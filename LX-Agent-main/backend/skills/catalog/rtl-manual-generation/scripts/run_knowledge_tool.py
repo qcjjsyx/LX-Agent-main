@@ -24,8 +24,8 @@ def run_knowledge_tool(
     top_module: str = "",
     audience: str = "newcomer",
     section_id: str = "",
-    enrich: bool = False,
-    enrich_modules: str = "decoder,launch,execute,lsu,wb",
+    enrich: bool = True,
+    enrich_modules: str = "decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf",
 ) -> str:
     if not top_module.strip():
         return "Knowledge failed: top_module is required."
@@ -83,6 +83,7 @@ def run_knowledge_tool(
         "--modules",
         enrich_modules,
         "--skip-missing",
+        "--skip-failed",
         "--output",
         str(Path("manual_ir") / top_module / "enrichment_report.json"),
     ]
@@ -196,8 +197,9 @@ def main() -> int:
     parser.add_argument("--top-module", required=True)
     parser.add_argument("--audience", default="newcomer")
     parser.add_argument("--section-id", default="")
-    parser.add_argument("--enrich", action="store_true", help="Run optional LLM semantic enrichment before packing")
-    parser.add_argument("--enrich-modules", default="decoder,launch,execute,lsu,wb")
+    parser.add_argument("--enrich", dest="enrich", action="store_true", default=True, help="Run source-reading LLM semantic enrichment before packing (default).")
+    parser.add_argument("--no-enrich", dest="enrich", action="store_false", help="Disable source-reading LLM semantic enrichment.")
+    parser.add_argument("--enrich-modules", default="decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf")
     args = parser.parse_args()
 
     print(

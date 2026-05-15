@@ -9,19 +9,24 @@ import re
 from typing import Any, Dict, Iterable, List, Protocol
 
 from .llm_client import OpenAICompatibleLLMClient
-from .prompts import build_module_enrichment_messages
+from .prompts import build_json_repair_messages, build_module_enrichment_messages
 from .split_store import ManualIRSplitError, load_manifest
 
 
-DEFAULT_CORE_MODULES = ("decoder", "launch", "execute", "lsu", "wb")
+DEFAULT_CORE_MODULES = ("decoder", "launch", "execute", "lsu", "wb", "fetch", "intAndExc", "grf", "prf")
 CONFIDENCE_LEVELS = {"high", "medium", "low"}
 CLAIM_LIST_FIELDS = (
     "key_behaviors",
     "important_signals",
     "payload_semantics",
+    "payload_field_semantics",
+    "interface_semantics",
     "handshake_notes",
     "control_flow_notes",
     "state_or_register_behavior",
+    "process_semantics",
+    "assign_semantics",
+    "signal_semantics",
 )
 
 
@@ -41,6 +46,7 @@ def enrich_manual_ir(
     modules: Iterable[str] | None = None,
     llm_client: JsonLLMClient | None = None,
     skip_missing: bool = False,
+    skip_failed: bool = False,
 ) -> Dict[str, Any]:
     """Enrich split Manual IR with semantic module cards.
 
@@ -81,15 +87,40 @@ def enrich_manual_ir(
         )
         input_hash = _hash_json(context)
         messages = build_module_enrichment_messages(context)
-        raw_output = client.complete_json(messages)
-        parsed = _parse_llm_json(raw_output, module_name)
-        card = _validate_and_normalize_semantic_card(
-            parsed,
-            module_name=module_name,
-            top_module=str(manifest.get("top_module", "")),
-            input_hash=input_hash,
-            source_refs=_semantic_source_refs(context),
-        )
+        try:
+            raw_output = client.complete_json(messages)
+            parsed, repaired = _parse_or_repair_llm_json(
+                client=client,
+                raw_output=raw_output,
+                module_name=module_name,
+            )
+            if repaired:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "code": "json_repaired",
+                        "message": f"Initial LLM JSON for module {module_name} was invalid and was repaired successfully.",
+                        "module_name": module_name,
+                    }
+                )
+            card = _validate_and_normalize_semantic_card(
+                parsed,
+                module_name=module_name,
+                top_module=str(manifest.get("top_module", "")),
+                input_hash=input_hash,
+                source_refs=_semantic_source_refs(context),
+            )
+        except Exception as exc:
+            issue = {
+                "level": "warning" if skip_failed else "error",
+                "code": "semantic_enrichment_failed",
+                "message": f"Semantic enrichment failed for module {module_name}: {exc}",
+                "module_name": module_name,
+            }
+            issues.append(issue)
+            if skip_failed:
+                continue
+            raise
         prepared_cards.append(card)
 
     if prepared_cards:
@@ -105,7 +136,7 @@ def enrich_manual_ir(
         "semantic_module_cards": [card["id"] for card in prepared_cards],
         "count": len(prepared_cards),
         "issues": issues,
-        "status": "passed" if not any(item.get("level") == "error" for item in issues) else "failed",
+        "status": "passed" if prepared_cards and not any(item.get("level") == "error" for item in issues) else "failed",
     }
     return report
 
@@ -142,6 +173,10 @@ def build_module_enrichment_context(
             "manual_module_card_id": module_card.get("id", ""),
             "rtl_file": rtl_excerpt.get("file", ""),
             "rtl_line_reference_format": "Use file plus line_start/line_end from rtl_source_excerpt.",
+            "rtl_semantic_slice_reference_format": (
+                "Use file plus line_start/line_end from rtl_semantic_slices for "
+                "always, initial, assign, case, register, or control-flow claims."
+            ),
         },
         "parser_module": _trim_parser_module(parser_module),
         "manual_module_card": module_card,
@@ -149,6 +184,7 @@ def build_module_enrichment_context(
         "related_flow_paths": flow_paths,
         "direct_component_contracts": contracts,
         "rtl_source_excerpt": rtl_excerpt,
+        "rtl_semantic_slices": rtl_excerpt.get("semantic_slices", {}),
     }
 
 
@@ -245,6 +281,12 @@ def _load_rtl_excerpt(
     lines = source_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     start, end = _find_module_line_span(lines, module_name)
     excerpt_lines = lines[start - 1 : end]
+    semantic_slices = _extract_rtl_semantic_slices(
+        lines=lines,
+        module_start=start,
+        module_end=end,
+        file=str(rtl_file),
+    )
     max_lines = 240
     truncated = len(excerpt_lines) > max_lines
     if truncated:
@@ -267,7 +309,152 @@ def _load_rtl_excerpt(
         "line_end": end,
         "truncated": truncated,
         "text": "\n".join(text_lines),
+        "semantic_slices": semantic_slices,
     }
+
+
+def _extract_rtl_semantic_slices(
+    *,
+    lines: List[str],
+    module_start: int,
+    module_end: int,
+    file: str,
+) -> Dict[str, Any]:
+    """Return focused source slices for LLM semantic extraction.
+
+    This is intentionally lightweight. It does not prove RTL semantics; it only
+    gives the enrichment LLM precise line-bounded evidence for process,
+    assignment, and control-flow claims.
+    """
+
+    module_lines = lines[module_start - 1 : module_end]
+    return {
+        "file": file,
+        "process_blocks": _extract_process_blocks(module_lines, module_start),
+        "continuous_assignments": _extract_assignments(module_lines, module_start),
+        "case_blocks": _extract_case_blocks(module_lines, module_start),
+        "state_like_signals": _extract_state_like_signals(module_lines, module_start),
+    }
+
+
+def _extract_process_blocks(module_lines: List[str], first_line_number: int) -> List[Dict[str, Any]]:
+    blocks: List[Dict[str, Any]] = []
+    process_start = re.compile(r"^\s*(always|initial)\b")
+    boundary = re.compile(r"^\s*(always|initial|assign)\b|\bendmodule\b")
+    index = 0
+    while index < len(module_lines):
+        line = module_lines[index]
+        match = process_start.search(line)
+        if not match:
+            index += 1
+            continue
+
+        start = index
+        end = index
+        for cursor in range(index + 1, min(len(module_lines), index + 90)):
+            current = module_lines[cursor]
+            if cursor > index + 1 and boundary.search(current):
+                break
+            end = cursor
+            if re.search(r"\bend\b", current) and _looks_like_process_end(module_lines[start : cursor + 1]):
+                break
+
+        blocks.append(
+            {
+                "process_id": f"process:{first_line_number + start}",
+                "kind": match.group(1),
+                "line_start": first_line_number + start,
+                "line_end": first_line_number + end,
+                "text": "\n".join(_numbered_lines(module_lines[start : end + 1], first_line_number + start)),
+            }
+        )
+        index = end + 1
+    return blocks[:12]
+
+
+def _looks_like_process_end(lines: List[str]) -> bool:
+    begin_count = sum(len(re.findall(r"\bbegin\b", line)) for line in lines)
+    end_count = sum(len(re.findall(r"\bend\b", line)) for line in lines)
+    return end_count >= begin_count
+
+
+def _extract_assignments(module_lines: List[str], first_line_number: int) -> List[Dict[str, Any]]:
+    assignments: List[Dict[str, Any]] = []
+    index = 0
+    while index < len(module_lines):
+        if not re.search(r"^\s*assign\b", module_lines[index]):
+            index += 1
+            continue
+        start = index
+        collected = [module_lines[index]]
+        while ";" not in module_lines[index] and index + 1 < len(module_lines):
+            index += 1
+            collected.append(module_lines[index])
+        text = "\n".join(collected)
+        lhs = ""
+        match = re.search(r"\bassign\s+([^=]+?)\s*=", text, flags=re.DOTALL)
+        if match:
+            lhs = " ".join(match.group(1).split())
+        assignments.append(
+            {
+                "assign_id": f"assign:{first_line_number + start}",
+                "lhs": lhs,
+                "line_start": first_line_number + start,
+                "line_end": first_line_number + index,
+                "text": "\n".join(_numbered_lines(collected, first_line_number + start)),
+            }
+        )
+        index += 1
+    return assignments[:30]
+
+
+def _extract_case_blocks(module_lines: List[str], first_line_number: int) -> List[Dict[str, Any]]:
+    blocks: List[Dict[str, Any]] = []
+    index = 0
+    while index < len(module_lines):
+        if not re.search(r"\bcase[zx]?\s*\(", module_lines[index]):
+            index += 1
+            continue
+        start = index
+        end = index
+        for cursor in range(index + 1, min(len(module_lines), index + 90)):
+            end = cursor
+            if re.search(r"\bendcase\b", module_lines[cursor]):
+                break
+        blocks.append(
+            {
+                "case_id": f"case:{first_line_number + start}",
+                "line_start": first_line_number + start,
+                "line_end": first_line_number + end,
+                "text": "\n".join(_numbered_lines(module_lines[start : end + 1], first_line_number + start)),
+            }
+        )
+        index = end + 1
+    return blocks[:12]
+
+
+def _extract_state_like_signals(module_lines: List[str], first_line_number: int) -> List[Dict[str, Any]]:
+    signals: List[Dict[str, Any]] = []
+    pattern = re.compile(r"^\s*(?:reg|logic)\b(?P<body>.*?)(?:;|$)")
+    state_words = re.compile(r"(state|fsm|cnt|count|flag|valid|ready|drive|free)", re.IGNORECASE)
+    for offset, line in enumerate(module_lines):
+        match = pattern.search(line)
+        if not match:
+            continue
+        body = match.group("body")
+        names = re.findall(r"\b[A-Za-z_][A-Za-z0-9_$]*\b", body)
+        names = [name for name in names if name not in {"signed", "wire", "reg", "logic"}]
+        interesting = [name for name in names if state_words.search(name)]
+        if not interesting:
+            continue
+        signals.append(
+            {
+                "line": first_line_number + offset,
+                "signals": interesting,
+                "declaration": line.strip(),
+            }
+        )
+    return signals[:30]
 
 
 def _find_module_line_span(lines: List[str], module_name: str) -> tuple[int, int]:
@@ -312,6 +499,36 @@ def _parse_llm_json(raw_output: str, module_name: str) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise EnrichmentError(f"LLM output for module {module_name} must be a JSON object.")
     return payload
+
+
+def _parse_or_repair_llm_json(
+    *,
+    client: JsonLLMClient,
+    raw_output: str,
+    module_name: str,
+) -> tuple[Dict[str, Any], bool]:
+    try:
+        return _parse_llm_json(raw_output, module_name), False
+    except EnrichmentError as first_error:
+        repair_messages = build_json_repair_messages(
+            module_name=module_name,
+            raw_output=_clip_repair_input(raw_output),
+            error_message=str(first_error),
+        )
+        repaired_output = client.complete_json(repair_messages)
+        try:
+            return _parse_llm_json(repaired_output, module_name), True
+        except EnrichmentError as second_error:
+            raise EnrichmentError(
+                f"{first_error}; JSON repair attempt also failed: {second_error}"
+            ) from second_error
+
+
+def _clip_repair_input(raw_output: str, limit: int = 60000) -> str:
+    text = raw_output or ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n... clipped malformed JSON tail ..."
 
 
 def _validate_and_normalize_semantic_card(

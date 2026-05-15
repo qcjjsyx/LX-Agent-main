@@ -23,8 +23,8 @@ Use this skill to generate a structured Markdown manual for RTL or source-code p
 4. If the user says the test files are RTL but does not provide `rtl_inputs`, use `rtl`.
 5. If `top_module` is missing, ask the user for it before running the knowledge tool.
 6. Run `run_parser_tool(project_root, rtl_inputs)`.
-7. Run `run_knowledge_tool(project_root, top_module)`.
-8. If the user asks for Manual IR semantic enrichment, run `run_knowledge_tool(project_root, top_module, enrich=True, enrich_modules="decoder,launch,execute,lsu,wb")`.
+7. Run `run_knowledge_tool(project_root, top_module, enrich=True, enrich_modules="decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf")`.
+8. Semantic enrichment is the default Manual IR build mode for generated manuals; only disable it when the user explicitly asks for a fast structural-only run.
 9. Build the main evidence index from `manual_ir/<top_module>`.
 10. For a complete project manual, use split Manual IR (`manifest.json`, `system_views.json`, `module_cards`, `semantic_module_cards`, `channel_cards`, `component_contracts`, `flow_paths`, `reading_paths`) as the main evidence. Do not use a newcomer ContextPack as the main structure.
 11. For a reading guide, use the selected ReadingPath / ContextPack as the main evidence and clearly label it as a reading guide.
@@ -37,13 +37,19 @@ Use this skill to generate a structured Markdown manual for RTL or source-code p
 ## Bundled Resources
 
 - `scripts/run_parser_tool.py`: runs the parser pipeline and checks `parser_pipeline_rtl` artifacts.
-- `scripts/run_knowledge_tool.py`: runs Manual IR export, optional semantic enrichment, validation, and ContextPack generation.
+- `scripts/run_knowledge_tool.py`: runs Manual IR export, default semantic enrichment, validation, and ContextPack generation.
 - `packages/parser/`: parser implementation used by `run_parser_tool.py`.
 - `packages/knowledge/`: Manual IR and knowledge implementation used by `run_knowledge_tool.py`.
 - `packages/tools/`: support package used by parser code.
 - `references/skill_script_reference.md`: script and workflow reference for this skill.
 
 The scripts set `PYTHONPATH` to `packages/` before invoking module commands, so use the exposed tools instead of importing these packages from application code.
+
+## Semantic Enrichment Boundary
+
+Semantic enrichment is a source-reading overlay on top of deterministic Manual IR. It may read RTL excerpts and focused source slices such as `always`/`initial` blocks, continuous `assign` statements, `case` blocks, and state-like declarations. Treat these semantic cards as evidence-bearing Manual IR objects, not as final prose.
+
+Use semantic fields to improve module purpose, interface meaning, payload field hints, process behavior, assignment behavior, signal roles, and evidence gaps. Preserve every `confidence` and `evidence` field in downstream writing. Low-confidence or unsupported conclusions must stay as evidence gaps rather than being promoted to facts.
 
 ## Suggested Chapters
 

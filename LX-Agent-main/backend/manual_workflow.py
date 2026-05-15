@@ -65,6 +65,8 @@ REGENERATE_WORDS = (
     "不要复用",
 )
 
+DEFAULT_ENRICH_MODULES = "decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf"
+
 REFERENCE_FILES = (
     "backend/skills/catalog/rtl-manual-generation/references/skill_script_reference.md",
 )
@@ -123,6 +125,25 @@ def _wants_regenerate(text):
     return any(word in (text or "") for word in REGENERATE_WORDS)
 
 
+def _extract_enrich_modules(text):
+    value = _match_value(
+        text or "",
+        (
+            r"enrich_modules\s*(?:=|:|：|是|为)?\s*([A-Za-z0-9_,$\-\s，]+)",
+            r"增强模块\s*(?:=|:|：|是|为)?\s*([A-Za-z0-9_,$\-\s，]+)",
+            r"语义模块\s*(?:=|:|：|是|为)?\s*([A-Za-z0-9_,$\-\s，]+)",
+        ),
+    )
+    if not value:
+        return ""
+    modules = [
+        item.strip()
+        for item in re.split(r"[,，\s]+", value)
+        if item.strip()
+    ]
+    return ",".join(modules)
+
+
 def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=None, event_logger=None):
     if (
         state
@@ -147,6 +168,8 @@ def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=
         evidence_mode=state.get("evidence_mode"),
         auto_run=state.get("auto_run"),
         force_regenerate=state.get("force_regenerate"),
+        semantic_enrichment=state.get("semantic_enrichment"),
+        enrich_modules=state.get("enrich_modules"),
     )
 
     if _is_cancel_request(user_input):
@@ -278,6 +301,8 @@ def _ensure_state(state):
             "manual_output_path": "",
             "auto_run": True,
             "force_regenerate": False,
+            "semantic_enrichment": True,
+            "enrich_modules": DEFAULT_ENRICH_MODULES,
         }
 
     state = dict(state)
@@ -301,6 +326,8 @@ def _ensure_state(state):
     state.setdefault("manual_output_path", "")
     state.setdefault("auto_run", True)
     state.setdefault("force_regenerate", False)
+    state["semantic_enrichment"] = True
+    state.setdefault("enrich_modules", DEFAULT_ENRICH_MODULES)
     return state
 
 
@@ -318,6 +345,10 @@ def _update_state_from_user_input(state, user_input):
 
     if _wants_regenerate(user_input):
         state["force_regenerate"] = True
+    state["semantic_enrichment"] = True
+    enrich_modules = _extract_enrich_modules(user_input)
+    if enrich_modules:
+        state["enrich_modules"] = enrich_modules
 
     _normalize_evidence_selection(state)
 
@@ -674,6 +705,11 @@ def _knowledge_artifacts_ready(state):
     ]
     if state.get("evidence_mode") == READING_PATH_EVIDENCE_MODE:
         required_items.append(manual_ir_dir / "context_pack.json")
+    if state.get("semantic_enrichment"):
+        required_items.extend([
+            manual_ir_dir / "semantic_module_cards",
+            manual_ir_dir / "enrichment_report.json",
+        ])
 
     missing = [path for path in required_items if not path.exists()]
     if missing:
@@ -686,6 +722,10 @@ def _knowledge_artifacts_ready(state):
 
     if manifest.get("top_module") and manifest.get("top_module") != state.get("top_module"):
         return False, manual_ir_dir, [manual_ir_dir / "manifest.json"]
+    if state.get("semantic_enrichment"):
+        counts = manifest.get("counts", {})
+        if not isinstance(counts, dict) or counts.get("semantic_module_cards", 0) <= 0:
+            return False, manual_ir_dir, [manual_ir_dir / "semantic_module_cards"]
 
     return True, manual_ir_dir, []
 
@@ -694,6 +734,8 @@ def _run_knowledge_stage(state, event_logger=None):
     project_root = state["project_root"]
     top_module = state["top_module"]
     audience = state.get("audience", "newcomer")
+    enrich = bool(state.get("semantic_enrichment"))
+    enrich_modules = state.get("enrich_modules") or DEFAULT_ENRICH_MODULES
 
     ready, manual_ir_dir, missing = _knowledge_artifacts_ready(state)
     if ready and not _force_regenerate(state):
@@ -714,6 +756,7 @@ def _run_knowledge_stage(state, event_logger=None):
             [
                 "检测到已有 `manual_ir/<top_module>/` 且关键产物齐全，本次复用已有 Manual IR。",
                 f"Manual IR 目录：`{manual_ir_dir}`",
+                "语义增强：`已满足`",
                 "",
                 "如需重新生成，请在请求中加入 `重新生成`、`强制生成` 或 `覆盖生成`。",
                 "",
@@ -725,6 +768,8 @@ def _run_knowledge_stage(state, event_logger=None):
         "project_root": project_root,
         "top_module": top_module,
         "audience": audience,
+        "enrich": enrich,
+        "enrich_modules": enrich_modules,
     }
     _log_event(
         event_logger,
@@ -737,6 +782,8 @@ def _run_knowledge_stage(state, event_logger=None):
         project_root=project_root,
         top_module=top_module,
         audience=audience,
+        enrich=enrich,
+        enrich_modules=enrich_modules,
     )
 
     state["knowledge_result"] = _clip_text(result)
@@ -779,6 +826,8 @@ def _run_knowledge_stage(state, event_logger=None):
         [
             "Knowledge Tool 已完成，Manual IR 目录已经记录到状态中。",
             f"Manual IR 目录：`{state.get('manual_ir_dir', '')}`",
+            "语义增强：`开启`",
+            f"增强模块：`{enrich_modules}`",
             "",
             _next_stage_hint(state, "阶段4：读取 Manual IR / ContextPack 证据"),
             "",
@@ -1487,9 +1536,14 @@ def _summarize_semantic_module_card(item):
         "key_behaviors": item.get("key_behaviors", []),
         "important_signals": item.get("important_signals", []),
         "payload_semantics": item.get("payload_semantics", []),
+        "payload_field_semantics": item.get("payload_field_semantics", []),
+        "interface_semantics": item.get("interface_semantics", []),
         "handshake_notes": item.get("handshake_notes", []),
         "control_flow_notes": item.get("control_flow_notes", []),
         "state_or_register_behavior": item.get("state_or_register_behavior", []),
+        "process_semantics": item.get("process_semantics", []),
+        "assign_semantics": item.get("assign_semantics", []),
+        "signal_semantics": item.get("signal_semantics", []),
         "evidence_gaps": item.get("evidence_gaps", []),
         "input_hash": item.get("input_hash", ""),
     }
@@ -1663,6 +1717,9 @@ def _generate_manual_markdown(state, client, model):
         "你是 RTL 项目代码手册写作助手。必须只使用用户提供的 JSON 证据摘要写作，"
         "不得编造模块、目录、接口、通道、状态机、寄存器行为或项目结构。"
         "如果证据不足，明确写“当前 Manual IR 未提供足够证据”。"
+        "如果证据摘要包含 semantic_modules，应把它作为带 evidence/confidence 的语义覆盖层使用，"
+        "优先用于解释模块目的、接口语义、payload 字段、always/assign/process 行为和证据缺口；"
+        "但不得把低置信度语义写成确定事实。"
         "如果 evidence_mode=project，必须生成完整项目代码手册，不要写成 newcomer/maintainer/reviewer 阅读指南；"
         "ReadingPath 只能作为“阅读路径建议”章节使用。"
         "输出 Markdown。\n\n"
@@ -1821,6 +1878,7 @@ def _format_reply(state, title, lines):
         f"【rtl_inputs：{state.get('rtl_inputs', '')}】",
         f"【top_module：{state.get('top_module', '') or '未设置'}】",
         f"【主证据：{state.get('evidence_mode', PROJECT_EVIDENCE_MODE)} / audience={state.get('audience', 'newcomer')}】",
+        f"【语义增强：开启 / modules={state.get('enrich_modules', DEFAULT_ENRICH_MODULES)}】",
         "",
         f"## {title}",
         "",

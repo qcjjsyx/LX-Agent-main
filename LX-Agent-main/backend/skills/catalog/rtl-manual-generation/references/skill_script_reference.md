@@ -541,9 +541,9 @@ python -m knowledge.manual_ir resolve \
 
 如果手册生成需要这些内容，应该先扩展 parser 层的事实提取，再让 Manual IR 消费这些新事实。
 
-## Optional Manual IR Semantic Enrichment
+## Default Manual IR Semantic Enrichment
 
-`knowledge.manual_ir enrich` is an optional post-processing stage. It reads parser artifacts, split Manual IR objects, and RTL source excerpts, then writes structured semantic JSON cards under:
+`knowledge.manual_ir enrich` is the default post-processing stage for generated manuals. It reads parser artifacts, split Manual IR objects, and RTL source excerpts, then writes structured semantic JSON cards under:
 
 ```text
 manual_ir/<top_module>/semantic_module_cards/<module>.json
@@ -555,7 +555,7 @@ Example:
 python -m knowledge.manual_ir enrich \
   --manual-ir-dir manual_ir/<top_module> \
   --parser-artifacts-root parser_pipeline_rtl \
-  --modules decoder,launch,execute,lsu,wb
+  --modules decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf
 ```
 
 Rules:
@@ -565,6 +565,8 @@ Rules:
 - Unsupported conclusions belong in `evidence_gaps`.
 - Bad LLM JSON fails clearly and must not write a broken semantic card.
 - `context_pack` includes matching semantic cards as `semantic_overlays` when they exist.
+- Enrichment reads RTL source as the primary semantic evidence, but only through line-bounded excerpts and focused slices such as `always`/`initial` blocks, continuous `assign` statements, `case` blocks, and state-like declarations.
+- New professional-manual fields include `payload_field_semantics`, `interface_semantics`, `process_semantics`, `assign_semantics`, and `signal_semantics`; downstream manual generation must keep their evidence and confidence visible.
 
 ## 选择哪个入口
 

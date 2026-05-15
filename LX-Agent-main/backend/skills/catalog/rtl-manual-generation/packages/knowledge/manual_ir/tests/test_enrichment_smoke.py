@@ -10,7 +10,11 @@ from knowledge.manual_ir.enrichment import EnrichmentError, enrich_manual_ir
 
 
 class FakeLLMClient:
+    def __init__(self):
+        self.messages = []
+
     def complete_json(self, messages):
+        self.messages = messages
         return json.dumps(
             {
                 "id": "semantic_module:decoder",
@@ -56,11 +60,94 @@ class FakeLLMClient:
                     }
                 ],
                 "payload_semantics": [],
+                "payload_field_semantics": [
+                    {
+                        "payload": "i_pcAndIns_64",
+                        "fields": ["instruction and PC payload bits are visible but not decomposed in the fixture"],
+                        "description": "Carries fetch payload into decoder.",
+                        "confidence": "low",
+                        "evidence": [
+                            {
+                                "source": "rtl/decoder.v",
+                                "line_start": 4,
+                                "line_end": 4,
+                            }
+                        ],
+                    }
+                ],
+                "interface_semantics": [],
                 "handshake_notes": [],
                 "control_flow_notes": [],
                 "state_or_register_behavior": [],
+                "process_semantics": [
+                    {
+                        "process_id": "process:8",
+                        "kind": "always",
+                        "summary": "Registers the output drive when input drive is observed.",
+                        "reads": ["i_driveFromIF"],
+                        "writes": ["drive_q"],
+                        "confidence": "medium",
+                        "evidence": [
+                            {
+                                "source": "rtl/decoder.v",
+                                "line_start": 8,
+                                "line_end": 12,
+                            }
+                        ],
+                    }
+                ],
+                "assign_semantics": [
+                    {
+                        "lhs": "o_driveToLaunch",
+                        "rhs_summary": "Driven from drive_q.",
+                        "role": "event output",
+                        "confidence": "medium",
+                        "evidence": [
+                            {
+                                "source": "rtl/decoder.v",
+                                "line_start": 13,
+                                "line_end": 13,
+                            }
+                        ],
+                    }
+                ],
+                "signal_semantics": [],
                 "evidence_gaps": [],
                 "input_hash": "",
+            }
+        )
+
+
+class RepairingLLMClient:
+    def __init__(self):
+        self.calls = 0
+        self.messages = []
+
+    def complete_json(self, messages):
+        self.calls += 1
+        self.messages.append(messages)
+        if self.calls == 1:
+            return '{"module_name": "decoder", "purpose": {"text": "broken", "confidence": "medium", "evidence": [{"source": "x"}]}'
+        return json.dumps(
+            {
+                "module_name": "decoder",
+                "purpose": {
+                    "text": "Repaired semantic card.",
+                    "confidence": "medium",
+                    "evidence": [{"source": "modules/decoder.json", "path": "interface"}],
+                },
+                "key_behaviors": [],
+                "important_signals": [],
+                "payload_semantics": [],
+                "payload_field_semantics": [],
+                "interface_semantics": [],
+                "handshake_notes": [],
+                "control_flow_notes": [],
+                "state_or_register_behavior": [],
+                "process_semantics": [],
+                "assign_semantics": [],
+                "signal_semantics": [],
+                "evidence_gaps": [],
             }
         )
 
@@ -72,12 +159,13 @@ class EnrichmentSmokeTest(unittest.TestCase):
             parser_root = root / "parser_pipeline_rtl"
             manual_root = root / "manual_ir" / "arm_soc_top"
             _write_fixture(parser_root, manual_root, root)
+            fake_client = FakeLLMClient()
 
             report = enrich_manual_ir(
                 manual_root,
                 parser_root,
                 modules=["decoder"],
-                llm_client=FakeLLMClient(),
+                llm_client=fake_client,
             )
 
             self.assertEqual(report["status"], "passed")
@@ -89,6 +177,9 @@ class EnrichmentSmokeTest(unittest.TestCase):
             self.assertEqual(semantic["kind"], "semantic_module_card")
             self.assertTrue(semantic["purpose"]["evidence"])
             self.assertTrue(semantic["input_hash"])
+            self.assertTrue(semantic["process_semantics"])
+            self.assertTrue(semantic["assign_semantics"])
+            self.assertIn("rtl_semantic_slices", fake_client.messages[-1]["content"])
 
             context_pack = build_context_pack(manual_root, audience="newcomer")
             overlays = context_pack["sections"][0]["semantic_overlays"]
@@ -114,6 +205,27 @@ class EnrichmentSmokeTest(unittest.TestCase):
                 )
 
             self.assertFalse((manual_root / "semantic_module_cards" / "decoder.json").exists())
+
+    def test_bad_json_is_repaired_before_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            parser_root = root / "parser_pipeline_rtl"
+            manual_root = root / "manual_ir" / "arm_soc_top"
+            _write_fixture(parser_root, manual_root, root)
+            client = RepairingLLMClient()
+
+            report = enrich_manual_ir(
+                manual_root,
+                parser_root,
+                modules=["decoder"],
+                llm_client=client,
+            )
+
+            self.assertEqual(report["status"], "passed")
+            self.assertEqual(client.calls, 2)
+            self.assertEqual(report["issues"][0]["code"], "json_repaired")
+            semantic_path = manual_root / "semantic_module_cards" / "decoder.json"
+            self.assertTrue(semantic_path.is_file())
 
 
 def _write_fixture(parser_root: Path, manual_root: Path, repo_root: Path) -> None:
@@ -185,6 +297,11 @@ def _write_fixture(parser_root: Path, manual_root: Path, repo_root: Path) -> Non
         "  input [63:0] i_pcAndIns_64,\n"
         "  output o_driveToLaunch\n"
         ");\n"
+        "reg drive_q;\n"
+        "always @(posedge i_driveFromIF) begin\n"
+        "  drive_q <= i_driveFromIF;\n"
+        "end\n"
+        "assign o_driveToLaunch = drive_q;\n"
         "endmodule\n",
         encoding="utf-8",
     )

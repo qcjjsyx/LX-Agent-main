@@ -319,14 +319,14 @@ def run_knowledge_tool(
     top_module: str = "",
     audience: str = "newcomer",
     section_id: str = "",
-    enrich: bool = False,
-    enrich_modules: str = "decoder,launch,execute,lsu,wb",
+    enrich: bool = True,
+    enrich_modules: str = "decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf",
 ):
     """
     Knowledge Tool：
 
     职责：
-        阅读 parser 生成的产物。
+        阅读 parser 生成的产物，并默认读取 RTL 源码做语义增强。
 
     固定输入：
         parser_pipeline_rtl/
@@ -487,7 +487,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_knowledge_tool",
-            "description": "Knowledge Tool：读取 parser_pipeline_rtl，生成 manual_ir/<top_module>，并生成 validation_report.json 和 context_pack.json。",
+            "description": "Knowledge Tool：读取 parser_pipeline_rtl，默认读取 RTL 源码做语义增强，生成 manual_ir/<top_module>、validation_report.json 和 context_pack.json。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -509,11 +509,11 @@ TOOLS = [
                     },
                     "enrich": {
                         "type": "boolean",
-                        "description": "Optional: run LLM semantic enrichment before building ContextPack."
+                        "description": "是否运行源码语义增强。默认 true，生成最全面的 Manual IR 语义层。"
                     },
                     "enrich_modules": {
                         "type": "string",
-                        "description": "Optional comma-separated modules for semantic enrichment, e.g. decoder,launch."
+                        "description": "逗号分隔的语义增强模块列表，默认覆盖核心 CPU 模块。"
                     }
                 },
                 "required": ["project_root", "top_module"]

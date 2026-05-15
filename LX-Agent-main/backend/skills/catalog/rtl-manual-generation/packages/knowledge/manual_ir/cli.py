@@ -50,6 +50,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="Skip modules that are absent from parser artifacts instead of failing.",
     )
+    enrich_parser.add_argument(
+        "--skip-failed",
+        action="store_true",
+        help="Skip modules whose LLM JSON is invalid or fails validation instead of failing the whole enrichment run.",
+    )
 
     pack_parser = subparsers.add_parser("pack", help="Build a section-scoped ContextPack from split Manual IR")
     pack_parser.add_argument("--manual-ir-dir", required=True, help="Split Manual IR output directory")
@@ -136,6 +141,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     base_url=args.base_url,
                 ),
                 skip_missing=args.skip_missing,
+                skip_failed=args.skip_failed,
             )
         except (FileNotFoundError, ManualIRSplitError, EnrichmentError, json.JSONDecodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
