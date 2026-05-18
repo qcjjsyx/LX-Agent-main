@@ -45,7 +45,13 @@ class OpenAICompatibleLLMClient:
         self.temperature = temperature
         self.timeout = timeout
 
+    def complete_text(self, messages: List[Dict[str, str]]) -> str:
+        return self._complete(messages, response_format=None)
+
     def complete_json(self, messages: List[Dict[str, str]]) -> str:
+        return self._complete(messages, response_format={"type": "json_object"})
+
+    def _complete(self, messages: List[Dict[str, str]], *, response_format: Dict[str, str] | None) -> str:
         if not self.api_key:
             raise LLMClientError(
                 "LLM API key is not configured. Set OPENAI_API_KEY, DEEPSEEK_API_KEY, or LLM_API_KEY."
@@ -64,13 +70,15 @@ class OpenAICompatibleLLMClient:
             client_kwargs["timeout"] = self.timeout
 
         client = OpenAI(**client_kwargs)
+        request_kwargs: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+        }
+        if response_format is not None:
+            request_kwargs["response_format"] = response_format
         try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=self.temperature,
-                response_format={"type": "json_object"},
-            )
+            response = client.chat.completions.create(**request_kwargs)
         except Exception as exc:  # pragma: no cover - provider-specific transport detail
             raise LLMClientError(f"LLM request failed: {exc}") from exc
 

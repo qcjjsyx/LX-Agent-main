@@ -9,8 +9,8 @@ import re
 from typing import Any, Dict, Iterable, List, Protocol
 
 from .llm_client import OpenAICompatibleLLMClient
-from .prompts import build_json_repair_messages, build_module_enrichment_messages
-from .split_store import ManualIRSplitError, load_manifest
+from .prompts import build_module_enrichment_messages
+from .split_store import load_manifest
 
 
 DEFAULT_CORE_MODULES = ("decoder", "launch", "execute", "lsu", "wb", "fetch", "intAndExc", "grf", "prf")
@@ -34,8 +34,8 @@ class EnrichmentError(RuntimeError):
     """Raised when semantic enrichment cannot produce valid JSON output."""
 
 
-class JsonLLMClient(Protocol):
-    def complete_json(self, messages: List[Dict[str, str]]) -> str:
+class TextLLMClient(Protocol):
+    def complete_text(self, messages: List[Dict[str, str]]) -> str:
         ...
 
 
@@ -44,14 +44,15 @@ def enrich_manual_ir(
     parser_artifacts_root: str | Path,
     *,
     modules: Iterable[str] | None = None,
-    llm_client: JsonLLMClient | None = None,
+    llm_client: TextLLMClient | None = None,
     skip_missing: bool = False,
     skip_failed: bool = False,
 ) -> Dict[str, Any]:
     """Enrich split Manual IR with semantic module cards.
 
-    The function validates all LLM JSON before writing any output, so malformed
-    responses never corrupt the Manual IR directory.
+    The function parses tagged LLM text into Python objects and validates the
+    resulting semantic card before writing output, so malformed responses never
+    corrupt the Manual IR directory.
     """
 
     manual_root = Path(manual_ir_dir)
@@ -88,21 +89,8 @@ def enrich_manual_ir(
         input_hash = _hash_json(context)
         messages = build_module_enrichment_messages(context)
         try:
-            raw_output = client.complete_json(messages)
-            parsed, repaired = _parse_or_repair_llm_json(
-                client=client,
-                raw_output=raw_output,
-                module_name=module_name,
-            )
-            if repaired:
-                issues.append(
-                    {
-                        "level": "warning",
-                        "code": "json_repaired",
-                        "message": f"Initial LLM JSON for module {module_name} was invalid and was repaired successfully.",
-                        "module_name": module_name,
-                    }
-                )
+            raw_output = _complete_llm_text(client, messages)
+            parsed = _parse_tagged_semantic_text(raw_output, module_name=module_name, context=context)
             card = _validate_and_normalize_semantic_card(
                 parsed,
                 module_name=module_name,
@@ -139,6 +127,16 @@ def enrich_manual_ir(
         "status": "passed" if prepared_cards and not any(item.get("level") == "error" for item in issues) else "failed",
     }
     return report
+
+
+def _complete_llm_text(client: Any, messages: List[Dict[str, str]]) -> str:
+    complete_text = getattr(client, "complete_text", None)
+    if callable(complete_text):
+        return complete_text(messages)
+    complete_json = getattr(client, "complete_json", None)
+    if callable(complete_json):
+        return complete_json(messages)
+    raise EnrichmentError("LLM client must provide complete_text(messages).")
 
 
 def build_module_enrichment_context(
@@ -479,56 +477,300 @@ def _numbered_lines(lines: List[str], first_line_number: int) -> List[str]:
     ]
 
 
-def _parse_llm_json(raw_output: str, module_name: str) -> Dict[str, Any]:
-    text = (raw_output or "").strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"\s*```$", "", text)
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                payload = json.loads(text[start : end + 1])
-            except json.JSONDecodeError as exc:
-                raise EnrichmentError(f"LLM output for module {module_name} was not valid JSON: {exc}") from exc
+SECTION_TO_FIELD = {
+    "KEY_BEHAVIOR": "key_behaviors",
+    "IMPORTANT_SIGNAL": "important_signals",
+    "PAYLOAD_SEMANTIC": "payload_semantics",
+    "PAYLOAD_FIELD_SEMANTIC": "payload_field_semantics",
+    "INTERFACE_SEMANTIC": "interface_semantics",
+    "HANDSHAKE_NOTE": "handshake_notes",
+    "CONTROL_FLOW_NOTE": "control_flow_notes",
+    "STATE_OR_REGISTER_BEHAVIOR": "state_or_register_behavior",
+    "PROCESS_SEMANTIC": "process_semantics",
+    "ASSIGN_SEMANTIC": "assign_semantics",
+    "SIGNAL_SEMANTIC": "signal_semantics",
+}
+LIST_VALUE_FIELDS = {
+    "signals",
+    "instances",
+    "fields",
+    "related_payload",
+    "reads",
+    "writes",
+    "consumers",
+}
+SECTION_FIELD_MAP = {
+    "KEY_BEHAVIOR": ("name", "description", "signals", "instances"),
+    "IMPORTANT_SIGNAL": ("signal", "role"),
+    "PAYLOAD_SEMANTIC": ("payload", "description", "signals"),
+    "PAYLOAD_FIELD_SEMANTIC": ("payload", "fields", "description"),
+    "INTERFACE_SEMANTIC": ("name", "direction", "role", "related_payload"),
+    "HANDSHAKE_NOTE": ("description", "signals"),
+    "CONTROL_FLOW_NOTE": ("description", "signals"),
+    "STATE_OR_REGISTER_BEHAVIOR": ("name", "description", "reads", "writes"),
+    "PROCESS_SEMANTIC": ("process_id", "kind", "summary", "reads", "writes"),
+    "ASSIGN_SEMANTIC": ("lhs", "rhs_summary", "role"),
+    "SIGNAL_SEMANTIC": ("signal", "role", "producer", "consumers"),
+}
+
+
+def _parse_tagged_semantic_text(
+    raw_output: str,
+    *,
+    module_name: str,
+    context: Dict[str, Any],
+) -> Dict[str, Any]:
+    sections = _collect_tagged_sections(raw_output)
+    if not sections:
+        raise EnrichmentError(f"LLM output for module {module_name} did not contain tagged semantic sections.")
+
+    payload: Dict[str, Any] = {
+        "purpose": None,
+        "evidence_gaps": [],
+    }
+    for field in CLAIM_LIST_FIELDS:
+        payload[field] = []
+
+    for tag, data in sections:
+        if tag == "PURPOSE":
+            purpose = _build_claim_from_section(
+                data,
+                fields=("text",),
+                module_name=module_name,
+                context=context,
+                allow_fallback_evidence=True,
+            )
+            if purpose is not None:
+                payload["purpose"] = purpose
+            continue
+
+        if tag == "EVIDENCE_GAP":
+            gap = _build_evidence_gap(data)
+            if gap:
+                payload["evidence_gaps"].append(gap)
+            continue
+
+        target_field = SECTION_TO_FIELD.get(tag)
+        if not target_field:
+            continue
+        claim = _build_claim_from_section(
+            data,
+            fields=SECTION_FIELD_MAP[tag],
+            module_name=module_name,
+            context=context,
+            allow_fallback_evidence=False,
+        )
+        if claim is not None:
+            payload[target_field].append(claim)
         else:
-            raise EnrichmentError(f"LLM output for module {module_name} did not contain a JSON object.")
-    if not isinstance(payload, dict):
-        raise EnrichmentError(f"LLM output for module {module_name} must be a JSON object.")
+            payload["evidence_gaps"].append(
+                {
+                    "field": target_field,
+                    "reason": f"Skipped [{tag}] because it lacked supported content or evidence.",
+                }
+            )
+
+    if not isinstance(payload.get("purpose"), dict):
+        payload["purpose"] = _fallback_purpose_claim(context)
+        payload["evidence_gaps"].append(
+            {
+                "field": "purpose",
+                "reason": "LLM did not return a valid [PURPOSE] section; deterministic low-confidence fallback was used.",
+            }
+        )
+
     return payload
 
 
-def _parse_or_repair_llm_json(
+def _collect_tagged_sections(raw_output: str) -> List[tuple[str, Dict[str, str]]]:
+    text = (raw_output or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:text|plaintext)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+
+    sections: List[tuple[str, Dict[str, str]]] = []
+    current_tag = ""
+    current_data: Dict[str, str] = {}
+    current_key = ""
+
+    def commit() -> None:
+        if current_tag and current_data:
+            sections.append((current_tag, dict(current_data)))
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = re.match(r"^\[([A-Za-z0-9_ -]+)\]$", stripped)
+        if match:
+            commit()
+            current_tag = _normalize_tag(match.group(1))
+            current_data = {}
+            current_key = ""
+            continue
+        if not current_tag:
+            continue
+        if ":" in stripped:
+            raw_key, value = stripped.split(":", 1)
+            key = _normalize_key(raw_key)
+            value = value.strip()
+            if key in current_data and value:
+                current_data[key] = f"{current_data[key]}; {value}"
+            else:
+                current_data[key] = value
+            current_key = key
+        elif current_key:
+            current_data[current_key] = f"{current_data[current_key]} {stripped}".strip()
+
+    commit()
+    return sections
+
+
+def _build_claim_from_section(
+    data: Dict[str, str],
     *,
-    client: JsonLLMClient,
-    raw_output: str,
+    fields: Iterable[str],
     module_name: str,
-) -> tuple[Dict[str, Any], bool]:
-    try:
-        return _parse_llm_json(raw_output, module_name), False
-    except EnrichmentError as first_error:
-        repair_messages = build_json_repair_messages(
-            module_name=module_name,
-            raw_output=_clip_repair_input(raw_output),
-            error_message=str(first_error),
+    context: Dict[str, Any],
+    allow_fallback_evidence: bool,
+) -> Dict[str, Any] | None:
+    claim: Dict[str, Any] = {}
+    for field in fields:
+        value = data.get(field, "")
+        if not value:
+            continue
+        if field in LIST_VALUE_FIELDS:
+            claim[field] = _split_list_value(value)
+        else:
+            claim[field] = value
+
+    if not claim:
+        return None
+
+    evidence = _parse_evidence_entries(data.get("evidence", ""))
+    if not evidence and allow_fallback_evidence:
+        evidence = _default_evidence(context, module_name)
+    if not evidence:
+        return None
+
+    claim["confidence"] = _normalize_confidence(data.get("confidence", "low"))
+    claim["evidence"] = evidence
+    return claim
+
+
+def _build_evidence_gap(data: Dict[str, str]) -> Dict[str, Any]:
+    field = data.get("field", "").strip()
+    reason = data.get("reason", "").strip()
+    if not field and not reason:
+        return {}
+    gap: Dict[str, Any] = {}
+    if field:
+        gap["field"] = field
+    if reason:
+        gap["reason"] = reason
+    evidence = _parse_evidence_entries(data.get("evidence", ""))
+    if evidence:
+        gap["evidence"] = evidence
+    return gap
+
+
+def _fallback_purpose_claim(context: Dict[str, Any]) -> Dict[str, Any]:
+    module_name = str(context.get("module_name", ""))
+    module_card = context.get("manual_module_card", {})
+    summary = ""
+    if isinstance(module_card, dict):
+        summary = str(module_card.get("summary", "")).strip()
+    text = summary or f"Module {module_name} has parser and RTL evidence, but its semantic purpose needs manual review."
+    return {
+        "text": text,
+        "confidence": "low",
+        "evidence": _default_evidence(context, module_name),
+    }
+
+
+def _default_evidence(context: Dict[str, Any], module_name: str) -> List[Dict[str, Any]]:
+    evidence: List[Dict[str, Any]] = [
+        {
+            "source": f"modules/{module_name}.json",
+            "path": "interface_summary",
+        }
+    ]
+    module_card = context.get("manual_module_card", {})
+    if isinstance(module_card, dict) and module_card.get("id"):
+        evidence.append({"manual_ir_id": module_card.get("id")})
+    rtl_excerpt = context.get("rtl_source_excerpt", {})
+    if isinstance(rtl_excerpt, dict) and rtl_excerpt.get("available"):
+        evidence.append(
+            {
+                "source": rtl_excerpt.get("file", ""),
+                "line_start": rtl_excerpt.get("line_start", 0),
+                "line_end": rtl_excerpt.get("line_end", 0),
+            }
         )
-        repaired_output = client.complete_json(repair_messages)
-        try:
-            return _parse_llm_json(repaired_output, module_name), True
-        except EnrichmentError as second_error:
-            raise EnrichmentError(
-                f"{first_error}; JSON repair attempt also failed: {second_error}"
-            ) from second_error
+    return evidence[:2]
 
 
-def _clip_repair_input(raw_output: str, limit: int = 60000) -> str:
-    text = raw_output or ""
-    if len(text) <= limit:
-        return text
-    return text[:limit] + "\n... clipped malformed JSON tail ..."
+def _parse_evidence_entries(value: str) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    for item in _split_evidence_value(value):
+        parsed = _parse_evidence_entry(item)
+        if parsed:
+            entries.append(parsed)
+    return entries
+
+
+def _split_evidence_value(value: str) -> List[str]:
+    value = value.strip()
+    if not value or value.lower() in {"none", "n/a", "unknown"}:
+        return []
+    separator = ";" if ";" in value else ","
+    return [item.strip() for item in value.split(separator) if item.strip()]
+
+
+def _parse_evidence_entry(item: str) -> Dict[str, Any]:
+    item = item.strip()
+    if not item:
+        return {}
+    manual_match = re.match(r"^(?:manual_ir_id|id)\s*:\s*(.+)$", item, flags=re.IGNORECASE)
+    if manual_match:
+        return {"manual_ir_id": manual_match.group(1).strip()}
+    if "@" in item:
+        source, path = item.split("@", 1)
+        entry: Dict[str, Any] = {"source": source.strip()}
+        if path.strip():
+            entry["path"] = path.strip()
+        return entry
+    line_match = re.match(r"^(.+):(\d+)(?:-(\d+))?$", item)
+    if line_match:
+        line_start = int(line_match.group(2))
+        line_end = int(line_match.group(3) or line_start)
+        return {
+            "source": line_match.group(1).strip(),
+            "line_start": line_start,
+            "line_end": line_end,
+        }
+    return {"source": item}
+
+
+def _split_list_value(value: str) -> List[str]:
+    return [
+        item.strip()
+        for item in re.split(r"[,;]", value)
+        if item.strip() and item.strip().lower() not in {"none", "n/a", "unknown"}
+    ]
+
+
+def _normalize_confidence(value: str) -> str:
+    confidence = value.strip().lower()
+    return confidence if confidence in CONFIDENCE_LEVELS else "low"
+
+
+def _normalize_tag(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", value.strip().upper()).strip("_")
+
+
+def _normalize_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
 
 
 def _validate_and_normalize_semantic_card(

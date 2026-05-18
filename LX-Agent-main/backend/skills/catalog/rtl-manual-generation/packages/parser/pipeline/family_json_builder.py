@@ -12,8 +12,8 @@ from .flow_inference import infer_signal_role, summarize_component_semantics
 
 def load_family_templates(repo_root: Path) -> Dict[str, Dict[str, Any]]:
     _ = repo_root
-    parser_package_dir = Path(__file__).resolve().parents[1]
-    template_path = parser_package_dir / "schemas" / "json_templates" / "family_level.json"
+    packages_dir = Path(__file__).resolve().parents[2]
+    template_path = packages_dir / "schemas" / "json_templates" / "family_level.json"
     data = json.loads(template_path.read_text(encoding="utf-8"))
     templates = {}
     for entry in data.get("templates", []):
@@ -55,7 +55,7 @@ def build_component_json(
         "artifact_kind": "derived_component",
         "family": family,
         "file": str(file_path),
-        "template_source": template.get("_template_source", "parser/schemas/json_templates/family_level.json"),
+        "template_source": template.get("_template_source", "schemas/json_templates/family_level.json"),
         "interface": {
             "params": params,
             "ports": parse_result.get("ports", []),

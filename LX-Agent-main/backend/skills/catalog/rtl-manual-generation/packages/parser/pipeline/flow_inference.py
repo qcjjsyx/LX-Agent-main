@@ -205,9 +205,162 @@ def build_flow_graph(parse_result: Dict[str, Any]) -> Dict[str, List[Dict[str, A
             }
         )
 
+    assignment_dependencies = build_assignment_dependencies(parse_result.get("assignments", []))
+    for assignment in parse_result.get("assignments", []):
+        for signal_name in assignment.get("lhs_terms", []) + assignment.get("rhs_terms", []):
+            signals.setdefault(
+                signal_name,
+                {
+                    "name": signal_name,
+                    "kind": "implicit_signal",
+                    "width_text": None,
+                    "role": infer_signal_role(signal_name),
+                },
+            )
+
     return {
         "signals": sorted(signals.values(), key=lambda item: item["name"]),
         "edges": edges,
+        "assignment_dependencies": assignment_dependencies,
+    }
+
+
+def build_assignment_dependencies(assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    dependencies: List[Dict[str, Any]] = []
+    for assignment in assignments:
+        lhs_terms = assignment.get("lhs_terms", [])
+        rhs_terms = assignment.get("rhs_terms", [])
+        if not lhs_terms or not rhs_terms:
+            continue
+        for lhs in lhs_terms:
+            for rhs in rhs_terms:
+                if lhs == rhs:
+                    continue
+                dependencies.append(
+                    {
+                        "from": rhs,
+                        "to": lhs,
+                        "assignment_index": assignment.get("index"),
+                        "kind": "continuous_assign_dependency",
+                        "lhs": assignment.get("lhs", ""),
+                        "rhs": assignment.get("rhs", ""),
+                    }
+                )
+    return dependencies
+
+
+def build_connection_graph(parse_result: Dict[str, Any], flow_graph: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a module-scoped driver/load graph from parsed ports and instance edges."""
+
+    module_name = parse_result.get("name", "")
+    nodes = [
+        {
+            "id": "self",
+            "kind": "module_boundary",
+            "module": module_name,
+        }
+    ]
+    for instance in parse_result.get("instances", []):
+        node = {
+            "id": instance.get("instance_name", ""),
+            "kind": "instance",
+            "module_type": instance.get("module_type", ""),
+            "artifact_kind": instance.get("artifact_kind", "unknown"),
+        }
+        for optional_key in ("target_ref", "family", "ignored_unresolved"):
+            if optional_key in instance:
+                node[optional_key] = instance[optional_key]
+        nodes.append(node)
+    for transparent_flow in parse_result.get("transparent_flows", []):
+        instance_name = transparent_flow.get("instance_name", "")
+        if not instance_name:
+            continue
+        nodes.append(
+            {
+                "id": instance_name,
+                "kind": "transparent_helper",
+                "module_type": transparent_flow.get("module_type", ""),
+                "artifact_kind": "transparent_helper",
+                "transparent_source": transparent_flow.get("source", "skip_helper_rule"),
+            }
+        )
+
+    nets: Dict[str, Dict[str, Any]] = {}
+    for signal in flow_graph.get("signals", []):
+        signal_name = signal.get("name")
+        if not signal_name:
+            continue
+        nets[signal_name] = {
+            "signal": signal_name,
+            "kind": signal.get("kind", "unknown"),
+            "width_text": signal.get("width_text"),
+            "role": signal.get("role", infer_signal_role(signal_name)),
+            "drivers": [],
+            "loads": [],
+            "bidirectional": [],
+            "boundary_inputs": [],
+            "boundary_outputs": [],
+        }
+
+    for port in parse_result.get("ports", []):
+        signal_name = port.get("name", "")
+        if not signal_name:
+            continue
+        net = _ensure_net(nets, signal_name)
+        endpoint = {
+            "node": "self",
+            "port": signal_name,
+            "port_direction": port.get("direction", "unknown"),
+        }
+        direction = port.get("direction")
+        if direction == "input":
+            _append_unique_endpoint(net["boundary_inputs"], endpoint)
+            _append_unique_endpoint(net["drivers"], {**endpoint, "driver_kind": "module_input"})
+        elif direction == "output":
+            _append_unique_endpoint(net["boundary_outputs"], endpoint)
+            _append_unique_endpoint(net["loads"], {**endpoint, "load_kind": "module_output"})
+        else:
+            _append_unique_endpoint(net["bidirectional"], endpoint)
+
+    for edge in flow_graph.get("edges", []):
+        signal_name = edge.get("signal", "")
+        if not signal_name:
+            continue
+        net = _ensure_net(nets, signal_name)
+        endpoint = {
+            "node": edge.get("instance_name", ""),
+            "port": edge.get("port", ""),
+            "module_type": edge.get("module_type", ""),
+            "port_direction": edge.get("port_direction", "unknown"),
+        }
+        if edge.get("source_expression"):
+            endpoint["source_expression"] = edge["source_expression"]
+        if edge.get("transparent"):
+            endpoint["transparent"] = True
+            endpoint["transparent_source"] = edge.get("transparent_source", "")
+
+        edge_kind = edge.get("edge_kind")
+        if edge_kind == "instance_to_signal":
+            _append_unique_endpoint(net["drivers"], {**endpoint, "driver_kind": "instance_output"})
+        elif edge_kind == "signal_to_instance":
+            _append_unique_endpoint(net["loads"], {**endpoint, "load_kind": "instance_input"})
+        else:
+            _append_unique_endpoint(net["bidirectional"], endpoint)
+
+    sorted_nets = sorted(nets.values(), key=lambda item: item["signal"])
+    connections = _build_connections(sorted_nets)
+    return {
+        "schema_version": "1.0",
+        "scope": "module",
+        "module": module_name,
+        "nodes": sorted(nodes, key=lambda item: item["id"]),
+        "nets": sorted_nets,
+        "connections": connections,
+        "summary": {
+            "node_count": len(nodes),
+            "net_count": len(sorted_nets),
+            "connection_count": len(connections),
+        },
     }
 
 
@@ -220,6 +373,93 @@ def collect_family_usage(instances: Iterable[Dict[str, Any]]) -> List[str]:
         } # type: ignore
     )
     return families
+
+
+def _ensure_net(nets: Dict[str, Dict[str, Any]], signal_name: str) -> Dict[str, Any]:
+    return nets.setdefault(
+        signal_name,
+        {
+            "signal": signal_name,
+            "kind": "implicit_signal",
+            "width_text": None,
+            "role": infer_signal_role(signal_name),
+            "drivers": [],
+            "loads": [],
+            "bidirectional": [],
+            "boundary_inputs": [],
+            "boundary_outputs": [],
+        },
+    )
+
+
+def _append_unique_endpoint(endpoints: List[Dict[str, Any]], endpoint: Dict[str, Any]) -> None:
+    key = (
+        endpoint.get("node"),
+        endpoint.get("port"),
+        endpoint.get("port_direction"),
+        endpoint.get("source_expression"),
+    )
+    for existing in endpoints:
+        existing_key = (
+            existing.get("node"),
+            existing.get("port"),
+            existing.get("port_direction"),
+            existing.get("source_expression"),
+        )
+        if existing_key == key:
+            existing.update({key: value for key, value in endpoint.items() if value not in ("", None)})
+            return
+    endpoints.append({key: value for key, value in endpoint.items() if value not in ("", None)})
+
+
+def _build_connections(nets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    connections: List[Dict[str, Any]] = []
+    for net in nets:
+        signal_name = net["signal"]
+        role = net.get("role", infer_signal_role(signal_name))
+        for driver in net.get("drivers", []):
+            for load in net.get("loads", []):
+                if _same_endpoint(driver, load):
+                    continue
+                connection = {
+                    "from": _connection_endpoint(driver),
+                    "to": _connection_endpoint(load),
+                    "signal": signal_name,
+                    "role": role,
+                }
+                if driver.get("source_expression"):
+                    connection["source_expression"] = driver["source_expression"]
+                elif load.get("source_expression"):
+                    connection["source_expression"] = load["source_expression"]
+                connections.append(connection)
+    return sorted(
+        connections,
+        key=lambda item: (
+            item["signal"],
+            item["from"].get("node", ""),
+            item["from"].get("port", ""),
+            item["to"].get("node", ""),
+            item["to"].get("port", ""),
+        ),
+    )
+
+
+def _connection_endpoint(endpoint: Dict[str, Any]) -> Dict[str, Any]:
+    result = {
+        "node": endpoint.get("node", ""),
+        "port": endpoint.get("port", ""),
+    }
+    if endpoint.get("module_type"):
+        result["module_type"] = endpoint["module_type"]
+    if endpoint.get("driver_kind"):
+        result["kind"] = endpoint["driver_kind"]
+    elif endpoint.get("load_kind"):
+        result["kind"] = endpoint["load_kind"]
+    return result
+
+
+def _same_endpoint(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    return left.get("node") == right.get("node") and left.get("port") == right.get("port")
 
 
 def summarize_component_semantics(family_template: Dict[str, Any], role_mapping: Dict[str, Any]) -> Dict[str, str]:

@@ -1,0 +1,866 @@
+{
+  "schema": "knowledge_ir_module_semantic_claims",
+  "schema_version": "0.2",
+  "id": "semantic:module:execute",
+  "kind": "module_semantic_claims",
+  "top_module": "arm_soc_top",
+  "module": "execute",
+  "input_hash": "157f10078999a1443bde1c4552cde332dbae72c375027572679635a873b29ace",
+  "source_context": "ai_context/modules/execute.json",
+  "source_refs": [
+    {
+      "id": "module_facts",
+      "source": "knowledge_ir/modules/execute.json",
+      "paths": [
+        "interface",
+        "interface_data_contract",
+        "internal_event_flow",
+        "assignment_facts",
+        "key_instances"
+      ]
+    },
+    {
+      "id": "parser_module",
+      "source": "parser_pipeline_rtl/modules/execute.json",
+      "paths": [
+        "interface",
+        "instances",
+        "connection_graph",
+        "assignments",
+        "flow_graph.assignment_dependencies"
+      ]
+    },
+    {
+      "id": "rtl_source",
+      "source": "rtl/rtl/Execute/execute.v",
+      "paths": [
+        "module_source"
+      ]
+    },
+    {
+      "id": "ai_context_source",
+      "source": {
+        "rtl_file": "rtl/rtl/Execute/execute.v",
+        "parser_module": "modules/execute.json"
+      }
+    }
+  ],
+  "claim_summary": {
+    "count": 21,
+    "by_type": {
+      "assignment_interpretation": 4,
+      "component_role": 3,
+      "documentation_focus": 3,
+      "interface_intent": 6,
+      "module_role": 1,
+      "structural_responsibility": 4
+    }
+  },
+  "claims": [
+    {
+      "claim_type": "module_role",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Central execution unit that decodes launch instructions, dispatches to ALU/div/mul/shift/bitwise datapaths, and routes results to LSU, GRF, exception, and launch feedback.",
+      "subject": "execute",
+      "explanation": "The module receives a 207-bit launch payload decoded into op1/op2/op3, path codes, and control fields. It fans out to multiple execution datapaths (adder, muller, shifter, reverse, satQ, bitwise) via selectors and merges, then collects results into a final result bus for output to LSU (163-bit), GRF (8-bit), exception (36-bit), and launch (96-bit). The four input event drives (LSU, GRF, launch, launch_by_path) and four free handshake outputs confirm a fully decoupled, event-driven pipeline stage.",
+      "signals": [
+        "i_launchDataToExe_207",
+        "o_executeDataToLsu_163",
+        "o_exeToLaunchData_96",
+        "o_exeToExcpData_36",
+        "o_executeToGrfData_8"
+      ],
+      "instances": [
+        "exeFifo2",
+        "executeSplitter",
+        "exeSelector",
+        "adder",
+        "muller",
+        "shifter",
+        "resMutexMerge",
+        "finalWaitMerge",
+        "ExcSplitter",
+        "grfSplitter"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1",
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1",
+        "flow_003_execute_i_launchDrive_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface,interface_data_contract,key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "interface,instances,connection_graph,assignments"
+        }
+      ],
+      "id": "semantic:module:execute:module_role:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Decodes the 207-bit launch packet into op1, op2, op3, path codes, and control flags, then dispatches operands to the appropriate execution datapath via exeSelector and op3Selector.",
+      "subject": "instruction decode and operand dispatch",
+      "explanation": "Assign index 1 decomposes i_launchDataToExe_207 into 35+ decoded fields including op1_32, op2_32, op3_32, pathCode_8, load/store flags, shift type, mul/div flags, and register list. The executeSplitter fans out to exeSelector (for ALU/div/mul/shift/rev) and op3Selector (for GRF writeback and op3-normal paths). This is the primary decode and dispatch point.",
+      "signals": [
+        "i_launchDataToExe_207",
+        "w_op1_32",
+        "w_op2_32",
+        "w_op3_32",
+        "w_pathCode_8",
+        "w_executeDataToExeSelctor_68"
+      ],
+      "instances": [
+        "executeSplitter",
+        "exeSelector",
+        "op3Selector",
+        "op3NormalSelector",
+        "secondExeSelector"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "assignments[1],connection_graph"
+        },
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        }
+      ],
+      "id": "semantic:module:execute:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Selects rs1 and rs2 data from either GRF or LSU forwarded results, using rele selectors and merges, before combining into a 64-bit operand pair.",
+      "subject": "register source selection (rs1/rs2)",
+      "explanation": "Four rele selectors (rele0-3) each pick between LSU data (via lsuMerge) and GRF data (via grfResSplitter). rs1Merge and rs2Merge combine the two rele outputs per register, then regMerge waits for both rs1 and rs2 to produce w_Rs1AndRs2Data_64. This implements register renaming or forwarding for the two source operands.",
+      "signals": [
+        "i_grfToExecuteData_64",
+        "i_lsuToExeData_64",
+        "w_grfRs1Data_32",
+        "w_lsuRs1Data_32",
+        "w_lastRs1Data_32",
+        "w_Rs1AndRs2Data_64"
+      ],
+      "instances": [
+        "rele0Selector",
+        "rele1Selector",
+        "rele2Selector",
+        "rele3Selector",
+        "rs1Merge",
+        "rs2Merge",
+        "regMerge",
+        "lsuMerge",
+        "grfResSplitter",
+        "rele4Splitter"
+      ],
+      "related_flows": [
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph"
+        },
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        }
+      ],
+      "id": "semantic:module:execute:structural_responsibility:002"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Dispatches operand pairs to adder, muller, shifter, reverse, satQ, and bitwise (and/or/eor) units, then collects results via fifos and mutex merges into a single 64-bit result bus.",
+      "subject": "execution datapath fan-out and result collection",
+      "explanation": "exeSelector fans out to 11 datapaths including adder (via addMutexMerge), muller (via mulWaitMerge), shifter (via shiftFifo/secondExeSelector), reverse, satQ, and bitwise. Each datapath produces a result that flows through a fifo (e.g., addFifo, mulFifo, shiftFifo) then into resMutexMerge (10-input mutex merge). The final result r_resMutexMergeToFinalWaitMergeData_64 is used for launch feedback and LSU output.",
+      "signals": [
+        "w_exeSelectorToAddData_64",
+        "w_exeSelectorToMulData_64",
+        "w_exeSelectorToShiftData_64",
+        "w_resMutexMergeToFinalWaitMergeData_64"
+      ],
+      "instances": [
+        "exeSelector",
+        "adder",
+        "muller",
+        "shifter",
+        "reverse",
+        "satQ",
+        "addFifo",
+        "mulFifo",
+        "shiftFifo",
+        "resMutexMerge",
+        "addMutexMerge",
+        "mulWaitMerge"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph,assignments"
+        },
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        }
+      ],
+      "id": "semantic:module:execute:structural_responsibility:003"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Routes the final execution result and metadata to four output interfaces: LSU (163-bit data+control), GRF (8-bit writeback), exception (36-bit PC+exception number), and launch (96-bit result+NZCV).",
+      "subject": "result routing to LSU, GRF, exception, and launch",
+      "explanation": "finalWaitMerge combines w_exeToLsuData_68 and w_exeToLsuData_95 into o_executeDataToLsu_163. ExcSplitter splits w_executeDriveToLsu_1 into o_exeDriveToExcp_1 and o_executeDriveToLsu_1. grfSplitter routes writeback data to o_executeToGrfData_8. rescSplitter sends the result to exeToLaunchDataDelay1/2 for o_exeToLaunchData_96. Assign 53 packs NZCV and result into o_exeToLaunchData_96.",
+      "signals": [
+        "o_executeDataToLsu_163",
+        "o_exeToExcpData_36",
+        "o_executeToGrfData_8",
+        "o_exeToLaunchData_96",
+        "w_nzcv_4"
+      ],
+      "instances": [
+        "finalWaitMerge",
+        "ExcSplitter",
+        "grfSplitter",
+        "rescSplitter",
+        "exeToLaunchDataDelay1",
+        "exeToLaunchDataDelay2"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph,assignments[53,58]"
+        },
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        }
+      ],
+      "id": "semantic:module:execute:structural_responsibility:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "exeFifo2",
+      "summary": "Input fifo that buffers the launch drive event and decouples the execute stage from the launch stage.",
+      "explanation": "exeFifo2 receives i_launchDriveToExecute_1 and outputs w_launchDriveToExecute_1 to executeSplitter. It is a cFifo1 (single-entry fifo) that provides backpressure via free handshake. This allows the launch stage to proceed even if execute is stalled.",
+      "signals": [
+        "i_launchDriveToExecute_1",
+        "w_launchDriveToExecute_1"
+      ],
+      "instances": [
+        "exeFifo2"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph"
+        }
+      ],
+      "id": "semantic:module:execute:component_role:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "resMutexMerge",
+      "summary": "10-input mutex merge that collects results from all execution datapaths into a single 64-bit result bus.",
+      "explanation": "resMutexMerge (cMutexMerge10_64b_exe) takes inputs from addFifo, andFifo, divFifo, eorFifo, exeSelector, mulSelector, orFifo, revFifo, rn_32, satQFifo, and secondExeSelector. It selects one winner per cycle based on mutex arbitration, producing w_resMutexMergeToFinalWaitMergeData_64. This is the central result collection point.",
+      "signals": [
+        "w_resMutexMergeToFinalWaitMergeData_64"
+      ],
+      "instances": [
+        "resMutexMerge"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph"
+        }
+      ],
+      "id": "semantic:module:execute:component_role:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "executeTap",
+      "summary": "Activity monitor that asserts o_executeInUseFlag_1 when the execute stage is active.",
+      "explanation": "executeTap (contTap) monitors w_launchDriveToExecute_1 and i_executeFreeFromExcp_1 to produce o_executeInUseFlag_1. This flag indicates the module is processing an instruction and can be used for power management or debug.",
+      "signals": [
+        "o_executeInUseFlag_1"
+      ],
+      "instances": [
+        "executeTap"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "reference",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph"
+        }
+      ],
+      "id": "semantic:module:execute:component_role:003"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "assign index 1",
+      "summary": "Decodes the 207-bit launch packet into all internal control and data fields.",
+      "explanation": "This assign splits i_launchDataToExe_207 into 35+ named wires including op1_32, op2_32, op3_32, pathCode_8, load/store flags, shift type, mul/div flags, register list, and PC. This is the primary instruction decode point.",
+      "signals": [
+        "i_launchDataToExe_207",
+        "w_op1_32",
+        "w_op2_32",
+        "w_op3_32",
+        "w_pathCode_8",
+        "w_pc_32",
+        "w_load_1",
+        "w_isLS_1",
+        "w_mulDivS_1",
+        "w_shift_3"
+      ],
+      "related_assignments": [
+        "assign 0",
+        "assign 2",
+        "assign 3",
+        "assign 4",
+        "assign 5",
+        "assign 6",
+        "assign 7",
+        "assign 8"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "assignments[1]"
+        }
+      ],
+      "id": "semantic:module:execute:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "assign index 53",
+      "summary": "Packs the final execution result and NZCV flags into the 96-bit launch feedback data.",
+      "explanation": "o_exeToLaunchData_96 is formed as {w_nzcv_4, 28'b0, r_resMutexMergeToFinalWaitMergeData_64}. This provides the result and condition flags back to the launch stage for next-PC calculation and writeback.",
+      "signals": [
+        "o_exeToLaunchData_96",
+        "w_nzcv_4",
+        "r_resMutexMergeToFinalWaitMergeData_64"
+      ],
+      "related_assignments": [
+        "assign 48",
+        "assign 49",
+        "assign 50",
+        "assign 51",
+        "assign 52"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "assignments[53]"
+        }
+      ],
+      "id": "semantic:module:execute:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "assign index 58",
+      "summary": "Packs PC and exception number into the 36-bit exception output.",
+      "explanation": "o_exeToExcpData_36 is formed as {w_pc_32, w_excNum_4}. This provides the faulting PC and exception type to the exception handler.",
+      "signals": [
+        "o_exeToExcpData_36",
+        "w_pc_32",
+        "w_excNum_4"
+      ],
+      "related_assignments": [
+        "assign 1"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "assignments[58]"
+        }
+      ],
+      "id": "semantic:module:execute:assignment_interpretation:003"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "assign index 38 and 39",
+      "summary": "Selects the correct half of LSU data for rs1 and rs2 based on register address comparison.",
+      "explanation": "w_lsuR1Data_32 and w_lsuR2Data_32 are selected from i_lsuToExeData_64[63:32] or [31:0] based on whether the register address matches w_preRdHiAddr_4. This handles doubleword LSU results where the two halves correspond to different registers.",
+      "signals": [
+        "i_lsuToExeData_64",
+        "w_lsuR1Data_32",
+        "w_lsuR2Data_32",
+        "w_rs1Addr_4",
+        "w_rs2Addr_4",
+        "w_preRdHiAddr_4"
+      ],
+      "related_assignments": [
+        "assign 1"
+      ],
+      "related_flows": [
+        "flow_002_execute_i_LsuDriveToExe_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "assignments[38"
+        },
+        {
+          "source": "39]"
+        }
+      ],
+      "id": "semantic:module:execute:assignment_interpretation:004"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Primary instruction input interface that carries a fully decoded instruction packet with event handshake.",
+      "subject": "launch drive interface",
+      "explanation": "i_launchDriveToExecute_1 (event) carries i_launchDataToExe_207 (payload) and is acknowledged by o_executeFreeToLaunch_1 (free). The 207-bit payload contains all decoded fields needed for execution. A second event i_launchDrive_1 also carries the same payload, suggesting a secondary or speculative launch path.",
+      "signals": [
+        "i_launchDriveToExecute_1",
+        "i_launchDrive_1",
+        "i_launchDataToExe_207",
+        "o_executeFreeToLaunch_1"
+      ],
+      "related_payload": [
+        "i_launchDataToExe_207"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Provides forwarded LSU result data for register renaming, with event handshake and free back to LSU.",
+      "subject": "LSU data forward interface",
+      "explanation": "i_LsuDriveToExe_1 (event) carries i_lsuToExeData_64 (payload) and is acknowledged by o_lsuFreeFromExecute_1 (free). The 64-bit data is used for rs1/rs2 selection via rele selectors. This implements LSU-to-execute forwarding.",
+      "signals": [
+        "i_LsuDriveToExe_1",
+        "i_lsuToExeData_64",
+        "o_lsuFreeFromExecute_1"
+      ],
+      "related_payload": [
+        "i_lsuToExeData_64"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:002"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Provides register file read data for execution, with event handshake and free back to GRF.",
+      "subject": "GRF read data interface",
+      "explanation": "i_grfDriveToExecute_1 (event) carries i_grfToExecuteData_64 (payload) and is acknowledged by o_executeFreeToGrf_1 (free). The 64-bit data is split by grfResSplitter for rs1/rs2 selection.",
+      "signals": [
+        "i_grfDriveToExecute_1",
+        "i_grfToExecuteData_64",
+        "o_executeFreeToGrf_1"
+      ],
+      "related_payload": [
+        "i_grfToExecuteData_64"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:003"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Reports exception events with PC and exception number to the exception handler.",
+      "subject": "exception output interface",
+      "explanation": "o_exeDriveToExcp_1 (event) carries o_exeToExcpData_36 (payload) and is acknowledged by i_executeFreeFromExcp_1 (free). The 36-bit payload contains PC[31:0] and exception number[3:0].",
+      "signals": [
+        "o_exeDriveToExcp_1",
+        "o_exeToExcpData_36",
+        "i_executeFreeFromExcp_1"
+      ],
+      "related_payload": [
+        "o_exeToExcpData_36"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:004"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Sends execution results (address, data, control) to the LSU for memory operations.",
+      "subject": "LSU result output interface",
+      "explanation": "o_executeDriveToLsu_1 (event) carries o_executeDataToLsu_163 (payload) and is acknowledged by i_executeFreeFromLsu_1 (free). The 163-bit payload includes address, store data, and control fields for load/store instructions.",
+      "signals": [
+        "o_executeDriveToLsu_1",
+        "o_executeDataToLsu_163",
+        "i_executeFreeFromLsu_1"
+      ],
+      "related_payload": [
+        "o_executeDataToLsu_163"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:005"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "Returns execution results and condition flags to the launch stage for next-PC calculation and writeback.",
+      "subject": "launch feedback interface",
+      "explanation": "o_exeByPathDriveToLaunch_1 (event) carries o_exeToLaunchData_96 (payload) and is acknowledged by i_executeFreeFromLaunchByPath_1 (free). The 96-bit payload contains NZCV flags and the 64-bit result.",
+      "signals": [
+        "o_exeByPathDriveToLaunch_1",
+        "o_exeToLaunchData_96",
+        "i_executeFreeFromLaunchByPath_1"
+      ],
+      "related_payload": [
+        "o_exeToLaunchData_96"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:006"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "The manual should emphasize the fan-out from decode to multiple execution units and the result collection via mutex merges.",
+      "subject": "execution datapath architecture",
+      "explanation": "The module has a clear splitter-selector-execute-merge pattern. The 207-bit decode, 11-way exeSelector, 10-input resMutexMerge, and 4 output interfaces are the key architectural features. The fifo-based decoupling between datapaths and the mutex arbitration for result collection should be highlighted.",
+      "signals": [
+        "i_launchDataToExe_207",
+        "w_executeDataToExeSelctor_68",
+        "w_resMutexMergeToFinalWaitMergeData_64"
+      ],
+      "instances": [
+        "executeSplitter",
+        "exeSelector",
+        "resMutexMerge",
+        "finalWaitMerge"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances,component_families"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph,assignments"
+        }
+      ],
+      "id": "semantic:module:execute:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "The manual should explain the rele selector/merge network that selects rs1/rs2 from GRF or LSU forwarded data.",
+      "subject": "register renaming and forwarding",
+      "explanation": "The four rele selectors (rele0-3) and two rs merges (rs1Merge, rs2Merge) implement a forwarding network that picks register values from either the GRF read data or the LSU forwarded data. This is critical for understanding data hazards and pipeline bypass.",
+      "signals": [
+        "i_grfToExecuteData_64",
+        "i_lsuToExeData_64",
+        "w_grfRs1Data_32",
+        "w_lsuRs1Data_32",
+        "w_lastRs1Data_32"
+      ],
+      "instances": [
+        "rele0Selector",
+        "rele1Selector",
+        "rele2Selector",
+        "rele3Selector",
+        "rs1Merge",
+        "rs2Merge",
+        "regMerge",
+        "lsuMerge",
+        "grfResSplitter"
+      ],
+      "related_flows": [
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json",
+          "path": "connection_graph"
+        }
+      ],
+      "id": "semantic:module:execute:documentation_focus:002"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "The manual should document the event/free handshake on all interfaces and the internal fifo-based decoupling.",
+      "subject": "event-driven handshake protocol",
+      "explanation": "All interfaces use event_drive (request) and event_free (acknowledge) handshakes. Internal fifos (exeFifo2, addFifo, mulFifo, etc.) provide decoupling between pipeline stages. The executeTap monitors activity. This is a fully decoupled, latency-insensitive design.",
+      "signals": [
+        "i_launchDriveToExecute_1",
+        "o_executeFreeToLaunch_1",
+        "o_executeInUseFlag_1"
+      ],
+      "instances": [
+        "exeFifo2",
+        "executeTap"
+      ],
+      "related_flows": [
+        "flow_000_execute_i_launchDriveToExecute_1",
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json",
+          "path": "interface"
+        },
+        {
+          "source": "interface_data_contract"
+        },
+        {
+          "source": "key_instances"
+        }
+      ],
+      "id": "semantic:module:execute:documentation_focus:003"
+    }
+  ],
+  "evidence_gaps": [
+    {
+      "field": "internal_event_flow.i_LsuDriveToExe_1",
+      "reason": "no module event output reached from i_LsuDriveToExe_1"
+    },
+    {
+      "field": "internal_event_flow.i_grfDriveToExecute_1",
+      "reason": "no module event output reached from i_grfDriveToExecute_1"
+    },
+    {
+      "field": "internal_event_flow.i_launchDriveToExecute_1",
+      "reason": "no module event output reached from i_launchDriveToExecute_1"
+    },
+    {
+      "field": "internal_event_flow.i_launchDrive_1",
+      "reason": "no module event output reached from i_launchDrive_1"
+    }
+  ]
+}

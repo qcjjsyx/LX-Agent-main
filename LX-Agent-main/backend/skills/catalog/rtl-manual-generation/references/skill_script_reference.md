@@ -134,7 +134,7 @@ derived component JSON 构建器。
 
 主要职责：
 
-- 读取 `parser/schemas/json_templates/family_level.json` 中的 family 模板。
+- 读取 `schemas/json_templates/family_level.json` 中的 family 模板。
 - 根据端口名推断 component 的 upstream、downstream、payload、condition、fire 角色。
 - 把 family contract、release rule、flow semantics 写入 component JSON。
 - 记录内部依赖，并声明 `stops_at_family_level: true`。

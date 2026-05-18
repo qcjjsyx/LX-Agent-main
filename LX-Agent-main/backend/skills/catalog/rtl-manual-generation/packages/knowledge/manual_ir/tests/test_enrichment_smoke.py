@@ -13,143 +13,61 @@ class FakeLLMClient:
     def __init__(self):
         self.messages = []
 
-    def complete_json(self, messages):
+    def complete_text(self, messages):
         self.messages = messages
-        return json.dumps(
-            {
-                "id": "semantic_module:decoder",
-                "kind": "semantic_module_card",
-                "module_name": "decoder",
-                "purpose": {
-                    "text": "Accepts fetch payload and drives a decoded event toward launch.",
-                    "confidence": "medium",
-                    "evidence": [
-                        {
-                            "source": "modules/decoder.json",
-                            "path": "interface_summary.signal_groups",
-                        }
-                    ],
-                },
-                "key_behaviors": [
-                    {
-                        "name": "decode handoff",
-                        "description": "Uses i_driveFromIF and o_driveToLaunch as the event handoff boundary.",
-                        "signals": ["i_driveFromIF", "o_driveToLaunch"],
-                        "instances": [],
-                        "confidence": "medium",
-                        "evidence": [
-                            {
-                                "source": "modules/decoder.json",
-                                "path": "interface.ports",
-                            }
-                        ],
-                    }
-                ],
-                "important_signals": [
-                    {
-                        "signal": "i_pcAndIns_64",
-                        "role": "fetch payload carrying PC/instruction bits.",
-                        "confidence": "medium",
-                        "evidence": [
-                            {
-                                "source": "rtl/decoder.v",
-                                "line_start": 2,
-                                "line_end": 8,
-                            }
-                        ],
-                    }
-                ],
-                "payload_semantics": [],
-                "payload_field_semantics": [
-                    {
-                        "payload": "i_pcAndIns_64",
-                        "fields": ["instruction and PC payload bits are visible but not decomposed in the fixture"],
-                        "description": "Carries fetch payload into decoder.",
-                        "confidence": "low",
-                        "evidence": [
-                            {
-                                "source": "rtl/decoder.v",
-                                "line_start": 4,
-                                "line_end": 4,
-                            }
-                        ],
-                    }
-                ],
-                "interface_semantics": [],
-                "handshake_notes": [],
-                "control_flow_notes": [],
-                "state_or_register_behavior": [],
-                "process_semantics": [
-                    {
-                        "process_id": "process:8",
-                        "kind": "always",
-                        "summary": "Registers the output drive when input drive is observed.",
-                        "reads": ["i_driveFromIF"],
-                        "writes": ["drive_q"],
-                        "confidence": "medium",
-                        "evidence": [
-                            {
-                                "source": "rtl/decoder.v",
-                                "line_start": 8,
-                                "line_end": 12,
-                            }
-                        ],
-                    }
-                ],
-                "assign_semantics": [
-                    {
-                        "lhs": "o_driveToLaunch",
-                        "rhs_summary": "Driven from drive_q.",
-                        "role": "event output",
-                        "confidence": "medium",
-                        "evidence": [
-                            {
-                                "source": "rtl/decoder.v",
-                                "line_start": 13,
-                                "line_end": 13,
-                            }
-                        ],
-                    }
-                ],
-                "signal_semantics": [],
-                "evidence_gaps": [],
-                "input_hash": "",
-            }
-        )
+        return """[PURPOSE]
+text: Accepts fetch payload and drives a decoded event toward launch.
+confidence: medium
+evidence: modules/decoder.json@interface_summary.signal_groups
+
+[KEY_BEHAVIOR]
+name: decode handoff
+description: Uses i_driveFromIF and o_driveToLaunch as the event handoff boundary.
+signals: i_driveFromIF, o_driveToLaunch
+instances:
+confidence: medium
+evidence: modules/decoder.json@interface.ports
+
+[IMPORTANT_SIGNAL]
+signal: i_pcAndIns_64
+role: fetch payload carrying PC/instruction bits.
+confidence: medium
+evidence: rtl/decoder.v:2-8
+
+[PAYLOAD_FIELD_SEMANTIC]
+payload: i_pcAndIns_64
+fields: instruction and PC payload bits are visible but not decomposed in the fixture
+description: Carries fetch payload into decoder.
+confidence: low
+evidence: rtl/decoder.v:4
+
+[PROCESS_SEMANTIC]
+process_id: process:8
+kind: always
+summary: Registers the output drive when input drive is observed.
+reads: i_driveFromIF
+writes: drive_q
+confidence: medium
+evidence: rtl/decoder.v:8-12
+
+[ASSIGN_SEMANTIC]
+lhs: o_driveToLaunch
+rhs_summary: Driven from drive_q.
+role: event output
+confidence: medium
+evidence: rtl/decoder.v:13
+"""
 
 
-class RepairingLLMClient:
-    def __init__(self):
-        self.calls = 0
-        self.messages = []
-
-    def complete_json(self, messages):
-        self.calls += 1
-        self.messages.append(messages)
-        if self.calls == 1:
-            return '{"module_name": "decoder", "purpose": {"text": "broken", "confidence": "medium", "evidence": [{"source": "x"}]}'
-        return json.dumps(
-            {
-                "module_name": "decoder",
-                "purpose": {
-                    "text": "Repaired semantic card.",
-                    "confidence": "medium",
-                    "evidence": [{"source": "modules/decoder.json", "path": "interface"}],
-                },
-                "key_behaviors": [],
-                "important_signals": [],
-                "payload_semantics": [],
-                "payload_field_semantics": [],
-                "interface_semantics": [],
-                "handshake_notes": [],
-                "control_flow_notes": [],
-                "state_or_register_behavior": [],
-                "process_semantics": [],
-                "assign_semantics": [],
-                "signal_semantics": [],
-                "evidence_gaps": [],
-            }
-        )
+class PartialTaggedLLMClient:
+    def complete_text(self, messages):
+        return """[KEY_BEHAVIOR]
+name: decode handoff
+description: Uses the parser-visible event ports as a local handoff.
+signals: i_driveFromIF, o_driveToLaunch
+confidence: medium
+evidence: modules/decoder.json@interface.ports
+"""
 
 
 class EnrichmentSmokeTest(unittest.TestCase):
@@ -185,10 +103,10 @@ class EnrichmentSmokeTest(unittest.TestCase):
             overlays = context_pack["sections"][0]["semantic_overlays"]
             self.assertEqual([item["id"] for item in overlays], ["semantic_module:decoder"])
 
-    def test_bad_llm_json_does_not_write_semantic_card(self):
+    def test_bad_tagged_text_does_not_write_semantic_card(self):
         class BadLLMClient:
-            def complete_json(self, messages):
-                return "not json"
+            def complete_text(self, messages):
+                return "plain text without tags"
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -206,13 +124,13 @@ class EnrichmentSmokeTest(unittest.TestCase):
 
             self.assertFalse((manual_root / "semantic_module_cards" / "decoder.json").exists())
 
-    def test_bad_json_is_repaired_before_write(self):
+    def test_missing_purpose_gets_deterministic_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             parser_root = root / "parser_pipeline_rtl"
             manual_root = root / "manual_ir" / "arm_soc_top"
             _write_fixture(parser_root, manual_root, root)
-            client = RepairingLLMClient()
+            client = PartialTaggedLLMClient()
 
             report = enrich_manual_ir(
                 manual_root,
@@ -222,10 +140,12 @@ class EnrichmentSmokeTest(unittest.TestCase):
             )
 
             self.assertEqual(report["status"], "passed")
-            self.assertEqual(client.calls, 2)
-            self.assertEqual(report["issues"][0]["code"], "json_repaired")
             semantic_path = manual_root / "semantic_module_cards" / "decoder.json"
             self.assertTrue(semantic_path.is_file())
+            semantic = json.loads(semantic_path.read_text(encoding="utf-8"))
+            self.assertEqual(semantic["purpose"]["confidence"], "low")
+            self.assertEqual(semantic["key_behaviors"][0]["name"], "decode handoff")
+            self.assertTrue(semantic["evidence_gaps"])
 
 
 def _write_fixture(parser_root: Path, manual_root: Path, repo_root: Path) -> None:

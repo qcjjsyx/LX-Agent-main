@@ -62,6 +62,7 @@ def parse_verilog_file(path: Path) -> Dict[str, Any]:
         ports = parse_body_port_declarations(body, module_info["ports_text"])
     instances = parse_instantiations(body)
     local_signals = parse_local_signals(body)
+    assignments = parse_continuous_assignments(body)
 
     warnings: List[str] = []
     if not module_info["name"]:
@@ -75,6 +76,7 @@ def parse_verilog_file(path: Path) -> Dict[str, Any]:
         "reset": derive_reset(ports),
         "local_signals": local_signals,
         "instances": instances,
+        "assignments": assignments,
         "warnings": warnings,
     }
 
@@ -292,6 +294,30 @@ def parse_instantiations(body: str) -> List[Dict[str, Any]]:
     return instances
 
 
+def parse_continuous_assignments(body: str) -> List[Dict[str, Any]]:
+    assignments: List[Dict[str, Any]] = []
+    for index, match in enumerate(re.finditer(r"\bassign\b\s+(.*?);", body, re.S)):
+        statement = " ".join(match.group(1).split())
+        lhs, rhs = _split_assignment(statement)
+        if not lhs or not rhs:
+            continue
+        lhs_terms = extract_expression_identifiers(lhs)
+        rhs_terms = extract_expression_identifiers(rhs)
+        assignment = {
+            "kind": "continuous_assign",
+            "index": index,
+            "lhs": lhs,
+            "rhs": rhs,
+            "lhs_terms": lhs_terms,
+            "rhs_terms": rhs_terms,
+            "lhs_role": infer_signal_role(lhs),
+        }
+        if len(lhs_terms) == 1:
+            assignment["lhs_signal"] = lhs_terms[0]
+        assignments.append(assignment)
+    return assignments
+
+
 def parse_parameter_overrides(params_text: str) -> Dict[str, str]:
     overrides: Dict[str, str] = {}
     for index, segment in enumerate(split_top_level(params_text)):
@@ -328,6 +354,21 @@ def parse_named_connections(connections_text: str) -> List[Dict[str, Any]]:
             connection["signal_terms"] = signal_terms
         connections.append(connection)
     return connections
+
+
+def extract_expression_identifiers(expression: str) -> List[str]:
+    cleaned = _strip_verilog_literals(expression)
+    identifiers = []
+    seen = set()
+    for match in re.finditer(r"\b[A-Za-z_]\w*\b", cleaned):
+        name = match.group(0)
+        if name in KEYWORDS:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        identifiers.append(name)
+    return identifiers
 
 
 def derive_reset(ports: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -369,6 +410,39 @@ def split_top_level(text: str) -> List[str]:
     if current:
         items.append("".join(current))
     return items
+
+
+def _split_assignment(statement: str) -> Tuple[str, str]:
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    for index, char in enumerate(statement):
+        if char == "=" and depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+            if index > 0 and statement[index - 1] in {"<", ">", "=", "!"}:
+                continue
+            if index + 1 < len(statement) and statement[index + 1] == "=":
+                continue
+            return statement[:index].strip(), statement[index + 1 :].strip()
+        if char == "(":
+            depth_paren += 1
+        elif char == ")":
+            depth_paren -= 1
+        elif char == "{":
+            depth_brace += 1
+        elif char == "}":
+            depth_brace -= 1
+        elif char == "[":
+            depth_bracket += 1
+        elif char == "]":
+            depth_bracket -= 1
+    return "", ""
+
+
+def _strip_verilog_literals(expression: str) -> str:
+    cleaned = re.sub(r"\b\d+\s*'\s*[sS]?[bBoOdDhH][0-9a-fA-F_xXzZ?]+", " ", expression)
+    cleaned = re.sub(r"\b\d+\b", " ", cleaned)
+    cleaned = re.sub(r'"(?:\\.|[^"\\])*"', " ", cleaned)
+    return cleaned
 
 
 def _parse_port_segment(direction: str, segment: str) -> List[Dict[str, Any]]:

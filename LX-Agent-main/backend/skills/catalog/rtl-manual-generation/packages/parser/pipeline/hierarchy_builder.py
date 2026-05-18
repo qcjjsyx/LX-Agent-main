@@ -10,7 +10,13 @@ from typing import Any, Dict, List, Set
 from .boundary_policy import BoundaryDecision, decide_boundary, infer_component_family
 from .cc_header_reader import read_cc_header
 from .family_json_builder import build_component_json, load_family_templates, missing_family_template
-from .flow_inference import build_flow_graph, collect_family_usage, extract_signal_terms, infer_signal_role
+from .flow_inference import (
+    build_connection_graph,
+    build_flow_graph,
+    collect_family_usage,
+    extract_signal_terms,
+    infer_signal_role,
+)
 from .module_index import build_module_index, resolve_explicit_verilog_files
 from .module_parser import parse_verilog_file
 
@@ -198,11 +204,22 @@ def _build_module_artifact(context: BuildContext, module_name: str) -> Dict[str,
 
     flow_graph = build_flow_graph(
         {
+            "name": module_name,
             "ports": parse_result.get("ports", []),
             "local_signals": parse_result.get("local_signals", []),
             "instances": enriched_instances,
             "transparent_flows": transparent_flows,
+            "assignments": parse_result.get("assignments", []),
         }
+    )
+    connection_graph = build_connection_graph(
+        {
+            "name": module_name,
+            "ports": parse_result.get("ports", []),
+            "instances": enriched_instances,
+            "transparent_flows": transparent_flows,
+        },
+        flow_graph,
     )
 
     module_json = {
@@ -219,6 +236,7 @@ def _build_module_artifact(context: BuildContext, module_name: str) -> Dict[str,
         },
         "local_signals": parse_result.get("local_signals", []),
         "instances": enriched_instances,
+        "assignments": parse_result.get("assignments", []),
         "transparent_flows": transparent_flows,
         "interface_summary": _build_interface_summary(parse_result.get("ports", [])),
         "direct_children": {
@@ -226,6 +244,7 @@ def _build_module_artifact(context: BuildContext, module_name: str) -> Dict[str,
             "components": sorted(set(direct_components)),
         },
         "flow_graph": flow_graph,
+        "connection_graph": connection_graph,
         "transitive_summary": {},
         "warnings": parse_result.get("warnings", []),
     }
