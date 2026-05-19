@@ -292,14 +292,15 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl"):
         阅读 RTL / 源代码。
 
     当测试文件类型是 rtl 时：
-        固定生成 parser_pipeline_rtl。
+        生成 parser_pipeline_rtl；如果识别到当前项目是 rtl/rtl 输入布局，
+        则输出到 rtl/parser_pipeline_rtl。
 
     输入：
         project_root: 项目根目录，默认 "."
         rtl_inputs: RTL 输入目录，默认 "rtl"
 
     输出：
-        parser_pipeline_rtl/
+        parser_pipeline_rtl/ 或 rtl/parser_pipeline_rtl/
     """
     print("\n[Parser Tool] 调用 rtl-manual-generation/scripts/run_parser_tool.py...")
     return run_skill_script(
@@ -320,19 +321,20 @@ def run_knowledge_tool(
     audience: str = "newcomer",
     section_id: str = "",
     enrich: bool = True,
-    enrich_modules: str = "decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf",
+    enrich_modules: str = "",
 ):
     """
     Knowledge Tool：
 
     职责：
-        阅读 parser 生成的产物，并默认读取 RTL 源码做语义增强。
+        阅读 parser 生成的产物，运行 Knowledge IR -> AI Context
+        -> Semantic Layer -> Manual Context 流水线。
 
     固定输入：
-        parser_pipeline_rtl/
+        rtl/parser_pipeline_rtl/ 或 parser_pipeline_rtl/
 
     固定输出：
-        manual_ir/<top_module>/
+        rtl/knowledge_ir/<top_module>/ 和 rtl/manual_context/<top_module>/
     """
     print("\n[Knowledge Tool] 调用 rtl-manual-generation/scripts/run_knowledge_tool.py...")
 
@@ -352,7 +354,7 @@ def run_knowledge_tool(
         if enrich_modules:
             args.extend(["--enrich-modules", enrich_modules])
 
-    return run_skill_script("run_knowledge_tool.py", args)
+    return run_skill_script("run_knowledge_tool.py", args, timeout=700)
 
 
 # ====================== 工具调度表 ======================
@@ -396,7 +398,7 @@ TOOLS = [
                 "properties": {
                     "filepath": {
                         "type": "string",
-                        "description": "要读取的文件路径，例如 README.md、docs/xxx.md、manual_ir/top/context_pack.json"
+                        "description": "要读取的文件路径，例如 README.md、docs/xxx.md、rtl/manual_context/top/project_context.json"
                     }
                 },
                 "required": ["filepath"]
@@ -466,7 +468,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_parser_tool",
-            "description": "Parser Tool：阅读 RTL 源码目录，运行 parser pipeline，并固定生成 parser_pipeline_rtl 目录。",
+            "description": "Parser Tool：阅读 RTL 源码目录，运行 parser pipeline，生成 parser_pipeline_rtl；对 rtl/rtl 输入布局会生成 rtl/parser_pipeline_rtl。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -487,7 +489,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_knowledge_tool",
-            "description": "Knowledge Tool：读取 parser_pipeline_rtl，默认读取 RTL 源码做语义增强，生成 manual_ir/<top_module>、validation_report.json 和 context_pack.json。",
+            "description": "Knowledge Tool：读取 parser artifacts，运行 Knowledge IR、AI Context、Semantic Layer、Manual Context 流水线，生成 rtl/knowledge_ir/<top_module> 和 rtl/manual_context/<top_module>。旧 Manual IR/ContextPack 不再作为主输出。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -505,15 +507,15 @@ TOOLS = [
                     },
                     "section_id": {
                         "type": "string",
-                        "description": "可选，只生成某个 section 的 ContextPack"
+                        "description": "兼容旧参数。Manual Context 主流程会忽略该参数。"
                     },
                     "enrich": {
                         "type": "boolean",
-                        "description": "是否运行源码语义增强。默认 true，生成最全面的 Manual IR 语义层。"
+                        "description": "是否运行 Semantic Layer。默认 true；false 时只生成确定性 Knowledge IR、AI Context 和 Manual Context。"
                     },
                     "enrich_modules": {
                         "type": "string",
-                        "description": "逗号分隔的语义增强模块列表，默认覆盖核心 CPU 模块。"
+                        "description": "兼容旧参数，映射为 Semantic Layer 的模块列表。留空表示由 pipeline 选择全部模块。"
                     }
                 },
                 "required": ["project_root", "top_module"]

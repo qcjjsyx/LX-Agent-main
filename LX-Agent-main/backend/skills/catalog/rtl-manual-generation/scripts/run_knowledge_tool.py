@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -25,170 +26,240 @@ def run_knowledge_tool(
     audience: str = "newcomer",
     section_id: str = "",
     enrich: bool = True,
-    enrich_modules: str = "decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf",
+    enrich_modules: str = "",
+    max_flows_per_module: str = "",
+    semantic_model: str = "",
+    semantic_base_url: str = "",
+    semantic_api_key: str = "",
 ) -> str:
+    """Run the new Knowledge IR -> Manual Context pipeline.
+
+    The function name and legacy arguments are kept for existing skill/tool
+    routing. `audience` and `section_id` were only meaningful for legacy
+    Manual IR ContextPack generation and are now recorded as compatibility
+    notes; final manual generation consumes Manual Context instead.
+    """
     if not top_module.strip():
-        return "Knowledge failed: top_module is required."
+        return "Knowledge Tool execution failed: top_module is required."
 
     root = Path(project_root).resolve()
-    parser_dir = root / "parser_pipeline_rtl"
-    manual_ir_dir = root / "manual_ir" / top_module
-    context_pack_output = manual_ir_dir / "context_pack.json"
-    validation_report_output = manual_ir_dir / "validation_report.json"
-
     if not root.exists():
-        return f"Knowledge failed: project_root does not exist: {root}"
+        return f"Knowledge Tool execution failed: project_root does not exist: {root}"
 
-    if not parser_dir.exists():
+    parser_dir = locate_parser_artifacts(root)
+    if not parser_dir:
         return (
-            "Knowledge failed: parser_pipeline_rtl was not found.\n"
+            "Knowledge Tool execution failed: parser artifacts were not found.\n"
+            "Expected one of:\n"
+            f"- {root / 'rtl' / 'parser_pipeline_rtl'}\n"
+            f"- {root / 'parser_pipeline_rtl'}\n"
             "Run run_parser_tool first so parser artifacts exist."
         )
 
-    export_cmd = [
+    output_base = output_base_for(root, parser_dir)
+    knowledge_output_root = output_base / "knowledge_ir"
+    manual_context_output_root = output_base / "manual_context"
+    knowledge_dir = knowledge_output_root / top_module
+    manual_context_dir = manual_context_output_root / top_module
+
+    cmd = [
         sys.executable,
         "-m",
-        "knowledge.manual_ir",
-        "export",
+        "knowledge.pipeline",
         "--artifacts-root",
-        "parser_pipeline_rtl",
+        path_arg(root, parser_dir),
         "--top-module",
         top_module,
-        "--output-dir",
-        str(Path("manual_ir") / top_module),
+        "--knowledge-output-root",
+        path_arg(root, knowledge_output_root),
+        "--manual-context-output-root",
+        path_arg(root, manual_context_output_root),
+        "--skip-failed-semantic",
     ]
 
-    validate_cmd = [
-        sys.executable,
-        "-m",
-        "knowledge.manual_ir",
-        "validate",
-        "--manual-ir-dir",
-        str(Path("manual_ir") / top_module),
-        "--parser-artifacts-root",
-        "parser_pipeline_rtl",
-        "--output",
-        str(Path("manual_ir") / top_module / "validation_report.json"),
-    ]
+    if not enrich:
+        cmd.append("--skip-semantic")
+    elif enrich_modules.strip():
+        cmd.extend(["--semantic-modules", normalize_modules(enrich_modules)])
 
-    enrich_cmd = [
-        sys.executable,
-        "-m",
-        "knowledge.manual_ir",
-        "enrich",
-        "--manual-ir-dir",
-        str(Path("manual_ir") / top_module),
-        "--parser-artifacts-root",
-        "parser_pipeline_rtl",
-        "--modules",
-        enrich_modules,
-        "--skip-missing",
-        "--skip-failed",
-        "--output",
-        str(Path("manual_ir") / top_module / "enrichment_report.json"),
-    ]
-
-    pack_cmd = [
-        sys.executable,
-        "-m",
-        "knowledge.manual_ir",
-        "pack",
-        "--manual-ir-dir",
-        str(Path("manual_ir") / top_module),
-        "--audience",
-        audience,
-        "--output",
-        str(Path("manual_ir") / top_module / "context_pack.json"),
-    ]
-
-    if section_id:
-        pack_cmd.extend(["--section-id", section_id])
-
-    steps = [
-        ("Export Manual IR", export_cmd),
-    ]
-    if enrich:
-        steps.append(("Enrich Manual IR", enrich_cmd))
-    steps.extend([
-        ("Validate Manual IR", validate_cmd),
-        ("Generate ContextPack", pack_cmd),
-    ])
-    logs = []
+    if max_flows_per_module.strip():
+        cmd.extend(["--max-flows-per-module", max_flows_per_module.strip()])
+    if semantic_model.strip():
+        cmd.extend(["--semantic-model", semantic_model.strip()])
+    if semantic_base_url.strip():
+        cmd.extend(["--semantic-base-url", semantic_base_url.strip()])
+    if semantic_api_key.strip():
+        cmd.extend(["--semantic-api-key", semantic_api_key.strip()])
 
     try:
-        for title, cmd in steps:
-            result = subprocess.run(
-                cmd,
-                cwd=str(root),
-                capture_output=True,
-                text=True,
-                timeout=180,
-                env=package_env(),
-            )
-
-            stdout = result.stdout.strip()
-            stderr = result.stderr.strip()
-
-            logs.append(
-                f"\n===== {title} =====\n"
-                f"Command: {' '.join(cmd)}\n"
-                f"returncode: {result.returncode}\n"
-                f"STDOUT:\n{stdout or 'None'}\n"
-                f"STDERR:\n{stderr or 'None'}\n"
-            )
-
-            if result.returncode != 0:
-                return "Knowledge Tool execution failed\n" + "\n".join(logs)
+        result = subprocess.run(
+            cmd,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=package_env(),
+        )
     except subprocess.TimeoutExpired:
-        return "Knowledge failed: execution timed out."
+        return "Knowledge Tool execution failed: execution timed out."
     except Exception as exc:
-        return f"Knowledge failed: {exc}"
+        return f"Knowledge Tool execution failed: {exc}"
+
+    stdout = result.stdout.strip()
+    stderr = result.stderr.strip()
+    pipeline_report = parse_report(stdout)
+
+    if result.returncode != 0:
+        return (
+            "Knowledge Tool execution failed\n"
+            f"Command: {' '.join(cmd)}\n"
+            f"Working directory: {root}\n\n"
+            f"STDOUT:\n{stdout or 'None'}\n\n"
+            f"STDERR:\n{stderr or 'None'}"
+        )
 
     expected_items = [
-        manual_ir_dir / "manifest.json",
-        manual_ir_dir / "system_views.json",
-        manual_ir_dir / "module_cards",
-        manual_ir_dir / "channel_cards",
-        manual_ir_dir / "component_contracts",
-        manual_ir_dir / "flow_paths",
-        manual_ir_dir / "reading_paths",
-        context_pack_output,
-        validation_report_output,
+        knowledge_dir / "manifest.json",
+        knowledge_dir / "project.json",
+        knowledge_dir / "modules",
+        knowledge_dir / "ai_context" / "index.json",
+        manual_context_dir / "manifest.json",
+        manual_context_dir / "project_context.json",
+        manual_context_dir / "system_topology.json",
+        manual_context_dir / "interface_index.json",
+        manual_context_dir / "flow_index.json",
+        manual_context_dir / "evidence_index.json",
+        manual_context_dir / "validation_report.json",
+        manual_context_dir / "modules" / top_module / "module_context.json",
+        manual_context_dir / "modules" / top_module / "interfaces.json",
+        manual_context_dir / "modules" / top_module / "gaps.json",
     ]
     if enrich:
-        expected_items.extend([
-            manual_ir_dir / "semantic_module_cards",
-            manual_ir_dir / "enrichment_report.json",
-        ])
-    missing = [str(path) for path in expected_items if not path.exists()]
+        expected_items.append(knowledge_dir / "semantic" / "index.json")
 
-    report = (
-        "Knowledge Tool execution succeeded\n"
-        "Input directory: parser_pipeline_rtl\n"
-        f"Output directory: manual_ir/{top_module}\n\n"
-    )
+    missing = [str(path) for path in expected_items if not path.exists()]
+    validation_report = read_optional_json(manual_context_dir / "validation_report.json")
+    validation_status = validation_report.get("status", "unknown")
 
     if missing:
-        report += "Some expected artifacts are missing:\n"
+        status_line = "Knowledge Tool execution incomplete"
+    else:
+        status_line = "Knowledge Tool execution succeeded"
+
+    report = (
+        f"{status_line}\n"
+        f"Input parser artifacts: {path_arg(root, parser_dir)}\n"
+        f"Knowledge IR output: {path_arg(root, knowledge_dir)}\n"
+        f"Manual Context output: {path_arg(root, manual_context_dir)}\n"
+        "Legacy Manual IR output: not generated\n"
+        f"Manual Context validation: {validation_status}\n"
+    )
+
+    if audience or section_id:
+        notes = []
+        if audience:
+            notes.append(f"audience={audience} is retained for compatibility only")
+        if section_id:
+            notes.append(f"section_id={section_id} is ignored by Manual Context pipeline")
+        report += "Compatibility notes: " + "; ".join(notes) + "\n"
+
+    if pipeline_report:
+        report += "\nPipeline summary:\n"
+        report += json.dumps(summarize_pipeline_report(pipeline_report), ensure_ascii=False, indent=2)
+        report += "\n"
+
+    if missing:
+        report += "\nMissing expected artifacts:\n"
         report += "\n".join(f"- {item}" for item in missing)
     else:
         report += (
-            "Generated key artifacts:\n"
-            f"- manual_ir/{top_module}/manifest.json\n"
-            f"- manual_ir/{top_module}/system_views.json\n"
-            f"- manual_ir/{top_module}/module_cards/\n"
-            f"- manual_ir/{top_module}/channel_cards/\n"
-            f"- manual_ir/{top_module}/component_contracts/\n"
-            f"- manual_ir/{top_module}/flow_paths/\n"
-            f"- manual_ir/{top_module}/reading_paths/\n"
-            + (f"- manual_ir/{top_module}/semantic_module_cards/\n" if enrich else "")
-            + f"- manual_ir/{top_module}/context_pack.json\n"
-            + f"- manual_ir/{top_module}/validation_report.json\n"
-            + (f"- manual_ir/{top_module}/enrichment_report.json\n" if enrich else "")
+            "\nGenerated key artifacts:\n"
+            f"- {path_arg(root, knowledge_dir / 'manifest.json')}\n"
+            f"- {path_arg(root, knowledge_dir / 'project.json')}\n"
+            f"- {path_arg(root, knowledge_dir / 'modules')}/\n"
+            f"- {path_arg(root, knowledge_dir / 'ai_context' / 'index.json')}\n"
+            + (f"- {path_arg(root, knowledge_dir / 'semantic' / 'index.json')}\n" if enrich else "")
+            + f"- {path_arg(root, manual_context_dir / 'manifest.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'project_context.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'system_topology.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'interface_index.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'flow_index.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'evidence_index.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'validation_report.json')}\n"
+            + f"- {path_arg(root, manual_context_dir / 'modules' / top_module / 'module_context.json')}\n"
         )
 
-    report += "\n".join(logs)
+    if stdout and not pipeline_report:
+        report += f"\nSTDOUT:\n{stdout}\n"
+    if stderr:
+        report += f"\nSTDERR:\n{stderr}\n"
     return report
+
+
+def locate_parser_artifacts(root: Path) -> Path | None:
+    candidates = [
+        root / "rtl" / "parser_pipeline_rtl",
+        root / "parser_pipeline_rtl",
+    ]
+    for candidate in candidates:
+        if (candidate / "project_index.json").is_file() and (candidate / "modules").is_dir():
+            return candidate
+    return None
+
+
+def output_base_for(root: Path, parser_dir: Path) -> Path:
+    if parser_dir.parent.name == "rtl":
+        return parser_dir.parent
+    return root
+
+
+def path_arg(root: Path, path: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def normalize_modules(value: str) -> str:
+    return ",".join(item.strip() for item in value.replace("，", ",").split(",") if item.strip())
+
+
+def parse_report(stdout: str) -> dict:
+    if not stdout:
+        return {}
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def summarize_pipeline_report(report: dict) -> dict:
+    return {
+        "status": report.get("status", ""),
+        "top_module": report.get("top_module", ""),
+        "outputs": report.get("outputs", {}),
+        "steps": [
+            {
+                "name": step.get("name", ""),
+                "status": step.get("status", ""),
+                "counts": step.get("counts", {}),
+                "issues": step.get("issues", [])[:5],
+            }
+            for step in report.get("steps", [])
+            if isinstance(step, dict)
+        ],
+    }
+
+
+def read_optional_json(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def main() -> int:
@@ -197,9 +268,13 @@ def main() -> int:
     parser.add_argument("--top-module", required=True)
     parser.add_argument("--audience", default="newcomer")
     parser.add_argument("--section-id", default="")
-    parser.add_argument("--enrich", dest="enrich", action="store_true", default=True, help="Run source-reading LLM semantic enrichment before packing (default).")
-    parser.add_argument("--no-enrich", dest="enrich", action="store_false", help="Disable source-reading LLM semantic enrichment.")
-    parser.add_argument("--enrich-modules", default="decoder,launch,execute,lsu,wb,fetch,intAndExc,grf,prf")
+    parser.add_argument("--enrich", dest="enrich", action="store_true", default=True, help="Run Semantic Layer before Manual Context (default).")
+    parser.add_argument("--no-enrich", dest="enrich", action="store_false", help="Skip Semantic Layer and build Manual Context without AI claims.")
+    parser.add_argument("--enrich-modules", default="", help="Compatibility alias for --semantic-modules.")
+    parser.add_argument("--max-flows-per-module", default="")
+    parser.add_argument("--semantic-model", default="")
+    parser.add_argument("--semantic-base-url", default="")
+    parser.add_argument("--semantic-api-key", default="")
     args = parser.parse_args()
 
     print(
@@ -210,6 +285,10 @@ def main() -> int:
             section_id=args.section_id,
             enrich=args.enrich,
             enrich_modules=args.enrich_modules,
+            max_flows_per_module=args.max_flows_per_module,
+            semantic_model=args.semantic_model,
+            semantic_base_url=args.semantic_base_url,
+            semantic_api_key=args.semantic_api_key,
         )
     )
     return 0

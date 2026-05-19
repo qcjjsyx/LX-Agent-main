@@ -21,16 +21,19 @@ def package_env():
 
 def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl") -> str:
     root = Path(project_root).resolve()
-    output_dir = root / "parser_pipeline_rtl"
 
     if not root.exists():
         return f"Parser failed: project_root does not exist: {root}"
 
-    inputs_path = root / rtl_inputs
+    rtl_inputs, inputs_path = resolve_rtl_inputs(root, rtl_inputs)
+    output_base = inputs_path.parent if inputs_path.parent != root and inputs_path.name == "rtl" else root
+    output_dir = output_base / "parser_pipeline_rtl"
+    output_arg = path_arg(root, output_dir)
+
     if not inputs_path.exists():
         return (
             f"Parser failed: RTL input directory does not exist: {inputs_path}\n"
-            "Check rtl_inputs, for example rtl, test_data/rtl, or tests/fixtures/rtl."
+            "Check rtl_inputs, for example rtl, rtl/rtl, test_data/rtl, or tests/fixtures/rtl."
         )
 
     cmd = [
@@ -41,7 +44,7 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl") -> str:
         "--inputs",
         rtl_inputs,
         "--output",
-        "parser_pipeline_rtl",
+        output_arg,
     ]
 
     try:
@@ -82,7 +85,7 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl") -> str:
         "Parser Tool execution succeeded\n"
         f"Project root: {root}\n"
         f"RTL input directory: {rtl_inputs}\n"
-        "Output directory: parser_pipeline_rtl\n\n"
+        f"Output directory: {output_arg}\n\n"
     )
 
     if missing:
@@ -91,15 +94,47 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl") -> str:
     else:
         report += (
             "Generated key artifacts:\n"
-            "- parser_pipeline_rtl/project_index.json\n"
-            "- parser_pipeline_rtl/build_report.json\n"
-            "- parser_pipeline_rtl/modules/\n"
-            "- parser_pipeline_rtl/components/\n"
+            f"- {output_arg}/project_index.json\n"
+            f"- {output_arg}/build_report.json\n"
+            f"- {output_arg}/modules/\n"
+            f"- {output_arg}/components/\n"
         )
 
     report += f"\n\nSTDOUT:\n{stdout or 'None'}\n"
     report += f"\nSTDERR:\n{stderr or 'None'}"
     return report
+
+
+def resolve_rtl_inputs(root: Path, rtl_inputs: str) -> tuple[str, Path]:
+    inputs_path = root / rtl_inputs
+    if looks_like_rtl_project(inputs_path):
+        return rtl_inputs, inputs_path
+
+    nested = inputs_path / "rtl"
+    if looks_like_rtl_project(nested):
+        return str(Path(rtl_inputs) / "rtl"), nested
+
+    return rtl_inputs, inputs_path
+
+
+def looks_like_rtl_project(path: Path) -> bool:
+    return (
+        path.exists()
+        and path.is_dir()
+        and (
+            (path / "read_rtl_list.tcl").is_file()
+            or (path / "rtl_top_list.tcl").is_file()
+            or any(path.glob("*.v"))
+            or any(path.glob("*.sv"))
+        )
+    )
+
+
+def path_arg(root: Path, path: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
 
 
 def main() -> int:
