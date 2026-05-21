@@ -13,11 +13,13 @@ from openai import OpenAI
 from werkzeug.utils import secure_filename
 
 try:
+    from .agent_runner import AgentRunner, AgentSession
     from .tools import select_tools_for_task
     from .context_manager import maybe_compress_context
     from .manual_workflow import handle_manual_workflow, should_handle_manual_workflow
     from .event_logger import log_event, read_events
 except ImportError:
+    from agent_runner import AgentRunner, AgentSession
     from tools import select_tools_for_task
     from context_manager import maybe_compress_context
     from manual_workflow import handle_manual_workflow, should_handle_manual_workflow
@@ -109,6 +111,12 @@ SYSTEM_MESSAGE = {
 current_conversation_id = None
 messages = [SYSTEM_MESSAGE]
 manual_workflow_state = None
+agent_runner = AgentRunner(
+    client=client,
+    model=MODEL,
+    base_dir=BASE_DIR,
+    system_message=SYSTEM_MESSAGE,
+)
 
 
 # ====================== 基础函数 ======================
@@ -586,7 +594,7 @@ def build_skill_context(active_skill_instructions, active_reference_files):
 
 # ====================== Agent 单轮执行 ======================
 
-def run_agent_once(user_input):
+def _legacy_run_agent_once(user_input):
     global messages, manual_workflow_state
 
     if not user_input.strip():
@@ -814,6 +822,46 @@ def run_agent_once(user_input):
 
 # ====================== Flask 路由 ======================
 
+def activate_conversation(conversation_id=None):
+    global current_conversation_id
+
+    if conversation_id and conversation_path(conversation_id).exists():
+        load_conversation(conversation_id)
+        return current_conversation_id
+
+    if current_conversation_id is None:
+        create_new_conversation()
+
+    return current_conversation_id
+
+
+def run_agent_once(user_input, conversation_id=None):
+    global messages, manual_workflow_state
+
+    activate_conversation(conversation_id)
+
+    session = AgentSession(
+        messages=messages,
+        manual_workflow_state=manual_workflow_state,
+    )
+
+    result = agent_runner.run(
+        user_input=user_input,
+        session=session,
+        conversation_id=current_conversation_id,
+        event_logger=lambda event_type, **payload: log_event(
+            current_conversation_id,
+            event_type,
+            **payload
+        ),
+    )
+
+    messages = result.messages
+    manual_workflow_state = result.manual_workflow_state
+    save_current_conversation()
+    return result.reply
+
+
 @app.route("/")
 def index():
     global current_conversation_id
@@ -826,11 +874,12 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json()
+    data = request.get_json() or {}
     user_input = data.get("message", "")
+    conversation_id = data.get("conversation_id")
 
     try:
-        reply = run_agent_once(user_input)
+        reply = run_agent_once(user_input, conversation_id=conversation_id)
 
         return jsonify({
             "reply": reply,
@@ -857,6 +906,8 @@ def upload_file():
     小文件用这个。
     大文件建议用 /import_path。
     """
+    activate_conversation(request.form.get("conversation_id"))
+
     if "files" not in request.files:
         log_event(current_conversation_id, "upload_end", status="error", error="no_files_field")
         return jsonify({
@@ -1006,7 +1057,8 @@ def import_path():
     - 普通文件：复制到 data/imports/
     - zip：复制到 data/imports/_archives/ 并解压到 data/imports/<zip_name_xxxxxxxx>/
     """
-    data = request.get_json()
+    data = request.get_json() or {}
+    activate_conversation(data.get("conversation_id"))
     source_path_text = data.get("path", "").strip()
 
     log_event(

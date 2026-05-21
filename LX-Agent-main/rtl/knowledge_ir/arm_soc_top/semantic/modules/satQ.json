@@ -46,11 +46,11 @@
     }
   ],
   "claim_summary": {
-    "count": 13,
+    "count": 12,
     "by_type": {
       "assignment_interpretation": 8,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
       "structural_responsibility": 1
     }
@@ -62,9 +62,9 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "饱和量化运算单元，根据符号标志选择有符号或无符号饱和算法对操作数进行限幅。",
+      "summary": "饱和量化运算单元，根据符号标志选择有符号或无符号饱和算法对操作数进行限幅",
       "subject": "satQ",
-      "explanation": "模块接收两个32位操作数和一个符号标志，通过组合逻辑计算有符号和无符号两种饱和结果，最终由符号标志选择输出。所有assign依赖均基于输入操作数和符号标志，无时序或状态依赖。",
+      "explanation": "模块接收两个32位操作数和一个符号标志，通过两条并行饱和路径（有符号/无符号）计算饱和结果，最终由符号标志选择输出。assign依赖显示所有运算均基于i_oprand1_32和i_oprand2_32[5:0]（作为位宽参数）进行边界裁剪。",
       "signals": [
         "i_oprand1_32",
         "i_oprand2_32",
@@ -92,27 +92,28 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "根据i_satQSymbolFlag_1选择有符号或无符号饱和路径，对i_oprand1_32进行限幅，输出限幅后的结果和饱和标志。",
-      "subject": "饱和限幅计算",
-      "explanation": "有符号路径（assign 0-2）使用i_oprand2_32[5:0]作为位宽参数，计算下限和上限进行限幅；无符号路径（assign 3-5）使用i_oprand2_32[5:0]作为位宽，下限为0。最终输出由assign 6和7选择。",
+      "summary": "根据符号标志选择有符号或无符号饱和算法，将输入操作数限制在由第二个操作数低位指定的位宽范围内",
+      "subject": "饱和限幅运算",
+      "explanation": "模块内部构建两条数据路径：有符号路径（w_saturated1_32）使用对称边界[-2^(N-1), 2^(N-1)-1]，无符号路径（w_satuarted2_32）使用边界[0, 2^N-1]，其中N由i_oprand2_32[5:0]决定。最终输出由i_satQSymbolFlag_1选择。",
       "signals": [
         "i_oprand1_32",
         "i_oprand2_32",
         "i_satQSymbolFlag_1",
         "o_saQResult_32",
-        "sat"
+        "w_saturated1_32",
+        "w_satuarted2_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl/rtl/Execute/satQ.v",
-          "path": "module_source"
-        },
-        {
           "source": "parser_pipeline_rtl/modules/satQ.json",
           "path": "assignments"
+        },
+        {
+          "source": "knowledge_ir/modules/satQ.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:module:satQ:structural_responsibility:001"
@@ -124,12 +125,12 @@
         "module": "satQ"
       },
       "subject": "w_maxOprand1_32",
-      "summary": "有符号饱和下限限幅，确保i_oprand1_32不小于-(1<<(i_oprand2_32[5:0]-1))。",
-      "explanation": "该assign是数据路径中的中间信号，用于有符号饱和路径的下界钳位。i_oprand2_32[5:0]作为位宽参数动态调整限幅范围。",
+      "summary": "有符号饱和路径的下界裁剪，确保操作数不小于-2^(N-1)",
+      "explanation": "将i_oprand1_32与有符号下界-2^(N-1)比较，取较大值，实现下界限幅。N来自i_oprand2_32[5:0]。",
       "signals": [
-        "w_maxOprand1_32",
         "i_oprand1_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "w_maxOprand1_32"
       ],
       "related_assignments": [
         "0"
@@ -152,12 +153,12 @@
         "module": "satQ"
       },
       "subject": "w_saturated1_32",
-      "summary": "有符号饱和上限限幅，在w_maxOprand1_32基础上进一步限制上限。",
-      "explanation": "该assign完成有符号饱和路径的完整限幅，上限为(1<<(i_oprand2_32[5:0]-1))-1。w_maxOprand1_32作为输入，形成级联限幅链。",
+      "summary": "有符号饱和路径的上界裁剪，完成完整有符号饱和运算",
+      "explanation": "对下界裁剪后的值w_maxOprand1_32与上界2^(N-1)-1比较，取较小值，得到最终有符号饱和结果。",
       "signals": [
-        "w_saturated1_32",
         "w_maxOprand1_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "w_saturated1_32"
       ],
       "related_assignments": [
         "1"
@@ -180,12 +181,12 @@
         "module": "satQ"
       },
       "subject": "w_sat1_1",
-      "summary": "有符号饱和标志，指示i_oprand1_32是否超出有符号范围。",
-      "explanation": "当i_oprand1_32小于下限或大于等于上限时置位，用于指示饱和发生。该标志与w_saturated1_32配合使用。",
+      "summary": "有符号饱和检测标志，指示输入是否超出有符号范围",
+      "explanation": "当i_oprand1_32小于下界或大于等于上界时置位，用于指示饱和事件发生。",
       "signals": [
-        "w_sat1_1",
         "i_oprand1_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "w_sat1_1"
       ],
       "related_assignments": [
         "2"
@@ -208,11 +209,11 @@
         "module": "satQ"
       },
       "subject": "w_maxOprand2_32",
-      "summary": "无符号饱和下限限幅，确保i_oprand1_32不小于0。",
-      "explanation": "该assign是无符号饱和路径的下界钳位，将i_oprand1_32与0比较取大值，实现无符号下限限幅。",
+      "summary": "无符号饱和路径的下界裁剪，将负数截断为0",
+      "explanation": "当i_oprand1_32为正数时保持不变，否则取0，实现无符号下界限幅。",
       "signals": [
-        "w_maxOprand2_32",
-        "i_oprand1_32"
+        "i_oprand1_32",
+        "w_maxOprand2_32"
       ],
       "related_assignments": [
         "3"
@@ -235,12 +236,12 @@
         "module": "satQ"
       },
       "subject": "w_satuarted2_32",
-      "summary": "无符号饱和上限限幅，在w_maxOprand2_32基础上限制上限。",
-      "explanation": "该assign完成无符号饱和路径的完整限幅，上限为(1<<i_oprand2_32[5:0])-1。w_maxOprand2_32作为输入，形成级联限幅链。",
+      "summary": "无符号饱和路径的上界裁剪，完成完整无符号饱和运算",
+      "explanation": "对下界裁剪后的值w_maxOprand2_32与上界2^N-1比较，取较小值，得到最终无符号饱和结果。",
       "signals": [
-        "w_satuarted2_32",
         "w_maxOprand2_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "w_satuarted2_32"
       ],
       "related_assignments": [
         "4"
@@ -263,12 +264,12 @@
         "module": "satQ"
       },
       "subject": "w_sat2_1",
-      "summary": "无符号饱和标志，指示i_oprand1_32是否超出无符号范围。",
-      "explanation": "当i_oprand1_32小于0或大于等于上限时置位，用于指示饱和发生。该标志与w_satuarted2_32配合使用。",
+      "summary": "无符号饱和检测标志，指示输入是否超出无符号范围",
+      "explanation": "当i_oprand1_32小于0或大于等于2^N时置位，用于指示无符号饱和事件发生。",
       "signals": [
-        "w_sat2_1",
         "i_oprand1_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "w_sat2_1"
       ],
       "related_assignments": [
         "5"
@@ -291,13 +292,13 @@
         "module": "satQ"
       },
       "subject": "o_saQResult_32",
-      "summary": "最终饱和结果输出，由i_satQSymbolFlag_1选择有符号或无符号路径。",
-      "explanation": "该assign是模块的主输出，根据符号标志选择w_saturated1_32（有符号）或w_satuarted2_32（无符号）作为结果。",
+      "summary": "最终饱和结果输出，由符号标志选择有符号或无符号饱和值",
+      "explanation": "当i_satQSymbolFlag_1为1时输出有符号饱和结果w_saturated1_32，否则输出无符号饱和结果w_satuarted2_32。",
       "signals": [
-        "o_saQResult_32",
         "i_satQSymbolFlag_1",
         "w_saturated1_32",
-        "w_satuarted2_32"
+        "w_satuarted2_32",
+        "o_saQResult_32"
       ],
       "related_assignments": [
         "6"
@@ -320,13 +321,13 @@
         "module": "satQ"
       },
       "subject": "sat",
-      "summary": "饱和标志输出，指示最终结果是否发生饱和。",
-      "explanation": "该assign根据i_satQSymbolFlag_1选择w_sat1_1（有符号饱和标志）或w_sat2_1（无符号饱和标志）作为输出，与o_saQResult_32同步。",
+      "summary": "饱和事件输出标志，指示最终输出是否发生了饱和",
+      "explanation": "根据符号标志选择对应的饱和检测信号，当输入超出所选饱和模式的范围时置位。",
       "signals": [
-        "sat",
         "i_satQSymbolFlag_1",
         "w_sat1_1",
-        "w_sat2_1"
+        "w_sat2_1",
+        "sat"
       ],
       "related_assignments": [
         "7"
@@ -348,61 +349,25 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "i_satQSymbolFlag_1作为模式选择信号，控制饱和算法类型（有符号/无符号）。",
-      "subject": "饱和控制接口",
-      "explanation": "该信号直接决定两条并行饱和路径的选择，是模块的核心控制输入。无事件握手，为纯组合逻辑控制。",
+      "summary": "第二个操作数的低6位作为饱和位宽参数N，控制饱和边界计算",
+      "subject": "i_oprand2_32[5:0]位宽参数",
+      "explanation": "所有饱和边界计算均使用i_oprand2_32[5:0]作为位宽参数，有符号边界为[-2^(N-1), 2^(N-1)-1]，无符号边界为[0, 2^N-1]。这表明i_oprand2_32不仅作为操作数，其低6位还承载了饱和配置信息。",
       "signals": [
-        "i_satQSymbolFlag_1"
-      ],
-      "related_payload": [
-        "o_saQResult_32",
-        "sat"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json",
-          "path": "interface"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json",
-          "path": "assignments[6,7]"
-        }
-      ],
-      "id": "semantic:module:satQ:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "summary": "i_oprand1_32为待饱和数据，i_oprand2_32[5:0]提供饱和位宽参数。",
-      "subject": "操作数接口",
-      "explanation": "i_oprand1_32是饱和运算的目标数据；i_oprand2_32的低6位作为位宽参数，动态调整饱和范围。两者均为纯数据输入，无控制语义。",
-      "signals": [
-        "i_oprand1_32",
         "i_oprand2_32"
       ],
       "related_payload": [
-        "o_saQResult_32"
+        "i_oprand1_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json",
-          "path": "interface"
-        },
         {
           "source": "parser_pipeline_rtl/modules/satQ.json",
           "path": "assignments[0-5]"
         }
       ],
-      "id": "semantic:module:satQ:interface_intent:002"
+      "id": "semantic:module:satQ:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -410,12 +375,13 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "文档应重点说明i_satQSymbolFlag_1如何选择有符号/无符号饱和算法，以及i_oprand2_32[5:0]如何动态控制饱和范围。",
-      "subject": "饱和算法选择与位宽参数",
-      "explanation": "模块核心逻辑是两条并行饱和路径的选择，位宽参数由i_oprand2_32[5:0]提供，这是文档需要强调的关键设计点。无时序或状态机逻辑，文档应聚焦组合逻辑行为。",
+      "summary": "文档应重点说明有符号/无符号饱和路径的并行结构、边界计算规则以及符号标志的选择逻辑",
+      "subject": "饱和算法双路径选择",
+      "explanation": "模块核心是两条独立的饱和路径，由i_satQSymbolFlag_1选择输出。有符号路径使用对称边界，无符号路径使用非对称边界，边界宽度由i_oprand2_32[5:0]动态决定。饱和检测标志sat指示饱和事件。",
       "signals": [
         "i_satQSymbolFlag_1",
-        "i_oprand2_32[5:0]",
+        "i_oprand1_32",
+        "i_oprand2_32",
         "o_saQResult_32",
         "sat"
       ],
@@ -426,10 +392,6 @@
         {
           "source": "parser_pipeline_rtl/modules/satQ.json",
           "path": "assignments[0-7]"
-        },
-        {
-          "source": "knowledge_ir/modules/satQ.json",
-          "path": "interface"
         }
       ],
       "id": "semantic:module:satQ:documentation_focus:001"

@@ -46,14 +46,15 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 17,
     "by_type": {
       "assignment_interpretation": 3,
-      "component_role": 2,
-      "documentation_focus": 1,
-      "interface_intent": 2,
+      "component_role": 6,
+      "documentation_focus": 2,
+      "interface_intent": 3,
       "module_role": 1,
-      "structural_responsibility": 2
+      "source_review_request": 1,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -63,9 +64,9 @@
         "type": "module",
         "module": "prf"
       },
-      "summary": "物理寄存器文件模块，负责存储和转发通用寄存器（PRF）和程序状态寄存器（PSR）的值。",
+      "summary": "物理寄存器文件模块，负责存储和转发来自发射、写回和异常阶段的寄存器数据与程序状态寄存器数据。",
       "subject": "prf",
-      "explanation": "模块通过多个驱动事件（来自发射、写回、异常阶段）接收数据，并通过FIFO组件进行缓冲和排序，最终将数据输出到发射和异常阶段。同时，模块管理释放信号，指示数据已被消费。",
+      "explanation": "模块通过多个Fifo1和MutexMerge组件管理来自不同流水线阶段（Launch、WB、Exp）的驱动事件，并输出对应的数据（prfData、psrData）和释放信号。其核心功能是作为寄存器数据的缓冲和同步点。",
       "signals": [
         "i_prfDriveFromLaunch_1",
         "i_prfDriveFromWB_1",
@@ -105,6 +106,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/prf.json"
+        },
+        {
+          "source": "rtl/rtl/PRF/prf.v"
         }
       ],
       "id": "semantic:module:prf:module_role:001"
@@ -115,59 +119,22 @@
         "type": "module",
         "module": "prf"
       },
-      "summary": "模块接收来自不同流水级（发射、写回、异常）的寄存器写入数据，并通过内部FIFO进行缓冲，最终将数据转发到目标流水级。",
-      "subject": "数据存储与转发",
-      "explanation": "模块的输入数据信号（如i_rdDataToPrf_32）与多个驱动事件相关联，表明数据来自不同源。内部FIFO实例（cFifo1_prf1等）用于缓冲这些数据，而输出数据信号（如o_prfDataToLaunch_32）则连接到FIFO的输出，表明数据被转发到发射阶段。",
+      "summary": "模块接收来自发射、写回和异常阶段的驱动事件，通过Fifo1和MutexMerge组件进行缓冲和仲裁，最终输出寄存器数据（prfData）和程序状态寄存器数据（psrData）到目标阶段。",
+      "subject": "寄存器数据与状态数据缓冲与转发",
+      "explanation": "来自Launch阶段的prf驱动事件通过cFifo1_prf1直接转发到Launch输出；来自Exp阶段的psr驱动事件通过cFifo1_prf3转发到Exp输出；来自Launch阶段的psr驱动事件通过cFifo1_prf2转发到Launch输出。来自WB和Exp的psr驱动事件通过cMutexMerge2_8b进行互斥合并后，再通过cLastFifo2_prf2处理。来自WB的prf驱动事件通过cLastFifo1_prf1处理。数据输出（o_prfDataToLaunch_32, o_psrDataToLaunch_32, o_psrDataToExp_32）直接来自内部寄存器r_prfValue_32, r_psrValue_32, r_psrValue2_32。",
       "signals": [
-        "i_rdDataToPrf_32",
+        "i_prfDriveFromLaunch_1",
+        "i_prfDriveFromWB_1",
+        "i_psrDriveFromExp_1",
+        "i_psrDriveFromLaunch_1",
+        "i_psrDriveFromWB_1",
+        "i_psrwDriveFromExp_1",
+        "o_prfDriveToLaunch_1",
+        "o_psrDriveToExp_1",
+        "o_psrDriveToLaunch_1",
         "o_prfDataToLaunch_32",
         "o_psrDataToExp_32",
         "o_psrDataToLaunch_32"
-      ],
-      "instances": [
-        "cFifo1_prf1",
-        "cFifo1_prf2",
-        "cFifo1_prf3",
-        "cLastFifo1_prf1",
-        "cLastFifo2_prf2"
-      ],
-      "related_flows": [
-        "flow_000_prf_i_prfDriveFromLaunch_1",
-        "flow_001_prf_i_psrDriveFromExp_1",
-        "flow_002_prf_i_psrDriveFromLaunch_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/prf.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/prf.json"
-        }
-      ],
-      "id": "semantic:module:prf:structural_responsibility:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "prf"
-      },
-      "summary": "模块管理多个释放信号，用于指示数据已被下游模块消费，从而允许上游模块释放资源。",
-      "subject": "释放信号管理",
-      "explanation": "模块接收来自发射和异常阶段的释放信号（如i_prfFreeFromLaunch_1），并通过内部FIFO组件处理后，生成对应的释放输出信号（如o_prfFreeToLaunch_1），反馈给数据源。",
-      "signals": [
-        "i_prfFreeFromLaunch_1",
-        "i_psrFreeFromExp_1",
-        "i_psrFreeFromLaunch_1",
-        "o_prfFreeToLaunch_1",
-        "o_prfFreeToWB_1",
-        "o_psrFreeToExp_1",
-        "o_psrFreeToLaunch_1",
-        "o_psrFreeToWB_1",
-        "o_psrwFreeToExp_1"
       ],
       "instances": [
         "cFifo1_prf1",
@@ -180,7 +147,10 @@
       "related_flows": [
         "flow_000_prf_i_prfDriveFromLaunch_1",
         "flow_001_prf_i_psrDriveFromExp_1",
-        "flow_002_prf_i_psrDriveFromLaunch_1"
+        "flow_002_prf_i_psrDriveFromLaunch_1",
+        "flow_003_prf_i_psrDriveFromWB_1",
+        "flow_004_prf_i_psrwDriveFromExp_1",
+        "flow_005_prf_i_prfDriveFromWB_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -191,9 +161,12 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/prf.json"
+        },
+        {
+          "source": "rtl/rtl/PRF/prf.v"
         }
       ],
-      "id": "semantic:module:prf:structural_responsibility:002"
+      "id": "semantic:module:prf:structural_responsibility:001"
     },
     {
       "claim_type": "component_role",
@@ -202,8 +175,8 @@
         "module": "prf"
       },
       "subject": "cFifo1_prf1",
-      "summary": "用于缓冲来自发射阶段的PRF驱动事件及其相关数据。",
-      "explanation": "该FIFO实例接收来自发射阶段的PRF驱动事件（i_prfDriveFromLaunch_1），并输出驱动事件到发射阶段（o_prfDriveToLaunch_1）。它同时处理来自发射阶段的释放信号（i_prfFreeFromLaunch_1）并生成释放输出（o_prfFreeToLaunch_1）。",
+      "summary": "处理来自发射阶段的prf驱动事件，并将其转发到发射阶段输出。",
+      "explanation": "该Fifo1实例接收i_prfDriveFromLaunch_1事件，并输出o_prfDriveToLaunch_1事件。它负责缓冲来自发射阶段的prf驱动请求，并管理对应的释放信号（i_prfFreeFromLaunch_1, o_prfFreeToLaunch_1）。",
       "signals": [
         "i_prfDriveFromLaunch_1",
         "o_prfDriveToLaunch_1",
@@ -235,18 +208,88 @@
         "type": "module",
         "module": "prf"
       },
+      "subject": "cFifo1_prf2",
+      "summary": "处理来自发射阶段的psr驱动事件，并将其转发到发射阶段输出。",
+      "explanation": "该Fifo1实例接收i_psrDriveFromLaunch_1事件，并输出o_psrDriveToLaunch_1事件。它负责缓冲来自发射阶段的psr驱动请求，并管理对应的释放信号（i_psrFreeFromLaunch_1, o_psrFreeToLaunch_1）。",
+      "signals": [
+        "i_psrDriveFromLaunch_1",
+        "o_psrDriveToLaunch_1",
+        "i_psrFreeFromLaunch_1",
+        "o_psrFreeToLaunch_1"
+      ],
+      "instances": [
+        "cFifo1_prf2"
+      ],
+      "related_flows": [
+        "flow_002_prf_i_psrDriveFromLaunch_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        }
+      ],
+      "id": "semantic:module:prf:component_role:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
+      "subject": "cFifo1_prf3",
+      "summary": "处理来自异常阶段的psr驱动事件，并将其转发到异常阶段输出。",
+      "explanation": "该Fifo1实例接收i_psrDriveFromExp_1事件，并输出o_psrDriveToExp_1事件。它负责缓冲来自异常阶段的psr驱动请求，并管理对应的释放信号（i_psrFreeFromExp_1, o_psrFreeToExp_1）。",
+      "signals": [
+        "i_psrDriveFromExp_1",
+        "o_psrDriveToExp_1",
+        "i_psrFreeFromExp_1",
+        "o_psrFreeToExp_1"
+      ],
+      "instances": [
+        "cFifo1_prf3"
+      ],
+      "related_flows": [
+        "flow_001_prf_i_psrDriveFromExp_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        }
+      ],
+      "id": "semantic:module:prf:component_role:003"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
       "subject": "cMutexMerge2_8b",
-      "summary": "用于合并来自写回阶段和异常阶段的PSR写回事件，并处理相关的状态数据。",
-      "explanation": "该组件接收来自写回阶段（i_psrDriveFromWB_1）和异常阶段（i_psrwDriveFromExp_1）的驱动事件，并输出一个合并后的驱动事件（w_driveTopsr）。它还接收来自这两个源的状态数据（如i_expen_4, i_wben_4），并输出合并后的数据（w_data_8）。",
+      "summary": "对来自写回和异常阶段的psr驱动事件进行互斥合并，并输出合并后的驱动事件和数据。",
+      "explanation": "该MutexMerge实例接收来自写回（i_psrDriveFromWB_1）和异常（i_psrwDriveFromExp_1）的psr驱动事件，进行互斥仲裁后，输出合并后的驱动事件w_driveTopsr和8位数据w_data_8。它还管理对应的释放信号（o_psrFreeToWB_1, o_psrwFreeToExp_1）。输入数据包括i_expen_4, i_expnzcv_4, i_wben_4, i_wbnzcv_4。",
       "signals": [
         "i_psrDriveFromWB_1",
         "i_psrwDriveFromExp_1",
         "w_driveTopsr",
+        "w_data_8",
         "i_expen_4",
         "i_expnzcv_4",
         "i_wben_4",
         "i_wbnzcv_4",
-        "w_data_8"
+        "o_psrFreeToWB_1",
+        "o_psrwFreeToExp_1"
       ],
       "instances": [
         "cMutexMerge2_8b"
@@ -266,7 +309,73 @@
           "source": "parser_pipeline_rtl/modules/prf.json"
         }
       ],
-      "id": "semantic:module:prf:component_role:002"
+      "id": "semantic:module:prf:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
+      "subject": "cLastFifo1_prf1",
+      "summary": "处理来自写回阶段的prf驱动事件，作为prf写回路径的末端缓冲。",
+      "explanation": "该Fifo1实例接收i_prfDriveFromWB_1事件，其输出事件未连接到模块输出，表明它可能用于内部状态更新或作为写回路径的末端缓冲。它管理对应的释放信号（o_prfFreeToWB_1）。",
+      "signals": [
+        "i_prfDriveFromWB_1",
+        "o_prfFreeToWB_1"
+      ],
+      "instances": [
+        "cLastFifo1_prf1"
+      ],
+      "related_flows": [
+        "flow_005_prf_i_prfDriveFromWB_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        }
+      ],
+      "id": "semantic:module:prf:component_role:005"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
+      "subject": "cLastFifo2_prf2",
+      "summary": "处理来自MutexMerge的合并后psr驱动事件，作为psr写回/异常路径的末端缓冲。",
+      "explanation": "该Fifo1实例接收来自cMutexMerge2_8b的合并驱动事件w_driveTopsr，其输出事件未连接到模块输出，表明它可能用于内部状态更新或作为psr写回/异常路径的末端缓冲。它管理对应的释放信号（o_psrFreeToWB_1, o_psrwFreeToExp_1）。",
+      "signals": [
+        "w_driveTopsr",
+        "o_psrFreeToWB_1",
+        "o_psrwFreeToExp_1"
+      ],
+      "instances": [
+        "cLastFifo2_prf2"
+      ],
+      "related_flows": [
+        "flow_003_prf_i_psrDriveFromWB_1",
+        "flow_004_prf_i_psrwDriveFromExp_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        }
+      ],
+      "id": "semantic:module:prf:component_role:006"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -275,8 +384,8 @@
         "module": "prf"
       },
       "subject": "o_prfDataToLaunch_32",
-      "summary": "将内部寄存器r_prfValue_32的值直接赋值给输出端口，用于向发射阶段提供PRF数据。",
-      "explanation": "该赋值语句将内部寄存器r_prfValue_32的值直接连接到输出端口o_prfDataToLaunch_32，表明该输出是模块内部存储的PRF值的直接反映。",
+      "summary": "将内部寄存器r_prfValue_32的值直接赋值给输出端口o_prfDataToLaunch_32。",
+      "explanation": "该赋值表明prf数据输出是组合逻辑的，直接反映了内部寄存器r_prfValue_32的当前值。该寄存器可能由来自发射或写回阶段的驱动事件更新。",
       "signals": [
         "o_prfDataToLaunch_32",
         "r_prfValue_32"
@@ -285,11 +394,12 @@
         "0"
       ],
       "related_flows": [
-        "flow_000_prf_i_prfDriveFromLaunch_1"
+        "flow_000_prf_i_prfDriveFromLaunch_1",
+        "flow_005_prf_i_prfDriveFromWB_1"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/prf.json"
@@ -307,8 +417,8 @@
         "module": "prf"
       },
       "subject": "o_psrDataToLaunch_32",
-      "summary": "将内部寄存器r_psrValue_32的值直接赋值给输出端口，用于向发射阶段提供PSR数据。",
-      "explanation": "该赋值语句将内部寄存器r_psrValue_32的值直接连接到输出端口o_psrDataToLaunch_32，表明该输出是模块内部存储的PSR值的直接反映。",
+      "summary": "将内部寄存器r_psrValue_32的值直接赋值给输出端口o_psrDataToLaunch_32。",
+      "explanation": "该赋值表明psr数据输出是组合逻辑的，直接反映了内部寄存器r_psrValue_32的当前值。该寄存器可能由来自发射阶段的psr驱动事件更新。",
       "signals": [
         "o_psrDataToLaunch_32",
         "r_psrValue_32"
@@ -319,9 +429,9 @@
       "related_flows": [
         "flow_002_prf_i_psrDriveFromLaunch_1"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/prf.json"
@@ -339,8 +449,8 @@
         "module": "prf"
       },
       "subject": "o_psrDataToExp_32",
-      "summary": "将内部寄存器r_psrValue2_32的值直接赋值给输出端口，用于向异常阶段提供PSR数据。",
-      "explanation": "该赋值语句将内部寄存器r_psrValue2_32的值直接连接到输出端口o_psrDataToExp_32，表明该输出是模块内部存储的另一个PSR值的直接反映。",
+      "summary": "将内部寄存器r_psrValue2_32的值直接赋值给输出端口o_psrDataToExp_32。",
+      "explanation": "该赋值表明psr数据输出是组合逻辑的，直接反映了内部寄存器r_psrValue2_32的当前值。该寄存器可能由来自异常阶段的psr驱动事件更新。",
       "signals": [
         "o_psrDataToExp_32",
         "r_psrValue2_32"
@@ -351,9 +461,9 @@
       "related_flows": [
         "flow_001_prf_i_psrDriveFromExp_1"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/prf.json"
@@ -370,33 +480,19 @@
         "type": "module",
         "module": "prf"
       },
-      "summary": "驱动事件（i_prfDriveFromLaunch_1等）与数据信号（i_rdDataToPrf_32）之间存在隐含的握手关系，驱动事件指示数据有效。",
-      "subject": "PRF驱动事件与数据接口",
-      "explanation": "事件-载荷合约表明，每个输入驱动事件都关联一个数据载荷（i_rdDataToPrf_32），驱动事件的断言表示数据有效。输出驱动事件（o_prfDriveToLaunch_1）则关联输出数据（o_prfDataToLaunch_32, o_psrDataToLaunch_32）。",
+      "summary": "每个prf驱动事件输出（o_prfDriveToLaunch_1）都伴随一个对应的数据输出（o_prfDataToLaunch_32），表明驱动事件用于指示数据有效。",
+      "subject": "prf驱动事件与数据输出",
+      "explanation": "事件-数据对（event-payload）的命名和连接关系表明，驱动事件信号作为数据有效的指示，下游模块在接收到驱动事件时采样对应的数据总线。",
       "signals": [
-        "i_prfDriveFromLaunch_1",
-        "i_prfDriveFromWB_1",
-        "i_psrDriveFromExp_1",
-        "i_psrDriveFromLaunch_1",
-        "i_psrDriveFromWB_1",
-        "i_psrwDriveFromExp_1",
-        "i_rdDataToPrf_32",
         "o_prfDriveToLaunch_1",
-        "o_psrDriveToExp_1",
-        "o_psrDriveToLaunch_1",
-        "o_prfDataToLaunch_32",
-        "o_psrDataToExp_32",
-        "o_psrDataToLaunch_32"
+        "o_prfDataToLaunch_32"
       ],
       "related_payload": [
-        "i_rdDataToPrf_32",
-        "o_prfDataToLaunch_32",
-        "o_psrDataToExp_32",
-        "o_psrDataToLaunch_32"
+        "o_prfDataToLaunch_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/prf.json"
@@ -413,29 +509,22 @@
         "type": "module",
         "module": "prf"
       },
-      "summary": "释放信号（i_prfFreeFromLaunch_1等）用于实现模块间的流控，指示下游模块已完成对数据的消费。",
-      "subject": "释放信号接口",
-      "explanation": "事件-载荷合约中，每个驱动事件都关联一个释放信号。输入释放信号（如i_prfFreeFromLaunch_1）表示下游模块（如发射阶段）已消费数据，模块可以释放内部资源。输出释放信号（如o_prfFreeToLaunch_1）则反馈给上游模块。",
+      "summary": "每个psr驱动事件输出（o_psrDriveToExp_1, o_psrDriveToLaunch_1）都伴随一个对应的数据输出（o_psrDataToExp_32, o_psrDataToLaunch_32），表明驱动事件用于指示数据有效。",
+      "subject": "psr驱动事件与数据输出",
+      "explanation": "事件-数据对（event-payload）的命名和连接关系表明，驱动事件信号作为数据有效的指示，下游模块在接收到驱动事件时采样对应的数据总线。",
       "signals": [
-        "i_prfFreeFromLaunch_1",
-        "i_psrFreeFromExp_1",
-        "i_psrFreeFromLaunch_1",
-        "o_prfFreeToLaunch_1",
-        "o_prfFreeToWB_1",
-        "o_psrFreeToExp_1",
-        "o_psrFreeToLaunch_1",
-        "o_psrFreeToWB_1",
-        "o_psrwFreeToExp_1"
+        "o_psrDriveToExp_1",
+        "o_psrDriveToLaunch_1",
+        "o_psrDataToExp_32",
+        "o_psrDataToLaunch_32"
       ],
       "related_payload": [
-        "i_rdDataToPrf_32",
-        "o_prfDataToLaunch_32",
         "o_psrDataToExp_32",
         "o_psrDataToLaunch_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/prf.json"
@@ -447,36 +536,59 @@
       "id": "semantic:module:prf:interface_intent:002"
     },
     {
-      "claim_type": "documentation_focus",
+      "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "prf"
       },
-      "summary": "文档应重点描述数据如何通过驱动事件和FIFO组件在模块内流动，以及释放信号如何控制流控。",
-      "subject": "数据流与事件流",
-      "explanation": "模块的核心功能是数据存储和转发，其实现依赖于驱动事件、FIFO组件和释放信号。文档应清晰说明这些元素如何协同工作，以实现数据从输入到输出的可靠传输。",
+      "summary": "每个驱动事件输入都有一个对应的释放信号输出，形成请求-释放（request-release）握手协议。",
+      "subject": "释放信号与驱动事件的握手关系",
+      "explanation": "例如，i_prfDriveFromLaunch_1事件输入对应o_prfFreeToLaunch_1释放信号输出。这表明驱动事件是请求，释放信号是完成确认，用于控制流水线阶段的推进。",
       "signals": [
+        "i_prfDriveFromLaunch_1",
+        "o_prfFreeToLaunch_1",
+        "i_psrDriveFromExp_1",
+        "o_psrFreeToExp_1",
+        "i_psrDriveFromLaunch_1",
+        "o_psrFreeToLaunch_1"
+      ],
+      "related_payload": [
+        "o_prfFreeToLaunch_1",
+        "o_psrFreeToExp_1",
+        "o_psrFreeToLaunch_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        }
+      ],
+      "id": "semantic:module:prf:interface_intent:003"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
+      "reason": "当前上下文仅显示数据输出直接来自内部寄存器（r_prfValue_32, r_psrValue_32, r_psrValue2_32），但未提供这些寄存器如何被驱动事件更新的逻辑。需要查看RTL源代码中的always块或assign语句以理解寄存器更新机制。",
+      "subject": "内部寄存器更新逻辑",
+      "needed_source_slice": "always block",
+      "signals": [
+        "r_prfValue_32",
+        "r_psrValue_32",
+        "r_psrValue2_32",
         "i_prfDriveFromLaunch_1",
         "i_prfDriveFromWB_1",
         "i_psrDriveFromExp_1",
         "i_psrDriveFromLaunch_1",
         "i_psrDriveFromWB_1",
-        "i_psrwDriveFromExp_1",
-        "o_prfDriveToLaunch_1",
-        "o_psrDriveToExp_1",
-        "o_psrDriveToLaunch_1",
-        "o_prfDataToLaunch_32",
-        "o_psrDataToExp_32",
-        "o_psrDataToLaunch_32",
-        "i_prfFreeFromLaunch_1",
-        "i_psrFreeFromExp_1",
-        "i_psrFreeFromLaunch_1",
-        "o_prfFreeToLaunch_1",
-        "o_prfFreeToWB_1",
-        "o_psrFreeToExp_1",
-        "o_psrFreeToLaunch_1",
-        "o_psrFreeToWB_1",
-        "o_psrwFreeToExp_1"
+        "i_psrwDriveFromExp_1"
       ],
       "instances": [
         "cFifo1_prf1",
@@ -495,6 +607,55 @@
         "flow_005_prf_i_prfDriveFromWB_1"
       ],
       "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        },
+        {
+          "source": "rtl/rtl/PRF/prf.v"
+        }
+      ],
+      "id": "semantic:module:prf:source_review_request:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
+      "summary": "文档应重点描述驱动事件如何触发数据输出，以及释放信号如何控制流水线握手。",
+      "subject": "事件驱动与数据流",
+      "explanation": "模块的核心功能是事件驱动的数据转发。每个驱动事件输入都对应一个数据输出和释放信号输出，形成清晰的请求-响应-释放协议。文档应详细说明每个事件-数据-释放信号三元组的关系。",
+      "signals": [
+        "i_prfDriveFromLaunch_1",
+        "o_prfDriveToLaunch_1",
+        "o_prfDataToLaunch_32",
+        "o_prfFreeToLaunch_1",
+        "i_psrDriveFromExp_1",
+        "o_psrDriveToExp_1",
+        "o_psrDataToExp_32",
+        "o_psrFreeToExp_1",
+        "i_psrDriveFromLaunch_1",
+        "o_psrDriveToLaunch_1",
+        "o_psrDataToLaunch_32",
+        "o_psrFreeToLaunch_1"
+      ],
+      "instances": [
+        "cFifo1_prf1",
+        "cFifo1_prf2",
+        "cFifo1_prf3"
+      ],
+      "related_flows": [
+        "flow_000_prf_i_prfDriveFromLaunch_1",
+        "flow_001_prf_i_psrDriveFromExp_1",
+        "flow_002_prf_i_psrDriveFromLaunch_1"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -506,20 +667,60 @@
         }
       ],
       "id": "semantic:module:prf:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "prf"
+      },
+      "summary": "文档应解释cMutexMerge2_8b如何仲裁来自写回和异常阶段的psr驱动事件，以及合并后的数据路径。",
+      "subject": "互斥合并路径",
+      "explanation": "来自写回和异常阶段的psr驱动事件通过MutexMerge组件进行互斥合并，这是一个关键的设计点。文档应说明仲裁策略（如优先级或轮询）以及合并后数据（w_data_8）的格式和用途。",
+      "signals": [
+        "i_psrDriveFromWB_1",
+        "i_psrwDriveFromExp_1",
+        "w_driveTopsr",
+        "w_data_8",
+        "i_expen_4",
+        "i_expnzcv_4",
+        "i_wben_4",
+        "i_wbnzcv_4"
+      ],
+      "instances": [
+        "cMutexMerge2_8b",
+        "cLastFifo2_prf2"
+      ],
+      "related_flows": [
+        "flow_003_prf_i_psrDriveFromWB_1",
+        "flow_004_prf_i_psrwDriveFromExp_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/prf.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/prf.json"
+        }
+      ],
+      "id": "semantic:module:prf:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_prfDriveFromWB_1",
-      "reason": "从i_prfDriveFromWB_1出发的内部事件流未到达任何模块事件输出，其最终影响不明确。"
+      "reason": "从i_prfDriveFromWB_1开始的内部事件流未到达任何模块事件输出，其内部处理逻辑（如寄存器更新）不明确。"
     },
     {
       "field": "internal_event_flow.i_psrDriveFromWB_1",
-      "reason": "从i_psrDriveFromWB_1出发的内部事件流未到达任何模块事件输出，其最终影响不明确。"
+      "reason": "从i_psrDriveFromWB_1开始的内部事件流未到达任何模块事件输出，其内部处理逻辑（如寄存器更新）不明确。"
     },
     {
       "field": "internal_event_flow.i_psrwDriveFromExp_1",
-      "reason": "从i_psrwDriveFromExp_1出发的内部事件流未到达任何模块事件输出，其最终影响不明确。"
+      "reason": "从i_psrwDriveFromExp_1开始的内部事件流未到达任何模块事件输出，其内部处理逻辑（如寄存器更新）不明确。"
     }
   ]
 }

@@ -367,7 +367,8 @@ def run_knowledge_tool(
         if enrich_modules:
             args.extend(["--enrich-modules", enrich_modules])
 
-    knowledge_timeout = env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 600)
+    knowledge_timeout = env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 3600)
+    args.extend(["--timeout", str(knowledge_timeout)])
     wrapper_timeout = env_int("RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT", knowledge_timeout + 120)
     return run_skill_script("run_knowledge_tool.py", args, timeout=wrapper_timeout)
 

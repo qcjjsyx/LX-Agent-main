@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 22,
+    "count": 9,
     "by_type": {
-      "assignment_interpretation": 6,
-      "component_role": 5,
-      "documentation_focus": 3,
-      "interface_intent": 2,
+      "assignment_interpretation": 3,
+      "component_role": 1,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 4,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,29 +64,23 @@
         "type": "module",
         "module": "SPI_control"
       },
-      "summary": "SPI 主从控制器，通过 APB 接口配置寄存器，管理 SPI 协议时序、时钟分频、CRC 校验及中断生成。",
+      "summary": "SPI 主从控制器，通过 APB 接口配置寄存器，管理 SPI 时钟分频、数据收发、CRC 校验及错误状态。",
       "subject": "SPI_control",
-      "explanation": "模块通过 reg_apb_u 实例接收 APB 总线配置，内部包含 spi_m_u（主模式）、spi_s_u（从模式）、clk_div_u（时钟分频）、CRC_rx_u/CRC_tx_u（CRC 校验）和 MODF_u/OVR_u（错误检测）子模块，共同实现 SPI 协议控制。",
+      "explanation": "模块通过 reg_apb_u 实例接收 APB 总线配置，驱动 clk_div_u 产生 SPI 时钟，spi_m_u 和 spi_s_u 分别处理主从模式数据流，CRC_rx_u/CRC_tx_u 进行 CRC 校验，MODF_u/OVR_u 检测模式错误和溢出。",
       "signals": [
         "PADDR",
         "PWDATA",
         "PRDATA",
-        "PENABLE",
-        "PREADY",
-        "PSEL",
-        "PSLVERR",
-        "PWRITE",
         "sclk_out",
         "mosi_out",
         "miso_out",
-        "nss_out",
-        "SPI_interrupt"
+        "nss_out"
       ],
       "instances": [
         "reg_apb_u",
+        "clk_div_u",
         "spi_m_u",
         "spi_s_u",
-        "clk_div_u",
         "CRC_rx_u",
         "CRC_tx_u",
         "MODF_u",
@@ -111,18 +105,18 @@
         "type": "module",
         "module": "SPI_control"
       },
-      "summary": "通过 reg_apb_u 实例将 APB 总线读写转换为内部寄存器配置，驱动 SPI 模式、时钟、中断使能等控制信号。",
+      "summary": "通过 reg_apb_u 实例将 APB 总线协议转换为内部寄存器读写，分发配置信号（如 MSTR、CPOL、BIDIMODE）到各子模块。",
       "subject": "APB 寄存器桥接与配置分发",
-      "explanation": "reg_apb_u 连接了所有 APB 接口信号（PADDR, PWDATA, PENABLE, PSEL, PWRITE），并输出 PRDATA 和 PREADY，同时通过 assign 将 RXONLY 等寄存器值分发到 clk_div_u 和 spi_m_u。",
+      "explanation": "所有 APB 接口信号（PADDR、PWDATA、PENABLE、PSEL、PWRITE）直接连接到 reg_apb_u，其输出 PRDATA、PREADY、PSLVERR 返回总线。内部配置信号如 RXONLY 从 reg_apb_u 分发到 clk_div_u 和 spi_m_u。",
       "signals": [
         "PADDR",
         "PWDATA",
         "PRDATA",
         "PENABLE",
-        "PREADY",
         "PSEL",
-        "PSLVERR",
         "PWRITE",
+        "PREADY",
+        "PSLVERR",
         "RXONLY"
       ],
       "instances": [
@@ -148,21 +142,21 @@
         "module": "SPI_control"
       },
       "subject": "reg_apb_u",
-      "summary": "APB 从设备寄存器文件，负责 SPI 控制寄存器的读写和状态寄存器的收集。",
-      "explanation": "作为 APB 接口的从设备，接收地址和数据，输出读取数据，同时收集来自 CRC_rx_u、MODF_u、OVR_u 的错误状态信号（CRCERR、MODF、OVR）并输出 RXONLY 控制信号。",
+      "summary": "APB 寄存器文件，存储 SPI 控制/状态/数据寄存器，提供配置接口和状态反馈。",
+      "explanation": "作为 APB 从设备，接收地址和数据，输出读取数据。其输出信号（如 RXONLY）直接控制其他子模块行为，输入信号（如 CRCERR、MODF、OVR）来自错误检测模块，用于状态寄存器更新。",
       "signals": [
         "PADDR",
         "PWDATA",
         "PRDATA",
         "PENABLE",
-        "PREADY",
         "PSEL",
-        "PSLVERR",
         "PWRITE",
+        "PREADY",
+        "PSLVERR",
+        "RXONLY",
         "CRCERR",
         "MODF",
-        "OVR",
-        "RXONLY"
+        "OVR"
       ],
       "instances": [
         "reg_apb_u"
@@ -181,144 +175,14 @@
       "id": "semantic:module:SPI_control:component_role:001"
     },
     {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "subject": "spi_m_u 与 spi_s_u",
-      "summary": "SPI 主模式和从模式协议引擎，分别处理主从模式下的数据收发和时序控制。",
-      "explanation": "spi_m_u 和 spi_s_u 接收时钟和复位，通过内部状态机控制 SPI 协议，输出 busy_m/busy_s 状态信号，并驱动 tx_m 数据到 mosi_out。",
-      "signals": [
-        "clk",
-        "rst_n",
-        "busy_m",
-        "busy_s",
-        "tx_m",
-        "mosi_out",
-        "miso_out"
-      ],
-      "instances": [
-        "spi_m_u",
-        "spi_s_u"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:component_role:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "subject": "clk_div_u",
-      "summary": "SPI 时钟分频器，根据配置生成 sclk 和 nss 输出时序。",
-      "explanation": "接收 RXONLY 控制信号，输出 nss_out 到顶层，并通过 assign 0 将分频后的 sclk_out_div 与 CPOL 结合生成 sclk_out。",
-      "signals": [
-        "clk",
-        "rst_n",
-        "rx_only",
-        "nss_out",
-        "sclk_out_div"
-      ],
-      "instances": [
-        "clk_div_u"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "subject": "CRC_rx_u 与 CRC_tx_u",
-      "summary": "SPI 接收和发送 CRC 校验模块，检测数据完整性。",
-      "explanation": "CRC_rx_u 输出 CRCERR 错误信号到 reg_apb_u，CRC_tx_u 同样连接时钟和复位，但未在上下文中显示其输出连接。",
-      "signals": [
-        "clk",
-        "rst_n",
-        "CRCERR"
-      ],
-      "instances": [
-        "CRC_rx_u",
-        "CRC_tx_u"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "subject": "MODF_u 与 OVR_u",
-      "summary": "SPI 模式错误和溢出错误检测模块，报告协议异常。",
-      "explanation": "MODF_u 和 OVR_u 分别输出 MODF 和 OVR 状态信号到 reg_apb_u，用于中断生成和状态寄存器更新。",
-      "signals": [
-        "clk",
-        "rst_n",
-        "MODF",
-        "OVR"
-      ],
-      "instances": [
-        "MODF_u",
-        "OVR_u"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:component_role:005"
-    },
-    {
       "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "SPI_control"
       },
       "subject": "sclk_out",
-      "summary": "根据 CPOL 极性选择分频时钟，生成 SPI 串行时钟输出。",
-      "explanation": "assign 0 通过 CPOL 选择 sclk_out_div 或其反相，控制 SPI 时钟极性。",
+      "summary": "根据 CPOL 极性选择分频时钟输出，决定 SPI 时钟空闲电平。",
+      "explanation": "assign 0 通过条件表达式 CPOL ? ~sclk_out_div : sclk_out_div 生成 sclk_out，直接控制 SPI 时钟极性。",
       "signals": [
         "sclk_out",
         "CPOL",
@@ -327,13 +191,10 @@
       "related_assignments": [
         "0"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/SPI_control.json"
         }
@@ -347,8 +208,8 @@
         "module": "SPI_control"
       },
       "subject": "io_ctl_sclk, io_ctl_miso, io_ctl_mosi, io_ctl_nss",
-      "summary": "根据 MSTR 和双向模式配置，控制 SPI IO 方向选择。",
-      "explanation": "assign 1-4 根据 MSTR、BIDIMODE、BIDIOE、SSOE 等寄存器值，决定 sclk、miso、mosi、nss 的 IO 方向控制信号。",
+      "summary": "根据主从模式和双向模式配置 IO 方向控制信号，决定引脚驱动方向。",
+      "explanation": "assign 1-4 根据 MSTR、BIDIMODE、BIDIOE、SSOE 生成 IO 控制信号，用于 SPI 引脚的三态控制或输出使能。",
       "signals": [
         "io_ctl_sclk",
         "io_ctl_miso",
@@ -370,9 +231,6 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
           "source": "parser_pipeline_rtl/modules/SPI_control.json"
         }
       ],
@@ -384,71 +242,9 @@
         "type": "module",
         "module": "SPI_control"
       },
-      "subject": "nss_reg",
-      "summary": "软件 NSS 管理，通过 SSM 和 SSI 寄存器选择内部或外部 NSS 信号。",
-      "explanation": "assign 5 在 SSM 使能时使用 SSI 寄存器值，否则使用外部 nss_in 输入。",
-      "signals": [
-        "nss_reg",
-        "SSM",
-        "SSI",
-        "nss_in"
-      ],
-      "related_assignments": [
-        "5"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "subject": "mosi_out",
-      "summary": "双向模式下控制 MOSI 输出数据，非双向模式直接输出 tx_m。",
-      "explanation": "assign 6 在 BIDIMODE 且 BIDIOE 为低时强制 MOSI 为 0，否则输出主模式发送数据 tx_m。",
-      "signals": [
-        "mosi_out",
-        "BIDIMODE",
-        "BIDIOE",
-        "tx_m"
-      ],
-      "related_assignments": [
-        "6"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
       "subject": "SPI_interrupt",
-      "summary": "组合多个中断源生成 SPI 中断信号，包括接收、发送、错误状态。",
-      "explanation": "assign 12 将 RXNE、TXE、MODF、OVR、CRCERR 与对应使能位（RXNEIE、TXEIE、ERRIE）组合，生成 SPI_interrupt 输出。",
+      "summary": "组合多个中断源（RXNE、TXE、MODF、OVR、CRCERR）生成单一中断输出，受使能位控制。",
+      "explanation": "assign 12 将接收非空、发送空、模式错误、溢出、CRC 错误等事件按位或合并，每个事件需对应使能位（RXNEIE、TXEIE、ERRIE）有效才触发中断。",
       "signals": [
         "SPI_interrupt",
         "RXNE",
@@ -468,45 +264,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
           "source": "parser_pipeline_rtl/modules/SPI_control.json"
         }
       ],
-      "id": "semantic:module:SPI_control:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "subject": "BSY",
-      "summary": "根据 RXONLY 和主从模式选择忙状态信号。",
-      "explanation": "assign 8 在 RXONLY 使能时强制为 1，否则根据 MSTR 选择 spi_m_u 或 spi_s_u 的忙状态。",
-      "signals": [
-        "BSY",
-        "RXONLY",
-        "MSTR",
-        "busy_m",
-        "busy_s"
-      ],
-      "related_assignments": [
-        "8"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:assignment_interpretation:006"
+      "id": "semantic:module:SPI_control:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -514,18 +275,18 @@
         "type": "module",
         "module": "SPI_control"
       },
-      "summary": "标准 APB 从设备接口，用于 CPU 通过 APB 总线配置 SPI 控制寄存器。",
-      "subject": "APB 从设备接口",
-      "explanation": "接口包含 PADDR、PWDATA、PRDATA、PENABLE、PREADY、PSEL、PSLVERR、PWRITE，符合 APB 协议规范，无事件信号，纯数据读写。",
+      "summary": "标准 APB 从设备接口，用于 CPU 通过 APB 总线配置 SPI 控制寄存器和读取状态。",
+      "subject": "APB 从接口",
+      "explanation": "接口包含地址（PADDR）、写数据（PWDATA）、读数据（PRDATA）、选择（PSEL）、使能（PENABLE）、写指示（PWRITE）、就绪（PREADY）、错误（PSLVERR），符合 APB 协议规范。",
       "signals": [
         "PADDR",
         "PWDATA",
         "PRDATA",
         "PENABLE",
-        "PREADY",
         "PSEL",
-        "PSLVERR",
-        "PWRITE"
+        "PWRITE",
+        "PREADY",
+        "PSLVERR"
       ],
       "related_payload": [
         "PWDATA",
@@ -545,61 +306,30 @@
       "id": "semantic:module:SPI_control:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "summary": "标准 SPI 四线接口，包括 sclk、mosi、miso、nss，支持主从模式和双向模式。",
-      "subject": "SPI 外部接口",
-      "explanation": "通过 assign 控制 IO 方向，输出 sclk_out、mosi_out、miso_out、nss_out，输入 nss_in，支持 CPOL 极性选择和软件 NSS 管理。",
-      "signals": [
-        "sclk_out",
-        "mosi_out",
-        "miso_out",
-        "nss_out",
-        "nss_in"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:interface_intent:002"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "SPI_control"
       },
-      "summary": "文档应重点描述 SPI_interrupt 的组合逻辑，包括各中断源（RXNE、TXE、MODF、OVR、CRCERR）与使能位的对应关系。",
-      "subject": "SPI 中断生成逻辑",
-      "explanation": "assign 12 清晰展示了中断生成结构，是理解 SPI 中断行为的关键，需详细说明每个中断源的条件和使能控制。",
+      "summary": "文档应重点说明主从模式选择（MSTR）、双向模式（BIDIMODE/BIDIOE）对 IO 方向控制的影响，以及时钟极性（CPOL）对 sclk_out 的生成。",
+      "subject": "SPI 模式配置与 IO 控制",
+      "explanation": "assign 1-4 和 assign 0 直接决定了 SPI 引脚的行为，是用户配置的核心，需要清晰解释每个控制位的组合效果。",
       "signals": [
-        "SPI_interrupt",
-        "RXNE",
-        "RXNEIE",
-        "TXE",
-        "TXEIE",
-        "MODF",
-        "OVR",
-        "CRCERR",
-        "ERRIE"
+        "MSTR",
+        "BIDIMODE",
+        "BIDIOE",
+        "CPOL",
+        "SSOE",
+        "io_ctl_sclk",
+        "io_ctl_miso",
+        "io_ctl_mosi",
+        "io_ctl_nss",
+        "sclk_out"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/SPI_control.json"
         }
@@ -607,62 +337,26 @@
       "id": "semantic:module:SPI_control:documentation_focus:001"
     },
     {
-      "claim_type": "documentation_focus",
+      "claim_type": "source_review_request",
       "scope": {
         "type": "module",
         "module": "SPI_control"
       },
-      "summary": "文档应详细解释 io_ctl_* 信号如何根据 MSTR、BIDIMODE、BIDIOE 配置 SPI 引脚方向。",
-      "subject": "SPI IO 方向控制",
-      "explanation": "assign 1-4 定义了主从模式和双向模式下的 IO 方向选择，是理解 SPI 引脚复用和模式切换的核心。",
+      "reason": "紧凑上下文未提供内部事件流和状态机信息，无法推断数据收发流程、FIFO 操作或 CRC 计算触发条件。",
+      "subject": "内部事件流和状态机细节",
+      "needed_source_slice": "always block, flow_graph, internal_event_flow",
       "signals": [
-        "io_ctl_sclk",
-        "io_ctl_miso",
-        "io_ctl_mosi",
-        "io_ctl_nss",
-        "MSTR",
-        "BIDIMODE",
-        "BIDIOE",
-        "SSOE"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:documentation_focus:002"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "summary": "文档应概述 spi_m_u、spi_s_u、clk_div_u、CRC_rx_u、CRC_tx_u、MODF_u、OVR_u 的职责及其与 reg_apb_u 的数据流。",
-      "subject": "子模块职责与连接",
-      "explanation": "上下文显示了子模块间的关键连接，如 CRCERR、MODF、OVR 到 reg_apb_u，RXONLY 到 clk_div_u 和 spi_m_u，但缺少内部细节，需 RTL 源码补充。",
-      "signals": [
-        "CRCERR",
-        "MODF",
-        "OVR",
-        "RXONLY",
+        "tx_m",
         "busy_m",
-        "busy_s"
+        "busy_s",
+        "RXNE",
+        "TXE"
       ],
       "instances": [
         "spi_m_u",
         "spi_s_u",
-        "clk_div_u",
         "CRC_rx_u",
-        "CRC_tx_u",
-        "MODF_u",
-        "OVR_u"
+        "CRC_tx_u"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -675,142 +369,8 @@
           "source": "parser_pipeline_rtl/modules/SPI_control.json"
         }
       ],
-      "id": "semantic:module:SPI_control:documentation_focus:003"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "reason": "上下文仅显示连接和忙状态输出，缺少主从模式协议引擎的内部状态机细节、数据收发时序和 FIFO 管理。",
-      "subject": "spi_m_u 和 spi_s_u 内部状态机",
-      "needed_source_slice": "always block, assign block, instance connections",
-      "signals": [
-        "busy_m",
-        "busy_s",
-        "tx_m",
-        "rx_m"
-      ],
-      "instances": [
-        "spi_m_u",
-        "spi_s_u"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
       "id": "semantic:module:SPI_control:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "reason": "上下文仅显示 nss_out 输出和 RXONLY 输入，缺少分频系数配置、sclk_out_div 生成逻辑和 NSS 时序控制。",
-      "subject": "clk_div_u 分频逻辑",
-      "needed_source_slice": "always block, assign block",
-      "signals": [
-        "sclk_out_div",
-        "nss_out",
-        "rx_only"
-      ],
-      "instances": [
-        "clk_div_u"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "reason": "上下文仅显示 CRCERR 输出，缺少 CRC 多项式配置、校验使能控制和数据路径连接。",
-      "subject": "CRC_rx_u 和 CRC_tx_u 校验逻辑",
-      "needed_source_slice": "always block, assign block, instance connections",
-      "signals": [
-        "CRCERR"
-      ],
-      "instances": [
-        "CRC_rx_u",
-        "CRC_tx_u"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:source_review_request:003"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI_control"
-      },
-      "reason": "上下文仅显示 MODF 和 OVR 输出，缺少错误触发条件、清除机制和状态机细节。",
-      "subject": "MODF_u 和 OVR_u 错误检测逻辑",
-      "needed_source_slice": "always block, assign block",
-      "signals": [
-        "MODF",
-        "OVR"
-      ],
-      "instances": [
-        "MODF_u",
-        "OVR_u"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI_control.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI_control.json"
-        }
-      ],
-      "id": "semantic:module:SPI_control:source_review_request:004"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "内部事件流",
-      "reason": "上下文未提供任何内部事件流信息，无法推断模块内部的事件驱动逻辑或状态机转换。"
-    },
-    {
-      "field": "寄存器映射",
-      "reason": "上下文未提供 reg_apb_u 的寄存器地址映射和位定义，无法确定各控制/状态寄存器的具体功能。"
-    },
-    {
-      "field": "数据路径",
-      "reason": "上下文未显示 SPI 数据收发路径（如 TX/RX FIFO、移位寄存器），无法推断数据流的具体实现。"
-    }
-  ]
+  "evidence_gaps": []
 }

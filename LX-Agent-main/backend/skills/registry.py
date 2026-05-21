@@ -125,6 +125,26 @@ def collect_skill_result(selected_skills, base_tool_names=None):
     )
 
 
+def score_skills_for_task(user_input):
+    scored = []
+
+    for skill in ALL_SKILLS:
+        score = skill.match_score(user_input)
+        if score <= 0:
+            continue
+        scored.append({
+            "skill": skill,
+            "score": score,
+            "priority": skill.priority,
+            "matched_triggers": skill.matched_triggers(user_input),
+        })
+
+    return sorted(
+        scored,
+        key=lambda item: (-item["score"], item["priority"], item["skill"].name),
+    )
+
+
 def select_tool_names_for_task(user_input):
     """
     Skill 选择入口。
@@ -136,18 +156,19 @@ def select_tool_names_for_task(user_input):
     4. 普通 skill 可以叠加。
     """
     base_tool_names = match_base_tool_names(user_input)
+    scored_skills = score_skills_for_task(user_input)
 
     high_priority_skills = [
-        skill for skill in ALL_SKILLS
-        if skill.priority < 50 and skill.matches(user_input)
+        item["skill"] for item in scored_skills
+        if item["skill"].priority < 50
     ]
 
     if high_priority_skills:
         return collect_skill_result(high_priority_skills)
 
     normal_skills = [
-        skill for skill in ALL_SKILLS
-        if skill.priority >= 50 and skill.matches(user_input)
+        item["skill"] for item in scored_skills
+        if item["skill"].priority >= 50
     ]
 
     return collect_skill_result(normal_skills, base_tool_names)

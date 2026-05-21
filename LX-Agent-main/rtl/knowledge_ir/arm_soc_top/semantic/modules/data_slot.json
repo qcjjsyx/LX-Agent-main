@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 15,
     "by_type": {
-      "assignment_interpretation": 3,
+      "assignment_interpretation": 4,
       "component_role": 3,
-      "documentation_focus": 2,
-      "interface_intent": 1,
+      "documentation_focus": 3,
+      "interface_intent": 3,
       "module_role": 1,
       "structural_responsibility": 1
     }
@@ -63,9 +63,9 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "数据槽模块，作为CPU、Dcache和Mesh之间的数据通路仲裁与分发中心",
+      "summary": "数据槽模块，作为CPU、Dcache和Mesh之间的数据通路仲裁与分发节点",
       "subject": "data_slot",
-      "explanation": "模块接收来自Dcache、Mesh和CPU的驱动事件，通过内部组件（MutexMerge、SelSplit、cFifo）进行仲裁和路由，最终将数据分发到CPU、Dcache和Mesh。事件-载荷契约和内部流图表明其核心功能是数据路径的调度和转发。",
+      "explanation": "模块接收来自Dcache、Mesh和CPU的驱动事件，通过内部组件（MutexMerge、Selector、Fifo）进行仲裁和路由，最终将数据分发到CPU、Dcache和Mesh。同时管理释放信号，实现握手协议。",
       "signals": [
         "i_driveFromDcache",
         "i_driveFromMesh",
@@ -92,7 +92,7 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:module_role:001"
@@ -103,18 +103,18 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "模块负责将来自CPU的请求（通过i_drvCpu2Mux）根据地址范围（w_toCache_1, w_toMesh_1）分发到Dcache或Mesh，并将来自Dcache和Mesh的响应（通过i_driveFromDcache, i_driveFromMesh）仲裁后转发到CPU。",
-      "subject": "数据路径仲裁与分发",
-      "explanation": "内部流图显示，i_drvCpu2Mux事件通过cfifo0和select1组件，根据地址解码信号（w_toCache_1, w_toMesh_1）路由到o_driveToDcache或o_driveToMesh。而i_driveFromDcache和i_driveFromMesh事件通过MutexMerge组件仲裁后，路由到o_driveToCpu。这构成了一个完整的请求-响应数据路径。",
+      "summary": "模块负责将来自CPU、Dcache和Mesh的数据请求，根据地址范围仲裁后，分发到正确的目标端口。",
+      "subject": "数据通路仲裁与分发",
+      "explanation": "来自CPU的请求（i_drvCpu2Mux）通过cfifo0缓存后，由select1根据地址译码结果（w_toCache_1, w_toMesh_1等）分发到Dcache或Mesh。来自Dcache和Mesh的请求通过MutexMerge互斥合并后，驱动到CPU。释放信号（i_freeFromCpu, i_freeFromDcache, i_freeFromMesh）用于释放对应路径的资源。",
       "signals": [
         "i_drvCpu2Mux",
-        "i_driveFromDcache",
-        "i_driveFromMesh",
-        "o_driveToCpu",
+        "i_dataCPU2Mux_105",
         "o_driveToDcache",
         "o_driveToMesh",
-        "w_toCache_1",
-        "w_toMesh_1"
+        "o_driveToCpu",
+        "i_freeFromCpu",
+        "i_freeFromDcache",
+        "i_freeFromMesh"
       ],
       "instances": [
         "cfifo0",
@@ -134,7 +134,7 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:structural_responsibility:001"
@@ -145,16 +145,51 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "MutexMerge",
-      "summary": "互斥合并器，用于仲裁来自Dcache和Mesh的响应事件，确保同一时刻只有一个响应被转发到CPU。",
-      "explanation": "MutexMerge接收来自delay_driveFromDcache和delay_driveFromMesh的驱动事件，并输出一个仲裁后的驱动事件到CPU。其输入数据包括来自Dcache的64位数据和来自Mesh的64位数据，输出合并后的数据。这表明它处理了来自两个源的竞争访问。",
+      "subject": "cfifo0 (cFifo1)",
+      "summary": "作为CPU到数据槽的输入FIFO，缓存来自CPU的驱动事件和关联数据。",
+      "explanation": "cfifo0接收来自CPU的驱动事件i_drvCpu2Mux，并输出w_drvCpu2Mux。其释放信号o_freeCPUFMux直接连接到模块输出，表明当FIFO为空时通知CPU可以发送新请求。",
+      "signals": [
+        "i_drvCpu2Mux",
+        "w_drvCpu2Mux",
+        "o_freeCPUFMux"
+      ],
+      "instances": [
+        "cfifo0"
+      ],
+      "related_flows": [
+        "flow_000_data_slot_i_drvCpu2Mux"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
+        }
+      ],
+      "id": "semantic:module:data_slot:component_role:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "subject": "MutexMerge (cMutexMerge2_64b)",
+      "summary": "作为来自Dcache和Mesh的请求的互斥合并器，确保同一时刻只有一个请求被转发到CPU。",
+      "explanation": "MutexMerge接收来自Dcache（w_delay_driveFromDcache）和Mesh（w_delay_driveFromMesh）的驱动事件，以及对应的数据（i_dcache_data, w_dataFromMesh_64）。它输出合并后的驱动事件w_driveToCpu和数据w_memData_64。其释放信号o_freeToDcache和o_freeToMesh分别通知Dcache和Mesh可以发送新请求。",
       "signals": [
         "w_delay_driveFromDcache",
         "w_delay_driveFromMesh",
-        "w_driveToCpu",
         "i_dcache_data",
         "w_dataFromMesh_64",
-        "w_memData_64"
+        "w_driveToCpu",
+        "w_memData_64",
+        "o_freeToDcache",
+        "o_freeToMesh"
       ],
       "instances": [
         "MutexMerge"
@@ -171,10 +206,10 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
-      "id": "semantic:module:data_slot:component_role:001"
+      "id": "semantic:module:data_slot:component_role:002"
     },
     {
       "claim_type": "component_role",
@@ -182,9 +217,9 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "select1",
-      "summary": "选择器/分发器，根据地址解码结果将CPU请求分发到Dcache或Mesh路径。",
-      "explanation": "select1接收来自delaymux的CPU驱动事件，并根据内部逻辑（可能基于w_toCache_1和w_toMesh_1信号）将其分发到o_driveToDcache或o_driveToMesh。其输出事件分别连接到delay3和delay2，最终驱动到Dcache和Mesh。",
+      "subject": "select1 (cSelector2_1b)",
+      "summary": "作为CPU请求的目的地选择器，根据地址译码结果将请求路由到Dcache或Mesh。",
+      "explanation": "select1接收来自CPU的延迟驱动事件w_drvCpu2Mux_delay，并根据内部选择逻辑（可能基于地址译码信号w_toCache_1, w_toMesh_1等）将其分发到Dcache（w_driveToDcache）或Mesh（w_driveToMesh）。其释放信号i_freeFromDcache和i_freeFromMesh用于释放对应路径。",
       "signals": [
         "w_drvCpu2Mux_delay",
         "w_driveToDcache",
@@ -206,40 +241,7 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:component_role:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "subject": "cfifo0",
-      "summary": "CPU请求的输入FIFO，用于缓冲来自CPU的驱动事件，处理可能的背压。",
-      "explanation": "cfifo0接收i_drvCpu2Mux事件，并输出w_drvCpu2Mux到后续的delaymux。其输出o_freeCPUFMux用于向CPU发送释放信号，表明FIFO已处理完一个请求。这表明它起到了事件缓冲和流控的作用。",
-      "signals": [
-        "i_drvCpu2Mux",
-        "w_drvCpu2Mux",
-        "o_freeCPUFMux"
-      ],
-      "instances": [
-        "cfifo0"
-      ],
-      "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:component_role:003"
@@ -250,17 +252,37 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "w_toCache_1, w_toMesh_1",
-      "summary": "地址解码信号，用于确定CPU请求的目标是Dcache还是Mesh。",
-      "explanation": "赋值语句显示，w_toCache_1在地址大于等于0x00021200时有效，w_toMesh_1在地址在0x00001000到0x00001200之间时有效。这些信号驱动select1组件的分发逻辑，是请求路由的关键控制信号。",
+      "subject": "w_toCache_1, w_toMesh_1, w_toUART0_1, w_toPWM0_1, w_toSPI0_1, w_toGPIO_1, w_toTIMER_1, w_toIIC_1, w_toWD_1, w_toSPI1_1, w_toPWM1_1, w_toUART1_1",
+      "summary": "地址译码信号，用于将CPU的请求路由到不同的外设或内存目标。",
+      "explanation": "这些赋值语句根据i_data_bus_addr（来自r_cpu_addr）的地址范围，生成一系列目标选择信号。例如，w_toCache_1在地址>=0x00021200时有效，w_toMesh_1在地址0x00001000-0x000011FF时有效。这些信号很可能用于控制select1或其他内部逻辑的路由选择。",
       "signals": [
         "i_data_bus_addr",
         "w_toCache_1",
-        "w_toMesh_1"
+        "w_toMesh_1",
+        "w_toUART0_1",
+        "w_toPWM0_1",
+        "w_toSPI0_1",
+        "w_toGPIO_1",
+        "w_toTIMER_1",
+        "w_toIIC_1",
+        "w_toWD_1",
+        "w_toSPI1_1",
+        "w_toPWM1_1",
+        "w_toUART1_1"
       ],
       "related_assignments": [
         "4",
-        "5"
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15"
       ],
       "related_flows": [
         "flow_000_data_slot_i_drvCpu2Mux"
@@ -270,7 +292,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:assignment_interpretation:001"
@@ -281,42 +306,9 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "data_pre_51",
-      "summary": "组装发往Mesh的51位数据包，包含写使能、地址、数据、X和Y坐标。",
-      "explanation": "赋值语句显示，data_pre_51由w_meshWen_1, w_meshAddr_8, w_meshData_32, w_meshX_5, w_meshY_5拼接而成。这表明发往Mesh的数据是一个结构化的数据包，包含了路由和操作信息。",
-      "signals": [
-        "data_pre_51",
-        "w_meshWen_1",
-        "w_meshAddr_8",
-        "w_meshData_32",
-        "w_meshX_5",
-        "w_meshY_5"
-      ],
-      "related_assignments": [
-        "21"
-      ],
-      "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
       "subject": "w_meshData_32",
-      "summary": "根据字节写使能信号从64位数据中提取32位数据，用于Mesh数据包。",
-      "explanation": "赋值语句是一个复杂的条件表达式，根据we（写使能）信号的不同位模式，从data信号中提取相应的字节或半字，并零扩展到32位。这表明Mesh接口可能支持不同粒度的写操作。",
+      "summary": "从64位数据中根据字节使能信号提取32位数据，用于Mesh接口。",
+      "explanation": "该赋值语句根据we（字节使能）信号，从data（64位）中提取一个32位的字。它支持单字节、双字节、半字和全字提取，是Mesh接口数据格式转换的关键步骤。",
       "signals": [
         "w_meshData_32",
         "we",
@@ -330,13 +322,88 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
+        }
+      ],
+      "id": "semantic:module:data_slot:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "subject": "data_pre_51",
+      "summary": "将Mesh接口的写使能、地址、数据、X/Y坐标打包成51位数据。",
+      "explanation": "该赋值语句将w_meshWen_1, w_meshAddr_8, w_meshData_32, w_meshX_5, w_meshY_5拼接成51位数据data_pre_51，然后赋值给o_data2Mesh。这是Mesh接口数据输出的最终打包步骤。",
+      "signals": [
+        "data_pre_51",
+        "w_meshWen_1",
+        "w_meshAddr_8",
+        "w_meshData_32",
+        "w_meshX_5",
+        "w_meshY_5",
+        "o_data2Mesh"
+      ],
+      "related_assignments": [
+        "21",
+        "22"
+      ],
+      "related_flows": [
+        "flow_000_data_slot_i_drvCpu2Mux"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:assignment_interpretation:003"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "subject": "o_memData_65",
+      "summary": "将64位内存数据和进位位打包成65位输出，用于CPU接口。",
+      "explanation": "该赋值语句将w_memData_64和r_carry拼接成65位数据o_memData_65。w_memData_64来自MutexMerge的输出，r_carry可能是一个进位或状态标志。这表明CPU接口需要额外的状态信息。",
+      "signals": [
+        "o_memData_65",
+        "w_memData_64",
+        "r_carry"
+      ],
+      "related_assignments": [
+        "24"
+      ],
+      "related_flows": [
+        "flow_001_data_slot_i_driveFromDcache",
+        "flow_002_data_slot_i_driveFromMesh"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
+        }
+      ],
+      "id": "semantic:module:data_slot:assignment_interpretation:004"
     },
     {
       "claim_type": "interface_intent",
@@ -344,31 +411,16 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "模块使用事件驱动和释放信号构成握手协议，用于管理数据路径的流控和资源释放。",
-      "subject": "事件-释放握手协议",
-      "explanation": "每个驱动事件（i_driveFromDcache, i_driveFromMesh, i_drvCpu2Mux）都对应一个释放信号（o_freeToDcache, o_freeToMesh, o_freeCPUFMux）。类似地，输出驱动事件（o_driveToCpu, o_driveToDcache, o_driveToMesh）也对应输入释放信号（i_freeFromCpu, i_freeFromDcache, i_freeFromMesh）。这表明模块内部使用了一种请求-确认或令牌传递的流控机制。",
+      "summary": "一个基于事件驱动的请求-释放接口，CPU通过驱动事件发送请求和数据，数据槽通过释放信号表示可以接收新请求。",
+      "subject": "CPU请求接口 (i_drvCpu2Mux, i_dataCPU2Mux_105, o_freeCPUFMux)",
+      "explanation": "CPU通过i_drvCpu2Mux事件发起请求，同时携带105位数据i_dataCPU2Mux_105。数据槽处理完成后，通过o_freeCPUFMux释放信号通知CPU可以发送下一个请求。cfifo0作为输入FIFO，其释放信号直接连接到模块输出。",
       "signals": [
-        "i_driveFromDcache",
-        "o_freeToDcache",
-        "i_driveFromMesh",
-        "o_freeToMesh",
         "i_drvCpu2Mux",
-        "o_freeCPUFMux",
-        "o_driveToCpu",
-        "i_freeFromCpu",
-        "o_driveToDcache",
-        "i_freeFromDcache",
-        "o_driveToMesh",
-        "i_freeFromMesh"
+        "i_dataCPU2Mux_105",
+        "o_freeCPUFMux"
       ],
       "related_payload": [
-        "i_dcache_data",
-        "i_dataCPU2Mux_105",
-        "o_dcache_addr",
-        "o_dcache_data",
-        "o_dcache_we",
-        "o_data2Mesh",
-        "o_memData_65"
+        "i_dataCPU2Mux_105"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -378,10 +430,80 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "summary": "一个双向事件驱动接口，用于数据槽与Dcache之间的数据交换。",
+      "subject": "Dcache接口 (i_driveFromDcache, i_dcache_data, o_freeToDcache, o_driveToDcache, o_dcache_addr, o_dcache_data, o_dcache_we, i_freeFromDcache)",
+      "explanation": "Dcache通过i_driveFromDcache事件向数据槽发送数据（i_dcache_data），数据槽处理后通过o_driveToDcache事件向Dcache发送写地址（o_dcache_addr）、数据（o_dcache_data）和写使能（o_dcache_we）。释放信号（o_freeToDcache, i_freeFromDcache）用于控制流控。",
+      "signals": [
+        "i_driveFromDcache",
+        "i_dcache_data",
+        "o_freeToDcache",
+        "o_driveToDcache",
+        "o_dcache_addr",
+        "o_dcache_data",
+        "o_dcache_we",
+        "i_freeFromDcache"
+      ],
+      "related_payload": [
+        "i_dcache_data",
+        "o_dcache_addr",
+        "o_dcache_data",
+        "o_dcache_we"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
+        }
+      ],
+      "id": "semantic:module:data_slot:interface_intent:002"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "summary": "一个基于事件驱动的请求-释放接口，用于数据槽与Mesh之间的数据交换。",
+      "subject": "Mesh接口 (i_driveFromMesh, o_freeToMesh, o_driveToMesh, o_data2Mesh, i_freeFromMesh)",
+      "explanation": "Mesh通过i_driveFromMesh事件向数据槽发送请求（无关联数据），数据槽处理后通过o_driveToMesh事件向Mesh发送51位数据（o_data2Mesh）。释放信号（o_freeToMesh, i_freeFromMesh）用于控制流控。",
+      "signals": [
+        "i_driveFromMesh",
+        "o_freeToMesh",
+        "o_driveToMesh",
+        "o_data2Mesh",
+        "i_freeFromMesh"
+      ],
+      "related_payload": [
+        "o_data2Mesh"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
+        }
+      ],
+      "id": "semantic:module:data_slot:interface_intent:003"
     },
     {
       "claim_type": "documentation_focus",
@@ -389,13 +511,10 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "手册应重点描述模块如何根据地址范围将CPU请求分发到Dcache或Mesh，以及如何仲裁来自Dcache和Mesh的响应。",
-      "subject": "数据路径仲裁与分发逻辑",
-      "explanation": "这是模块的核心功能，由select1和MutexMerge组件实现。地址解码信号（w_toCache_1, w_toMesh_1）是分发逻辑的关键。文档应清晰说明地址映射规则和仲裁策略。",
+      "summary": "手册应重点描述从CPU、Dcache、Mesh三个方向的数据流路径，以及内部仲裁（MutexMerge）和选择（select1）逻辑。",
+      "subject": "数据流路径与仲裁逻辑",
+      "explanation": "模块的核心功能是数据通路仲裁与分发。文档应清晰说明每个输入事件如何通过内部组件（cfifo0, MutexMerge, select1）处理，并最终路由到正确的输出端口。地址译码逻辑（w_toCache_1, w_toMesh_1等）是路由决策的关键，需要详细解释。",
       "signals": [
-        "i_data_bus_addr",
-        "w_toCache_1",
-        "w_toMesh_1",
         "i_drvCpu2Mux",
         "i_driveFromDcache",
         "i_driveFromMesh",
@@ -404,8 +523,9 @@
         "o_driveToMesh"
       ],
       "instances": [
-        "select1",
-        "MutexMerge"
+        "cfifo0",
+        "MutexMerge",
+        "select1"
       ],
       "related_flows": [
         "flow_000_data_slot_i_drvCpu2Mux",
@@ -420,7 +540,7 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:documentation_focus:001"
@@ -431,22 +551,16 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "手册应详细解释事件驱动和释放信号的握手协议，包括时序和流控机制。",
-      "subject": "事件-释放握手协议",
-      "explanation": "这是模块与外部组件（CPU、Dcache、Mesh）交互的基础。理解该协议对于正确使用模块至关重要。文档应说明每个驱动事件何时被确认，以及释放信号如何用于背压管理。",
+      "summary": "手册应详细解释每个接口的释放信号（free）如何与驱动事件（drive）配合，实现流控和握手。",
+      "subject": "释放信号握手协议",
+      "explanation": "每个输入事件都有一个对应的释放输出信号，每个输出事件都有一个对应的释放输入信号。这种握手协议确保了数据槽不会丢失请求，并且可以控制数据流速率。文档应说明释放信号何时有效（例如，当FIFO为空或处理完成时）。",
       "signals": [
-        "i_driveFromDcache",
-        "o_freeToDcache",
-        "i_driveFromMesh",
-        "o_freeToMesh",
-        "i_drvCpu2Mux",
-        "o_freeCPUFMux",
-        "o_driveToCpu",
         "i_freeFromCpu",
-        "o_driveToDcache",
         "i_freeFromDcache",
-        "o_driveToMesh",
-        "i_freeFromMesh"
+        "i_freeFromMesh",
+        "o_freeCPUFMux",
+        "o_freeToDcache",
+        "o_freeToMesh"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -456,20 +570,61 @@
           "source": "knowledge_ir/modules/data_slot.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
+          "source": "rtl/rtl/slot/data_slot.v"
         }
       ],
       "id": "semantic:module:data_slot:documentation_focus:002"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "summary": "手册应详细列出地址译码规则，说明不同地址范围对应的目标外设或内存。",
+      "subject": "地址译码与目标选择",
+      "explanation": "赋值语句4-15定义了基于i_data_bus_addr的地址译码逻辑。这些译码信号（w_toCache_1, w_toMesh_1, w_toUART0_1等）是select1路由决策的基础。文档应提供一个地址映射表，清晰说明每个地址范围对应的目标。",
+      "signals": [
+        "i_data_bus_addr",
+        "w_toCache_1",
+        "w_toMesh_1",
+        "w_toUART0_1",
+        "w_toPWM0_1",
+        "w_toSPI0_1",
+        "w_toGPIO_1",
+        "w_toTIMER_1",
+        "w_toIIC_1",
+        "w_toWD_1",
+        "w_toSPI1_1",
+        "w_toPWM1_1",
+        "w_toUART1_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "rtl/rtl/slot/data_slot.v"
+        }
+      ],
+      "id": "semantic:module:data_slot:documentation_focus:003"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部寄存器定义",
-      "reason": "上下文未提供内部寄存器（如r_cpuWen_8, r_cpu_data, r_cpu_addr, r_data0, r_carry）的详细定义和更新逻辑，这些是理解数据路径的关键。"
+      "field": "i_driveFromMesh 的关联数据",
+      "reason": "事件-载荷合约显示i_driveFromMesh没有关联数据，但内部事件流flow_002_data_slot_i_driveFromMesh的端点包括o_driveToCpu，且MutexMerge接收w_dataFromMesh_64。需要RTL源码确认i_driveFromMesh是否携带数据，或者w_dataFromMesh_64是如何生成的。"
     },
     {
-      "field": "地址解码逻辑的完整映射",
-      "reason": "上下文仅提供了w_toCache_1和w_toMesh_1的地址范围，但未提供其他外设（如UART、PWM、IIC等）的地址解码信号（w_toUART0_1等）如何被使用，这些信号可能用于更细粒度的路由或控制。"
+      "field": "o_driveToCpu 的关联数据",
+      "reason": "事件-载荷合约显示o_driveToCpu没有关联数据，但内部事件流flow_001和flow_002的端点包括o_driveToCpu，且MutexMerge输出w_memData_64。需要RTL源码确认o_driveToCpu是否携带数据，或者w_memData_64是如何连接到o_memData_65的。"
+    },
+    {
+      "field": "select1 的选择逻辑",
+      "reason": "上下文显示select1接收w_drvCpu2Mux_delay并输出到Dcache或Mesh，但没有明确说明选择信号是什么。需要RTL源码确认select1的选择逻辑是否基于地址译码信号（w_toCache_1, w_toMesh_1等）。"
     }
   ]
 }

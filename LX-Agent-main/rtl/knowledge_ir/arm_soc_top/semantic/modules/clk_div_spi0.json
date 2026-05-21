@@ -46,14 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 9,
     "by_type": {
       "assignment_interpretation": 3,
-      "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 3,
-      "structural_responsibility": 1
+      "source_review_request": 3
     }
   },
   "claims": [
@@ -63,15 +61,17 @@
         "type": "module",
         "module": "clk_div_spi0"
       },
-      "summary": "该模块根据波特率选择信号BR和片选信号nss_out，从系统时钟分频生成SPI主时钟sclk_out，并输出当前分频计数值sclk_cnt。",
+      "summary": "该模块根据波特率选择信号BR，从内部计数器cnt中产生SPI主时钟sclk_out，并控制8位传输使能信号bit8_out。",
       "subject": "clk_div_spi0",
-      "explanation": "模块接收3位波特率选择信号BR，通过组合逻辑从内部计数器cnt中选取对应位，并在nss_out有效（低电平）时输出分频时钟sclk_m；再通过bit8_out使能信号控制最终sclk_out的输出。sclk_cnt提供当前分频计数值，用于外部同步或状态监测。",
+      "explanation": "模块仅有一个数据输入BR（波特率选择）和一个数据输出sclk_cnt（计数器值）。赋值依赖显示sclk_out由bit8_out和sclk_m控制，而sclk_m由nss_out和cnt[BR]决定，表明模块核心功能是时钟分频和传输使能控制。",
       "signals": [
         "BR",
         "sclk_cnt",
         "sclk_out",
+        "bit8_out",
+        "sclk_m",
         "nss_out",
-        "bit8_out"
+        "cnt"
       ],
       "instances": [
         "u_sclk_done_1"
@@ -93,53 +93,22 @@
       "id": "semantic:module:clk_div_spi0:module_role:001"
     },
     {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "clk_div_spi0"
-      },
-      "summary": "模块根据BR选择分频系数，在片选有效期间生成SPI主时钟，并控制时钟仅在数据传输位（bit8_out有效）时输出。",
-      "subject": "SPI时钟分频与输出控制",
-      "explanation": "通过assign依赖关系可见，sclk_m由nss_out和cnt[BR]决定，实现片选使能下的可编程分频；sclk_out进一步由bit8_out门控，确保仅在数据传输窗口内输出时钟，符合SPI主设备时钟控制逻辑。",
-      "signals": [
-        "sclk_m",
-        "sclk_out",
-        "nss_out",
-        "cnt",
-        "BR",
-        "bit8_out"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
-        }
-      ],
-      "id": "semantic:module:clk_div_spi0:structural_responsibility:001"
-    },
-    {
       "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "clk_div_spi0"
       },
       "subject": "bit8_out",
-      "summary": "该信号作为数据传输使能标志，当sclk_cnt非零时有效，用于门控sclk_out的输出。",
-      "explanation": "assign 0将sclk_cnt非零条件映射为bit8_out高电平，表明当前处于有效数据传输周期（非空闲计数值），从而控制sclk_out仅在数据位传输期间输出时钟。",
+      "summary": "该赋值将sclk_cnt非零条件转换为8位传输使能信号，用于控制sclk_out的输出门控。",
+      "explanation": "bit8_out = (sclk_cnt != 0) ? 1'b1 : 1'b0，表明当计数器非零时，使能后续的sclk_out输出，实现8位数据帧的时钟控制。",
       "signals": [
         "bit8_out",
         "sclk_cnt"
       ],
       "related_assignments": [
-        "0",
         "2"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -159,8 +128,8 @@
         "module": "clk_div_spi0"
       },
       "subject": "sclk_m",
-      "summary": "该信号在片选有效（nss_out为低）时，从内部计数器cnt中按BR索引选择分频时钟；片选无效时输出低电平。",
-      "explanation": "assign 1通过条件表达式实现：当nss_out为高（片选无效）时强制输出0；否则输出cnt[BR]，即根据BR选择计数器某位作为分频时钟，实现可编程分频。",
+      "summary": "该赋值根据片选信号nss_out和波特率选择BR，从内部计数器cnt中提取分频后的中间时钟。",
+      "explanation": "sclk_m = nss_out ? 1'b0 : cnt[BR]，表明当片选无效（nss_out为高）时输出低电平，否则输出cnt中由BR索引的位，实现可编程分频。",
       "signals": [
         "sclk_m",
         "nss_out",
@@ -168,7 +137,6 @@
         "BR"
       ],
       "related_assignments": [
-        "1",
         "2"
       ],
       "doc_priority": "primary",
@@ -191,8 +159,8 @@
         "module": "clk_div_spi0"
       },
       "subject": "sclk_out",
-      "summary": "最终SPI主时钟输出，由bit8_out使能信号门控sclk_m，仅在数据传输位期间输出有效时钟。",
-      "explanation": "assign 2将sclk_out定义为bit8_out为高时输出sclk_m，否则输出0，实现时钟门控，确保SPI时钟仅在数据帧有效期间产生。",
+      "summary": "该赋值在8位传输使能有效时，将分频后的中间时钟sclk_m输出为SPI主时钟，否则保持低电平。",
+      "explanation": "sclk_out = bit8_out ? sclk_m : 1'b0，表明sclk_out仅在bit8_out有效时跟随sclk_m，实现传输帧内的时钟门控。",
       "signals": [
         "sclk_out",
         "bit8_out",
@@ -200,8 +168,7 @@
       ],
       "related_assignments": [
         "0",
-        "1",
-        "2"
+        "1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -222,21 +189,23 @@
         "type": "module",
         "module": "clk_div_spi0"
       },
-      "summary": "3位波特率选择信号，用于选择分频系数，控制SPI时钟频率。",
+      "summary": "BR作为波特率选择输入，通过索引内部计数器cnt的位来动态选择分频系数。",
       "subject": "BR输入接口",
-      "explanation": "BR作为唯一的数据输入，直接参与分频选择（cnt[BR]），其宽度为3位，支持最多8种分频配置，是模块可编程性的核心控制接口。",
+      "explanation": "赋值sclk_m = nss_out ? 1'b0 : cnt[BR]表明BR直接用于选择cnt的某一位，实现2^BR分频，是模块的核心控制接口。",
       "signals": [
-        "BR"
+        "BR",
+        "cnt",
+        "sclk_m"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/clk_div_spi0.json"
+          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
+          "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
         }
       ],
       "id": "semantic:module:clk_div_spi0:interface_intent:001"
@@ -247,24 +216,23 @@
         "type": "module",
         "module": "clk_div_spi0"
       },
-      "summary": "6位分频计数值输出，反映当前分频器状态，用于外部同步或调试。",
+      "summary": "sclk_cnt作为内部计数器值输出，用于外部模块（如u_sclk_done_1）判断传输完成状态。",
       "subject": "sclk_cnt输出接口",
-      "explanation": "sclk_cnt作为唯一的数据输出，宽度为6位，其值非零时指示数据传输进行中（bit8_out有效），可用于外部逻辑判断SPI传输状态。",
+      "explanation": "赋值bit8_out = (sclk_cnt != 0)表明sclk_cnt的非零状态用于使能时钟输出，同时该信号连接到实例u_sclk_done_1的时钟输入，暗示其用于传输完成检测。",
       "signals": [
-        "sclk_cnt"
-      ],
-      "related_payload": [
-        "bit8_out"
+        "sclk_cnt",
+        "bit8_out",
+        "u_sclk_done_1.clk"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/clk_div_spi0.json"
+          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
+          "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
         }
       ],
       "id": "semantic:module:clk_div_spi0:interface_intent:002"
@@ -275,19 +243,17 @@
         "type": "module",
         "module": "clk_div_spi0"
       },
-      "reason": "当前上下文未提供cnt信号的声明、宽度、复位行为及计数逻辑，无法确定其具体实现（如递增/递减、复位值、与BR的映射关系）。",
+      "reason": "紧凑上下文未提供cnt的生成逻辑（如always块或assign），无法确定其计数方式、复位行为或与sclk_cnt的关系。",
       "subject": "内部计数器cnt",
-      "needed_source_slice": "always block, module declaration",
+      "needed_source_slice": "always block|assign block",
       "signals": [
-        "cnt"
+        "cnt",
+        "sclk_cnt"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
-        },
         {
           "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
         }
@@ -300,9 +266,9 @@
         "type": "module",
         "module": "clk_div_spi0"
       },
-      "reason": "当前上下文未提供nss_out的驱动源或连接关系，无法确定其来自模块内部还是外部输入，影响对片选控制逻辑的完整理解。",
-      "subject": "nss_out信号来源",
-      "needed_source_slice": "module declaration, instance connections",
+      "reason": "紧凑上下文未提供nss_out的来源或生成逻辑，无法确定其与SPI片选的关系或驱动源。",
+      "subject": "片选信号nss_out",
+      "needed_source_slice": "module declaration|assign block|always block",
       "signals": [
         "nss_out"
       ],
@@ -310,9 +276,6 @@
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
-        },
         {
           "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
         }
@@ -325,43 +288,16 @@
         "type": "module",
         "module": "clk_div_spi0"
       },
-      "reason": "当前上下文仅记录该实例的时钟连接，未提供其模块类型、其他端口连接及功能，无法判断其在分频或状态检测中的具体作用。",
-      "subject": "u_sclk_done_1实例",
-      "needed_source_slice": "instance connections, module declaration",
+      "reason": "紧凑上下文仅显示其时钟连接，未提供实例化参数、端口连接或模块类型，无法推断其功能或与clk_div_spi0的交互。",
+      "subject": "实例u_sclk_done_1",
+      "needed_source_slice": "instance connections|module declaration",
+      "signals": [
+        "u_sclk_done_1.clk"
+      ],
       "instances": [
         "u_sclk_done_1"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/clk_div_spi0.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
-        }
-      ],
-      "id": "semantic:module:clk_div_spi0:source_review_request:003"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "clk_div_spi0"
-      },
-      "summary": "手册应重点描述BR选择分频系数、nss_out片选使能、bit8_out数据传输使能三级控制下的sclk_out生成机制。",
-      "subject": "分频时钟生成与门控逻辑",
-      "explanation": "三个assign依赖关系清晰展示了从分频选择到时钟门控的完整数据流，是模块的核心功能，需详细说明各控制信号的时序关系和配置方法。",
-      "signals": [
-        "BR",
-        "nss_out",
-        "cnt",
-        "bit8_out",
-        "sclk_m",
-        "sclk_out"
-      ],
-      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -372,21 +308,21 @@
           "source": "rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v"
         }
       ],
-      "id": "semantic:module:clk_div_spi0:documentation_focus:001"
+      "id": "semantic:module:clk_div_spi0:source_review_request:003"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部计数器cnt的详细实现",
-      "reason": "缺少cnt的声明、宽度、复位行为及计数逻辑，无法确定分频系数的具体映射关系。"
+      "field": "内部计数器cnt的生成逻辑",
+      "reason": "紧凑上下文未提供cnt的赋值或always块，无法确定其计数方式、复位行为或与sclk_cnt的关系。"
     },
     {
-      "field": "nss_out信号的驱动源",
-      "reason": "未提供nss_out的来源，无法确认其是模块输入还是内部生成信号。"
+      "field": "片选信号nss_out的来源",
+      "reason": "紧凑上下文未提供nss_out的驱动源或生成逻辑，无法确定其与SPI片选的关系。"
     },
     {
-      "field": "u_sclk_done_1实例的完整功能",
-      "reason": "仅知时钟连接，缺少模块类型和其他端口信息，无法评估其对分频或状态检测的贡献。"
+      "field": "实例u_sclk_done_1的完整连接",
+      "reason": "紧凑上下文仅显示时钟连接，未提供其他端口或模块类型，无法推断其功能。"
     }
   ]
 }

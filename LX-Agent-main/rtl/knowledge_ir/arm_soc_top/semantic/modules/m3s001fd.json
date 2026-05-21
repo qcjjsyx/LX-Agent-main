@@ -46,11 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 3,
+    "count": 4,
     "by_type": {
       "assignment_interpretation": 1,
       "interface_intent": 1,
-      "module_role": 1
+      "module_role": 1,
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -62,7 +63,7 @@
       },
       "summary": "该模块是UART发送路径中的发送缓冲加载控制单元，负责将并行数据加载到发送FIFO。",
       "subject": "m3s001fd",
-      "explanation": "模块仅有两个数据输入DataIn和TxFIFO，无数据输出，且唯一赋值依赖LoadTxBuff = Start，表明其核心功能是根据Start信号触发将DataIn数据加载到TxFIFO，是发送数据路径的启动控制点。",
+      "explanation": "模块仅有两个数据输入DataIn和TxFIFO，无数据输出，且唯一赋值依赖LoadTxBuff <= Start表明其核心功能是在Start信号触发下将数据加载到发送缓冲，不包含数据发送或串行化逻辑。",
       "signals": [
         "DataIn",
         "TxFIFO",
@@ -91,11 +92,13 @@
         "module": "m3s001fd"
       },
       "subject": "LoadTxBuff",
-      "summary": "LoadTxBuff由Start直接驱动，作为数据加载使能信号。",
-      "explanation": "赋值LoadTxBuff = Start表明LoadTxBuff是Start信号的直通，用于控制DataIn到TxFIFO的加载操作，属于控制路径的使能信号，不涉及数据路径的变换。",
+      "summary": "该赋值将Start信号直接映射为发送缓冲加载使能，控制数据从DataIn到TxFIFO的传输。",
+      "explanation": "LoadTxBuff <= Start表明模块在Start有效时产生加载脉冲，驱动数据从DataIn写入TxFIFO，是发送流程的启动点。",
       "signals": [
         "LoadTxBuff",
-        "Start"
+        "Start",
+        "DataIn",
+        "TxFIFO"
       ],
       "related_assignments": [
         "0"
@@ -117,16 +120,20 @@
         "type": "module",
         "module": "m3s001fd"
       },
-      "summary": "DataIn是待发送的并行数据输入，TxFIFO是发送FIFO的数据输入接口，两者构成数据加载路径。",
-      "subject": "DataIn与TxFIFO",
-      "explanation": "两个数据输入均标记为payload_data，且无其他数据输出，表明DataIn是数据源，TxFIFO是数据目标，模块负责在Start控制下将DataIn内容传递到TxFIFO。",
+      "summary": "DataIn和TxFIFO构成发送数据路径的输入接口，分别承载待发送数据和FIFO存储目标。",
+      "subject": "数据输入组",
+      "explanation": "DataIn为外部并行数据输入，TxFIFO为内部FIFO写端口，两者结合表明模块是数据加载通路的一部分，不涉及串行输出或握手控制。",
       "signals": [
         "DataIn",
         "TxFIFO"
       ],
-      "doc_priority": "primary",
+      "related_payload": [
+        "DataIn",
+        "TxFIFO"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/m3s001fd.json",
@@ -134,20 +141,46 @@
         }
       ],
       "id": "semantic:module:m3s001fd:interface_intent:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "m3s001fd"
+      },
+      "reason": "紧凑上下文仅提供接口和一条赋值，无法推断模块是否包含状态机、计数器或其他控制逻辑，需审查RTL源文件以确认完整行为。",
+      "subject": "模块完整功能",
+      "needed_source_slice": "module declaration, always block, assign block, comments",
+      "signals": [
+        "DataIn",
+        "TxFIFO",
+        "LoadTxBuff",
+        "Start"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/UART/m3s001fd.v",
+          "path": "module_source"
+        }
+      ],
+      "id": "semantic:module:m3s001fd:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
       "field": "内部事件流",
-      "reason": "紧凑上下文中无内部事件流信息，无法推断模块内部状态机或握手协议。"
+      "reason": "无内部事件流信息，无法推断模块是否产生或消费任何事件信号。"
     },
     {
-      "field": "关键实例连接",
-      "reason": "紧凑上下文中无关键实例连接信息，无法确认模块是否包含子模块或具体数据路径实现。"
+      "field": "关键组件连接",
+      "reason": "无关键组件连接信息，无法确认模块与UART其他子模块（如波特率发生器、移位寄存器）的交互关系。"
     },
     {
-      "field": "组件族",
-      "reason": "紧凑上下文中无组件族信息，无法推断模块内部功能块划分。"
+      "field": "复位行为",
+      "reason": "复位端口为空，无法确定模块的复位策略和初始状态。"
     }
   ]
 }

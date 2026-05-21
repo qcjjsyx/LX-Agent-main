@@ -47,6 +47,30 @@ description: 基于 parser 产物、Knowledge IR、AI Context、Semantic Layer c
 12. 最终手册必须由 Manual Context 证据边界渲染器生成，不把自由发挥式 LLM 初稿作为权威正文。
 13. 生成后必须先做 Manual Context checker，再考虑任何模型辅助审查。
 
+## 阶段重跑规则
+
+当用户要求“重新生成 / 重跑 / 强制生成 / 覆盖 / 从某阶段开始继续”时，不要让模型自己手动调用零散工具，必须交给 `manual_workflow` 的阶段控制逻辑处理。
+
+用户可以指定这些阶段：
+
+- `references`：读取 skill/reference
+- `parser`：解析 RTL
+- `knowledge`：生成 Knowledge IR / Manual Context
+- `evidence`：建立证据摘要
+- `source_review`：源码复核
+- `outline`：生成目录
+- `chapter_plan`：章节规划
+- `manual`：生成手册正文
+- `review`：生成审查报告
+
+如果用户指定某一阶段，则 workflow 应：
+
+1. 将当前 stage 设置为该阶段。
+2. 强制该阶段重新执行，即使已有产物。
+3. 将该阶段之后的阶段标记为需要重跑。
+4. 用户要求继续或当前是自动执行模式时，自动执行后续阶段。
+5. 不删除 RTL 源文件，不在 workflow 之外编造阶段产物。
+
 ## 证据分层
 
 - parser：RTL 结构事实来源。

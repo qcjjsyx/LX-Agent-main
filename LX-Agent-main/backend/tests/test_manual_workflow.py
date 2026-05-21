@@ -340,6 +340,61 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
                 else:
                     manual_cli.os.environ[key] = value
 
+    def test_cli_reuses_manual_workflow_stage_order(self):
+        self.assertEqual(manual_cli.STAGE_ORDER, mw.MANUAL_STAGE_ORDER)
+
+    def test_unknown_stage_falls_back_to_references(self):
+        state = mw._ensure_state({"stage": "unknown_stage", "top_module": "top"})
+        reply = mw._run_current_stage(state, Path("."), None, None, "continue")
+
+        self.assertEqual(state["stage"], "parser")
+        self.assertIn("references", state["completed_stages"])
+        self.assertTrue(reply)
+
+    def test_restart_stage_resets_requested_stage_and_downstream(self):
+        state = mw._ensure_state({
+            "stage": "done",
+            "completed_stages": list(mw.MANUAL_STAGE_ORDER),
+            "top_module": "top",
+            "evidence_digest": {"old": True},
+            "outline": [{"title": "old"}],
+            "chapter_plan": [{"title": "old"}],
+            "manual_summary": {"old": True},
+            "review_report": "old",
+        })
+
+        mw._reset_from_stage(state, "knowledge")
+
+        self.assertEqual(state["stage"], "knowledge")
+        self.assertEqual(state["restart_stage"], "knowledge")
+        self.assertEqual(state["force_stages"], list(mw.MANUAL_STAGE_ORDER[2:]))
+        self.assertIn("parser", state["completed_stages"])
+        self.assertNotIn("knowledge", state["completed_stages"])
+        self.assertEqual(state["evidence_digest"], {})
+        self.assertEqual(state["outline"], [])
+        self.assertEqual(state["chapter_plan"], [])
+        self.assertEqual(state["manual_summary"], {})
+        self.assertEqual(state["review_report"], "")
+        self.assertTrue(state["manual_needs_regenerate"])
+
+    def test_restart_stage_parser_ignores_negated_mentions(self):
+        stage = mw._extract_restart_stage("只重新生成 manual 和 review，不要重跑 parser 和 knowledge")
+        self.assertEqual(stage, "manual")
+
+    def test_force_stage_is_cleared_when_stage_completes(self):
+        state = mw._ensure_state({"force_stages": ["manual", "review"], "restart_stage": "manual"})
+
+        self.assertTrue(mw._should_force_stage(state, "manual"))
+        mw._mark_stage_done(state, "manual")
+
+        self.assertFalse(mw._should_force_stage(state, "manual"))
+        self.assertTrue(mw._should_force_stage(state, "review"))
+        self.assertEqual(state["restart_stage"], "manual")
+
+        mw._mark_stage_done(state, "review")
+        self.assertEqual(state["force_stages"], [])
+        self.assertEqual(state["restart_stage"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

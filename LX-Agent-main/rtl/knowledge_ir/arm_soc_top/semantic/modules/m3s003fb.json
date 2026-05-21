@@ -46,11 +46,11 @@
     }
   ],
   "claim_summary": {
-    "count": 4,
+    "count": 5,
     "by_type": {
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 1
+      "source_review_request": 2
     }
   },
   "claims": [
@@ -60,14 +60,14 @@
         "type": "module",
         "module": "m3s003fb"
       },
-      "summary": "该模块是I2C总线从机接口的寄存器文件与地址译码单元，负责从I2C总线接收地址和数据，并输出配置寄存器值。",
+      "summary": "该模块是I2C总线接口的寄存器文件与地址译码单元，负责从APB总线接收配置数据并生成I2C控制与状态寄存器输出。",
       "subject": "m3s003fb",
-      "explanation": "模块的输入端口包括ADDRESS、Data、Status和WDATA，输出端口包括CCRFS、CCRH、RDATA、SLAA、WrData和XSLA。这些端口名称和宽度（如ADDRESS[2:0]、Data[7:0]）表明模块用于I2C从机地址译码和寄存器读写操作。没有事件输入/输出，表明其功能是组合逻辑或简单的寄存器访问。",
+      "explanation": "模块拥有多个数据输入（ADDRESS, Data, WDATA, Status）和数据输出（CCRFS, CCRH, RDATA, SLAA, WrData, XSLA），无事件接口，表明其核心功能是寄存器读写与地址译码，而非协议序列控制。",
       "signals": [
         "ADDRESS",
         "Data",
-        "Status",
         "WDATA",
+        "Status",
         "CCRFS",
         "CCRH",
         "RDATA",
@@ -96,14 +96,19 @@
         "type": "module",
         "module": "m3s003fb"
       },
-      "summary": "ADDRESS[2:0]和WDATA[7:0]构成寄存器访问的地址和数据总线，Data[7:0]和Status[4:0]可能提供额外的状态或配置信息。",
-      "subject": "地址与数据输入组",
-      "explanation": "ADDRESS宽度为3位，可寻址8个内部寄存器。WDATA是写入数据，Data和Status可能是来自I2C核心的状态或数据。这些输入共同决定了模块的输出行为。",
+      "summary": "ADDRESS[2:0]和WDATA[7:0]构成APB从设备写通道，Data[7:0]和Status[4:0]为内部状态反馈输入，RDATA[7:0]为APB读数据返回。",
+      "subject": "地址译码与数据分发接口",
+      "explanation": "输入ADDRESS为3位地址，WDATA为8位写数据，符合APB寄存器访问协议；输出RDATA为8位读数据，表明模块支持读写操作。Data和Status输入可能来自I2C核心状态机，用于更新寄存器或触发操作。",
       "signals": [
         "ADDRESS",
         "WDATA",
+        "RDATA",
         "Data",
         "Status"
+      ],
+      "related_payload": [
+        "WDATA",
+        "RDATA"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -122,15 +127,14 @@
         "type": "module",
         "module": "m3s003fb"
       },
-      "summary": "CCRFS[6:0]、CCRH[6:0]、SLAA[6:0]和XSLA[7:0]是I2C从机的配置寄存器输出，RDATA[7:0]是读数据输出，WrData是写数据选通信号。",
-      "subject": "配置与数据输出组",
-      "explanation": "CCRFS和CCRH可能是时钟控制寄存器，SLAA是从机地址寄存器，XSLA可能是扩展从机地址。RDATA用于返回读取的寄存器值，WrData可能指示写入操作的有效性。",
+      "summary": "CCRFS[6:0]和CCRH[6:0]为时钟分频寄存器输出，SLAA[6:0]为从机地址寄存器输出，XSLA[7:0]为扩展从机地址输出，WrData为写数据选通信号。",
+      "subject": "I2C控制与状态输出接口",
+      "explanation": "这些输出信号直接对应I2C控制寄存器（时钟分频、从机地址）和状态寄存器，表明模块内部包含多个可编程寄存器，用于配置I2C核心的工作模式。",
       "signals": [
         "CCRFS",
         "CCRH",
         "SLAA",
         "XSLA",
-        "RDATA",
         "WrData"
       ],
       "doc_priority": "primary",
@@ -150,17 +154,18 @@
         "type": "module",
         "module": "m3s003fb"
       },
-      "reason": "紧凑上下文未提供任何赋值依赖或内部事件流，无法确定ADDRESS如何选择寄存器以及WDATA如何映射到输出。",
-      "subject": "寄存器译码逻辑",
-      "needed_source_slice": "always block|assign block",
+      "reason": "紧凑上下文未包含assign_dependencies，无法确定ADDRESS到具体寄存器的译码关系以及读写使能信号的生成方式。",
+      "subject": "寄存器地址映射与读写控制逻辑",
+      "needed_source_slice": "assign block",
       "signals": [
         "ADDRESS",
         "WDATA",
+        "RDATA",
         "CCRFS",
         "CCRH",
         "SLAA",
         "XSLA",
-        "RDATA"
+        "WrData"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -168,30 +173,57 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/m3s003fb.json",
-          "path": "assign_dependencies"
+          "path": "interface"
         },
         {
           "source": "parser_pipeline_rtl/modules/m3s003fb.json",
-          "path": "flow_graph.assignment_dependencies"
+          "path": "interface"
         }
       ],
       "id": "semantic:module:m3s003fb:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "m3s003fb"
+      },
+      "reason": "紧凑上下文中key_instances为空，无法确定模块是否实例化了I2C核心或其他子模块，以及它们之间的数据流和控制信号。",
+      "subject": "内部实例化组件及其连接",
+      "needed_source_slice": "instance connections",
+      "signals": [
+        "Data",
+        "Status",
+        "CCRFS",
+        "CCRH",
+        "SLAA",
+        "XSLA",
+        "WrData"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/m3s003fb.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/m3s003fb.json",
+          "path": "instances"
+        }
+      ],
+      "id": "semantic:module:m3s003fb:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部事件流与赋值依赖",
-      "reason": "上下文中internal_event_flow_refs和assign_dependencies为空，无法推断模块内部的数据流和控制逻辑。需要RTL源代码来理解寄存器译码和赋值逻辑。",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/m3s003fb.json",
-          "path": "internal_event_flow"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/m3s003fb.json",
-          "path": "assignments"
-        }
-      ]
+      "field": "内部寄存器映射与地址译码逻辑",
+      "reason": "紧凑上下文中未提供assign_dependencies和key_instances，无法推断具体寄存器地址分配、读写使能逻辑以及内部状态机交互细节。"
+    },
+    {
+      "field": "内部事件流与状态机交互",
+      "reason": "无internal_event_flow_refs和event_payload_contracts，无法确定模块与I2C核心状态机之间的握手或中断信号。"
     }
   ]
 }

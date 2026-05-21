@@ -28,6 +28,7 @@ def run_knowledge_tool(
     enrich: bool = True,
     enrich_modules: str = "",
     max_flows_per_module: str = "",
+    semantic_workers: str = "",
     semantic_model: str = "",
     semantic_base_url: str = "",
     semantic_api_key: str = "",
@@ -85,6 +86,8 @@ def run_knowledge_tool(
 
     if max_flows_per_module.strip():
         cmd.extend(["--max-flows-per-module", max_flows_per_module.strip()])
+    if semantic_workers.strip():
+        cmd.extend(["--semantic-workers", semantic_workers.strip()])
     if semantic_model.strip():
         cmd.extend(["--semantic-model", semantic_model.strip()])
     if semantic_base_url.strip():
@@ -92,7 +95,7 @@ def run_knowledge_tool(
     if semantic_api_key.strip():
         cmd.extend(["--semantic-api-key", semantic_api_key.strip()])
 
-    pipeline_timeout = timeout or env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 600)
+    pipeline_timeout = timeout or env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 3600)
     try:
         result = subprocess.run(
             cmd,
@@ -285,10 +288,11 @@ def main() -> int:
     parser.add_argument("--no-enrich", dest="enrich", action="store_false", help="Skip Semantic Layer and build Manual Context without AI claims.")
     parser.add_argument("--enrich-modules", default="", help="Compatibility alias for --semantic-modules.")
     parser.add_argument("--max-flows-per-module", default="")
+    parser.add_argument("--semantic-workers", default="")
     parser.add_argument("--semantic-model", default="")
     parser.add_argument("--semantic-base-url", default="")
     parser.add_argument("--semantic-api-key", default="")
-    parser.add_argument("--timeout", type=int, default=0, help="Timeout in seconds for knowledge.pipeline. Defaults to RTL_MANUAL_KNOWLEDGE_TIMEOUT or 600.")
+    parser.add_argument("--timeout", type=int, default=0, help="Timeout in seconds for knowledge.pipeline. Defaults to RTL_MANUAL_KNOWLEDGE_TIMEOUT or 3600.")
     args = parser.parse_args()
 
     print(
@@ -300,6 +304,7 @@ def main() -> int:
             enrich=args.enrich,
             enrich_modules=args.enrich_modules,
             max_flows_per_module=args.max_flows_per_module,
+            semantic_workers=args.semantic_workers,
             semantic_model=args.semantic_model,
             semantic_base_url=args.semantic_base_url,
             semantic_api_key=args.semantic_api_key,

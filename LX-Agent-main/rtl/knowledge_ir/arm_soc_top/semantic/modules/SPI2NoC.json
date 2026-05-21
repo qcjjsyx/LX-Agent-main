@@ -46,14 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 8,
+    "count": 9,
     "by_type": {
       "assignment_interpretation": 1,
-      "component_role": 2,
+      "component_role": 3,
       "documentation_focus": 1,
-      "interface_intent": 1,
+      "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,13 +63,13 @@
         "type": "module",
         "module": "SPI2NoC"
       },
-      "summary": "SPI2NoC 是 SPI 子系统与片上网络 (NoC) 之间的桥接模块，负责将 SPI 控制器的驱动事件和数据打包成 NoC 兼容的格式，并处理来自 NoC 的释放信号。",
+      "summary": "SPI2NoC 是一个桥接模块，负责将 SPI 控制器的驱动事件和数据通过一对 FIFO 流水线转换为 NoC 接口的驱动事件和数据，并处理空闲信号。",
       "subject": "SPI2NoC",
-      "explanation": "模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 和数据接口 (i_dataFNoc_51/o_data2Noc_51) 与 NoC 交互，内部使用两个 FIFO (cfifo0, cfifo1) 进行事件缓冲和同步，并包含一个 SPI_control 实例处理 SPI 协议。证据显示输入事件 i_drvFNoc 连接到 cfifo0，输出事件 o_drv2Noc 来自 cfifo1，表明模块是 SPI 与 NoC 之间的异步或同步桥接点。",
+      "explanation": "模块通过输入事件 i_drvFNoc 和输入数据 i_dataFNoc_51 接收来自 SPI 控制器的驱动请求，经过 cfifo0 和 cfifo1 两级 FIFO 流水线后，输出事件 o_drv2Noc 和数据 o_data2Noc_51 到 NoC。同时，输入空闲信号 i_freeFNoc 连接到 cfifo1，输出空闲信号 o_free2Noc 来自 cfifo0，表明模块处理了空闲信号的传递。",
       "signals": [
         "i_drvFNoc",
-        "o_drv2Noc",
         "i_dataFNoc_51",
+        "o_drv2Noc",
         "o_data2Noc_51",
         "i_freeFNoc",
         "o_free2Noc"
@@ -88,10 +87,28 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "interface.event_outputs"
+        },
+        {
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "interface.data_outputs"
+        },
+        {
+          "source": "interface.free_inputs"
+        },
+        {
+          "source": "interface.free_outputs"
+        },
+        {
+          "source": "key_component_connections"
+        },
+        {
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:SPI2NoC:module_role:001"
@@ -102,13 +119,15 @@
         "type": "module",
         "module": "SPI2NoC"
       },
-      "summary": "SPI2NoC 将 SPI 控制器的驱动事件 (来自 SPI_control_u) 通过 FIFO 链 (cfifo0 -> cfifo1) 转发至 NoC，同时将 SPI 数据 (r_apbrdata) 与 NoC 数据 (r_dataFNoc_51) 组合成 51 位输出数据包。",
-      "subject": "事件驱动与数据打包",
-      "explanation": "输入事件 i_drvFNoc 驱动 cfifo0，其输出 w_drvnext_fifo1 驱动 cfifo1，最终产生输出事件 o_drv2Noc。赋值语句显示 o_data2Noc_51 由 r_dataFNoc_51、r_apbrdata、r_X 和 r_Y 拼接而成，表明模块负责将 SPI 读取的数据 (r_apbrdata) 嵌入到 NoC 数据包中。",
+      "summary": "SPI2NoC 通过两级 FIFO (cfifo0 和 cfifo1) 构建了一个驱动事件和数据流水线，将 SPI 控制器的驱动请求同步并转发到 NoC。",
+      "subject": "驱动事件与数据流水线",
+      "explanation": "输入驱动事件 i_drvFNoc 直接连接到 cfifo0 的 i_drive 端口，cfifo0 的输出事件 w_drvnext_fifo1 连接到 cfifo1 的输入，cfifo1 的输出事件 o_drv2Noc 直接驱动模块输出。输入数据 i_dataFNoc_51 经过寄存器 r_dataFNoc_51 后，与来自 SPI_control_u 的 APB 读数据 (r_apbrdata) 以及 r_X, r_Y 拼接成输出数据 o_data2Noc_51。这表明模块的核心功能是数据重组和流水线转发。",
       "signals": [
         "i_drvFNoc",
+        "i_dataFNoc_51",
         "o_drv2Noc",
         "o_data2Noc_51",
+        "w_drvnext_fifo1",
         "r_dataFNoc_51",
         "r_apbrdata",
         "r_X",
@@ -116,21 +135,23 @@
       ],
       "instances": [
         "cfifo0",
-        "cfifo1",
-        "SPI_control_u"
+        "cfifo1"
       ],
       "related_flows": [
         "flow_000_SPI2NoC_i_drvFNoc"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "key_instances"
+        },
+        {
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:SPI2NoC:structural_responsibility:001"
@@ -141,31 +162,28 @@
         "type": "module",
         "module": "SPI2NoC"
       },
-      "subject": "cfifo0 和 cfifo1 (Fifo1 系列)",
-      "summary": "这两个 FIFO 实例构成一个两级事件缓冲链，用于同步和缓冲从 SPI 到 NoC 的驱动事件流。",
-      "explanation": "cfifo0 接收来自 NoC 的输入事件 i_drvFNoc，其输出 w_drvnext_fifo1 驱动 cfifo1。cfifo1 的输出 o_drv2Noc 直接连接到模块输出。这种级联结构可能用于处理事件速率匹配或提供流水线深度。此外，cfifo0 的输出 o_free2Noc 直接连接到模块输出，表明其也参与释放信号路径。",
+      "subject": "cfifo0",
+      "summary": "cfifo0 是输入驱动事件的同步与缓冲 FIFO，接收来自 SPI 控制器的驱动事件并输出到内部流水线。",
+      "explanation": "cfifo0 的输入事件 i_drive 直接连接模块输入 i_drvFNoc，其输出事件 w_drvnext_fifo1 连接到 cfifo1。这表明 cfifo0 是流水线的第一级，负责缓冲和同步输入驱动事件。",
       "signals": [
         "i_drvFNoc",
-        "w_drvnext_fifo1",
-        "o_drv2Noc",
-        "o_free2Noc"
+        "w_drvnext_fifo1"
       ],
       "instances": [
-        "cfifo0",
-        "cfifo1"
+        "cfifo0"
       ],
       "related_flows": [
         "flow_000_SPI2NoC_i_drvFNoc"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:SPI2NoC:component_role:001"
@@ -176,9 +194,42 @@
         "type": "module",
         "module": "SPI2NoC"
       },
-      "subject": "SPI_control_u (SPI_control)",
-      "summary": "SPI_control_u 是 SPI 协议控制器，负责处理 SPI 总线协议 (MISO, MOSI, SCLK, NSS) 并提供 APB 接口数据 (PWDATA/PRDATA)。",
-      "explanation": "该实例与模块的 SPI 引脚 (io_ctl_miso, io_ctl_mosi, io_ctl_nss, io_ctl_sclk, miso_in/out, mosi_in/out, nss_in/out, sclk_in/out) 直接连接，表明其是 SPI 物理层接口。其数据输出 PRDATA 被用于构造 NoC 输出数据包 (o_data2Noc_51)，说明 SPI 读取的数据通过此模块上传至 NoC。",
+      "subject": "cfifo1",
+      "summary": "cfifo1 是输出驱动事件的同步与缓冲 FIFO，接收来自内部流水线的驱动事件并输出到 NoC。",
+      "explanation": "cfifo1 的输入事件来自 cfifo0 的输出 (w_drvnext_fifo1)，其输出事件 o_drv2Noc 直接驱动模块输出。同时，输入空闲信号 i_freeFNoc 连接到 cfifo1 的 i_freeNext 端口，表明 cfifo1 也处理空闲信号的传递。",
+      "signals": [
+        "w_drvnext_fifo1",
+        "o_drv2Noc",
+        "i_freeFNoc"
+      ],
+      "instances": [
+        "cfifo1"
+      ],
+      "related_flows": [
+        "flow_000_SPI2NoC_i_drvFNoc"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "key_component_connections"
+        },
+        {
+          "source": "key_instances"
+        }
+      ],
+      "id": "semantic:module:SPI2NoC:component_role:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "SPI2NoC"
+      },
+      "subject": "SPI_control_u",
+      "summary": "SPI_control_u 是 SPI 协议控制核心，负责 SPI 总线协议处理，并通过 APB 接口与模块内部逻辑交互。",
+      "explanation": "SPI_control_u 连接了所有 SPI 总线信号 (miso, mosi, nss, sclk) 以及 APB 数据接口 (PWDATA, PRDATA)。其输出 SPI_IRQ 连接到模块输出，表明它负责产生 SPI 中断。其 APB 读数据 PRDATA 被用于构造输出数据 o_data2Noc_51，表明模块将 SPI 控制器的状态或数据打包到 NoC 数据包中。",
       "signals": [
         "io_ctl_miso",
         "io_ctl_mosi",
@@ -192,6 +243,7 @@
         "nss_out",
         "sclk_in",
         "sclk_out",
+        "SPI_IRQ",
         "PWDATA",
         "PRDATA"
       ],
@@ -206,13 +258,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "key_instances"
+        },
+        {
+          "source": "assign_dependencies"
         }
       ],
-      "id": "semantic:module:SPI2NoC:component_role:002"
+      "id": "semantic:module:SPI2NoC:component_role:003"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -221,8 +276,8 @@
         "module": "SPI2NoC"
       },
       "subject": "o_data2Noc_51",
-      "summary": "该赋值将 SPI 读取的数据 (r_apbrdata) 与 NoC 数据 (r_dataFNoc_51) 及位置信息 (r_X, r_Y) 拼接成 51 位输出数据包。",
-      "explanation": "赋值语句 o_data2Noc_51 = {r_dataFNoc_51[50], r_dataFNoc_51[49:42], r_apbrdata, r_X, r_Y} 表明输出数据包包含：高位数据 (r_dataFNoc_51[50])、中间数据 (r_dataFNoc_51[49:42])、APB 读取数据 (r_apbrdata) 以及坐标信息 (r_X, r_Y)。这暗示模块可能用于 NoC 网络中的数据路由或地址映射。",
+      "summary": "该赋值将来自 SPI 控制器的 APB 读数据 (r_apbrdata) 与输入数据的高位 (r_dataFNoc_51) 以及内部寄存器 (r_X, r_Y) 拼接成最终的 NoC 输出数据。",
+      "explanation": "赋值表达式 {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_apbrdata,r_X,r_Y} 表明输出数据包包含：输入数据的高位 (r_dataFNoc_51[50] 和 [49:42])、来自 SPI 控制器的 APB 读数据 (r_apbrdata) 以及两个内部寄存器 (r_X, r_Y)。这暗示模块将 SPI 控制器的状态或配置数据嵌入到 NoC 数据包中。",
       "signals": [
         "o_data2Noc_51",
         "r_dataFNoc_51",
@@ -238,13 +293,10 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:SPI2NoC:assignment_interpretation:001"
@@ -255,33 +307,60 @@
         "type": "module",
         "module": "SPI2NoC"
       },
-      "summary": "模块的输入输出接口遵循“事件-数据-释放”三元组协议，用于与 NoC 进行同步数据传输。",
-      "subject": "事件-数据-释放接口对",
-      "explanation": "输入接口包含事件 (i_drvFNoc)、数据 (i_dataFNoc_51) 和释放 (i_freeFNoc) 信号；输出接口同样包含事件 (o_drv2Noc)、数据 (o_data2Noc_51) 和释放 (o_free2Noc) 信号。这种结构表明模块使用类似“请求-确认”或“握手”协议与 NoC 通信，其中事件信号触发数据传输，释放信号表示传输完成或资源可用。",
+      "summary": "该接口对将 SPI 控制器的驱动请求及其关联数据打包成一个原子事务，输入到模块。",
+      "subject": "驱动事件与数据接口 (i_drvFNoc / i_dataFNoc_51)",
+      "explanation": "输入事件 i_drvFNoc 与输入数据 i_dataFNoc_51 之间存在事件-载荷契约 (event_payload_contract)，表明当驱动事件有效时，输入数据同时有效。这构成了一个驱动事务的输入接口。",
       "signals": [
         "i_drvFNoc",
-        "i_dataFNoc_51",
-        "i_freeFNoc",
-        "o_drv2Noc",
-        "o_data2Noc_51",
-        "o_free2Noc"
+        "i_dataFNoc_51"
       ],
       "related_payload": [
-        "i_dataFNoc_51",
-        "o_data2Noc_51"
+        "i_dataFNoc_51"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:SPI2NoC:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "SPI2NoC"
+      },
+      "summary": "该接口对处理 NoC 空闲信号的传递，可能用于流量控制或流水线排空。",
+      "subject": "空闲信号接口 (i_freeFNoc / o_free2Noc)",
+      "explanation": "输入空闲信号 i_freeFNoc 连接到 cfifo1 的 i_freeNext 端口，输出空闲信号 o_free2Noc 来自 cfifo0 的 o_free 端口。这表明空闲信号在 FIFO 流水线中反向传递，可能用于指示下游可以接收新数据或流水线已排空。",
+      "signals": [
+        "i_freeFNoc",
+        "o_free2Noc"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "interface.free_inputs"
+        },
+        {
+          "source": "interface.free_outputs"
+        },
+        {
+          "source": "key_component_connections"
+        }
+      ],
+      "id": "semantic:module:SPI2NoC:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -289,47 +368,15 @@
         "type": "module",
         "module": "SPI2NoC"
       },
-      "summary": "手册应重点描述 o_data2Noc_51 数据包的字段含义，特别是 r_apbrdata、r_X 和 r_Y 的用途，以及它们如何与 NoC 路由或地址映射关联。",
-      "subject": "数据包格式与路由",
-      "explanation": "赋值语句显示输出数据包包含 SPI 读取数据 (r_apbrdata) 和坐标信息 (r_X, r_Y)，这可能是 NoC 路由的关键字段。文档需要解释这些字段的来源、更新时机以及它们在 NoC 网络中的作用。",
+      "summary": "手册应重点描述输出数据包 o_data2Noc_51 的位域定义，以及驱动事件通过 FIFO 流水线的时序和空闲信号处理。",
+      "subject": "数据包格式与流水线行为",
+      "explanation": "模块的核心功能是数据重组和流水线转发。输出数据包的位域 (r_dataFNoc_51[50], [49:42], r_apbrdata, r_X, r_Y) 需要明确文档化。同时，驱动事件通过 cfifo0 和 cfifo1 的流水线行为，以及空闲信号的反向传递机制，是理解模块时序的关键。",
       "signals": [
         "o_data2Noc_51",
-        "r_apbrdata",
-        "r_X",
-        "r_Y"
-      ],
-      "instances": [
-        "SPI_control_u"
-      ],
-      "related_flows": [
-        "flow_000_SPI2NoC_i_drvFNoc"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI2NoC:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI2NoC"
-      },
-      "reason": "当前上下文仅显示输入事件 i_drvFNoc 连接到 cfifo0，但未提供从 i_drvFNoc 到任何模块输出的完整事件路径，导致无法确认事件流是否完整。",
-      "subject": "内部事件流 i_drvFNoc",
-      "needed_source_slice": "always block, assign block, instance connections",
-      "signals": [
         "i_drvFNoc",
-        "w_drvnext_fifo1",
-        "o_drv2Noc"
+        "o_drv2Noc",
+        "i_freeFNoc",
+        "o_free2Noc"
       ],
       "instances": [
         "cfifo0",
@@ -339,23 +386,29 @@
         "flow_000_SPI2NoC_i_drvFNoc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/SPI2NoC.json"
+          "source": "assign_dependencies"
         },
         {
-          "source": "parser_pipeline_rtl/modules/SPI2NoC.json"
+          "source": "key_component_connections"
+        },
+        {
+          "source": "interface.free_inputs"
+        },
+        {
+          "source": "interface.free_outputs"
         }
       ],
-      "id": "semantic:module:SPI2NoC:source_review_request:001"
+      "id": "semantic:module:SPI2NoC:documentation_focus:001"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_drvFNoc",
-      "reason": "未从 i_drvFNoc 到达任何模块事件输出，事件流路径不完整。"
+      "reason": "提供的内部事件流 (flow_000_SPI2NoC_i_drvFNoc) 没有到达任何模块事件输出，无法确认驱动事件在 FIFO 流水线中的完整传播路径。需要 RTL 源代码来验证 cfifo0 和 cfifo1 之间的连接以及输出事件 o_drv2Noc 的生成逻辑。"
     }
   ]
 }

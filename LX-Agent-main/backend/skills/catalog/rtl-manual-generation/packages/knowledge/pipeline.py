@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shutil
 import sys
+import tempfile
 from typing import Any, Dict, Iterable, List
 
 try:
@@ -36,6 +38,7 @@ def run_knowledge_pipeline(
     semantic_modules: Iterable[str] | None = None,
     include_flows: bool = True,
     max_flows_per_module: int | None = None,
+    semantic_workers: int | None = None,
     skip_failed_semantic: bool = False,
     skip_semantic: bool = False,
     semantic_dry_run: bool = False,
@@ -54,6 +57,10 @@ def run_knowledge_pipeline(
     knowledge_root = Path(knowledge_output_root) / top_module
     manual_context_root = Path(manual_context_output_root) / top_module
     steps: List[Dict[str, Any]] = []
+    semantic_cache_root = preserve_semantic_cache(
+        knowledge_root,
+        enabled=clean and not skip_semantic and not semantic_dry_run,
+    )
 
     knowledge_manifest = build_knowledge_ir(
         parser_root,
@@ -84,6 +91,7 @@ def run_knowledge_pipeline(
         }
     )
 
+    restore_semantic_cache(knowledge_root, semantic_cache_root)
     semantic_report: Dict[str, Any] = {}
     if skip_semantic:
         semantic_report = {
@@ -112,6 +120,7 @@ def run_knowledge_pipeline(
             modules=semantic_modules,
             include_flows=include_flows,
             max_flows_per_module=max_flows_per_module,
+            max_workers=semantic_workers,
             llm_client=client,
             skip_failed=skip_failed_semantic,
             dry_run=semantic_dry_run,
@@ -167,6 +176,29 @@ def run_knowledge_pipeline(
     }
 
 
+def preserve_semantic_cache(knowledge_root: Path, *, enabled: bool) -> Path | None:
+    semantic_root = knowledge_root / "semantic"
+    if not enabled or not semantic_root.exists():
+        return None
+    cache_root = Path(tempfile.mkdtemp(prefix=f"{knowledge_root.name}_semantic_", dir=str(knowledge_root.parent)))
+    shutil.copytree(semantic_root, cache_root / "semantic")
+    return cache_root
+
+
+def restore_semantic_cache(knowledge_root: Path, cache_root: Path | None) -> None:
+    if cache_root is None:
+        return
+    cached_semantic_root = cache_root / "semantic"
+    semantic_root = knowledge_root / "semantic"
+    try:
+        if cached_semantic_root.exists():
+            if semantic_root.exists():
+                shutil.rmtree(semantic_root)
+            shutil.copytree(cached_semantic_root, semantic_root)
+    finally:
+        shutil.rmtree(cache_root, ignore_errors=True)
+
+
 def parse_modules_arg(value: str) -> List[str] | None:
     if not value.strip():
         return None
@@ -188,6 +220,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--semantic-modules", default="", help="Comma-separated modules for Semantic Layer. Defaults to all modules.")
     parser.add_argument("--no-flows", action="store_true", help="Do not generate Semantic Layer flow claims.")
     parser.add_argument("--max-flows-per-module", type=int, default=None)
+    parser.add_argument("--semantic-workers", type=int, default=None, help="Parallel Semantic Layer LLM workers. Defaults to RTL_MANUAL_SEMANTIC_WORKERS or 4.")
     parser.add_argument("--skip-failed-semantic", action="store_true")
     parser.add_argument("--skip-semantic", action="store_true", help="Debug option: skip Semantic Layer and build Manual Context without AI claims.")
     parser.add_argument("--semantic-dry-run", action="store_true", help="Plan Semantic Layer only; no semantic files are written.")
@@ -205,6 +238,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         semantic_modules=parse_modules_arg(args.semantic_modules),
         include_flows=not args.no_flows,
         max_flows_per_module=args.max_flows_per_module,
+        semantic_workers=args.semantic_workers,
         skip_failed_semantic=args.skip_failed_semantic,
         skip_semantic=args.skip_semantic,
         semantic_dry_run=args.semantic_dry_run,

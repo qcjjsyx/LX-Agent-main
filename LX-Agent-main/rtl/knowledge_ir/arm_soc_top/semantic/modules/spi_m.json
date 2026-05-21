@@ -46,10 +46,11 @@
     }
   ],
   "claim_summary": {
-    "count": 7,
+    "count": 9,
     "by_type": {
       "assignment_interpretation": 4,
-      "interface_intent": 1,
+      "documentation_focus": 1,
+      "interface_intent": 2,
       "module_role": 1,
       "structural_responsibility": 1
     }
@@ -61,23 +62,21 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "SPI主设备控制器，负责管理SPI总线的发送、接收和CRC校验时序",
+      "summary": "SPI主设备控制器，负责管理SPI总线的数据传输、接收和CRC校验。",
       "subject": "spi_m",
-      "explanation": "模块通过内部计数器（tx_cnt、rx_cnt、crc_cnt）和状态信号（busy、tx_done、rx_done、crc_done）控制SPI数据传输的完整流程，支持可配置的时钟相位（CPHA）和数据帧格式（DFF）",
+      "explanation": "模块通过data_in和TXCRC接收数据，通过data_out输出接收数据，并通过busy、rx_done、tx_done和crc_done等内部信号指示传输状态，表明其核心角色是SPI主设备的数据路径控制。",
       "signals": [
+        "data_in",
+        "data_out",
+        "TXCRC",
         "busy",
-        "tx_done",
         "rx_done",
-        "crc_done",
-        "enable",
-        "TXE",
-        "crc_en",
-        "CPHA",
-        "DFF"
+        "tx_done",
+        "crc_done"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_m.json"
@@ -94,26 +93,30 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "根据CPHA和DFF配置，动态计算发送、接收和CRC校验的完成条件",
-      "subject": "SPI传输完成检测",
-      "explanation": "assign依赖显示tx_done、rx_done和crc_done的判定逻辑均依赖于CPHA和DFF的组合选择，通过不同位宽的计数器（tx_cnt[4:2]、rx_cnt[4:2]、crc_cnt[4:2]）与cnt_buf_*信号比较，实现不同帧格式下的传输完成标志",
+      "summary": "模块根据内部计数器（rx_cnt, tx_cnt, crc_cnt）和配置（CPHA, DFF, rxonly）生成rx_done、tx_done和crc_done信号，以控制SPI传输的完成状态。",
+      "subject": "数据传输与状态指示",
+      "explanation": "assign依赖显示rx_done、tx_done和crc_done的计算依赖于CPHA、DFF、rxonly以及各自的计数器，表明模块负责根据SPI模式（CPHA）和数据帧格式（DFF）动态确定传输完成条件。",
       "signals": [
-        "tx_done",
         "rx_done",
+        "tx_done",
         "crc_done",
+        "rx_cnt",
+        "tx_cnt",
+        "crc_cnt",
         "CPHA",
         "DFF",
-        "tx_cnt",
-        "rx_cnt",
-        "crc_cnt",
-        "cnt_buf_tx",
+        "rxonly",
         "cnt_buf_rx",
+        "cnt_buf_tx",
         "cnt_buf_crc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
@@ -127,8 +130,8 @@
         "module": "spi_m"
       },
       "subject": "busy",
-      "summary": "模块忙状态由使能信号、发送FIFO空标志和CRC使能共同决定",
-      "explanation": "busy = enable | !TXE | crc_en，表明模块在以下任一条件下保持忙状态：使能有效、发送FIFO非空（TXE为低）、或CRC校验使能。该信号用于外部同步或状态指示",
+      "summary": "busy信号由enable、TXE和crc_en组合驱动，指示模块是否处于活动状态。",
+      "explanation": "assign busy = enable | !TXE | crc_en表明当使能有效、发送FIFO非空或CRC使能时，模块标记为忙状态，用于外部同步或状态监控。",
       "signals": [
         "busy",
         "enable",
@@ -143,6 +146,9 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
@@ -155,8 +161,8 @@
         "module": "spi_m"
       },
       "subject": "rx_done",
-      "summary": "接收完成条件根据rxonly模式和DFF配置动态选择不同位宽的计数器比较",
-      "explanation": "当rxonly与DFF异或为真时，根据DFF选择rx_cnt[4]或rx_cnt[2]的比较；否则使用rx_cnt[3]的比较。表明模块支持多种数据宽度和接收模式的完成检测",
+      "summary": "rx_done信号根据rxonly和DFF配置，基于rx_cnt和cnt_buf_rx计算接收完成条件。",
+      "explanation": "assign rx_done = (rxonly^DFF) ? (DFF ? ((~rx_cnt[4]) & cnt_buf_rx) : (~rx_cnt[2]) & cnt_buf_rx) : ((~rx_cnt[3]) & cnt_buf_rx)表明接收完成逻辑依赖于双倍数据速率（DFF）和仅接收模式（rxonly），用于控制接收数据采样结束。",
       "signals": [
         "rx_done",
         "rxonly",
@@ -167,10 +173,13 @@
       "related_assignments": [
         "1"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
@@ -184,8 +193,8 @@
         "module": "spi_m"
       },
       "subject": "tx_done",
-      "summary": "发送完成条件由CPHA和DFF共同决定计数器位宽选择",
-      "explanation": "当CPHA与DFF异或为真时使用tx_cnt[3]比较；否则根据DFF选择tx_cnt[4]或tx_cnt[2]。表明发送时序与时钟相位和数据帧格式紧密相关",
+      "summary": "tx_done信号根据CPHA和DFF配置，基于tx_cnt和cnt_buf_tx计算发送完成条件。",
+      "explanation": "assign tx_done = (CPHA^DFF) ? ((~tx_cnt[3]) & cnt_buf_tx) : (DFF ? ((~tx_cnt[4]) & cnt_buf_tx) : (~tx_cnt[2]) & cnt_buf_tx)表明发送完成逻辑依赖于时钟相位（CPHA）和双倍数据速率（DFF），用于控制发送数据移位结束。",
       "signals": [
         "tx_done",
         "CPHA",
@@ -196,10 +205,13 @@
       "related_assignments": [
         "2"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
@@ -213,8 +225,8 @@
         "module": "spi_m"
       },
       "subject": "crc_done",
-      "summary": "CRC校验完成条件与发送完成逻辑结构相同，使用独立的CRC计数器",
-      "explanation": "crc_done的判定逻辑与tx_done完全一致，但使用crc_cnt和cnt_buf_crc信号，表明CRC校验与发送操作共享相同的时序控制结构，但使用独立的计数资源",
+      "summary": "crc_done信号根据CPHA和DFF配置，基于crc_cnt和cnt_buf_crc计算CRC校验完成条件。",
+      "explanation": "assign crc_done = (CPHA^DFF) ? ((~crc_cnt[3]) & cnt_buf_crc) : (DFF ? ((~crc_cnt[4]) & cnt_buf_crc) : (~crc_cnt[2]) & cnt_buf_crc)表明CRC完成逻辑与发送完成逻辑结构相似，依赖于CPHA和DFF，用于控制CRC计算结束。",
       "signals": [
         "crc_done",
         "CPHA",
@@ -225,10 +237,13 @@
       "related_assignments": [
         "3"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
@@ -241,42 +256,104 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "16位并行数据接口用于SPI帧数据的输入输出，支持TXCRC作为独立数据源",
-      "subject": "数据接口组",
-      "explanation": "data_in和data_out构成主数据通道，TXCRC作为额外的16位数据输入，可能用于CRC校验值的注入或验证。无事件接口表明模块采用轮询或状态驱动方式工作",
+      "summary": "data_in和TXCRC作为并行数据输入，分别承载普通发送数据和CRC校验数据。",
+      "subject": "数据输入接口",
+      "explanation": "两个16位数据输入端口（data_in和TXCRC）表明模块支持独立的数据和CRC输入路径，可能用于发送数据帧时附加CRC值。",
       "signals": [
         "data_in",
-        "data_out",
         "TXCRC"
       ],
-      "related_payload": [
-        "data_in",
-        "data_out",
-        "TXCRC"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_m.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "spi_m"
+      },
+      "summary": "data_out作为16位并行数据输出，承载接收到的SPI数据。",
+      "subject": "数据输出接口",
+      "explanation": "单个16位数据输出端口表明模块将接收到的串行数据转换为并行格式输出。",
+      "signals": [
+        "data_out"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
+        }
+      ],
+      "id": "semantic:module:spi_m:interface_intent:002"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "spi_m"
+      },
+      "summary": "文档应重点解释rx_done、tx_done和crc_done信号的计算逻辑及其与CPHA、DFF、rxonly配置的关系。",
+      "subject": "传输完成条件",
+      "explanation": "这些assign依赖展示了模块的核心时序控制逻辑，直接影响SPI传输的正确性，需要详细说明。",
+      "signals": [
+        "rx_done",
+        "tx_done",
+        "crc_done",
+        "CPHA",
+        "DFF",
+        "rxonly",
+        "rx_cnt",
+        "tx_cnt",
+        "crc_cnt",
+        "cnt_buf_rx",
+        "cnt_buf_tx",
+        "cnt_buf_crc"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_m.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
+        }
+      ],
+      "id": "semantic:module:spi_m:documentation_focus:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部状态机与计数器实现",
-      "reason": "缺少always块和状态机描述，无法确定tx_cnt、rx_cnt、crc_cnt的计数逻辑和复位行为"
+      "field": "内部计数器（rx_cnt, tx_cnt, crc_cnt）的驱动逻辑",
+      "reason": "上下文未提供这些计数器的赋值来源或更新条件，无法推断其具体行为。"
     },
     {
-      "field": "组件实例化",
-      "reason": "未提供任何实例化信息，无法分析模块内部子模块划分和层次结构"
+      "field": "配置信号（CPHA, DFF, rxonly, enable, TXE, crc_en）的来源",
+      "reason": "上下文未指明这些控制信号是来自寄存器配置还是外部输入，无法确定其驱动源。"
     },
     {
-      "field": "事件流",
-      "reason": "无事件输入输出和内部事件流引用，无法推断模块与外部的中断或握手交互机制"
+      "field": "模块内部实例和组件",
+      "reason": "上下文未列出任何实例或组件族，无法推断模块内部结构。"
+    },
+    {
+      "field": "事件流和事件输入/输出",
+      "reason": "上下文显示事件输入和输出均为空，但SPI主设备通常需要中断或事件输出，可能存在证据缺失。"
     }
   ]
 }

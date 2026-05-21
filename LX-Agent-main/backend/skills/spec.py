@@ -16,8 +16,67 @@ class SkillSpec:
     priority: int = 100
 
     def matches(self, user_input: str) -> bool:
-        text = user_input.lower()
-        return any(trigger.lower() in text for trigger in self.triggers)
+        return self.match_score(user_input) > 0
+
+    def match_score(self, user_input: str) -> int:
+        text = (user_input or "").lower()
+        if not text:
+            return 0
+
+        if self.name == "rtl-manual-generation":
+            return self._rtl_manual_score(text)
+
+        score = self._trigger_score(text)
+
+        if self.name == "python-code-analysis" and any(
+            ext in text for ext in (".py", ".pyw", ".ipynb")
+        ):
+            score += 8
+
+        return score
+
+    def matched_triggers(self, user_input: str) -> tuple[str, ...]:
+        text = (user_input or "").lower()
+        return tuple(
+            trigger for trigger in self.triggers
+            if trigger and trigger.lower() in text
+        )
+
+    def _trigger_score(self, text: str) -> int:
+        return len([
+            trigger for trigger in self.triggers
+            if trigger and trigger.lower() in text
+        ]) * 10
+
+    def _rtl_manual_score(self, text: str) -> int:
+        strong_triggers = {
+            "manual",
+            "manual_ir",
+            "manual_context",
+            "contextpack",
+            "parser",
+            "knowledge",
+            "knowledge_ir",
+            "semantic_layer",
+            "docs",
+            "readme",
+        }
+        score = 0
+
+        for trigger in self.triggers:
+            if not trigger:
+                continue
+            normalized = trigger.lower()
+            if normalized not in text:
+                continue
+            score += 2 if normalized == "rtl" else 10
+
+        if any(token in text for token in strong_triggers):
+            score += 8
+        if "top_module" in text or "top module" in text:
+            score += 6
+
+        return score if score >= 8 else 0
 
 
 def split_skill_markdown(content: str):

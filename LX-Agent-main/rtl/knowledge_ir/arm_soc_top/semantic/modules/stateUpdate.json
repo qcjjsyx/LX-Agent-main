@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 12,
+    "count": 13,
     "by_type": {
       "assignment_interpretation": 3,
       "component_role": 4,
       "documentation_focus": 1,
-      "interface_intent": 1,
+      "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 1,
       "structural_responsibility": 1
@@ -64,9 +64,9 @@
         "type": "module",
         "module": "stateUpdate"
       },
-      "summary": "状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）并分发至对应的加载或存储FIFO，最终合并输出。",
+      "summary": "状态更新与负载/存储操作分发模块，负责将更新拆分器传入的请求按类型（load/store）分发到对应FIFO，并合并输出到状态更新选择器。",
       "subject": "stateUpdate",
-      "explanation": "模块接收一个事件驱动输入和7位数据，通过Fifo1缓冲后，由loadAndStoreSelector根据数据内容（w_isLoad_1/w_isStore_1）将请求分发至loadFifo或storeFifo，再经loadOrStoreMutexMerge合并输出。同时输出12位状态有效信号和未对齐指示。",
+      "explanation": "模块接收来自更新拆分器的事件和7位数据，通过Fifo1缓冲后由loadAndStoreSelector根据数据内容区分load或store操作，分别送入loadFifo和storeFifo，再经loadOrStoreMutexMerge合并输出。同时输出12位状态有效信号和1位未对齐信号。",
       "signals": [
         "i_driveFromUpdateSplitter_1",
         "i_fromUpdateSplitterData_7",
@@ -106,33 +106,40 @@
         "type": "module",
         "module": "stateUpdate"
       },
-      "summary": "根据输入数据中的加载/存储类型标志，将请求分发至对应的加载或存储处理路径，并维护内部状态机以跟踪当前操作状态。",
-      "subject": "请求类型分发与状态跟踪",
-      "explanation": "通过loadAndStoreSelector根据w_isLoad_1和w_isStore_1信号将请求分别导向loadFifo或storeFifo。assign_dependencies中的w_nextState_4计算涉及多种加载/存储操作状态（如lbValid, lwValid, swValid等），表明模块内部维护状态机以跟踪不同操作阶段。",
+      "summary": "将输入事件按load/store类型分发到独立FIFO路径，合并后输出，并生成状态有效信号和未对齐指示。",
+      "subject": "负载/存储操作分发与状态更新",
+      "explanation": "输入事件经Fifo1缓冲后，loadAndStoreSelector根据数据位（w_isLoad_1/w_isStore_1）将事件导向loadFifo或storeFifo，两路FIFO输出经loadOrStoreMutexMerge合并为输出事件。同时，assign依赖显示状态机根据load/store类型和当前状态计算下一状态（w_nextState_4），并驱动o_stateValid_12和o_misaligned_1。",
       "signals": [
         "w_isLoad_1",
         "w_isStore_1",
+        "w_loadAndStoreSelectorToLoadFifo_1",
+        "w_loadAndStoreSelectorToStoreFifo_1",
+        "w_loadFifoDrive_1",
+        "w_storeFifoDrive_1",
+        "w_stateUpdateFire",
         "w_nextState_4",
-        "r_nextLoadState_4",
-        "r_nextStoreState_4"
+        "o_stateValid_12",
+        "o_misaligned_1"
       ],
       "instances": [
+        "Fifo1",
         "loadAndStoreSelector",
         "loadFifo",
-        "storeFifo"
+        "storeFifo",
+        "loadOrStoreMutexMerge"
       ],
       "related_flows": [
         "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:structural_responsibility:001"
@@ -144,8 +151,8 @@
         "module": "stateUpdate"
       },
       "subject": "Fifo1",
-      "summary": "输入缓冲与数据同步FIFO，暂存来自更新拆分器的请求和数据，确保事件与数据同步传递。",
-      "explanation": "作为模块的入口缓冲，接收事件驱动i_driveFromUpdateSplitter_1和7位数据i_fromUpdateSplitterData_7，输出驱动信号w_driveToLoadAndStoreSelector_1和数据信号（用于生成w_isLoad_1/w_isStore_1）。其空闲信号o_freeToUpdateSplitter_1用于反压上游。",
+      "summary": "输入缓冲FIFO，暂存来自更新拆分器的事件和数据，为后续load/store类型判断提供稳定输入。",
+      "explanation": "作为模块入口缓冲，接收i_driveFromUpdateSplitter_1事件和i_fromUpdateSplitterData_7数据，输出驱动loadAndStoreSelector。其输出数据w_isLoad_1和w_isStore_1用于区分操作类型。",
       "signals": [
         "i_driveFromUpdateSplitter_1",
         "i_fromUpdateSplitterData_7",
@@ -163,10 +170,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:component_role:001"
@@ -178,8 +185,8 @@
         "module": "stateUpdate"
       },
       "subject": "loadAndStoreSelector",
-      "summary": "加载/存储类型选择器，根据数据内容将请求分发至加载或存储路径。",
-      "explanation": "接收来自Fifo1的驱动信号，根据w_isLoad_1和w_isStore_1信号将请求分别导向loadFifo（w_loadAndStoreSelectorToLoadFifo_1）或storeFifo（w_loadAndStoreSelectorToStoreFifo_1）。这两个输出信号也用于生成w_stateUpdateFire。",
+      "summary": "负载/存储类型选择器，根据Fifo1输出数据将事件分发到loadFifo或storeFifo路径。",
+      "explanation": "接收来自Fifo1的事件，利用数据位w_isLoad_1和w_isStore_1决定输出方向：w_loadAndStoreSelectorToLoadFifo_1驱动loadFifo，w_loadAndStoreSelectorToStoreFifo_1驱动storeFifo。w_stateUpdateFire由两者或运算生成，可能用于状态更新触发。",
       "signals": [
         "w_driveToLoadAndStoreSelector_1",
         "w_loadAndStoreSelectorToLoadFifo_1",
@@ -198,10 +205,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:component_role:002"
@@ -213,8 +220,8 @@
         "module": "stateUpdate"
       },
       "subject": "loadFifo / storeFifo",
-      "summary": "加载和存储请求的专用FIFO，分别缓冲对应类型的请求，实现加载与存储路径的独立处理。",
-      "explanation": "分别接收来自loadAndStoreSelector的驱动信号，输出驱动信号至loadOrStoreMutexMerge。它们属于同一Fifo1组件族，表明具有相似的缓冲行为，但分别服务于加载和存储请求流。",
+      "summary": "负载和存储操作专用FIFO，分别缓冲对应类型的事件，实现操作流水线解耦。",
+      "explanation": "loadFifo接收来自选择器的load事件，storeFifo接收store事件。两者输出分别驱动loadOrStoreMutexMerge的输入i_drive1和i_drive0，确保load和store操作在合并前独立排队。",
       "signals": [
         "w_loadAndStoreSelectorToLoadFifo_1",
         "w_loadAndStoreSelectorToStoreFifo_1",
@@ -233,10 +240,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:component_role:003"
@@ -248,8 +255,8 @@
         "module": "stateUpdate"
       },
       "subject": "loadOrStoreMutexMerge",
-      "summary": "加载与存储路径的互斥合并器，将来自加载和存储FIFO的请求合并为单一输出流。",
-      "explanation": "接收loadFifo和storeFifo的驱动信号，输出o_driveToStateUpdateSelector_1。其互斥特性确保加载和存储请求不会同时输出，避免下游冲突。同时接收空闲信号i_freeFromStateUpdateSelector_1用于反压。",
+      "summary": "互斥合并器，将loadFifo和storeFifo的输出事件合并为单一输出事件流。",
+      "explanation": "接收来自loadFifo和storeFifo的事件，通过互斥机制确保同一时刻只有一个事件被输出到o_driveToStateUpdateSelector_1。其i_freeNext输入来自模块的i_freeFromStateUpdateSelector_1，实现背压控制。",
       "signals": [
         "w_loadFifoDrive_1",
         "w_storeFifoDrive_1",
@@ -267,10 +274,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:component_role:004"
@@ -282,8 +289,8 @@
         "module": "stateUpdate"
       },
       "subject": "w_nextState_4",
-      "summary": "下一状态计算逻辑，根据当前操作类型和有效标志确定状态机的下一个状态。",
-      "explanation": "该赋值综合了多种加载/存储操作的有效标志（如lbValid, lwValid, swValid等）和当前状态（如state_Idle, state_LoadHwordEnd等），计算下一状态。表明模块内部维护一个状态机来跟踪不同加载/存储操作的执行阶段。",
+      "summary": "组合逻辑计算下一状态，根据当前操作类型（load/store）和有效标志，以及多种load/store子操作类型，决定状态转移。",
+      "explanation": "该赋值使用大量条件表达式，根据w_isLoad_1、LoadIdleValid、w_isStore_1、StoreIdleValid以及lbValid、lhwValid等子操作有效信号，选择下一状态值。表明模块内部包含一个有限状态机，管理load/store操作的执行阶段。",
       "signals": [
         "w_nextState_4",
         "w_isLoad_1",
@@ -291,7 +298,17 @@
         "LoadIdleValid",
         "StoreIdleValid",
         "r_nextLoadState_4",
-        "r_nextStoreState_4"
+        "r_nextStoreState_4",
+        "lbValid",
+        "lhwValid",
+        "ldwValid",
+        "lwValid",
+        "lhwmValid",
+        "ldwmValid",
+        "lwmValid",
+        "swValid",
+        "shwValid",
+        "sdwValid"
       ],
       "related_assignments": [
         "12",
@@ -306,10 +323,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:assignment_interpretation:001"
@@ -321,8 +338,8 @@
         "module": "stateUpdate"
       },
       "subject": "w_stateUpdateFire",
-      "summary": "状态更新触发信号，指示有请求被分发至加载或存储FIFO。",
-      "explanation": "该信号由loadAndStoreSelector的两个输出信号相或得到，表明当任一FIFO接收到请求时，状态更新被触发。该信号可能用于驱动状态机或作为内部事件标志。",
+      "summary": "状态更新触发信号，由load或store事件分发到FIFO时产生，可能用于驱动状态机更新。",
+      "explanation": "该信号由w_loadAndStoreSelectorToLoadFifo_1和w_loadAndStoreSelectorToStoreFifo_1的或运算生成，表明每当有事件被分发到任一FIFO时，状态更新逻辑被触发。",
       "signals": [
         "w_stateUpdateFire",
         "w_loadAndStoreSelectorToLoadFifo_1",
@@ -339,10 +356,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:assignment_interpretation:002"
@@ -354,8 +371,8 @@
         "module": "stateUpdate"
       },
       "subject": "o_stateValid_12",
-      "summary": "12位状态有效输出，反映内部状态机的当前状态。",
-      "explanation": "该信号直接由内部寄存器r_stateValid_12驱动，表明模块维护一个12位的状态向量，用于指示当前处理状态。该输出可能用于外部模块的状态监控或同步。",
+      "summary": "12位状态有效输出，由寄存器r_stateValid_12直接驱动，表示当前状态的有效性。",
+      "explanation": "该赋值将内部寄存器状态直接映射到输出端口，表明模块维护一个12位的状态有效向量，可能对应不同操作或流水线阶段的有效性。",
       "signals": [
         "o_stateValid_12",
         "r_stateValid_12"
@@ -371,10 +388,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:assignment_interpretation:003"
@@ -385,15 +402,13 @@
         "type": "module",
         "module": "stateUpdate"
       },
-      "summary": "输入事件i_driveFromUpdateSplitter_1与数据i_fromUpdateSplitterData_7同步，空闲信号o_freeToUpdateSplitter_1提供反压机制。",
-      "subject": "事件-数据-空闲握手协议",
-      "explanation": "事件-数据合同表明输入事件携带7位数据，空闲信号用于流控。输出事件o_driveToStateUpdateSelector_1与空闲信号i_freeFromStateUpdateSelector_1构成类似握手，但无数据输出，表明输出仅为事件驱动信号。",
+      "summary": "输入事件i_driveFromUpdateSplitter_1与数据i_fromUpdateSplitterData_7和释放信号o_freeToUpdateSplitter_1构成一个事件-数据-释放握手协议。",
+      "subject": "输入事件-数据-释放握手",
+      "explanation": "事件输入携带7位数据载荷，释放信号用于背压控制，表明上游模块通过此协议发送带数据的请求，模块处理完成后释放上游。",
       "signals": [
         "i_driveFromUpdateSplitter_1",
         "i_fromUpdateSplitterData_7",
-        "o_freeToUpdateSplitter_1",
-        "o_driveToStateUpdateSelector_1",
-        "i_freeFromStateUpdateSelector_1"
+        "o_freeToUpdateSplitter_1"
       ],
       "related_payload": [
         "i_fromUpdateSplitterData_7"
@@ -412,14 +427,40 @@
       "id": "semantic:module:stateUpdate:interface_intent:001"
     },
     {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "stateUpdate"
+      },
+      "summary": "输出事件o_driveToStateUpdateSelector_1与释放信号i_freeFromStateUpdateSelector_1构成一个事件-释放握手协议，无数据载荷。",
+      "subject": "输出事件-释放握手",
+      "explanation": "输出事件不带数据，释放信号来自下游，表明下游通过释放信号控制输出速率，实现背压。",
+      "signals": [
+        "o_driveToStateUpdateSelector_1",
+        "i_freeFromStateUpdateSelector_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/stateUpdate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+        }
+      ],
+      "id": "semantic:module:stateUpdate:interface_intent:002"
+    },
+    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "stateUpdate"
       },
-      "summary": "文档应重点描述请求类型识别、分发路径以及内部状态机的状态转换逻辑。",
-      "subject": "请求分发与状态机逻辑",
-      "explanation": "模块的核心功能是将输入请求根据类型分发至加载或存储路径，并维护状态机跟踪操作进度。w_nextState_4的计算逻辑和状态有效输出是理解模块行为的关键。",
+      "summary": "文档应重点描述模块如何根据输入数据区分load/store操作，以及内部状态机如何管理不同操作类型的执行阶段。",
+      "subject": "状态机与操作分发逻辑",
+      "explanation": "模块核心功能是操作分发和状态更新，涉及loadAndStoreSelector的分发逻辑、loadFifo/storeFifo的独立缓冲、loadOrStoreMutexMerge的合并，以及w_nextState_4所体现的状态机。这些是理解模块行为的关键。",
       "signals": [
         "w_isLoad_1",
         "w_isStore_1",
@@ -428,22 +469,24 @@
         "o_misaligned_1"
       ],
       "instances": [
+        "Fifo1",
         "loadAndStoreSelector",
         "loadFifo",
-        "storeFifo"
+        "storeFifo",
+        "loadOrStoreMutexMerge"
       ],
       "related_flows": [
         "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          "source": "knowledge_ir/modules/stateUpdate.json"
         },
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:documentation_focus:001"
@@ -454,14 +497,18 @@
         "type": "module",
         "module": "stateUpdate"
       },
-      "reason": "紧凑上下文未提供状态机状态定义（如state_Idle, state_LoadHwordEnd等）和状态转换表，需要RTL源码以完整描述状态机行为。",
-      "subject": "内部状态机定义",
-      "needed_source_slice": "always block, module declaration",
+      "reason": "当前上下文仅提供w_nextState_4的组合逻辑表达式，但未包含状态编码（如state_Idle、state_LoadHwordEnd等）的定义、寄存器更新逻辑（如r_stateValid_12、r_nextLoadState_4）以及状态机完整转移表。",
+      "subject": "状态机状态定义与转移细节",
+      "needed_source_slice": "always block, assign block",
       "signals": [
         "w_nextState_4",
         "r_stateValid_12",
         "r_nextLoadState_4",
-        "r_nextStoreState_4"
+        "r_nextStoreState_4",
+        "state_Idle",
+        "state_LoadHwordEnd",
+        "state_LoadDwordEnd",
+        "state_LoadWordEnd"
       ],
       "related_flows": [
         "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
@@ -471,7 +518,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/Lsu/stateUpdate.v"
+          "source": "knowledge_ir/modules/stateUpdate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:module:stateUpdate:source_review_request:001"

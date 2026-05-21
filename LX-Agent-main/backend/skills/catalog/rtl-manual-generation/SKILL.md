@@ -39,6 +39,38 @@ Use this skill to generate a structured Markdown manual for RTL or source-code p
 16. Review the generated manual with the Manual Context checker before relying on any model-assisted review.
 17. If the user asks to save it, write the main manual to `docs/manuals/<top_module>_generated.md` and module pages to `docs/manuals/<top_module>_generated_modules/<module>.md`.
 
+## Stage Restart / Regeneration Requests
+
+If the user asks to regenerate, rerun, restart, force, overwrite, or rebuild a specific stage, do not improvise the pipeline manually. Treat it as a workflow-control request handled by `manual_workflow`.
+
+Supported stages:
+
+- `references`
+- `parser`
+- `knowledge`
+- `evidence`
+- `source_review`
+- `outline`
+- `chapter_plan`
+- `manual`
+- `review`
+
+Expected behavior:
+
+- Restart from the requested stage.
+- Force that stage to run even if artifacts already exist.
+- Mark downstream stages as stale.
+- Continue automatically if the workflow is in auto-run mode or the user requested continuation.
+- Do not delete source RTL files.
+- Do not invent stage outputs outside the workflow.
+
+Examples:
+
+- "重新生成 parser 阶段"
+- "从 knowledge 阶段开始重跑，然后继续"
+- "强制重新生成 manual 和 review"
+- "rerun source_review and continue"
+
 ## Bundled Resources
 
 - `scripts/run_parser_tool.py`: runs the parser pipeline and checks parser artifacts.

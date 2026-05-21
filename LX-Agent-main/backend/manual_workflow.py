@@ -9,6 +9,43 @@ except ImportError:
 
 
 MANUAL_SKILL_NAME = "rtl-manual-generation"
+MANUAL_STAGE_ORDER = (
+    "references",
+    "parser",
+    "knowledge",
+    "evidence",
+    "source_review",
+    "outline",
+    "chapter_plan",
+    "manual",
+    "review",
+)
+RESTART_WORDS = (
+    "重新生成",
+    "重新执行",
+    "重新跑",
+    "重跑",
+    "强制生成",
+    "强制执行",
+    "覆盖生成",
+    "regenerate",
+    "rerun",
+    "restart",
+    "force",
+    "rebuild",
+)
+RESTART_STAGE_ALIASES = {
+    "references": ("references", "reference", "refs", "参考"),
+    "parser": ("parser", "parse", "解析"),
+    "knowledge": ("knowledge", "knowledge_ir", "knowledge ir", "manual_context", "manual context", "知识"),
+    "evidence": ("evidence", "证据"),
+    "source_review": ("source_review", "source review", "源码复核", "源代码复核"),
+    "outline": ("outline", "toc", "目录", "大纲"),
+    "chapter_plan": ("chapter_plan", "chapter plan", "章节规划"),
+    "manual": ("manual", "markdown", "手册", "正文"),
+    "review": ("review", "checker", "审查", "检查"),
+}
+RESTART_NEGATION_WORDS = ("不要", "不", "别", "无需", "不用", "skip", "without", "do not", "don't")
 
 MANUAL_TRIGGERS = (
     "生成代码手册",
@@ -130,6 +167,77 @@ def _wants_regenerate(text):
     return any(word in (text or "") for word in REGENERATE_WORDS)
 
 
+def _extract_restart_stage(text):
+    raw_text = text or ""
+    lower_text = raw_text.lower()
+    if not any(word.lower() in lower_text for word in RESTART_WORDS):
+        return ""
+
+    matches = []
+    for stage, aliases in RESTART_STAGE_ALIASES.items():
+        for alias in aliases:
+            alias_text = alias.lower()
+            start = lower_text.find(alias_text)
+            while start >= 0:
+                if not _stage_mention_is_negated(lower_text, start):
+                    matches.append((start, stage))
+                start = lower_text.find(alias_text, start + len(alias_text))
+
+    if not matches:
+        return ""
+
+    matches.sort(key=lambda item: item[0])
+    return matches[0][1]
+
+
+def _stage_mention_is_negated(lower_text, start_index):
+    prefix = lower_text[max(0, start_index - 16):start_index]
+    return any(word.lower() in prefix for word in RESTART_NEGATION_WORDS)
+
+
+def _reset_from_stage(state, stage):
+    if stage not in MANUAL_STAGE_ORDER:
+        return
+
+    index = MANUAL_STAGE_ORDER.index(stage)
+    affected_stages = list(MANUAL_STAGE_ORDER[index:])
+    affected_set = set(affected_stages)
+
+    state["stage"] = stage
+    state["active"] = True
+    state["restart_stage"] = stage
+    state["last_error"] = ""
+    state["force_regenerate"] = False
+    state["force_stages"] = affected_stages
+    state["completed_stages"] = [
+        item for item in state.get("completed_stages", [])
+        if item not in affected_set
+    ]
+    _clear_stage_outputs(state, affected_set)
+
+
+def _clear_stage_outputs(state, affected_stages):
+    if "parser" in affected_stages:
+        state["parser_result"] = ""
+    if "knowledge" in affected_stages:
+        state["knowledge_result"] = ""
+    if "evidence" in affected_stages:
+        state["evidence_digest"] = {}
+    if "source_review" in affected_stages:
+        state["source_review_report"] = {}
+        state["source_review_output_path"] = ""
+    if "outline" in affected_stages:
+        state["outline"] = []
+    if "chapter_plan" in affected_stages:
+        state["chapter_plan"] = []
+    if "manual" in affected_stages:
+        state["manual_summary"] = {}
+        state["manual_needs_regenerate"] = True
+    if "review" in affected_stages:
+        state["review_report"] = ""
+        state["review_output_path"] = ""
+
+
 def _extract_enrich_modules(text):
     value = _match_value(
         text or "",
@@ -155,6 +263,7 @@ def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=
         and (not state.get("active") or state.get("stage") == "done")
         and is_manual_request(user_input)
         and not is_continue_request(user_input)
+        and not _extract_restart_stage(user_input)
     ):
         state = None
 
@@ -173,6 +282,7 @@ def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=
         evidence_mode=state.get("evidence_mode"),
         auto_run=state.get("auto_run"),
         force_regenerate=state.get("force_regenerate"),
+        force_stages=state.get("force_stages"),
         semantic_enrichment=state.get("semantic_enrichment"),
         enrich_modules=state.get("enrich_modules"),
     )
@@ -234,24 +344,9 @@ def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=
 
 def _run_current_stage(state, base_dir, client, model, user_input, event_logger=None):
     stage = state.get("stage")
-    if stage == "references":
-        return _run_reference_stage(state, base_dir, event_logger)
-    if stage == "parser":
-        return _run_parser_stage(state, event_logger)
-    if stage == "knowledge":
-        return _run_knowledge_stage(state, event_logger)
-    if stage == "evidence":
-        return _run_evidence_stage(state, event_logger)
-    if stage == "source_review":
-        return _run_source_review_stage(state, client, model, event_logger)
-    if stage == "outline":
-        return _run_outline_stage(state, event_logger)
-    if stage == "chapter_plan":
-        return _run_chapter_plan_stage(state, event_logger)
-    if stage == "manual":
-        return _run_manual_stage(state, client, model, user_input, event_logger)
-    if stage == "review":
-        return _run_review_stage(state, client, model, event_logger)
+    handler = MANUAL_STAGE_HANDLERS.get(stage)
+    if handler:
+        return handler(state, base_dir, client, model, user_input, event_logger)
     if stage == "done":
         return _format_reply(
             state,
@@ -265,6 +360,37 @@ def _run_current_stage(state, base_dir, client, model, user_input, event_logger=
 
     state["stage"] = "references"
     return _run_reference_stage(state, base_dir, event_logger)
+
+
+MANUAL_STAGE_HANDLERS = {
+    "references": lambda state, base_dir, client, model, user_input, event_logger: _run_reference_stage(
+        state, base_dir, event_logger
+    ),
+    "parser": lambda state, base_dir, client, model, user_input, event_logger: _run_parser_stage(
+        state, event_logger
+    ),
+    "knowledge": lambda state, base_dir, client, model, user_input, event_logger: _run_knowledge_stage(
+        state, event_logger
+    ),
+    "evidence": lambda state, base_dir, client, model, user_input, event_logger: _run_evidence_stage(
+        state, event_logger
+    ),
+    "source_review": lambda state, base_dir, client, model, user_input, event_logger: _run_source_review_stage(
+        state, client, model, event_logger
+    ),
+    "outline": lambda state, base_dir, client, model, user_input, event_logger: _run_outline_stage(
+        state, event_logger
+    ),
+    "chapter_plan": lambda state, base_dir, client, model, user_input, event_logger: _run_chapter_plan_stage(
+        state, event_logger
+    ),
+    "manual": lambda state, base_dir, client, model, user_input, event_logger: _run_manual_stage(
+        state, client, model, user_input, event_logger
+    ),
+    "review": lambda state, base_dir, client, model, user_input, event_logger: _run_review_stage(
+        state, client, model, event_logger
+    ),
+}
 
 
 def _combine_stage_replies(replies):
@@ -312,6 +438,8 @@ def _ensure_state(state):
             "manual_output_override": "",
             "auto_run": True,
             "force_regenerate": False,
+            "force_stages": [],
+            "restart_stage": "",
             "semantic_enrichment": True,
             "enrich_modules": DEFAULT_ENRICH_MODULES,
         }
@@ -341,6 +469,8 @@ def _ensure_state(state):
     state.setdefault("manual_output_override", "")
     state.setdefault("auto_run", True)
     state.setdefault("force_regenerate", False)
+    state.setdefault("force_stages", [])
+    state.setdefault("restart_stage", "")
     state["semantic_enrichment"] = True
     state.setdefault("enrich_modules", DEFAULT_ENRICH_MODULES)
     return state
@@ -358,7 +488,10 @@ def _update_state_from_user_input(state, user_input):
         if value:
             state[key] = value
 
-    if _wants_regenerate(user_input):
+    restart_stage = _extract_restart_stage(user_input)
+    if restart_stage:
+        _reset_from_stage(state, restart_stage)
+    elif _wants_regenerate(user_input):
         state["force_regenerate"] = True
     state["semantic_enrichment"] = True
     enrich_modules = _extract_enrich_modules(user_input)
@@ -607,6 +740,10 @@ def _force_regenerate(state):
     return bool(state.get("force_regenerate"))
 
 
+def _should_force_stage(state, stage):
+    return _force_regenerate(state) or stage in set(state.get("force_stages", []))
+
+
 def _candidate_parser_dirs(project_root):
     root = Path(project_root)
     return [
@@ -647,7 +784,7 @@ def _run_parser_stage(state, event_logger=None):
     rtl_inputs = state["rtl_inputs"]
 
     ready, parser_dir, missing = _parser_artifacts_ready(state)
-    if ready and not _force_regenerate(state):
+    if ready and not _should_force_stage(state, "parser"):
         _log_event(
             event_logger,
             "tool_skip",
@@ -777,7 +914,7 @@ def _run_knowledge_stage(state, event_logger=None):
     enrich_modules = state.get("enrich_modules") or DEFAULT_ENRICH_MODULES
 
     ready, manual_context_dir, missing = _knowledge_artifacts_ready(state)
-    if ready and not _force_regenerate(state):
+    if ready and not _should_force_stage(state, "knowledge"):
         _log_event(
             event_logger,
             "tool_skip",
@@ -988,7 +1125,7 @@ def _load_manual_context_digest(state):
 def _run_source_review_stage(state, client, model, event_logger=None):
     digest = state.get("evidence_digest") or _load_manual_context_digest(state)
     report_path = _source_review_output_path(state)
-    if report_path.exists() and report_path.is_file() and not _force_regenerate(state):
+    if report_path.exists() and report_path.is_file() and not _should_force_stage(state, "source_review"):
         report = _read_json(report_path)
         state["source_review_report"] = report
         state["source_review_output_path"] = str(report_path)
@@ -1700,7 +1837,7 @@ def _manual_file_ready(state, user_input):
 def _run_manual_stage(state, client, model, user_input, event_logger=None):
     ready, output_path = _manual_file_ready(state, user_input)
     state["_manual_output_stem"] = output_path.stem
-    if ready and not _force_regenerate(state) and not state.get("manual_needs_regenerate"):
+    if ready and not _should_force_stage(state, "manual") and not state.get("manual_needs_regenerate"):
         _log_event(
             event_logger,
             "model_skip",
@@ -1836,7 +1973,7 @@ def _run_review_stage(state, client, model, event_logger=None):
 
     state["manual_output_path"] = str(manual_path)
     review_output_path = _review_output_path(state)
-    if review_output_path.exists() and review_output_path.is_file() and not _force_regenerate(state):
+    if review_output_path.exists() and review_output_path.is_file() and not _should_force_stage(state, "review"):
         _log_event(
             event_logger,
             "model_skip",
@@ -4144,4 +4281,11 @@ def _mark_stage_done(state, stage):
     if stage not in completed:
         completed.append(stage)
     state["completed_stages"] = completed
+    force_stages = [
+        item for item in state.get("force_stages", [])
+        if item != stage
+    ]
+    state["force_stages"] = force_stages
+    if not force_stages:
+        state["restart_stage"] = ""
     state["last_error"] = ""

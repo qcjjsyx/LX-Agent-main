@@ -46,13 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 9,
+    "count": 6,
     "by_type": {
-      "assignment_interpretation": 3,
+      "assignment_interpretation": 2,
       "documentation_focus": 1,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -63,9 +62,9 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "reg_apb 是 SPI 模块的 APB 从设备寄存器接口，负责将 APB 总线协议转换为 SPI 内部寄存器读写控制信号。",
+      "summary": "reg_apb 是 SPI 模块的 APB 寄存器接口桥接单元，负责将 APB 总线协议转换为 SPI 内部寄存器读写控制信号。",
       "subject": "reg_apb",
-      "explanation": "模块通过 APB 接口信号（PADDR、PWDATA、PSEL、PENABLE、PWRITE）生成内部读写选通信号（read、write），并基于地址译码产生各寄存器（SPI_SR、SPI_DR、SPI_CR1）的独立读写使能（SR_r、DR_r、CR1_r、DR_w、CR1_w）。输出 PRDATA 在读取时驱动 rdata，否则高阻。PSLVERR 和 PREADY 被固定为 0 和 1，表明模块始终就绪且无错误。",
+      "explanation": "该模块通过 APB 接口信号（PADDR、PWDATA、PSEL、PENABLE、PWRITE）生成内部读写选通信号（read、write），并基于地址译码产生各 SPI 寄存器的读写使能（SR_r、DR_r、CR1_r、DR_w、CR1_w）。输出 PRDATA 在读取时返回内部 rdata 值，PSLVERR 恒为 0，PREADY 恒为 1，表明模块始终就绪且无错误。",
       "signals": [
         "PADDR",
         "PWDATA",
@@ -74,16 +73,7 @@
         "PWRITE",
         "PRDATA",
         "PREADY",
-        "PSLVERR",
-        "read",
-        "write",
-        "addr",
-        "SR_r",
-        "DR_r",
-        "CR1_r",
-        "DR_w",
-        "CR1_w",
-        "rdata"
+        "PSLVERR"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -104,14 +94,13 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "模块根据 APB 地址 PADDR 译码，生成 SPI 内部状态/数据/控制寄存器的独立读写选通信号。",
-      "subject": "APB 地址译码与寄存器选通",
-      "explanation": "通过 assign 语句将 PADDR 赋值给 addr，然后使用 addr 与 SPI_SR、SPI_DR、SPI_CR1 等地址常量比较，结合 read/write 信号生成 SR_r、DR_r、CR1_r、DR_w、CR1_w。这些选通信号用于后续 SPI 核心逻辑的寄存器访问控制。",
+      "summary": "根据 APB 总线协议生成 SPI 内部寄存器的读写选通信号，并完成地址译码。",
+      "subject": "APB 寄存器读写控制",
+      "explanation": "通过 assign 2 和 3 分别生成 read 和 write 信号，read 由 PSEL 和 !PWRITE 组合，write 由 PENABLE、PSEL 和 PWRITE 组合。assign 5-9 基于 addr（来自 PADDR）与 SPI 寄存器地址（SPI_SR、SPI_DR、SPI_CR1）的比较，产生各寄存器的读/写使能脉冲。",
       "signals": [
-        "addr",
-        "PADDR",
         "read",
         "write",
+        "addr",
         "SR_r",
         "DR_r",
         "CR1_r",
@@ -137,64 +126,9 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "subject": "read",
-      "summary": "生成 APB 读选通信号，当 PSEL 有效且 PWRITE 为低时有效。",
-      "explanation": "该信号是 APB 读事务的指示，用于后续地址译码和 PRDATA 驱动。它直接由 PSEL 和 PWRITE 组合而成，不依赖时钟。",
-      "signals": [
-        "read",
-        "PSEL",
-        "PWRITE"
-      ],
-      "related_assignments": [
-        "2"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:assignment_interpretation:001"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
-      "subject": "write",
-      "summary": "生成 APB 写选通信号，当 PENABLE、PSEL 和 PWRITE 同时有效时有效。",
-      "explanation": "该信号是 APB 写事务的指示，用于后续地址译码。它需要 PENABLE 有效，符合 APB 协议写数据阶段要求。",
-      "signals": [
-        "write",
-        "PENABLE",
-        "PSEL",
-        "PWRITE"
-      ],
-      "related_assignments": [
-        "3"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
       "subject": "PRDATA",
-      "summary": "在读取时驱动内部 rdata 到 PRDATA，否则输出高阻。",
-      "explanation": "该 assign 表明 PRDATA 在读取事务期间由内部 rdata 驱动，非读取时处于高阻态，符合 APB 从设备多路复用数据总线的典型实现。",
+      "summary": "PRDATA 在读取操作时输出内部 rdata 值，否则输出高阻态。",
+      "explanation": "assign 10 显示 PRDATA 在 read 有效时驱动为 rdata，否则为 32'bz。这表明模块在非读取周期释放总线，符合 APB 从设备规范。",
       "signals": [
         "PRDATA",
         "read",
@@ -209,9 +143,42 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/reg_apb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
         }
       ],
-      "id": "semantic:module:reg_apb:assignment_interpretation:003"
+      "id": "semantic:module:reg_apb:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "reg_apb"
+      },
+      "subject": "PREADY 和 PSLVERR",
+      "summary": "PREADY 恒为 1，PSLVERR 恒为 0，表明模块始终就绪且无传输错误。",
+      "explanation": "assign 1 和 4 将 PSLVERR 固定为 0，PREADY 固定为 1。这简化了 APB 协议交互，无需等待周期，且不产生错误响应。",
+      "signals": [
+        "PREADY",
+        "PSLVERR"
+      ],
+      "related_assignments": [
+        "1",
+        "4"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/reg_apb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
+        }
+      ],
+      "id": "semantic:module:reg_apb:assignment_interpretation:002"
     },
     {
       "claim_type": "interface_intent",
@@ -219,17 +186,23 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "模块实现零等待状态 APB 从设备接口，PREADY 恒为 1，PSLVERR 恒为 0。",
-      "subject": "APB 从设备接口",
-      "explanation": "PREADY 固定为高电平表明模块始终准备好立即响应 APB 事务，无需插入等待周期。PSLVERR 固定为低电平表明模块不会产生 APB 错误响应。这简化了 APB 总线时序，适用于简单寄存器映射。",
+      "summary": "该模块实现零等待、无错误的 APB 从设备接口，所有传输在单周期内完成。",
+      "subject": "APB 从接口",
+      "explanation": "PREADY 恒为 1 表示无需插入等待状态，PSLVERR 恒为 0 表示所有地址访问均有效。write 信号在 PENABLE 有效时才产生，符合 APB 写传输时序。",
       "signals": [
+        "PADDR",
+        "PWDATA",
+        "PSEL",
+        "PENABLE",
+        "PWRITE",
+        "PRDATA",
         "PREADY",
         "PSLVERR"
       ],
       "related_payload": [
-        "PRDATA",
+        "PADDR",
         "PWDATA",
-        "PADDR"
+        "PRDATA"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -237,6 +210,9 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/reg_apb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
         }
       ],
       "id": "semantic:module:reg_apb:interface_intent:001"
@@ -247,21 +223,20 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "手册应重点说明 SPI 寄存器（SPI_SR、SPI_DR、SPI_CR1）的 APB 地址映射关系，以及各读写选通信号（SR_r、DR_r、CR1_r、DR_w、CR1_w）的生成条件。",
-      "subject": "寄存器地址映射与选通逻辑",
-      "explanation": "模块的核心功能是 APB 地址译码，生成 SPI 核心所需的寄存器访问控制信号。这些选通信号是 SPI 状态机与数据路径的接口，其正确性直接影响 SPI 功能。地址常量（SPI_SR、SPI_DR、SPI_CR1）的具体值需从 RTL 源文件确认。",
+      "summary": "手册应重点描述 SPI 寄存器地址（SPI_SR、SPI_DR、SPI_CR1）与读写使能信号的对应关系。",
+      "subject": "寄存器地址映射与读写使能",
+      "explanation": "模块的核心功能是地址译码，assign 5-9 明确展示了各寄存器使能信号的生成逻辑。手册需列出每个寄存器的地址、读写使能条件及数据流向。",
       "signals": [
         "addr",
         "SR_r",
         "DR_r",
         "CR1_r",
         "DR_w",
-        "CR1_w",
-        "PADDR"
+        "CR1_w"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/reg_apb.json"
@@ -271,70 +246,12 @@
         }
       ],
       "id": "semantic:module:reg_apb:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
-      "reason": "紧凑上下文中未提供 SPI_SR、SPI_DR、SPI_CR1 的具体数值，无法确定寄存器地址映射。",
-      "subject": "寄存器地址常量",
-      "needed_source_slice": "模块声明或参数定义",
-      "signals": [
-        "SPI_SR",
-        "SPI_DR",
-        "SPI_CR1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/reg_apb.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
-      "reason": "紧凑上下文中未提供 rdata 的来源，无法确定 PRDATA 在读取时驱动的数据内容。",
-      "subject": "内部 rdata 生成逻辑",
-      "needed_source_slice": "assign 块或 always 块",
-      "signals": [
-        "rdata",
-        "PRDATA"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "寄存器地址常量值",
-      "reason": "紧凑上下文中未提供 SPI_SR、SPI_DR、SPI_CR1 的具体数值。"
-    },
-    {
       "field": "内部 rdata 生成逻辑",
-      "reason": "紧凑上下文中未提供 rdata 的来源和生成方式。"
-    },
-    {
-      "field": "输出信号 BR、CRCPOLY、TDR、BIDIMODE 的驱动逻辑",
-      "reason": "紧凑上下文中未提供这些输出信号的赋值来源，无法确定其与 APB 寄存器映射的关系。"
+      "reason": "上下文未提供 rdata 信号的赋值来源，无法确定 PRDATA 的数据路径细节。"
     }
   ]
 }

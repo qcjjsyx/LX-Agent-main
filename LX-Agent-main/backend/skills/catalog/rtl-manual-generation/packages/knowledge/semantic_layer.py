@@ -8,13 +8,15 @@ directly.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
-from typing import Any, Dict, Iterable, List, Protocol
+from typing import Any, Callable, Dict, Iterable, List, Protocol
 
 try:
     from .llm_client import OpenAICompatibleLLMClient
@@ -128,6 +130,7 @@ def enrich_semantic_layer(
     modules: Iterable[str] | None = None,
     include_flows: bool = True,
     max_flows_per_module: int | None = None,
+    max_workers: int | None = None,
     llm_client: TextLLMClient | None = None,
     skip_failed: bool = False,
     dry_run: bool = False,
@@ -154,6 +157,7 @@ def enrich_semantic_layer(
             "modules_requested": selected_modules,
             "planned_modules": len(plan["module_contexts"]),
             "planned_flows": len(plan["flow_contexts"]),
+            "workers": resolve_semantic_workers(max_workers),
             "issues": [],
         }
 
@@ -164,51 +168,54 @@ def enrich_semantic_layer(
     issues: List[Dict[str, Any]] = []
     module_cards: List[Dict[str, Any]] = []
     flow_cards: List[Dict[str, Any]] = []
+    skipped_modules = 0
+    skipped_flows = 0
+    workers = resolve_semantic_workers(max_workers)
 
-    for module_name, context_path in plan["module_contexts"]:
-        context = read_json(context_path)
-        try:
-            raw = client.complete_text(build_module_messages(context))
-            card = parse_module_semantic_card(raw, context)
-            rel_path = f"semantic/modules/{safe_filename(module_name)}.json"
-            write_json(knowledge_root / rel_path, card)
-            module_files[module_name] = rel_path
-            module_cards.append(card)
-        except Exception as exc:
-            issue = {
-                "level": "warning" if skip_failed else "error",
-                "code": "module_semantic_failed",
-                "module": module_name,
-                "message": str(exc),
-            }
-            issues.append(issue)
-            if not skip_failed:
-                raise
+    module_results = run_enrichment_tasks(
+        plan["module_contexts"],
+        lambda item: enrich_module_context(knowledge_root, client, item),
+        max_workers=workers,
+    )
+    for result in module_results:
+        if result["ok"]:
+            module_files[result["module"]] = result["rel_path"]
+            module_cards.append(result["card"])
+            if result.get("skipped"):
+                skipped_modules += 1
+            continue
+        issue = {
+            "level": "warning" if skip_failed else "error",
+            "code": "module_semantic_failed",
+            "module": result["module"],
+            "message": result["message"],
+        }
+        issues.append(issue)
+        if not skip_failed:
+            raise SemanticLayerError(issue["message"])
 
-    for module_name, flow_path in plan["flow_contexts"]:
-        context = read_json(flow_path)
-        flow_id = str(context.get("flow_id", flow_path.stem))
-        try:
-            raw = client.complete_text(build_flow_messages(context))
-            card = parse_flow_semantic_card(raw, context)
-            rel_path = (
-                f"semantic/flows/{safe_filename(module_name)}/"
-                f"{safe_filename(flow_id)}.json"
-            )
-            write_json(knowledge_root / rel_path, card)
-            flow_files.setdefault(module_name, []).append(rel_path)
-            flow_cards.append(card)
-        except Exception as exc:
-            issue = {
-                "level": "warning" if skip_failed else "error",
-                "code": "flow_semantic_failed",
-                "module": module_name,
-                "flow_id": flow_id,
-                "message": str(exc),
-            }
-            issues.append(issue)
-            if not skip_failed:
-                raise
+    flow_results = run_enrichment_tasks(
+        plan["flow_contexts"],
+        lambda item: enrich_flow_context(knowledge_root, client, item),
+        max_workers=workers,
+    )
+    for result in flow_results:
+        if result["ok"]:
+            flow_files.setdefault(result["module"], []).append(result["rel_path"])
+            flow_cards.append(result["card"])
+            if result.get("skipped"):
+                skipped_flows += 1
+            continue
+        issue = {
+            "level": "warning" if skip_failed else "error",
+            "code": "flow_semantic_failed",
+            "module": result["module"],
+            "flow_id": result.get("flow_id", ""),
+            "message": result["message"],
+        }
+        issues.append(issue)
+        if not skip_failed:
+            raise SemanticLayerError(issue["message"])
 
     status = semantic_status(issues)
     claim_counts = summarize_claims(module_cards + flow_cards)
@@ -224,6 +231,8 @@ def enrich_semantic_layer(
             "modules": len(module_files),
             "flows": sum(len(items) for items in flow_files.values()),
             "claims": sum(claim_counts.values()),
+            "skipped_modules": skipped_modules,
+            "skipped_flows": skipped_flows,
         },
         "claim_types": claim_counts,
         "files": {
@@ -248,12 +257,146 @@ def enrich_semantic_layer(
             "modules": len(module_cards),
             "flows": len(flow_cards),
             "claims": sum(claim_counts.values()),
+            "skipped_modules": skipped_modules,
+            "skipped_flows": skipped_flows,
         },
+        "workers": workers,
         "claim_types": claim_counts,
         "issues": issues,
     }
     write_json(semantic_root / "semantic_report.json", report)
     return report
+
+
+def enrich_module_context(
+    knowledge_root: Path,
+    client: TextLLMClient,
+    item: tuple[str, Path],
+) -> Dict[str, Any]:
+    module_name, context_path = item
+    rel_path = f"semantic/modules/{safe_filename(module_name)}.json"
+    context = read_json(context_path)
+    cached = read_cached_semantic_card(
+        knowledge_root / rel_path,
+        expected_schema="knowledge_ir_module_semantic_claims",
+        expected_hash=hash_json(context),
+    )
+    if cached:
+        return {
+            "ok": True,
+            "module": module_name,
+            "rel_path": rel_path,
+            "card": cached,
+            "skipped": True,
+        }
+    try:
+        raw = client.complete_text(build_module_messages(context))
+        card = parse_module_semantic_card(raw, context)
+        write_json(knowledge_root / rel_path, card)
+        return {
+            "ok": True,
+            "module": module_name,
+            "rel_path": rel_path,
+            "card": card,
+            "skipped": False,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "module": module_name,
+            "message": str(exc),
+        }
+
+
+def enrich_flow_context(
+    knowledge_root: Path,
+    client: TextLLMClient,
+    item: tuple[str, Path],
+) -> Dict[str, Any]:
+    module_name, flow_path = item
+    context = read_json(flow_path)
+    flow_id = str(context.get("flow_id", flow_path.stem))
+    rel_path = f"semantic/flows/{safe_filename(module_name)}/{safe_filename(flow_id)}.json"
+    cached = read_cached_semantic_card(
+        knowledge_root / rel_path,
+        expected_schema="knowledge_ir_flow_semantic_claims",
+        expected_hash=hash_json(context),
+    )
+    if cached:
+        return {
+            "ok": True,
+            "module": module_name,
+            "flow_id": flow_id,
+            "rel_path": rel_path,
+            "card": cached,
+            "skipped": True,
+        }
+    try:
+        raw = client.complete_text(build_flow_messages(context))
+        card = parse_flow_semantic_card(raw, context)
+        write_json(knowledge_root / rel_path, card)
+        return {
+            "ok": True,
+            "module": module_name,
+            "flow_id": flow_id,
+            "rel_path": rel_path,
+            "card": card,
+            "skipped": False,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "module": module_name,
+            "flow_id": flow_id,
+            "message": str(exc),
+        }
+
+
+def read_cached_semantic_card(path: Path, *, expected_schema: str, expected_hash: str) -> Dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = read_json(path)
+    except Exception:
+        return None
+    if payload.get("schema") != expected_schema:
+        return None
+    if payload.get("schema_version") != SCHEMA_VERSION:
+        return None
+    if payload.get("input_hash") != expected_hash:
+        return None
+    if not isinstance(payload.get("claims"), list):
+        return None
+    return payload
+
+
+def run_enrichment_tasks(
+    items: List[tuple[str, Path]],
+    worker: Callable[[tuple[str, Path]], Dict[str, Any]],
+    *,
+    max_workers: int,
+) -> List[Dict[str, Any]]:
+    if not items:
+        return []
+    if max_workers <= 1 or len(items) == 1:
+        return [worker(item) for item in items]
+
+    results: List[Dict[str, Any] | None] = [None] * len(items)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index = {executor.submit(worker, item): index for index, item in enumerate(items)}
+        for future in as_completed(future_to_index):
+            results[future_to_index[future]] = future.result()
+    return [result for result in results if result is not None]
+
+
+def resolve_semantic_workers(value: int | None = None) -> int:
+    if value is None:
+        raw = os.getenv("RTL_MANUAL_SEMANTIC_WORKERS", "4")
+        try:
+            value = int(raw)
+        except ValueError:
+            value = 4
+    return max(1, value)
 
 
 def build_enrichment_plan(
@@ -929,6 +1072,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--modules", default="", help="Comma-separated module names. Defaults to all modules.")
     parser.add_argument("--no-flows", action="store_true", help="Only enrich module overview contexts.")
     parser.add_argument("--max-flows-per-module", type=int, default=None)
+    parser.add_argument("--semantic-workers", type=int, default=None, help="Parallel LLM workers. Defaults to RTL_MANUAL_SEMANTIC_WORKERS or 4.")
     parser.add_argument("--model", default=None)
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--api-key", default=None)
@@ -948,6 +1092,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         modules=parse_modules_arg(args.modules),
         include_flows=not args.no_flows,
         max_flows_per_module=args.max_flows_per_module,
+        max_workers=args.semantic_workers,
         llm_client=client,
         skip_failed=args.skip_failed,
         dry_run=args.dry_run,

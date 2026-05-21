@@ -19,6 +19,7 @@ from typing import Any
 try:
     from .event_logger import log_event
     from .manual_workflow import (
+        MANUAL_STAGE_ORDER,
         PROJECT_EVIDENCE_MODE,
         READING_PATH_EVIDENCE_MODE,
         _artifact_base_from_parser,
@@ -29,6 +30,7 @@ try:
 except ImportError:  # pragma: no cover - supports direct script execution
     from event_logger import log_event
     from manual_workflow import (
+        MANUAL_STAGE_ORDER,
         PROJECT_EVIDENCE_MODE,
         READING_PATH_EVIDENCE_MODE,
         _artifact_base_from_parser,
@@ -39,17 +41,7 @@ except ImportError:  # pragma: no cover - supports direct script execution
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-STAGE_ORDER = (
-    "references",
-    "parser",
-    "knowledge",
-    "evidence",
-    "source_review",
-    "outline",
-    "chapter_plan",
-    "manual",
-    "review",
-)
+STAGE_ORDER = MANUAL_STAGE_ORDER
 
 
 def main(argv: list[str] | None = None) -> int:

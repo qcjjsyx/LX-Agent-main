@@ -46,10 +46,9 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 6,
     "by_type": {
-      "assignment_interpretation": 5,
-      "documentation_focus": 1,
+      "assignment_interpretation": 2,
       "interface_intent": 1,
       "module_role": 1,
       "source_review_request": 1,
@@ -65,12 +64,13 @@
       },
       "summary": "该模块是一个基于APB接口的强制看门狗定时器，用于在系统锁定或故障时生成复位或中断。",
       "subject": "cmsdk_apb_watchdog_frc",
-      "explanation": "模块通过APB接口接收配置和加载值，内部产生中断和复位输出。assign依赖显示写操作受frc_sel和wdog_lock信号控制，表明其强制特性。",
+      "explanation": "模块通过APB接口接收配置和加载值，内部通过wdog_lock信号控制写访问，防止意外修改。输出WDOGINT和WDOGRES分别表示中断和复位请求，表明其核心功能是系统监控和故障响应。",
       "signals": [
         "PADDR",
         "PWDATA",
         "WDOGINT",
-        "WDOGRES"
+        "WDOGRES",
+        "wdog_lock"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -91,25 +91,24 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog_frc"
       },
-      "summary": "模块负责在APB写操作中，根据地址译码和锁定状态，生成控制使能信号，以更新看门狗配置和加载值。",
-      "subject": "强制看门狗定时器控制",
-      "explanation": "assign依赖显示wdog_ctrl_en、load_en和int_clr_en等使能信号由PADDR、PWRITE、frc_sel、PENABLE和wdog_lock共同决定，形成写控制路径。",
+      "summary": "通过地址译码和锁定机制，控制对看门狗控制寄存器（ARM_WDOGCONTROLA）和加载寄存器（ARM_WDOGLOADA）的写操作。",
+      "subject": "APB寄存器写使能控制",
+      "explanation": "assign_dependencies显示wdog_ctrl_en和load_en的生成条件相同，均依赖PADDR、PWRITE、frc_sel、PENABLE和wdog_lock，表明写操作受地址、选择信号和锁定状态共同控制。",
       "signals": [
-        "wdog_ctrl_en",
-        "load_en",
-        "int_clr_en",
         "PADDR",
         "PWRITE",
         "frc_sel",
         "PENABLE",
-        "wdog_lock"
+        "wdog_lock",
+        "wdog_ctrl_en",
+        "load_en"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
+          "source": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog_frc.v"
         },
         {
           "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
@@ -123,11 +122,12 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog_frc"
       },
-      "summary": "APB写操作通过地址译码和锁定信号，实现对看门狗控制、加载和中断清除寄存器的选择性写入。",
-      "subject": "APB写控制接口",
-      "explanation": "assign依赖显示写使能信号仅在PADDR匹配特定地址、PWRITE有效、frc_sel选中且wdog_lock未锁定时产生，表明APB接口用于配置强制看门狗。",
+      "summary": "该接口用于配置看门狗定时器的控制寄存器和加载值，写操作受锁定信号（wdog_lock）保护。",
+      "subject": "APB写事务接口",
+      "explanation": "写使能信号（wdog_ctrl_en, load_en, int_clr_en）均依赖PWRITE、frc_sel和~PENABLE，表明写事务在APB协议中于地址相位（PENABLE为低）完成，且需frc_sel有效。",
       "signals": [
         "PADDR",
+        "PWDATA",
         "PWRITE",
         "PENABLE",
         "frc_sel",
@@ -141,7 +141,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
+          "source": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog_frc.v"
         },
         {
           "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
@@ -155,29 +155,22 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog_frc"
       },
-      "subject": "wdog_ctrl_en",
-      "summary": "该赋值生成看门狗控制寄存器的写使能信号，仅在地址匹配、写操作、强制选中且未锁定时有效。",
-      "explanation": "赋值条件包含PADDR、PWRITE、frc_sel、PENABLE和wdog_lock，表明该信号控制控制寄存器的更新，是配置路径的关键。",
+      "subject": "WDOGINT",
+      "summary": "将内部中断状态信号wdog_mis直接驱动到输出端口WDOGINT。",
+      "explanation": "assign_dependencies索引20显示WDOGINT直接赋值给wdog_mis，表明中断输出是内部屏蔽中断状态的直接反映，无额外组合逻辑。",
       "signals": [
-        "wdog_ctrl_en",
-        "PADDR",
-        "PWRITE",
-        "frc_sel",
-        "PENABLE",
-        "wdog_lock"
+        "WDOGINT",
+        "wdog_mis"
       ],
       "related_assignments": [
-        "0"
+        "20"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
+          "source": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog_frc.v"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog_frc:assignment_interpretation:001"
@@ -188,105 +181,9 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog_frc"
       },
-      "subject": "load_en",
-      "summary": "该赋值生成看门狗加载寄存器的写使能信号，条件与wdog_ctrl_en类似，用于更新定时器加载值。",
-      "explanation": "赋值条件与wdog_ctrl_en相同，但地址不同，表明该信号控制加载寄存器的写入，是数据路径的一部分。",
-      "signals": [
-        "load_en",
-        "PADDR",
-        "PWRITE",
-        "frc_sel",
-        "PENABLE",
-        "wdog_lock"
-      ],
-      "related_assignments": [
-        "4"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog_frc:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog_frc"
-      },
-      "subject": "int_clr_en",
-      "summary": "该赋值生成中断清除使能信号，在写操作且中断未清除时有效，用于清除看门狗中断。",
-      "explanation": "赋值条件包含int_clr_w、PWRITE、frc_sel、PENABLE、wdog_lock和地址匹配，表明该信号控制中断清除，是控制路径的一部分。",
-      "signals": [
-        "int_clr_en",
-        "int_clr_w",
-        "PWRITE",
-        "frc_sel",
-        "PENABLE",
-        "wdog_lock",
-        "PADDR"
-      ],
-      "related_assignments": [
-        "14"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog_frc:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog_frc"
-      },
-      "subject": "WDOGINT",
-      "summary": "该赋值将内部中断状态信号wdog_mis直接连接到输出端口WDOGINT。",
-      "explanation": "赋值显示WDOGINT由wdog_mis驱动，表明模块内部产生中断信号并输出。",
-      "signals": [
-        "WDOGINT",
-        "wdog_mis"
-      ],
-      "related_assignments": [
-        "20"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog_frc:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog_frc"
-      },
       "subject": "WDOGRES",
-      "summary": "该赋值将内部复位信号i_wdog_res直接连接到输出端口WDOGRES。",
-      "explanation": "赋值显示WDOGRES由i_wdog_res驱动，表明模块内部产生复位信号并输出。",
+      "summary": "将内部复位信号i_wdog_res直接驱动到输出端口WDOGRES。",
+      "explanation": "assign_dependencies索引22显示WDOGRES直接赋值给i_wdog_res，表明复位输出是内部复位逻辑的直接传递。",
       "signals": [
         "WDOGRES",
         "i_wdog_res"
@@ -295,46 +192,14 @@
         "22"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
+          "source": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog_frc.v"
         }
       ],
-      "id": "semantic:module:cmsdk_apb_watchdog_frc:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog_frc"
-      },
-      "summary": "手册应重点描述frc_sel和wdog_lock信号如何控制看门狗的强制写入和锁定，以及地址译码逻辑。",
-      "subject": "强制看门狗配置与锁定机制",
-      "explanation": "assign依赖显示所有写使能信号都受frc_sel和wdog_lock控制，表明这是模块的核心控制机制，需要详细解释。",
-      "signals": [
-        "frc_sel",
-        "wdog_lock",
-        "PADDR",
-        "PWRITE",
-        "PENABLE"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog_frc:documentation_focus:001"
+      "id": "semantic:module:cmsdk_apb_watchdog_frc:assignment_interpretation:002"
     },
     {
       "claim_type": "source_review_request",
@@ -342,23 +207,15 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog_frc"
       },
-      "reason": "紧凑上下文缺少内部事件流和关键组件连接，无法推断定时器计数、中断和复位生成的具体逻辑。",
-      "subject": "内部定时器逻辑和中断/复位生成",
-      "needed_source_slice": "always block, instance connections",
-      "signals": [
-        "wdog_mis",
-        "i_wdog_res",
-        "frc_data"
-      ],
+      "reason": "紧凑上下文未包含内部计数器、比较器或状态机的实现，无法推断定时器行为。",
+      "subject": "内部定时器逻辑",
+      "needed_source_slice": "always block, assign block",
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog_frc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog_frc.json"
+          "source": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog_frc.v"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog_frc:source_review_request:001"
@@ -366,12 +223,16 @@
   ],
   "evidence_gaps": [
     {
-      "field": "内部事件流",
-      "reason": "紧凑上下文中internal_event_flow_refs为空，无法推断定时器计数、中断和复位生成的内部逻辑。"
+      "field": "内部定时器逻辑",
+      "reason": "上下文未提供内部计数器、比较器或状态机的实现细节，无法推断定时器如何递减、何时触发中断或复位。"
     },
     {
-      "field": "关键组件连接",
-      "reason": "紧凑上下文中key_component_connections为空，无法推断模块内部子模块或组件的连接关系。"
+      "field": "锁定机制（wdog_lock）",
+      "reason": "上下文未说明wdog_lock信号的来源、置位条件和清除方式，无法解释锁定机制的具体行为。"
+    },
+    {
+      "field": "组件实例",
+      "reason": "上下文未列出任何内部实例（如计数器、寄存器），无法分析模块的层次化结构。"
     }
   ]
 }
