@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 9,
+    "count": 16,
     "by_type": {
-      "assignment_interpretation": 2,
-      "component_role": 2,
-      "documentation_focus": 1,
-      "interface_intent": 1,
+      "assignment_interpretation": 3,
+      "component_role": 7,
+      "documentation_focus": 2,
+      "interface_intent": 2,
       "module_role": 1,
-      "structural_responsibility": 2
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -63,12 +63,12 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "Write-back stage that demultiplexes LSU results and mutex-merged drive events into targeted register file and system register write paths.",
+      "summary": "写回阶段模块，负责将执行结果分发到通用寄存器组、程序计数器、谓词寄存器、XPSR以及GRF读取路径。",
       "subject": "wb",
-      "explanation": "The module receives a single LSU drive event (i_lsuDriveToWB) and a mutex-merged drive event (i_driveMutexMerge2). It splits the LSU event into two delayed paths (Selector1, Selector2) and merges the mutex event with a delayed LSU path via cFifo1 and MutexMerge2. The final outputs are five drive events (o_drive_grf, o_drive_pc, o_drive_prf, o_drive_xpsr, o_wbDriveReadGRF) each with a dedicated data payload. The free signals (i_wbFreeFrom*) allow downstream consumers to back-pressure or release the write-back pipeline.",
+      "explanation": "模块接收来自互斥合并单元和加载存储单元的两个驱动事件，通过分路器、选择器、互斥合并器和FIFO等组件，将数据分发到五个输出驱动事件和对应的数据输出端口。自由信号用于协调下游模块的释放。",
       "signals": [
-        "i_lsuDriveToWB",
         "i_driveMutexMerge2",
+        "i_lsuDriveToWB",
         "o_drive_grf",
         "o_drive_pc",
         "o_drive_prf",
@@ -81,8 +81,8 @@
         "Selector2",
         "MutexMerge1",
         "MutexMerge2",
-        "cFifo1",
-        "wbSplitter"
+        "wbSplitter",
+        "cFifo1"
       ],
       "related_flows": [
         "flow_000_wb_i_lsuDriveToWB",
@@ -93,20 +93,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json"
-        },
-        {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_001_wb_i_driveMutexMerge2.json"
-        },
-        {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
       "id": "semantic:module:wb:module_role:001"
@@ -117,24 +107,59 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "Splits the single LSU drive event into two independent delayed paths for GRF/PRF/XPSR and PC/ReadGRF write-back.",
-      "subject": "LSU write-back demultiplexing",
-      "explanation": "The Splitter instance takes i_lsuDriveToWB and produces two output events: w_driveSelector1 (to Selector1) and w_driveSelector2 (to Selector2). Selector1 then fans out to o_drive_prf, o_wbDriveReadGRF, w_driveMutexMerge11, w_driveMutexMerge2, and w_drive_pc. Selector2 drives o_drive_xpsr. The delays (delay1, delay8) between Splitter and Selectors indicate pipeline timing separation.",
+      "summary": "将来自LSU的103位数据包解析并分发到GRF、PRF、PC和XPSR等目标。",
+      "subject": "写回数据分发",
+      "explanation": "Splitter将输入数据包拆解为多个字段，Selector1和Selector2根据控制信号选择对应的数据输出，MutexMerge1和MutexMerge2合并来自不同路径的数据，cFifo1提供缓冲。",
       "signals": [
-        "i_lsuDriveToWB",
-        "w_driveSelector1",
-        "w_driveSelector2",
-        "o_drive_prf",
-        "o_wbDriveReadGRF",
-        "o_drive_xpsr",
-        "w_drive_pc"
+        "i_data_103",
+        "o_grfData_74",
+        "o_pcData_32",
+        "o_prfData_40",
+        "o_xpsrData_4",
+        "o_WBdataToGRF_8"
       ],
       "instances": [
         "Splitter",
         "Selector1",
         "Selector2",
-        "delay1",
-        "delay8"
+        "MutexMerge1",
+        "MutexMerge2",
+        "cFifo1"
+      ],
+      "related_flows": [
+        "flow_000_wb_i_lsuDriveToWB",
+        "flow_001_wb_i_driveMutexMerge2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:structural_responsibility:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "Splitter",
+      "summary": "将LSU驱动事件和103位数据包分路到两个不同的处理路径。",
+      "explanation": "Splitter接收i_lsuDriveToWB事件和i_data_103数据，产生两个驱动事件w_driveSelector1和w_driveSelector2，分别导向Selector1和Selector2路径。",
+      "signals": [
+        "i_lsuDriveToWB",
+        "i_data_103",
+        "w_driveSelector1",
+        "w_driveSelector2"
+      ],
+      "instances": [
+        "Splitter"
       ],
       "related_flows": [
         "flow_000_wb_i_lsuDriveToWB"
@@ -144,65 +169,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
-      "id": "semantic:module:wb:structural_responsibility:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "wb"
-      },
-      "summary": "Merges the i_driveMutexMerge2 event with a delayed LSU path (via cFifo1 and bitOperationDelay) to produce the final GRF drive event.",
-      "subject": "Mutex-merged write-back arbitration",
-      "explanation": "MutexMerge2 receives i_driveMutexMerge2 and w_driveMutexMerge2 (from Selector1). Its output drives cFifo1, which then feeds bitOperationDelay, and finally MutexMerge1. MutexMerge1 also receives w_driveMutexMerge11 (from Selector1) and w_wbSplitterDriveToMutexMerge1_1 (from wbSplitter). MutexMerge1's output w_drive_grf goes through toGrfDelay to produce o_drive_grf. This structure suggests arbitration between the mutex path and the LSU path for GRF write access.",
-      "signals": [
-        "i_driveMutexMerge2",
-        "w_driveMutexMerge2",
-        "w_drivecFifo1",
-        "w_driveMutexMerge12",
-        "w_driveMutexMerge12Delay_1",
-        "w_driveMutexMerge11",
-        "w_wbSplitterDriveToMutexMerge1_1",
-        "w_drive_grf",
-        "o_drive_grf"
-      ],
-      "instances": [
-        "MutexMerge2",
-        "cFifo1",
-        "bitOperationDelay",
-        "MutexMerge1",
-        "toGrfDelay"
-      ],
-      "related_flows": [
-        "flow_001_wb_i_driveMutexMerge2",
-        "flow_000_wb_i_lsuDriveToWB"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
-        },
-        {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_001_wb_i_driveMutexMerge2.json"
-        },
-        {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json"
-        }
-      ],
-      "id": "semantic:module:wb:structural_responsibility:002"
+      "id": "semantic:module:wb:component_role:001"
     },
     {
       "claim_type": "component_role",
@@ -211,8 +184,8 @@
         "module": "wb"
       },
       "subject": "Selector1",
-      "summary": "Central fan-out and data routing component for LSU write-back to PRF, PC, ReadGRF, and GRF paths.",
-      "explanation": "Selector1 receives w_drive1Selector1 (from delay1) and produces five output events: o_drive_prf, o_wbDriveReadGRF, w_driveMutexMerge11, w_driveMutexMerge2, and w_drive_pc. It also outputs data: o_pcData_32, o_prfData_40, w_dataReadGRF_87, w_grf1Data_74, and w_grf2Data_87. The free signal i_wbFreeFROMPrf connects to its i_freeNext0, and i_wbFreeFromReadGRF connects to i_freeNext3. This indicates it handles back-pressure for PRF and ReadGRF paths.",
+      "summary": "多路选择器，将数据分发到PRF、PC、GRF读取和GRF写入路径。",
+      "explanation": "Selector1接收来自Splitter路径的驱动事件，产生五个输出驱动事件，分别导向PRF、PC、GRF读取、MutexMerge1和MutexMerge2。它输出多个数据包，包括PRF数据、PC数据和GRF相关数据。",
       "signals": [
         "w_drive1Selector1",
         "o_drive_prf",
@@ -224,9 +197,7 @@
         "o_prfData_40",
         "w_dataReadGRF_87",
         "w_grf1Data_74",
-        "w_grf2Data_87",
-        "i_wbFreeFROMPrf",
-        "i_wbFreeFromReadGRF"
+        "w_grf2Data_87"
       ],
       "instances": [
         "Selector1"
@@ -239,15 +210,46 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
-      "id": "semantic:module:wb:component_role:001"
+      "id": "semantic:module:wb:component_role:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "Selector2",
+      "summary": "选择器，将数据分发到XPSR路径。",
+      "explanation": "Selector2接收来自Splitter路径的驱动事件，产生一个输出驱动事件o_drive_xpsr，并输出XPSR数据o_xpsrData_4。",
+      "signals": [
+        "w_drive1Selector2",
+        "o_drive_xpsr",
+        "o_xpsrData_4"
+      ],
+      "instances": [
+        "Selector2"
+      ],
+      "related_flows": [
+        "flow_000_wb_i_lsuDriveToWB"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:component_role:003"
     },
     {
       "claim_type": "component_role",
@@ -256,8 +258,8 @@
         "module": "wb"
       },
       "subject": "MutexMerge1",
-      "summary": "Arbiter for GRF write data from three sources: LSU path (Selector1), mutex path (cFifo1/bitOperationDelay), and PC path (wbSplitter).",
-      "explanation": "MutexMerge1 receives three input events: w_driveMutexMerge11 (from Selector1), w_driveMutexMerge12Delay_1 (from bitOperationDelay), and w_wbSplitterDriveToMutexMerge1_1 (from wbSplitter). It also receives three data inputs: w_grf1Data_74, w_prodata_74, and w_wbSplitterToMutexMerge1Data_74. Its output is w_drive_grf and o_grfData_74. The free signal i_wbFreeFromGRF connects to its i_freeNext. This suggests it arbitrates between the three paths for GRF write access.",
+      "summary": "三输入互斥合并器，合并来自Selector1、位操作延迟和wbSplitter的GRF写入数据。",
+      "explanation": "MutexMerge1接收三个驱动事件和对应的数据，合并后输出一个驱动事件w_drive_grf和GRF数据o_grfData_74。",
       "signals": [
         "w_driveMutexMerge11",
         "w_driveMutexMerge12Delay_1",
@@ -266,8 +268,7 @@
         "w_prodata_74",
         "w_wbSplitterToMutexMerge1Data_74",
         "w_drive_grf",
-        "o_grfData_74",
-        "i_wbFreeFromGRF"
+        "o_grfData_74"
       ],
       "instances": [
         "MutexMerge1"
@@ -278,22 +279,116 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "MutexMerge2",
+      "summary": "双输入互斥合并器，合并来自外部和Selector1的GRF读取数据。",
+      "explanation": "MutexMerge2接收i_driveMutexMerge2和w_driveMutexMerge2两个驱动事件，以及对应的数据，合并后输出到cFifo1。",
+      "signals": [
+        "i_driveMutexMerge2",
+        "w_driveMutexMerge2",
+        "w_data2_64",
+        "w_dataToMutexMerge2_64",
+        "w_drivecFifo1"
+      ],
+      "instances": [
+        "MutexMerge2"
+      ],
+      "related_flows": [
+        "flow_001_wb_i_driveMutexMerge2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:component_role:005"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "wbSplitter",
+      "summary": "将PC驱动事件分路，一路输出到PC，另一路反馈到MutexMerge1。",
+      "explanation": "wbSplitter接收来自Selector1的PC驱动事件，产生两个输出：o_drive_pc和w_wbSplitterDriveToMutexMerge1_1，后者用于将PC写入操作也作为GRF写入的一个来源。",
+      "signals": [
+        "w_drive_pc",
+        "o_drive_pc",
+        "w_wbSplitterDriveToMutexMerge1_1"
+      ],
+      "instances": [
+        "wbSplitter"
+      ],
+      "related_flows": [
+        "flow_000_wb_i_lsuDriveToWB"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json"
-        },
-        {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_001_wb_i_driveMutexMerge2.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
-      "id": "semantic:module:wb:component_role:002"
+      "id": "semantic:module:wb:component_role:006"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "cFifo1",
+      "summary": "FIFO缓冲，用于MutexMerge2输出到位操作延迟路径的缓冲。",
+      "explanation": "cFifo1接收来自MutexMerge2的驱动事件，缓冲后输出到bitOperationDelay，用于后续的位操作处理。",
+      "signals": [
+        "w_drivecFifo1",
+        "w_driveMutexMerge12"
+      ],
+      "instances": [
+        "cFifo1"
+      ],
+      "related_flows": [
+        "flow_001_wb_i_driveMutexMerge2"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:component_role:007"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -302,8 +397,8 @@
         "module": "wb"
       },
       "subject": "o_WBdataToGRF_8",
-      "summary": "Provides an 8-bit data slice from the ReadGRF path to the GRF, likely for register read data forwarding.",
-      "explanation": "This assignment extracts bits [85:78] from w_dataReadGRF_87. w_dataReadGRF_87 is an output of Selector1. The signal o_WBdataToGRF_8 is listed as a payload for both o_drive_grf and o_wbDriveReadGRF events. This suggests it carries a small data field (e.g., a register address or status) for the GRF read operation.",
+      "summary": "从GRF读取数据包中提取8位数据，用于GRF写入。",
+      "explanation": "赋值从w_dataReadGRF_87的[85:78]位提取数据，作为o_WBdataToGRF_8输出，用于GRF写入操作。",
       "signals": [
         "o_WBdataToGRF_8",
         "w_dataReadGRF_87"
@@ -319,12 +414,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "knowledge_ir/modules/wb.json"
-        },
-        {
-          "source": "event_payload_contracts",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
       "id": "semantic:module:wb:assignment_interpretation:001"
@@ -336,16 +426,15 @@
         "module": "wb"
       },
       "subject": "w_dataToMutexMerge2_64",
-      "summary": "Combines GRF read-back data with a delayed data field for the mutex merge path.",
-      "explanation": "This assignment concatenates the upper 32 bits of i_dataFromGRF_64 with the upper 32 bits of w_data1_64. w_data1_64 is derived from w_dataReadGRF_87[77:14]. This suggests that the mutex merge path (MutexMerge2) receives a 64-bit data word that is a mix of fresh GRF data and delayed LSU data.",
+      "summary": "组合来自GRF和内部数据，形成MutexMerge2的输入数据。",
+      "explanation": "赋值将i_dataFromGRF_64的高32位和w_data1_64的高32位拼接，形成64位数据，用于MutexMerge2的输入。",
       "signals": [
         "w_dataToMutexMerge2_64",
         "i_dataFromGRF_64",
         "w_data1_64"
       ],
       "related_assignments": [
-        "23",
-        "12"
+        "23"
       ],
       "related_flows": [
         "flow_001_wb_i_driveMutexMerge2"
@@ -355,15 +444,40 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "knowledge_ir/modules/wb.json"
-        },
-        {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
       "id": "semantic:module:wb:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "w_prodata_74",
+      "summary": "组合GRF读取数据、程序计数器和控制位，形成MutexMerge1的输入数据。",
+      "explanation": "赋值将w_dataReadGRF_87的部分位、r_pro_32、32位零和w_dataReadGRF_87的控制位拼接，形成74位数据，用于MutexMerge1的输入。",
+      "signals": [
+        "w_prodata_74",
+        "w_dataReadGRF_87",
+        "r_pro_32"
+      ],
+      "related_assignments": [
+        "24"
+      ],
+      "related_flows": [
+        "flow_000_wb_i_lsuDriveToWB"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -371,42 +485,66 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "Free signals (i_wbFreeFrom*) allow downstream consumers to stall or release write-back events, indicating a credit-based or ready/valid flow control.",
-      "subject": "Free signal back-pressure",
-      "explanation": "Each output drive event (o_drive_grf, o_drive_prf, o_drive_xpsr, o_wbDriveReadGRF) has a corresponding free input (i_wbFreeFromGRF, i_wbFreeFROMPrf, i_wbFreeFromXpsr, i_wbFreeFromReadGRF). The free signals connect to the i_freeNext ports of Selector1, Selector2, MutexMerge1, and wbSplitter. This pattern suggests that the write-back stage uses a handshake where the downstream module asserts free when it can accept new data, and the write-back stage only drives events when free is asserted.",
+      "summary": "五个输出驱动事件分别对应GRF、PC、PRF、XPSR和GRF读取的写回操作。",
+      "subject": "写回驱动事件组",
+      "explanation": "每个输出驱动事件都关联一个或多个数据输出，表明该事件触发对应目标的写回操作。自由信号用于下游模块释放资源。",
       "signals": [
-        "i_wbFreeFromGRF",
-        "i_wbFreeFROMPrf",
-        "i_wbFreeFromXpsr",
-        "i_wbFreeFromReadGRF",
-        "i_wbFreeFromIF",
-        "o_WBfreeGRF",
-        "o_free"
-      ],
-      "related_payload": [
         "o_drive_grf",
+        "o_drive_pc",
         "o_drive_prf",
         "o_drive_xpsr",
         "o_wbDriveReadGRF"
+      ],
+      "related_payload": [
+        "o_grfData_74",
+        "o_pcData_32",
+        "o_prfData_40",
+        "o_xpsrData_4",
+        "o_WBdataToGRF_8"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
-        },
-        {
-          "source": "event_payload_contracts",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
       "id": "semantic:module:wb:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "summary": "自由信号用于协调下游模块的释放，确保写回操作完成。",
+      "subject": "自由信号组",
+      "explanation": "模块接收来自PRF、GRF、IF、ReadGRF和XPSR的自由信号，并输出GRF和全局自由信号，用于控制数据流。",
+      "signals": [
+        "i_wbFreeFROMPrf",
+        "i_wbFreeFromGRF",
+        "i_wbFreeFromIF",
+        "i_wbFreeFromReadGRF",
+        "i_wbFreeFromXpsr",
+        "o_WBfreeGRF",
+        "o_free"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -414,29 +552,19 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "The manual should emphasize the arbitration between the LSU write-back path and the mutex-merged path, and the pipeline delays (delay1, delay8, toGrfDelay, bitOperationDelay) that create timing separation.",
-      "subject": "Write-back arbitration and timing",
-      "explanation": "The module has two main input paths (LSU and mutex) that converge at MutexMerge1 for GRF writes. The delays (delay1, delay8) between Splitter and Selectors create a pipeline stage. The cFifo1 and bitOperationDelay in the mutex path add further latency. The documentation should explain how these delays ensure correct write ordering and avoid data hazards.",
+      "summary": "文档应重点描述从输入事件到输出事件的完整数据流，以及各组件（Splitter、Selector、MutexMerge、FIFO）的角色和交互。",
+      "subject": "写回数据流和组件交互",
+      "explanation": "模块的核心功能是数据分发和合并，理解数据流和组件交互是理解模块行为的关键。",
       "signals": [
         "i_lsuDriveToWB",
-        "i_driveMutexMerge2",
-        "w_driveSelector1",
-        "w_driveSelector2",
-        "w_drivecFifo1",
-        "w_driveMutexMerge12Delay_1",
-        "w_drive_grf"
+        "i_data_103",
+        "o_drive_grf",
+        "o_grfData_74"
       ],
       "instances": [
         "Splitter",
         "Selector1",
-        "Selector2",
-        "MutexMerge1",
-        "MutexMerge2",
-        "cFifo1",
-        "delay1",
-        "delay8",
-        "toGrfDelay",
-        "bitOperationDelay"
+        "MutexMerge1"
       ],
       "related_flows": [
         "flow_000_wb_i_lsuDriveToWB",
@@ -444,42 +572,51 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "internal_event_flow_refs",
-          "path": "ai_context/modules/wb/flows/flow_001_wb_i_driveMutexMerge2.json"
-        },
-        {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
       "id": "semantic:module:wb:documentation_focus:001"
-    }
-  ],
-  "evidence_gaps": [
+    },
     {
-      "field": "i_data_103 payload structure",
-      "reason": "The 103-bit input data is split by Splitter, but the exact bit-field mapping to the output data paths (o_pcData_32, o_prfData_40, o_grfData_74, o_xpsrData_4) is not fully specified in the compact context. The assign_dependencies show some bit-slicing (e.g., w_temp1_98 decomposition), but the complete mapping from i_data_103 to the output data signals is unclear.",
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "summary": "文档应解释位操作延迟路径和GRF读取路径的详细行为。",
+      "subject": "位操作和GRF读取路径",
+      "explanation": "位操作路径涉及cFifo1和bitOperationDelay，GRF读取路径涉及MutexMerge2和i_dataFromGRF_64，这些路径的详细行为需要进一步解释。",
+      "signals": [
+        "i_dataFromGRF_64",
+        "w_driveMutexMerge12Delay_1",
+        "o_bitOpOver_1"
+      ],
+      "instances": [
+        "cFifo1",
+        "MutexMerge2"
+      ],
+      "related_flows": [
+        "flow_001_wb_i_driveMutexMerge2"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
-          "source": "interface.data_ports",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "knowledge_ir/modules/wb.json"
         },
         {
-          "source": "assign_dependencies",
-          "path": "knowledge_ir/modules/wb.json"
-        },
-        {
-          "source": "key_component_connections",
-          "path": "knowledge_ir/modules/wb.json"
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
-      ]
+      ],
+      "id": "semantic:module:wb:documentation_focus:002"
     }
-  ]
+  ],
+  "evidence_gaps": []
 }

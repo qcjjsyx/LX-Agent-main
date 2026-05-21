@@ -31,6 +31,7 @@ def run_knowledge_tool(
     semantic_model: str = "",
     semantic_base_url: str = "",
     semantic_api_key: str = "",
+    timeout: int | None = None,
 ) -> str:
     """Run the new Knowledge IR -> Manual Context pipeline.
 
@@ -91,17 +92,18 @@ def run_knowledge_tool(
     if semantic_api_key.strip():
         cmd.extend(["--semantic-api-key", semantic_api_key.strip()])
 
+    pipeline_timeout = timeout or env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 600)
     try:
         result = subprocess.run(
             cmd,
             cwd=str(root),
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=pipeline_timeout,
             env=package_env(),
         )
     except subprocess.TimeoutExpired:
-        return "Knowledge Tool execution failed: execution timed out."
+        return f"Knowledge Tool execution failed: execution timed out after {pipeline_timeout}s."
     except Exception as exc:
         return f"Knowledge Tool execution failed: {exc}"
 
@@ -262,6 +264,17 @@ def read_optional_json(path: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", default=".")
@@ -275,6 +288,7 @@ def main() -> int:
     parser.add_argument("--semantic-model", default="")
     parser.add_argument("--semantic-base-url", default="")
     parser.add_argument("--semantic-api-key", default="")
+    parser.add_argument("--timeout", type=int, default=0, help="Timeout in seconds for knowledge.pipeline. Defaults to RTL_MANUAL_KNOWLEDGE_TIMEOUT or 600.")
     args = parser.parse_args()
 
     print(
@@ -289,6 +303,7 @@ def main() -> int:
             semantic_model=args.semantic_model,
             semantic_base_url=args.semantic_base_url,
             semantic_api_key=args.semantic_api_key,
+            timeout=args.timeout or None,
         )
     )
     return 0

@@ -75,6 +75,10 @@ REFERENCE_FILES = (
 PROJECT_EVIDENCE_MODE = "project"
 READING_PATH_EVIDENCE_MODE = "reading_path"
 VALID_AUDIENCES = {"newcomer", "maintainer", "reviewer"}
+SOURCE_REVIEW_MAX_MODULES = 20
+SOURCE_REVIEW_MAX_TARGETS_PER_MODULE = 8
+SOURCE_REVIEW_MAX_SNIPPET_LINES = 180
+SOURCE_REVIEW_MAX_SNIPPET_CHARS = 16000
 
 
 def should_handle_manual_workflow(user_input, state):
@@ -238,6 +242,8 @@ def _run_current_stage(state, base_dir, client, model, user_input, event_logger=
         return _run_knowledge_stage(state, event_logger)
     if stage == "evidence":
         return _run_evidence_stage(state, event_logger)
+    if stage == "source_review":
+        return _run_source_review_stage(state, client, model, event_logger)
     if stage == "outline":
         return _run_outline_stage(state, event_logger)
     if stage == "chapter_plan":
@@ -298,8 +304,12 @@ def _ensure_state(state):
             "manual_summary": {},
             "review_report": "",
             "review_output_path": "",
+            "source_review_report": {},
+            "source_review_output_path": "",
+            "manual_needs_regenerate": False,
             "last_error": "",
             "manual_output_path": "",
+            "manual_output_override": "",
             "auto_run": True,
             "force_regenerate": False,
             "semantic_enrichment": True,
@@ -323,8 +333,12 @@ def _ensure_state(state):
     state.setdefault("manual_summary", {})
     state.setdefault("review_report", "")
     state.setdefault("review_output_path", "")
+    state.setdefault("source_review_report", {})
+    state.setdefault("source_review_output_path", "")
+    state.setdefault("manual_needs_regenerate", False)
     state.setdefault("last_error", "")
     state.setdefault("manual_output_path", "")
+    state.setdefault("manual_output_override", "")
     state.setdefault("auto_run", True)
     state.setdefault("force_regenerate", False)
     state["semantic_enrichment"] = True
@@ -564,10 +578,11 @@ def _run_reference_stage(state, base_dir, event_logger=None):
         "2. Parser Tool：读取 `project_root/rtl_inputs`，生成 `parser_pipeline_rtl/`。",
         "3. Knowledge Tool：读取 parser 产物，生成 `knowledge_ir/<top_module>/` 与 `manual_context/<top_module>/`。",
         "4. Evidence：建立 Manual Context 主证据索引。",
-        "5. Outline：根据证据生成完整手册目录。",
-        "6. Chapter Plan：生成每章大致内容与证据来源。",
-        "7. Manual：生成 Markdown 代码手册正文。",
-        "8. Review：审查手册是否越过证据边界。",
+        "5. Source Review：对需要 RTL 源码复核的关键项做受控 AI 复核并写回 Manual Context。",
+        "6. Outline：根据证据生成完整手册目录。",
+        "7. Chapter Plan：生成每章大致内容与证据来源。",
+        "8. Manual：生成 Markdown 代码手册正文。",
+        "9. Review：审查手册是否越过公开输出边界。",
         "",
         "reference 文件结果：",
     ]
@@ -732,6 +747,7 @@ def _knowledge_artifacts_ready(state):
         manual_context_dir / "evidence_index.json",
         manual_context_dir / "validation_report.json",
         manual_context_dir / "modules" / state["top_module"] / "module_context.json",
+        manual_context_dir / "modules" / state["top_module"] / "module_doc_card.json",
         manual_context_dir / "modules" / state["top_module"] / "interfaces.json",
         manual_context_dir / "modules" / state["top_module"] / "gaps.json",
     ]
@@ -864,34 +880,16 @@ def _run_knowledge_stage(state, event_logger=None):
 
 
 def _run_evidence_stage(state, event_logger=None):
-    manual_context_dir = Path(state["manual_context_dir"])
-    manifest_path = manual_context_dir / "manifest.json"
-    project_context_path = manual_context_dir / "project_context.json"
-    system_topology_path = manual_context_dir / "system_topology.json"
-    interface_index_path = manual_context_dir / "interface_index.json"
-    flow_index_path = manual_context_dir / "flow_index.json"
-    evidence_index_path = manual_context_dir / "evidence_index.json"
-    validation_report_path = manual_context_dir / "validation_report.json"
-
-    missing = [
-        str(path)
-        for path in (
-            manifest_path,
-            project_context_path,
-            system_topology_path,
-            interface_index_path,
-            flow_index_path,
-            evidence_index_path,
-            validation_report_path,
-        )
-        if not path.exists()
-    ]
-    if missing:
+    try:
+        digest = _load_manual_context_digest(state)
+    except FileNotFoundError as exc:
+        missing = [item for item in str(exc).splitlines() if item]
+        manual_context_dir = Path(state.get("manual_context_dir", ""))
         _log_event(
             event_logger,
             "manual_evidence_missing",
             skill=MANUAL_SKILL_NAME,
-            missing=[str(item) for item in missing],
+            missing=missing,
         )
         state["last_error"] = "\n".join(missing)
         return _format_reply(
@@ -903,6 +901,68 @@ def _run_evidence_stage(state, event_logger=None):
                 *[f"- `{item}`" for item in missing],
             ],
         )
+    except Exception as exc:
+        state["last_error"] = str(exc)
+        return _format_reply(
+            state,
+            "阶段4：证据读取失败",
+            [
+                "Manual Context 证据读取时发生错误。",
+                "",
+                "```text",
+                str(exc),
+                "```",
+            ],
+        )
+
+    manual_context_dir = Path(state["manual_context_dir"])
+    state["evidence_digest"] = digest
+    _log_event(
+        event_logger,
+        "manual_evidence_indexed",
+        skill=MANUAL_SKILL_NAME,
+        evidence_mode=digest.get("evidence_mode"),
+        counts=digest.get("counts"),
+        manual_context_dir=str(manual_context_dir),
+    )
+    _mark_stage_done(state, "evidence")
+    state["stage"] = "source_review"
+
+    return _format_reply(
+        state,
+        "阶段4：证据读取完成",
+        [
+            "我已建立 Manual Context 主证据索引。下一阶段会对需要源码复核的关键项做受控 RTL 读取并写回 Manual Context。",
+            "",
+            _format_digest(digest),
+            "",
+            _next_stage_hint(state, "阶段5：AI 源码复核"),
+        ],
+    )
+
+
+def _load_manual_context_digest(state):
+    manual_context_dir = Path(state["manual_context_dir"])
+    manifest_path = manual_context_dir / "manifest.json"
+    project_context_path = manual_context_dir / "project_context.json"
+    system_topology_path = manual_context_dir / "system_topology.json"
+    interface_index_path = manual_context_dir / "interface_index.json"
+    flow_index_path = manual_context_dir / "flow_index.json"
+    evidence_index_path = manual_context_dir / "evidence_index.json"
+    validation_report_path = manual_context_dir / "validation_report.json"
+
+    required_paths = (
+        manifest_path,
+        project_context_path,
+        system_topology_path,
+        interface_index_path,
+        flow_index_path,
+        evidence_index_path,
+        validation_report_path,
+    )
+    missing = [str(path) for path in required_paths if not path.exists()]
+    if missing:
+        raise FileNotFoundError("\n".join(missing))
 
     manifest = _read_json(manifest_path)
     project_context = _read_json(project_context_path)
@@ -922,30 +982,602 @@ def _run_evidence_stage(state, event_logger=None):
         validation_report=validation_report,
         state=state,
     )
+    return digest
 
-    state["evidence_digest"] = digest
-    _log_event(
-        event_logger,
-        "manual_evidence_indexed",
-        skill=MANUAL_SKILL_NAME,
-        evidence_mode=digest.get("evidence_mode"),
-        counts=digest.get("counts"),
-        manual_context_dir=str(manual_context_dir),
-    )
-    _mark_stage_done(state, "evidence")
+
+def _run_source_review_stage(state, client, model, event_logger=None):
+    digest = state.get("evidence_digest") or _load_manual_context_digest(state)
+    report_path = _source_review_output_path(state)
+    if report_path.exists() and report_path.is_file() and not _force_regenerate(state):
+        report = _read_json(report_path)
+        state["source_review_report"] = report
+        state["source_review_output_path"] = str(report_path)
+        state["evidence_digest"] = _load_manual_context_digest(state)
+        state["manual_needs_regenerate"] = True
+        _mark_stage_done(state, "source_review")
+        state["stage"] = "outline"
+        return _format_reply(
+            state,
+            "阶段5：AI 源码复核已跳过",
+            [
+                "检测到已有源码复核报告，本次复用并重新读取 Manual Context。",
+                f"源码复核报告：`{report_path}`",
+                _format_source_review_summary(report),
+                "",
+                _next_stage_hint(state, "阶段6：根据证据生成完整手册目录"),
+            ],
+        )
+
+    try:
+        report = _build_source_review_report(state, digest, client, model, event_logger)
+    except Exception as exc:
+        state["last_error"] = str(exc)
+        return _format_reply(
+            state,
+            "阶段5：AI 源码复核失败",
+            [
+                "源码复核阶段失败，流程已停在 `source_review` 阶段。",
+                "",
+                "```text",
+                str(exc),
+                "```",
+            ],
+        )
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(report_path, report)
+    state["source_review_report"] = report
+    state["source_review_output_path"] = str(report_path)
+    state["evidence_digest"] = _load_manual_context_digest(state)
+    state["manual_needs_regenerate"] = True
+    _mark_stage_done(state, "source_review")
     state["stage"] = "outline"
 
+    _log_event(
+        event_logger,
+        "manual_source_review_complete",
+        skill=MANUAL_SKILL_NAME,
+        report_path=str(report_path),
+        reviewed_modules=report.get("reviewed_modules", 0),
+        claim_count=report.get("claim_count", 0),
+        unresolved_count=report.get("unresolved_count", 0),
+    )
     return _format_reply(
         state,
-        "阶段4：证据读取完成",
+        "阶段5：AI 源码复核完成",
         [
-            "我已建立 Manual Context 主证据索引。后续目录、章节规划和手册内容只会基于这些证据生成。",
+            "源码复核结论已结构化写回 Manual Context，后续手册和 review 文档会从这些字段读取。",
+            f"源码复核报告：`{report_path}`",
+            _format_source_review_summary(report),
             "",
-            _format_digest(digest),
-            "",
-            _next_stage_hint(state, "阶段5：根据证据生成完整手册目录"),
+            _next_stage_hint(state, "阶段6：根据证据生成完整手册目录"),
         ],
     )
+
+
+def _source_review_output_path(state):
+    return Path(state["manual_context_dir"]) / "source_review_report.json"
+
+
+def _build_source_review_report(state, digest, client, model, event_logger=None):
+    targets = _collect_source_review_targets(digest)
+    reports = []
+    for target in targets:
+        _log_event(
+            event_logger,
+            "manual_source_review_module_start",
+            skill=MANUAL_SKILL_NAME,
+            module=target.get("module"),
+            target_count=len(target.get("items", [])),
+        )
+        module_report = _review_source_for_module(state, target, client, model)
+        _write_source_review_module_report(state, module_report)
+        reports.append(module_report)
+        _log_event(
+            event_logger,
+            "manual_source_review_module_end",
+            skill=MANUAL_SKILL_NAME,
+            module=target.get("module"),
+            status=module_report.get("status"),
+            claim_count=len(module_report.get("claims", [])),
+        )
+
+    root_report = {
+        "schema": "manual_context_source_review_report",
+        "schema_version": "0.1",
+        "top_module": digest.get("top_module", state.get("top_module", "")),
+        "policy": {
+            "scope": "priority_flagged_items",
+            "max_modules": SOURCE_REVIEW_MAX_MODULES,
+            "max_targets_per_module": SOURCE_REVIEW_MAX_TARGETS_PER_MODULE,
+            "allowed_slices": [
+                "module declaration",
+                "related assign lines",
+                "related instance connections",
+                "related always snippets",
+            ],
+            "promotion_rule": "source review may create ai_inferred or evidence_gap claims only",
+        },
+        "target_count": len(targets),
+        "reviewed_modules": len(reports),
+        "claim_count": sum(len(item.get("claims", [])) for item in reports),
+        "unresolved_count": sum(len(item.get("open_questions", [])) for item in reports),
+        "modules": [
+            {
+                "module": item.get("module", ""),
+                "status": item.get("status", ""),
+                "source_file": item.get("source_file", ""),
+                "target_count": len(item.get("targets", [])),
+                "claim_count": len(item.get("claims", [])),
+                "open_question_count": len(item.get("open_questions", [])),
+                "report_file": f"modules/{safe_filename(item.get('module', ''))}/source_review_report.json",
+            }
+            for item in reports
+        ],
+    }
+    _update_source_review_manifest(state, reports)
+    return root_report
+
+
+def _collect_source_review_targets(digest):
+    top_module = digest.get("top_module", "")
+    direct_modules = set(_claim_value(digest.get("project_context", {}).get("top_level", {}).get("direct_modules")) or [])
+    candidates = []
+    for module in digest.get("modules", []):
+        module_name = module.get("module_name", "")
+        policy = module.get("page_policy", {})
+        detail_level = policy.get("detail_level", "standard")
+        is_priority_module = (
+            module_name == top_module
+            or module_name in direct_modules
+            or detail_level == "detailed"
+        )
+        if not is_priority_module:
+            continue
+        items = _collect_module_source_review_items(digest, module)
+        if not items:
+            continue
+        priority = 0 if module_name == top_module else 1 if module_name in direct_modules else 2
+        candidates.append({
+            "module": module_name,
+            "priority": priority,
+            "source_file": _first_source_file_from_module(module),
+            "items": items[:SOURCE_REVIEW_MAX_TARGETS_PER_MODULE],
+            "page_policy": policy,
+        })
+    candidates.sort(key=lambda item: (item.get("priority", 99), item.get("module", "")))
+    return candidates[:SOURCE_REVIEW_MAX_MODULES]
+
+
+def _collect_module_source_review_items(digest, module):
+    module_name = module.get("module_name", "")
+    items = []
+
+    summary = module.get("responsibility", {}).get("short_summary", {})
+    if _claim_requires_source_review(summary):
+        items.append(_source_review_item("module_responsibility", module_name, summary))
+
+    for claim in module.get("responsibility", {}).get("responsibility_claims", []):
+        if _claim_requires_source_review(claim):
+            items.append(_source_review_item("responsibility_claim", module_name, claim))
+
+    for gap in module.get("evidence_gaps", []):
+        items.append(_source_review_item("evidence_gap", module_name, gap))
+    for gap in module.get("gap_file", {}).get("gaps", []):
+        items.append(_source_review_item("evidence_gap", module_name, gap))
+    for question in module.get("review_questions", []):
+        items.append(_source_review_item("review_question", module_name, question))
+
+    for flow in _load_module_flow_contexts(digest, module):
+        semantic = flow.get("semantic_meaning", {})
+        if _claim_requires_source_review(semantic) or flow.get("gaps"):
+            items.append(_source_review_item("flow", module_name, {
+                "subject": flow.get("flow_id", ""),
+                "value": semantic.get("value", flow.get("title", "")),
+                "explanation": semantic.get("explanation", ""),
+                "signals": [flow.get("trigger_event", {}).get("signal", "")],
+                "instances": [],
+                "field": flow.get("flow_id", ""),
+                "reason": "; ".join(_plain(gap.get("reason", "")) for gap in flow.get("gaps", []) if isinstance(gap, dict)),
+                "requires_rtl_source_review": semantic.get("requires_rtl_source_review", False),
+                "review_status": semantic.get("review_status", ""),
+                "evidence_refs": flow.get("evidence_refs", []),
+            }))
+
+    deduped = []
+    seen = set()
+    for item in items:
+        key = (item.get("kind"), item.get("subject"), item.get("reason"), item.get("summary"))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _claim_requires_source_review(claim):
+    if not isinstance(claim, dict):
+        return False
+    return (
+        bool(claim.get("requires_rtl_source_review"))
+        or claim.get("review_status") == "needs_review"
+        or claim.get("certainty") == "evidence_gap"
+    )
+
+
+def _source_review_item(kind, module_name, item):
+    item = item if isinstance(item, dict) else {"reason": str(item)}
+    return {
+        "kind": kind,
+        "module": module_name,
+        "subject": _plain(item.get("subject") or item.get("field") or item.get("semantic_claim_id") or kind),
+        "summary": _plain(item.get("value") or item.get("summary") or item.get("question") or ""),
+        "explanation": _plain(item.get("explanation") or ""),
+        "reason": _plain(item.get("reason") or item.get("question") or ""),
+        "signals": [value for value in item.get("signals", []) if value],
+        "instances": [value for value in item.get("instances", []) if value],
+        "evidence_refs": item.get("evidence_refs", []),
+        "requires_rtl_source_review": bool(item.get("requires_rtl_source_review")),
+        "review_status": item.get("review_status", ""),
+    }
+
+
+def _review_source_for_module(state, target, client, model):
+    module_name = target.get("module", "")
+    source_file = target.get("source_file", "")
+    source_path = _resolve_source_path(state, source_file)
+    if not source_path.exists():
+        return _source_review_fallback_report(
+            target,
+            status="source_missing",
+            reason=f"RTL source file not found: {source_file}",
+        )
+
+    source_text = source_path.read_text(encoding="utf-8", errors="replace")
+    source_lines = source_text.splitlines()
+    tokens = _source_review_tokens(target)
+    snippets = _extract_rtl_review_snippets(source_lines, module_name, tokens)
+    if not snippets:
+        return _source_review_fallback_report(
+            target,
+            status="no_relevant_slice",
+            reason="No whitelisted source slice matched the flagged items.",
+            source_refs=[{"file": source_file, "line_start": 1, "line_end": min(len(source_lines), 1)}],
+        )
+
+    if client is None or model is None:
+        return _source_review_fallback_report(
+            target,
+            status="model_unavailable",
+            reason="No model client is available for AI source review.",
+            source_refs=_snippet_source_refs(source_file, snippets),
+        )
+
+    messages = _build_source_review_messages(module_name, target.get("items", []), source_file, snippets)
+    try:
+        response = client.chat.completions.create(model=model, messages=messages)
+        raw = response.choices[0].message.content
+        parsed = _parse_source_review_response(raw)
+    except Exception as exc:
+        return _source_review_fallback_report(
+            target,
+            status="model_failed",
+            reason=str(exc),
+            source_refs=_snippet_source_refs(source_file, snippets),
+        )
+
+    claims, open_questions = _normalize_source_review_payload(parsed, target, source_file, snippets)
+    status = "reviewed" if claims else "reviewed_without_claims"
+    return {
+        "schema": "manual_context_module_source_review_report",
+        "schema_version": "0.1",
+        "module": module_name,
+        "status": status,
+        "source_file": source_file,
+        "targets": target.get("items", []),
+        "source_refs": _snippet_source_refs(source_file, snippets),
+        "claims": claims,
+        "open_questions": open_questions,
+        "raw_model_chars": len(raw or ""),
+    }
+
+
+def _source_review_fallback_report(target, status, reason, source_refs=None):
+    module_name = target.get("module", "")
+    refs = source_refs or []
+    claim = {
+        "subject": "source_review",
+        "summary": "源码复核未形成可写入公开手册的结论。",
+        "explanation": reason,
+        "certainty": "evidence_gap",
+        "source_layers": ["source_review"],
+        "signals": _source_review_tokens(target)[:20],
+        "instances": [],
+        "source_refs": refs,
+        "evidence_refs": _target_evidence_refs(target),
+        "review_status": "needs_review",
+    }
+    return {
+        "schema": "manual_context_module_source_review_report",
+        "schema_version": "0.1",
+        "module": module_name,
+        "status": status,
+        "source_file": target.get("source_file", ""),
+        "targets": target.get("items", []),
+        "source_refs": refs,
+        "claims": [claim],
+        "open_questions": [
+            {
+                "subject": "source_review",
+                "question": reason,
+                "source_refs": refs,
+                "evidence_refs": _target_evidence_refs(target),
+            }
+        ],
+    }
+
+
+def _resolve_source_path(state, source_file):
+    source_file = str(source_file or "")
+    path = Path(source_file)
+    if path.is_absolute():
+        return path
+    return Path(state.get("project_root", ".")) / path
+
+
+def _first_source_file_from_module(module):
+    source_files = module.get("source_files", [])
+    if source_files:
+        return source_files[0]
+    context = module.get("source_review_context", {})
+    return context.get("rtl_file", "")
+
+
+def _source_review_tokens(target):
+    tokens = set()
+    for item in target.get("items", []):
+        for key in ("signals", "instances"):
+            for value in item.get(key, []) or []:
+                if value:
+                    tokens.add(str(value))
+        for key in ("subject", "summary", "explanation", "reason"):
+            for match in re.findall(r"\b[A-Za-z_][A-Za-z0-9_$]*\b", item.get(key, "") or ""):
+                if len(match) > 1 and match not in {"review", "source", "module", "flow"}:
+                    tokens.add(match)
+    tokens.add(target.get("module", ""))
+    return sorted(token for token in tokens if token)
+
+
+def _extract_rtl_review_snippets(lines, module_name, tokens):
+    ranges = []
+    module_range = _find_module_declaration_range(lines, module_name)
+    if module_range:
+        ranges.append(module_range)
+
+    token_set = set(tokens)
+    for index, line in enumerate(lines):
+        if not _line_matches_tokens(line, token_set):
+            continue
+        start = max(1, index - 2 + 1)
+        end = min(len(lines), index + 3)
+        if "always" in line:
+            end = min(len(lines), index + 24)
+        ranges.append((start, end))
+
+    merged = _merge_line_ranges(ranges)
+    snippets = []
+    total_lines = 0
+    total_chars = 0
+    for start, end in merged:
+        if total_lines >= SOURCE_REVIEW_MAX_SNIPPET_LINES or total_chars >= SOURCE_REVIEW_MAX_SNIPPET_CHARS:
+            break
+        excerpt_lines = []
+        for number in range(start, end + 1):
+            excerpt_lines.append(f"{number}: {lines[number - 1]}")
+        text = "\n".join(excerpt_lines)
+        snippets.append({"line_start": start, "line_end": end, "text": text})
+        total_lines += end - start + 1
+        total_chars += len(text)
+    return snippets
+
+
+def _find_module_declaration_range(lines, module_name):
+    pattern = re.compile(rf"\bmodule\s+{re.escape(module_name)}\b")
+    for index, line in enumerate(lines):
+        if not pattern.search(line):
+            continue
+        end = index + 1
+        while end < len(lines) and end - index < 120:
+            if ");" in lines[end] or lines[end].strip().endswith(";"):
+                return (index + 1, end + 1)
+            end += 1
+        return (index + 1, min(len(lines), index + 80))
+    return None
+
+
+def _line_matches_tokens(line, tokens):
+    if not tokens:
+        return False
+    return any(token and token in line for token in tokens)
+
+
+def _merge_line_ranges(ranges):
+    if not ranges:
+        return []
+    ordered = sorted((max(1, start), max(start, end)) for start, end in ranges)
+    merged = [ordered[0]]
+    for start, end in ordered[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end + 2:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _snippet_source_refs(source_file, snippets):
+    return [
+        {
+            "file": source_file,
+            "line_start": item.get("line_start"),
+            "line_end": item.get("line_end"),
+        }
+        for item in snippets
+    ]
+
+
+def _build_source_review_messages(module_name, items, source_file, snippets):
+    snippet_text = "\n\n".join(
+        f"[slice {index}: lines {item['line_start']}-{item['line_end']}]\n{item['text']}"
+        for index, item in enumerate(snippets, start=1)
+    )
+    target_text = json.dumps(items, ensure_ascii=False, indent=2)
+    system_prompt = (
+        "你是 RTL 源码复核助手。只允许基于用户提供的 flagged Manual Context 项和 RTL 白名单切片作答。"
+        "不要补写未被要求的连接、flow、FSM、always 行为、寄存器更新条件或时序保证。"
+        "输出必须是 JSON，不要 Markdown 或代码围栏。summary、explanation、question 必须用简体中文；"
+        "模块名、信号名、实例名保持源码原文。certainty 只能是 ai_inferred 或 evidence_gap。"
+    )
+    user_prompt = (
+        f"模块：{module_name}\n"
+        f"源码文件：{source_file}\n\n"
+        "需要复核的 Manual Context 项：\n"
+        f"{target_text}\n\n"
+        "允许阅读的 RTL 切片：\n"
+        f"{snippet_text}\n\n"
+        "请输出 JSON：\n"
+        "{\n"
+        "  \"claims\": [\n"
+        "    {\n"
+        "      \"subject\": \"被复核对象\",\n"
+        "      \"summary\": \"一句中文结论\",\n"
+        "      \"explanation\": \"中文说明，只引用给定切片能支持的内容\",\n"
+        "      \"certainty\": \"ai_inferred 或 evidence_gap\",\n"
+        "      \"signals\": [\"相关信号\"],\n"
+        "      \"instances\": [\"相关实例\"],\n"
+        "      \"source_refs\": [{\"file\": \"源码文件\", \"line_start\": 1, \"line_end\": 2}]\n"
+        "    }\n"
+        "  ],\n"
+        "  \"open_questions\": [\n"
+        "    {\"subject\": \"对象\", \"question\": \"仍需人工确认的问题\", \"source_refs\": []}\n"
+        "  ]\n"
+        "}\n"
+    )
+    return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+
+
+def _parse_source_review_response(raw):
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?", "", text).strip()
+        text = re.sub(r"```$", "", text).strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end >= start:
+        text = text[start:end + 1]
+    return json.loads(text)
+
+
+def _normalize_source_review_payload(payload, target, source_file, snippets):
+    default_refs = _snippet_source_refs(source_file, snippets)
+    evidence_refs = _target_evidence_refs(target)
+    claims = []
+    for item in (payload.get("claims", []) if isinstance(payload, dict) else []):
+        if not isinstance(item, dict):
+            continue
+        certainty = item.get("certainty")
+        if certainty not in {"ai_inferred", "evidence_gap"}:
+            certainty = "evidence_gap"
+        claims.append({
+            "subject": _plain(item.get("subject") or "source_review"),
+            "summary": _plain(item.get("summary") or ""),
+            "explanation": _plain(item.get("explanation") or ""),
+            "certainty": certainty,
+            "source_layers": ["source_review", "rtl_source", "manual_context"],
+            "signals": item.get("signals", []) if isinstance(item.get("signals"), list) else [],
+            "instances": item.get("instances", []) if isinstance(item.get("instances"), list) else [],
+            "source_refs": item.get("source_refs") if isinstance(item.get("source_refs"), list) and item.get("source_refs") else default_refs,
+            "evidence_refs": evidence_refs,
+            "review_status": "needs_review" if certainty == "evidence_gap" else "ready",
+        })
+    open_questions = []
+    for item in (payload.get("open_questions", []) if isinstance(payload, dict) else []):
+        if not isinstance(item, dict):
+            continue
+        open_questions.append({
+            "subject": _plain(item.get("subject") or "source_review"),
+            "question": _plain(item.get("question") or ""),
+            "source_refs": item.get("source_refs") if isinstance(item.get("source_refs"), list) else default_refs,
+            "evidence_refs": evidence_refs,
+        })
+    return claims, open_questions
+
+
+def _target_evidence_refs(target):
+    refs = []
+    for item in target.get("items", []):
+        refs.extend(ref for ref in item.get("evidence_refs", []) if ref)
+    return list(dict.fromkeys(refs))
+
+
+def _write_source_review_module_report(state, report):
+    manual_context_dir = Path(state["manual_context_dir"])
+    module_name = report.get("module", "")
+    module_dir = manual_context_dir / "modules" / safe_filename(module_name)
+    module_context_path = module_dir / "module_context.json"
+    module_doc_card_path = module_dir / "module_doc_card.json"
+    report_path = module_dir / "source_review_report.json"
+    module_dir.mkdir(parents=True, exist_ok=True)
+
+    if module_context_path.exists():
+        module_context = _read_json(module_context_path)
+    else:
+        module_context = {}
+    module_context["source_review_claims"] = report.get("claims", [])
+    module_context["source_review_report"] = {
+        "status": report.get("status", ""),
+        "claim_count": len(report.get("claims", [])),
+        "open_question_count": len(report.get("open_questions", [])),
+        "source_file": report.get("source_file", ""),
+        "report_file": "source_review_report.json",
+    }
+    _write_json(module_context_path, module_context)
+
+    if module_doc_card_path.exists():
+        module_doc_card = _read_json(module_doc_card_path)
+        module_doc_card["source_review_claims"] = report.get("claims", [])
+        module_doc_card["source_review_report"] = module_context["source_review_report"]
+        _write_json(module_doc_card_path, module_doc_card)
+
+    _write_json(report_path, report)
+
+
+def _update_source_review_manifest(state, reports):
+    manifest_path = Path(state["manual_context_dir"]) / "manifest.json"
+    if not manifest_path.exists():
+        return
+    manifest = _read_json(manifest_path)
+    files = manifest.setdefault("files", {})
+    files["source_review_report"] = "source_review_report.json"
+    files["source_review_reports"] = {
+        item.get("module", ""): f"modules/{safe_filename(item.get('module', ''))}/source_review_report.json"
+        for item in reports
+        if item.get("module")
+    }
+    counts = manifest.setdefault("counts", {})
+    counts["source_review_modules"] = len(reports)
+    counts["source_review_claims"] = sum(len(item.get("claims", [])) for item in reports)
+    _write_json(manifest_path, manifest)
+
+
+def _format_source_review_summary(report):
+    return "\n".join([
+        "## 源码复核摘要",
+        f"- 目标模块数：{report.get('target_count', 0)}",
+        f"- 已复核模块数：{report.get('reviewed_modules', 0)}",
+        f"- 写回 claim 数：{report.get('claim_count', 0)}",
+        f"- 未解决问题数：{report.get('unresolved_count', 0)}",
+    ])
 
 
 def _run_outline_stage(state, event_logger=None):
@@ -964,7 +1596,7 @@ def _run_outline_stage(state, event_logger=None):
     state["stage"] = "chapter_plan"
 
     lines = [
-        "阶段5完成：已根据 Manual Context 证据生成手册目录。",
+        "阶段6完成：已根据 Manual Context 证据生成手册目录。",
         "",
         "## 拟定目录",
     ]
@@ -975,9 +1607,9 @@ def _run_outline_stage(state, event_logger=None):
 
     lines.extend([
         "",
-        _next_stage_hint(state, "阶段6：生成每章大致内容规划"),
+        _next_stage_hint(state, "阶段7：生成每章大致内容规划"),
     ])
-    return _format_reply(state, "阶段5：规划目录", lines)
+    return _format_reply(state, "阶段6：规划目录", lines)
 
 
 def _run_chapter_plan_stage(state, event_logger=None):
@@ -997,7 +1629,7 @@ def _run_chapter_plan_stage(state, event_logger=None):
     state["stage"] = "manual"
 
     lines = [
-        "阶段6完成：已生成每章大致内容和证据来源。",
+        "阶段7完成：已生成每章大致内容和证据来源。",
         "",
         "## 每章内容规划",
     ]
@@ -1011,9 +1643,9 @@ def _run_chapter_plan_stage(state, event_logger=None):
 
     lines.extend([
         "",
-        _next_stage_hint(state, "阶段7：生成完整 Markdown 手册"),
+        _next_stage_hint(state, "阶段8：生成完整 Markdown 手册"),
     ])
-    return _format_reply(state, "阶段6：章节内容规划", lines)
+    return _format_reply(state, "阶段7：章节内容规划", lines)
 
 
 def _build_chapter_plan(outline, digest):
@@ -1044,15 +1676,10 @@ def _chapter_intent(title, mode):
         )
 
     rules = [
-        ("项目总览", "建立完整工程的系统边界、对象规模和文档焦点。", ["说明 top module", "列出 Manual Context 对象数量", "概括一级模块和主要事件模式"]),
-        ("顶层模块", "解释顶层模块在系统中的职责和直接结构。", ["说明 top module 摘要", "列出直接一级子模块", "区分确定事实和 AI 推断"]),
-        ("模块层级", "让读者看到模块之间的父子关系和结构展开方式。", ["按 parent/child 关系组织模块", "列出关键子模块和结构子", "提示证据来自 system_topology 和 module_context"]),
-        ("关键模块职责", "解释主要模块各自承担的功能角色。", ["逐个概括 major module", "列出 module_responsibility 和 documentation_focus", "保留 review_status"]),
-        ("接口", "说明接口边界、数据事件绑定和主次文档优先级。", ["汇总 primary interfaces", "说明 payload/free 与 drive 的关系", "free 仅在影响 backpressure 时重点解释"]),
-        ("Drive-centered Flow", "说明以 drive 为核心的事件/数据/控制路径。", ["列出 trigger_event、payload、endpoint", "说明 branch/join/blocking 点", "标注 requires_review 和 evidence_gap"]),
-        ("内部组件", "说明结构子 family 和 assign 对手册解释的影响。", ["按 component_family 分组", "解释 primary component role", "说明 assignment impact 的 certainty"]),
-        ("证据缺口", "给维护者和审查者提供待确认项。", ["汇总 evidence_gaps", "列出 review_questions", "结合 validation_report 判断风险"]),
-        ("证据边界", "明确哪些内容由 Manual Context 支持，哪些不能推断。", ["列出 evidence_boundary", "说明 certainty 写作规则", "说明 parser 当前不证明 FSM/always/register 行为"]),
+        ("项目总览", "用一句话说明项目用途和工程入口。", ["写项目用途推断", "列出 RTL 目录", "列出顶层文件"]),
+        ("顶层模块", "解释顶层模块组成和外部端口分组。", ["列出直接一级子模块", "按 pad/端口组自然语言总结输入输出", "区分确定事实和 AI 推断"]),
+        ("模块层级", "让读者看到完整父子层级。", ["列出全部 hierarchy_edges", "不使用层级样本替代完整结构", "提示证据来自 system_topology 和 module_context"]),
+        ("子系统", "提供全量模块入口和模块页索引。", ["按 region 组织模块", "所有 reachable modules 都有入口", "职责摘要只保留工程师可读内容"]),
     ]
     for keyword, purpose, points in rules:
         if keyword in title:
@@ -1072,7 +1699,8 @@ def _manual_file_ready(state, user_input):
 
 def _run_manual_stage(state, client, model, user_input, event_logger=None):
     ready, output_path = _manual_file_ready(state, user_input)
-    if ready and not _force_regenerate(state):
+    state["_manual_output_stem"] = output_path.stem
+    if ready and not _force_regenerate(state) and not state.get("manual_needs_regenerate"):
         _log_event(
             event_logger,
             "model_skip",
@@ -1089,7 +1717,7 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
 
         return _format_reply(
             state,
-            "阶段7：手册生成已跳过",
+            "阶段8：手册生成已跳过",
             [
                 "检测到已有 Markdown 代码手册文件，本次复用已有手册。",
                 f"手册路径：`{state['manual_output_path']}`",
@@ -1098,7 +1726,7 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
                 "",
                 "如需重新生成，请在请求中加入 `重新生成`、`强制生成` 或 `覆盖生成`。",
                 "",
-                _next_stage_hint(state, "阶段8：审查或复用审查报告"),
+                _next_stage_hint(state, "阶段9：审查或复用审查报告"),
             ],
         )
 
@@ -1123,7 +1751,7 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
         state["last_error"] = str(exc)
         return _format_reply(
             state,
-            "阶段7：生成手册失败",
+            "阶段8：生成手册失败",
             [
                 "Manual Context Markdown 渲染失败，流程已停在 `manual` 阶段。",
                 "Manual Context 证据和目录规划已经保存在会话状态中，修正渲染问题后可以发送 `继续` 重试。",
@@ -1137,6 +1765,7 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
     output_path = _manual_output_path(state, user_input)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(manual + "\n", encoding="utf-8")
+    module_page_paths = _write_module_pages(state, output_path)
 
     _log_event(
         event_logger,
@@ -1154,27 +1783,40 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
         path=str(output_path),
         chars=len(manual),
     )
+    if module_page_paths:
+        _log_event(
+            event_logger,
+            "artifact_write",
+            skill=MANUAL_SKILL_NAME,
+            artifact="manual_module_pages",
+            path=str(output_path.with_name(output_path.stem + "_modules")),
+            count=len(module_page_paths),
+        )
 
     state["manual_output_path"] = str(output_path)
+    state["manual_module_pages_dir"] = str(output_path.with_name(output_path.stem + "_modules"))
+    state["manual_module_page_count"] = len(module_page_paths)
     state["manual_summary"] = _build_manual_summary(manual, state)
+    state["manual_needs_regenerate"] = False
     _mark_stage_done(state, "manual")
     state["stage"] = "review"
 
     lines = [
-        "阶段7完成：完整 Markdown 手册已生成并保存。",
+        "阶段8完成：完整 Markdown 手册已生成并保存。",
         "",
         f"保存路径：`{state['manual_output_path']}`",
+        f"模块页目录：`{state['manual_module_pages_dir']}`（{len(module_page_paths)} 个模块页）",
         "",
         _format_manual_summary(state["manual_summary"]),
         "",
-        _next_stage_hint(state, "阶段8：审查手册"),
+        _next_stage_hint(state, "阶段9：审查手册"),
     ]
 
-    return _format_reply(state, "阶段7：生成手册", lines)
+    return _format_reply(state, "阶段8：生成手册", lines)
 
 
 def _run_review_stage(state, client, model, event_logger=None):
-    manual_path = Path(state.get("manual_output_path", ""))
+    manual_path = Path(state.get("manual_output_path") or state.get("manual_output_override") or "")
     if not manual_path.exists():
         _log_event(
             event_logger,
@@ -1185,13 +1827,14 @@ def _run_review_stage(state, client, model, event_logger=None):
         state["last_error"] = f"manual file not found: {manual_path}"
         return _format_reply(
             state,
-            "阶段8：审查失败",
+            "阶段9：审查失败",
             [
                 "没有找到可审查的手册文件，流程停在 `review` 阶段。",
                 f"期望路径：`{manual_path}`",
             ],
         )
 
+    state["manual_output_path"] = str(manual_path)
     review_output_path = _review_output_path(state)
     if review_output_path.exists() and review_output_path.is_file() and not _force_regenerate(state):
         _log_event(
@@ -1209,7 +1852,7 @@ def _run_review_stage(state, client, model, event_logger=None):
         state["stage"] = "done"
         return _format_reply(
             state,
-            "阶段8：审查已跳过",
+            "阶段9：审查已跳过",
             [
                 "检测到已有审查报告，本次复用已有审查结果。",
                 "",
@@ -1242,7 +1885,7 @@ def _run_review_stage(state, client, model, event_logger=None):
         state["last_error"] = str(exc)
         return _format_reply(
             state,
-            "阶段8：审查失败",
+            "阶段9：审查失败",
             [
                 "Manual Context 结构化审查失败，流程已停在 `review` 阶段。",
                 "",
@@ -1279,7 +1922,7 @@ def _run_review_stage(state, client, model, event_logger=None):
 
     return _format_reply(
         state,
-        "阶段8：审查完成",
+        "阶段9：审查完成",
         [
             "代码手册已完成审查，审查报告已保存。",
             "",
@@ -1316,12 +1959,14 @@ def _build_manual_context_evidence_digest(
             module_summaries.append(_summarize_manual_context_module(module_payload))
 
     project_major_modules = project_context.get("major_modules", [])
-    flow_samples = flow_index.get("flows", [])[:80]
+    flow_samples = flow_index.get("flows", [])
     primary_interfaces = [
         item for item in interface_index.get("interfaces", [])
         if item.get("doc_priority") == "primary"
-    ][:100]
+    ]
     evidence_policy = evidence_index.get("evidence_policy", {})
+    source_review_report_path = manual_context_dir / "source_review_report.json"
+    source_review_report = _read_json(source_review_report_path) if source_review_report_path.exists() else {}
 
     return {
         "evidence_mode": PROJECT_EVIDENCE_MODE,
@@ -1339,18 +1984,21 @@ def _build_manual_context_evidence_digest(
         },
         "project_context": {
             "top_module": project_context.get("top_module", {}),
+            "project_purpose": project_context.get("project_purpose", {}),
             "system_summary": project_context.get("system_summary", {}),
             "top_level": project_context.get("top_level", {}),
             "major_modules": project_major_modules[:30],
             "component_families_overview": project_context.get("component_families_overview", [])[:30],
             "system_level_gaps": project_context.get("system_level_gaps", [])[:40],
+            "manual_toc_plan": project_context.get("manual_toc_plan", []),
+            "source_review_context": project_context.get("source_review_context", {}),
         },
         "known_modules": sorted((manifest.get("files", {}).get("modules") or {}).keys()),
         "system_topology": _summarize_manual_context_topology(system_topology, top_module),
         "interface_index": {
             "counts": interface_index.get("counts", {}),
             "primary_samples": primary_interfaces,
-            "all_samples": interface_index.get("interfaces", [])[:80],
+            "all_samples": interface_index.get("interfaces", []),
         },
         "flow_index": {
             "counts": flow_index.get("counts", {}),
@@ -1361,10 +2009,12 @@ def _build_manual_context_evidence_digest(
             ][:60],
         },
         "modules": module_summaries,
+        "source_review_report": source_review_report,
         "evidence_policy": evidence_policy,
         "evidence_samples": evidence_index.get("evidence", [])[:80],
         "evidence_boundary": [
             "主证据为 Manual Context；最终手册不要直接把 parser JSON、Knowledge IR、AI Context 或 Semantic Layer 当作主输入。",
+            "允许受控读取 RTL 源码作为 source_review_context：只用于端口分组、模块一句话用途和证据缺口复核；不得补写连接、flow、FSM、always 或时序保证。",
             "deterministic_fact 可以直接陈述；derived_fact 必须说明是派生事实。",
             "ai_inferred 必须标注为推断、可能或需要 review，不能写成确定事实。",
             "human_asserted 必须标注为人工断言；evidence_gap 必须写入证据不足或待审查章节。",
@@ -1381,6 +2031,7 @@ def _build_manual_context_evidence_digest(
                 "flow_index.json",
                 "evidence_index.json",
                 "modules/<module>/module_context.json",
+                "modules/<module>/module_doc_card.json",
                 "modules/<module>/interfaces.json",
                 "modules/<module>/flows/<flow_id>.json",
             ],
@@ -1389,6 +2040,8 @@ def _build_manual_context_evidence_digest(
                 "evidence_gap_to_confirmed_behavior",
                 "free_signal_to_main_protocol_without_backpressure_evidence",
             ],
+            "output_shape": "main_manual_plus_module_pages",
+            "module_page_policy": "all reachable modules get a module page; detailed modules are expanded, helper/leaf modules use compact cards",
         },
     }
 
@@ -1401,6 +2054,8 @@ def _select_manual_context_modules(top_module, manifest, project_context, system
             selected.append(name)
 
     add(top_module)
+    for page in _module_pages_from_toc(project_context.get("manual_toc_plan", [])):
+        add(page.get("module"))
     direct_modules = (
         project_context.get("top_level", {})
         .get("direct_modules", {})
@@ -1415,7 +2070,22 @@ def _select_manual_context_modules(top_module, manifest, project_context, system
             add(edge.get("child"))
 
     known_modules = set((manifest.get("files", {}).get("modules") or {}).keys())
-    return [name for name in selected if name in known_modules][:30]
+    for name in sorted(known_modules):
+        add(name)
+    return [name for name in selected if name in known_modules]
+
+
+def _module_pages_from_toc(toc_plan):
+    pages = []
+    for item in toc_plan or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("page_type") == "module":
+            pages.append(item)
+        for page in item.get("pages", []) or []:
+            if isinstance(page, dict) and page.get("page_type") == "module":
+                pages.append(page)
+    return pages
 
 
 def _read_manual_context_module(manual_context_dir, module_name):
@@ -1426,6 +2096,8 @@ def _read_manual_context_module(manual_context_dir, module_name):
     payload = _read_json(module_context_path)
     payload["_interfaces"] = _read_json(module_dir / "interfaces.json") if (module_dir / "interfaces.json").exists() else {}
     payload["_gaps"] = _read_json(module_dir / "gaps.json") if (module_dir / "gaps.json").exists() else {}
+    payload["_doc_card"] = _read_json(module_dir / "module_doc_card.json") if (module_dir / "module_doc_card.json").exists() else {}
+    payload["_source_review_report"] = _read_json(module_dir / "source_review_report.json") if (module_dir / "source_review_report.json").exists() else {}
     return payload
 
 
@@ -1436,6 +2108,13 @@ def _summarize_manual_context_module(item):
     interface_summary = item.get("interface_summary", {})
     gaps_payload = item.get("_gaps", {})
     interfaces_payload = item.get("_interfaces", {})
+    doc_card_payload = item.get("_doc_card") or item.get("module_doc_card", {})
+    source_review_report = item.get("_source_review_report") or item.get("source_review_report", {})
+    source_review_claims = (
+        item.get("source_review_claims")
+        or doc_card_payload.get("source_review_claims")
+        or source_review_report.get("claims", [])
+    )
     components = item.get("internal_components", [])
     assignments = item.get("assignment_impact_summary", [])
 
@@ -1443,6 +2122,12 @@ def _summarize_manual_context_module(item):
         "module_name": identity.get("module_name", ""),
         "module_role": identity.get("module_role", ""),
         "source_files": identity.get("source_files", []),
+        "doc_card": doc_card_payload,
+        "page_policy": doc_card_payload.get("page_policy", {}),
+        "port_summary": doc_card_payload.get("port_summary", {}),
+        "source_review_context": doc_card_payload.get("source_review_context", item.get("source_review_context", {})),
+        "source_review_claims": source_review_claims,
+        "source_review_report": source_review_report or doc_card_payload.get("source_review_report", {}),
         "identity_certainty": identity.get("certainty", ""),
         "system_position": {
             "parents": _claim_value(position.get("parents")),
@@ -1494,7 +2179,9 @@ def _summarize_manual_context_topology(system_topology, top_module):
     return {
         "module_count": system_topology.get("module_count", 0),
         "direct_edges": direct_edges,
-        "edge_samples": edges[:120],
+        "edges": edges,
+        "edge_samples": edges,
+        "module_neighbors": system_topology.get("module_neighbors", {}),
     }
 
 
@@ -1554,15 +2241,10 @@ def _build_outline(digest):
     if digest.get("evidence_mode") == PROJECT_EVIDENCE_MODE:
         top_module = digest.get("top_module", "top_module")
         return [
-            {"title": "项目总览", "evidence": ["project_context", "manifest.counts", "doc_focus"]},
-            {"title": f"顶层模块 {top_module}", "evidence": ["project_context.top_level", f"modules.{top_module}.module_context"]},
-            {"title": "模块层级结构", "evidence": ["system_topology.hierarchy_edges", "modules.system_position"]},
-            {"title": "关键模块职责", "evidence": ["project_context.major_modules", "modules.module_responsibility"]},
-            {"title": "接口与数据事件契约", "evidence": ["interface_index", "modules.interfaces"]},
-            {"title": "Drive-centered Flow", "evidence": ["flow_index", "modules.key_drive_flows"]},
-            {"title": "内部组件与 Assign 影响", "evidence": ["modules.internal_components", "modules.assignment_impact_summary"]},
-            {"title": "证据缺口与 Review 问题", "evidence": ["modules.evidence_gaps", "modules.review_questions", "validation"]},
-            {"title": "证据边界与写作规则", "evidence": ["evidence_policy", "evidence_boundary"]},
+            {"title": "项目总览", "evidence": ["project_context.project_purpose", "project_context.top_level.source_file"]},
+            {"title": f"顶层模块 {top_module}", "evidence": ["project_context.top_level", f"modules.{top_module}.module_doc_card"]},
+            {"title": "完整模块层级结构", "evidence": ["system_topology.hierarchy_edges"]},
+            {"title": "子系统与模块索引", "evidence": ["project_context.manual_toc_plan", "modules.module_doc_card"]},
         ]
 
     sections = digest.get("sections", [])
@@ -1598,23 +2280,504 @@ def _generate_manual_markdown(state, client, model):
 def _render_manual_context_markdown(state):
     digest = state.get("evidence_digest") or {}
     top_module = digest.get("top_module") or state.get("top_module", "")
+    module_dir_name = f"{state.get('_manual_output_stem') or (top_module + '_generated')}_modules"
+    project_context = digest.get("project_context", {})
+    top_level = project_context.get("top_level", {})
+    purpose = _preferred_project_purpose_claim(digest)
+    source_file = top_level.get("source_file", "")
+    direct_modules = _claim_value(top_level.get("direct_modules")) or []
+    rtl_root = _rtl_root_from_source(source_file)
+    topology = digest.get("system_topology", {})
 
     lines = [
         f"# {top_module} RTL 代码手册",
         "",
-        "本手册由 `manual_context` 结构化证据渲染生成。确定性事实、派生事实、AI 推断和证据缺口按字段原样分级，手册不补写 Manual Context 中没有的连接、接口、flow、时序保证、always/FSM 行为或寄存器更新语义。",
+        "本手册采用“主手册 + 模块页”的结构，主手册用于快速定位系统结构，模块页用于查看具体接口和 flow 细节。",
+        "",
+        "## 1. 项目总览",
+        "",
+        f"- 项目用途：{_claim_brief(purpose, limit=180)}",
+        f"- RTL 目录：`{rtl_root}`。",
+        f"- 顶层文件：`{source_file or 'Manual Context 未提供'}`。",
+        "",
+        f"## 2. 顶层模块 `{top_module}`",
+        "",
+        f"- 顶层直接实例化模块：{_code_list(direct_modules)}。",
+    ]
+    lines.extend(_render_top_external_port_groups(top_level.get("external_port_groups", [])))
+    lines.extend(_render_top_child_module_summary(digest, direct_modules, module_dir_name))
+    lines.extend(_render_top_structure_diagram(digest, top_module))
+    lines.extend(_render_complete_hierarchy_section(topology))
+    lines.extend(_render_module_index_section(digest, module_dir_name))
+    return "\n".join(lines).strip()
+
+
+def _render_top_external_port_groups(groups):
+    lines = [
+        "",
+        "### 2.1 外部端口分组",
+        "",
+        "端口分组按 pad/信号命名和方向归类，用于快速识别顶层对外边界。",
+        "",
+        "| 端口组 | 方向统计 | 代表信号 |",
+        "| --- | --- | --- |",
+    ]
+    if not groups:
+        lines.append("| - | - | Manual Context 未提供顶层外部端口分组 |")
+        return lines
+    for group in groups:
+        signals = [item.get("name", "") for item in group.get("signals", [])]
+        direction_counts = group.get("direction_counts", {})
+        direction_text = ", ".join(f"{key}:{value}" for key, value in sorted(direction_counts.items())) or "未记录"
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(_code(group.get("group"))),
+                _md_cell(direction_text),
+                _md_cell(_code_list(_clip_list(signals, 8))),
+            ])
+            + " |"
+        )
+    return lines
+
+
+def _render_top_child_module_summary(digest, direct_modules, module_dir_name):
+    lines = [
+        "",
+        "### 2.2 顶层组成",
+        "",
+        "| 子模块 | 职责 | 接收 | 输出 | 模块页 |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    if not direct_modules:
+        lines.append("| - | 证据不足：Manual Context 未提供顶层子模块 | - | - | - |")
+        return lines
+    for module_name in direct_modules:
+        module = _module_summary_by_name(digest, module_name)
+        summary = _preferred_module_summary_claim(module) if module else {}
+        port_summary = module.get("port_summary", {}) if module else {}
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(_code(module_name)),
+                _md_cell(_claim_brief(summary)),
+                _md_cell(_natural_port_side(port_summary, "input")),
+                _md_cell(_natural_port_side(port_summary, "output")),
+                _md_cell(f"[打开]({module_dir_name}/{safe_filename(module_name)}.md)"),
+            ])
+            + " |"
+        )
+    return lines
+
+
+def _render_top_structure_diagram(digest, top_module):
+    topology = digest.get("system_topology", {})
+    edges = topology.get("edges") or topology.get("edge_samples", [])
+    diagram = _build_hierarchy_diagram(top_module, edges, max_depth=2, max_edges=40)
+    lines = [
+        "",
+        "### 2.3 顶层结构图",
         "",
     ]
-    lines.extend(_render_project_overview_section(digest))
-    lines.extend(_render_top_module_section(digest, top_module))
-    lines.extend(_render_hierarchy_section(digest))
-    lines.extend(_render_responsibility_section(digest))
-    lines.extend(_render_interfaces_section(digest))
-    lines.extend(_render_flows_section(digest))
-    lines.extend(_render_components_assignments_section(digest))
-    lines.extend(_render_gaps_section(digest))
-    lines.extend(_render_evidence_boundary_section(digest))
-    return "\n".join(lines).strip()
+    if not diagram["edges"]:
+        lines.append("Manual Context 未提供可绘制的顶层层级边。")
+        return lines
+    lines.extend([
+        "下图只展示顶层向下的有限层级，完整父子关系见后续层级表。",
+        "",
+        "```mermaid",
+        "flowchart TB",
+        *diagram["mermaid"],
+        "```",
+        "",
+        "```text",
+        *diagram["ascii"],
+        "```",
+    ])
+    if diagram.get("truncated"):
+        lines.append(f"- 图中已截断，未展开 {diagram['truncated']} 条后续层级边。")
+    return lines
+
+
+def _build_hierarchy_diagram(root, edges, max_depth=2, max_edges=40):
+    children_by_parent = {}
+    for edge in edges or []:
+        if not isinstance(edge, dict):
+            continue
+        parent = str(edge.get("parent", "") or "")
+        child = str(edge.get("child", "") or "")
+        if not parent or not child:
+            continue
+        children = children_by_parent.setdefault(parent, [])
+        if child not in children:
+            children.append(child)
+
+    selected_edges = []
+    truncated = 0
+    queue = [(root, 0)]
+    visited = set()
+    while queue and len(selected_edges) < max_edges:
+        parent, depth = queue.pop(0)
+        key = (parent, depth)
+        if key in visited:
+            continue
+        visited.add(key)
+        children = children_by_parent.get(parent, [])
+        if depth >= max_depth:
+            truncated += len(children)
+            continue
+        remaining = max_edges - len(selected_edges)
+        for child in children[:remaining]:
+            selected_edges.append({"parent": parent, "child": child})
+            queue.append((child, depth + 1))
+        if len(children) > remaining:
+            truncated += len(children) - remaining
+
+    selected_children = {}
+    for edge in selected_edges:
+        selected_children.setdefault(edge["parent"], []).append(edge["child"])
+
+    return {
+        "edges": selected_edges,
+        "mermaid": [_mermaid_edge(edge["parent"], edge["child"]) for edge in selected_edges],
+        "ascii": _ascii_tree(root, selected_children),
+        "truncated": truncated,
+    }
+
+
+def _ascii_tree(root, children_by_parent):
+    lines = [str(root or "root")]
+
+    def add_children(parent, prefix=""):
+        children = children_by_parent.get(parent, [])
+        for index, child in enumerate(children):
+            is_last = index == len(children) - 1
+            connector = "`-- " if is_last else "|-- "
+            lines.append(f"{prefix}{connector}{child}")
+            add_children(child, prefix + ("    " if is_last else "|   "))
+
+    add_children(root)
+    return lines
+
+
+def _dedupe_diagram_nodes(nodes):
+    result = []
+    seen = set()
+    for item in nodes:
+        name = str(item.get("name", "") or "")
+        label = str(item.get("label", "") or name)
+        if not name and not label:
+            continue
+        key = (name, label)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({**item, "name": name, "label": label})
+    return result
+
+
+def _mermaid_edge(parent, child, edge_label=""):
+    left = _mermaid_node(parent)
+    right = _mermaid_node(child)
+    label = _mermaid_label(edge_label)
+    if label:
+        return f"  {left} -->|{label}| {right}"
+    return f"  {left} --> {right}"
+
+
+def _mermaid_node(label):
+    return f'{_mermaid_id(label)}["{_mermaid_label(label)}"]'
+
+
+def _mermaid_id(label):
+    safe = safe_filename(label)
+    safe = re.sub(r"[^A-Za-z0-9_]", "_", safe)
+    if not safe or safe[0].isdigit():
+        safe = "n_" + safe
+    return safe
+
+
+def _mermaid_label(label):
+    return _plain(label).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("|", "/")
+
+
+def _render_complete_hierarchy_section(topology):
+    edges = topology.get("edges") or topology.get("edge_samples", [])
+    lines = [
+        "",
+        "## 3. 完整模块层级结构",
+        "",
+        f"- 模块数：{topology.get('module_count', 0)}。",
+        f"- 层级边数：{len(edges)}。",
+        "",
+        "| Parent | Child | Relationship |",
+        "| --- | --- | --- |",
+    ]
+    if not edges:
+        lines.append("| - | - | Manual Context 未提供 hierarchy_edges |")
+        return lines
+    for edge in edges:
+        lines.append(_hierarchy_row(edge))
+    return lines
+
+
+def _render_module_index_section(digest, module_dir_name):
+    modules = digest.get("modules", [])
+    lines = [
+        "",
+        "## 4. 子系统与模块索引",
+        "",
+        "每个 reachable module 都有独立模块页；关键模块详写，helper/leaf 模块使用压缩卡片。",
+        "",
+        "| 模块 | 区域 | 职责摘要 | 模块页 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for module in sorted(modules, key=lambda item: (_module_region(item), item.get("module_name", ""))):
+        module_name = module.get("module_name", "")
+        summary = _preferred_module_summary_claim(module)
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(_code(module_name)),
+                _md_cell(_module_region(module)),
+                _md_cell(_claim_brief(summary, limit=96)),
+                _md_cell(f"[打开]({module_dir_name}/{safe_filename(module_name)}.md)"),
+            ])
+            + " |"
+        )
+    if not modules:
+        lines.append("| - | - | 未加载模块上下文 | - |")
+    return lines
+
+
+def _render_cross_module_flow_section(digest):
+    flows = digest.get("flow_index", {}).get("samples", [])
+    lines = [
+        "",
+        "## 5. 关键 Drive-centered Flow 索引",
+        "",
+        "这里保留跨模块阅读入口；完整 flow 细节进入对应模块页。",
+        "",
+        "| 模块 | Trigger | 标题 | Payload | Review | Evidence |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    if not flows:
+        lines.append("| - | - | - | - | evidence_gap | - |")
+        return lines
+    for flow in flows[:80]:
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(_code(flow.get("module"))),
+                _md_cell(_code(flow.get("trigger_event"))),
+                _md_cell(flow.get("title", "")),
+                _md_cell(_code_list(_clip_list(flow.get("payloads", []), 4))),
+                _md_cell("需要 review" if flow.get("requires_review") else "ready"),
+                _md_cell(_refs_text(flow)),
+            ])
+            + " |"
+        )
+    if len(flows) > 80:
+        lines.append(f"| ... | ... | 其余 {len(flows) - 80} 条 flow 见对应模块页 | ... | ... | ... |")
+    return lines
+
+
+def _render_global_gaps_section(digest):
+    grouped = _collect_grouped_gaps(digest)
+    lines = [
+        "",
+        "## 6. 证据缺口与 Review 问题",
+        "",
+        "本节把底层 gap 翻译成可人工 review 的问题；逐模块细节见模块页。",
+        "",
+        "| 范围 | Review 问题 | Evidence |",
+        "| --- | --- | --- |",
+    ]
+    if not grouped:
+        lines.append("| 全局 | 当前已加载 Manual Context 未提供 evidence_gap | - |")
+        return lines
+    for item in grouped[:60]:
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(item.get("scope", "")),
+                _md_cell(item.get("question", "")),
+                _md_cell(item.get("evidence", "")),
+            ])
+            + " |"
+        )
+    if len(grouped) > 60:
+        lines.append(f"| ... | 其余 {len(grouped) - 60} 个 review 项进入对应模块页 | ... |")
+    return lines
+
+
+def _rtl_root_from_source(source_file):
+    source_file = str(source_file or "").replace("\\", "/")
+    if source_file.startswith("rtl/rtl/"):
+        return "rtl/rtl"
+    if "/rtl/rtl/" in source_file:
+        return source_file.split("/rtl/rtl/", 1)[0] + "/rtl/rtl"
+    parts = source_file.split("/")
+    if len(parts) > 1:
+        return "/".join(parts[:-1])
+    return "rtl/rtl"
+
+
+def _one_sentence(text):
+    text = _plain(text)
+    for sep in ("。", ". "):
+        if sep in text:
+            first = text.split(sep, 1)[0].strip()
+            if first:
+                return first + ("。" if sep == "。" else ".")
+    return text
+
+
+def _clip_list(values, limit):
+    values = [value for value in (values or []) if value]
+    if len(values) <= limit:
+        return values
+    return values[:limit] + [f"... +{len(values) - limit}"]
+
+
+def _claim_brief(claim, limit=120):
+    if not isinstance(claim, dict) or not claim.get("value"):
+        return "证据不足：Manual Context 未提供职责摘要"
+    return f"{_claim_label(claim)}：{_shorten(_one_sentence(claim.get('value', '')), limit)}"
+
+
+def _preferred_project_purpose_claim(digest):
+    top_module = digest.get("top_module", "")
+    top_summary = _module_summary_by_name(digest, top_module)
+    if top_summary:
+        source_claim = _preferred_source_review_claim(top_summary)
+        if source_claim:
+            return source_claim
+    return (
+        digest.get("project_context", {}).get("project_purpose")
+        or digest.get("project_context", {}).get("system_summary")
+        or {"value": f"{top_module} 是该 RTL 项目的顶层模块。", "certainty": "derived_fact"}
+    )
+
+
+def _preferred_module_summary_claim(module):
+    source_claim = _preferred_source_review_claim(module)
+    if source_claim:
+        return source_claim
+    return module.get("responsibility", {}).get("short_summary", {})
+
+
+def _preferred_source_review_claim(module):
+    first_claim = {}
+    for claim in module.get("source_review_claims", []) or []:
+        if not isinstance(claim, dict):
+            continue
+        if claim.get("certainty") != "ai_inferred":
+            continue
+        summary = claim.get("summary") or claim.get("value")
+        if not summary:
+            continue
+        if not first_claim:
+            first_claim = {
+                "value": summary,
+                "explanation": claim.get("explanation", ""),
+                "certainty": "ai_inferred",
+                "source_layers": claim.get("source_layers", []),
+                "source_refs": claim.get("source_refs", []),
+            }
+        subject = (claim.get("subject") or "").lower()
+        if any(token in subject for token in ("responsibility", "module", "role", "purpose", "source_review", "职责", "用途", "角色")):
+            return {
+                "value": summary,
+                "explanation": claim.get("explanation", ""),
+                "certainty": "ai_inferred",
+                "source_layers": claim.get("source_layers", []),
+                "source_refs": claim.get("source_refs", []),
+            }
+    return first_claim
+
+
+def _natural_port_side(port_summary, direction):
+    if not port_summary:
+        return "未记录"
+    if direction == "input":
+        items = []
+        items.extend(_signals_from_port_summary(port_summary, "event_inputs", "drive 输入"))
+        items.extend(_signals_from_port_summary(port_summary, "data_inputs", "数据输入"))
+        items.extend(_signals_from_port_summary(port_summary, "control_inputs", "控制输入"))
+        items.extend(_signals_from_port_summary(port_summary, "free_inputs", "free 输入"))
+        items.extend(_signals_from_port_summary(port_summary, "unknown_inputs", "其他输入"))
+    else:
+        items = []
+        items.extend(_signals_from_port_summary(port_summary, "event_outputs", "drive 输出"))
+        items.extend(_signals_from_port_summary(port_summary, "data_outputs", "数据输出"))
+        items.extend(_signals_from_port_summary(port_summary, "control_outputs", "控制输出"))
+        items.extend(_signals_from_port_summary(port_summary, "free_outputs", "free 输出"))
+        items.extend(_signals_from_port_summary(port_summary, "unknown_outputs", "其他输出"))
+        items.extend(_signals_from_port_summary(port_summary, "inout_ports", "双向端口"))
+    return "；".join(items[:5]) if items else "未记录"
+
+
+def _signals_from_port_summary(port_summary, key, label):
+    signals = port_summary.get(key, []) if isinstance(port_summary, dict) else []
+    names = [item.get("name", "") for item in signals if isinstance(item, dict) and item.get("name")]
+    if not names:
+        return []
+    return [f"{label}：{_code_list(_clip_list(names, 4))}"]
+
+
+def _module_region(module):
+    region = (module.get("system_position", {}).get("region") or {}).get("value", "")
+    if not region:
+        region = (module.get("doc_card", {}).get("hierarchy", {}).get("region") or {}).get("value", "")
+    return region or "other"
+
+
+def _collect_grouped_gaps(digest):
+    rows = []
+
+    def add(scope, gap):
+        if not isinstance(gap, dict):
+            gap = {"reason": str(gap), "certainty": "evidence_gap"}
+        question = _gap_review_question(gap)
+        key = (scope, question)
+        if key in {(item.get("scope"), item.get("question")) for item in rows}:
+            return
+        rows.append({
+            "scope": scope,
+            "question": question,
+            "evidence": _refs_text(gap),
+        })
+
+    for gap in digest.get("project_context", {}).get("system_level_gaps", []):
+        add("全局", gap)
+    for module in digest.get("modules", []):
+        scope = module.get("module_name", "")
+        for gap in module.get("evidence_gaps", []):
+            add(scope, gap)
+        for gap in module.get("gap_file", {}).get("gaps", []):
+            add(scope, gap)
+        for question in module.get("review_questions", []):
+            if isinstance(question, dict):
+                add(scope, {
+                    "field": question.get("subject", ""),
+                    "reason": question.get("question", ""),
+                    "certainty": "evidence_gap",
+                    "evidence_refs": question.get("evidence_refs", []),
+                })
+    return rows
+
+
+def _gap_review_question(gap):
+    field = _plain(gap.get("field", ""))
+    reason = _plain(gap.get("reason", ""))
+    if field and reason:
+        return f"请人工确认 `{field}`：{reason}"
+    if reason:
+        return f"请人工确认：{reason}"
+    if field:
+        return f"请人工确认 `{field}` 的证据是否充分。"
+    return "请人工确认该项证据是否充分。"
 
 
 def _render_project_overview_section(digest):
@@ -1762,8 +2925,6 @@ def _hierarchy_row(edge):
             _md_cell(_code(edge.get("parent"))),
             _md_cell(_code(edge.get("child"))),
             _md_cell(edge.get("relationship", "")),
-            _md_cell(edge.get("certainty", "")),
-            _md_cell(_refs_text(edge)),
         ])
         + " |"
     )
@@ -1992,7 +3153,7 @@ def _render_gaps_section(digest):
 
 def _render_evidence_boundary_section(digest):
     lines = [
-        "## 9. 证据边界与写作规则",
+        "## 7. 证据边界与写作规则",
         "",
     ]
     for item in digest.get("evidence_boundary", []):
@@ -2006,6 +3167,352 @@ def _render_evidence_boundary_section(digest):
         ])
     lines.append("")
     return lines
+
+
+def _write_module_pages(state, output_path):
+    digest = state.get("evidence_digest") or {}
+    modules = digest.get("modules", [])
+    if not modules:
+        return []
+    module_dir = output_path.with_name(output_path.stem + "_modules")
+    module_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for module in modules:
+        module_name = module.get("module_name", "")
+        if not module_name:
+            continue
+        path = module_dir / f"{safe_filename(module_name)}.md"
+        path.write_text(_render_module_page(digest, module) + "\n", encoding="utf-8")
+        paths.append(path)
+    return paths
+
+
+def _render_module_page(digest, module):
+    module_name = module.get("module_name", "")
+    policy = module.get("page_policy", {})
+    detail_level = policy.get("detail_level", "standard")
+    summary = _preferred_module_summary_claim(module)
+    source_files = module.get("source_files", [])
+    position = module.get("system_position", {})
+    port_summary = module.get("port_summary", {})
+    lines = [
+        f"# 模块 `{module_name}`",
+        "",
+        f"- 源文件：{_code_list(source_files)}。",
+        f"- 职责：{_claim_brief(summary, limit=220)}。",
+    ]
+    if summary.get("explanation") and detail_level != "compact":
+        lines.append(f"- 说明：{_plain(summary.get('explanation'))}")
+    lines.extend([
+        "",
+        "## 1. 层级位置",
+        "",
+        f"- Parents：{_code_list(position.get('parents', []))}。",
+        f"- Children：{_code_list(position.get('children', []))}。",
+        f"- Component children：{_code_list(position.get('component_children', []))}。",
+        f"- Upstream modules：{_code_list(position.get('upstream_modules', []))}。",
+        f"- Downstream modules：{_code_list(position.get('downstream_modules', []))}。",
+    ])
+    lines.extend(_render_module_structure_diagram(module))
+    lines.extend([
+        "",
+        "## 2. 输入/输出接口摘要",
+        "",
+        f"- 接收：{_natural_port_side(port_summary, 'input')}。",
+        f"- 输出：{_natural_port_side(port_summary, 'output')}。",
+    ])
+    lines.extend(_render_module_port_groups(port_summary, detail_level))
+    lines.extend(_render_module_interfaces(module, detail_level))
+    lines.extend(_render_module_flows(digest, module, detail_level))
+    lines.extend(_render_module_components_assignments(module, detail_level))
+    return "\n".join(lines).strip()
+
+
+def _render_module_port_groups(port_summary, detail_level):
+    groups = port_summary.get("external_port_groups", []) if isinstance(port_summary, dict) else []
+    if not groups:
+        return []
+    limit = 99 if detail_level == "detailed" else 8 if detail_level == "standard" else 4
+    lines = [
+        "",
+        "### 2.1 端口分组",
+        "",
+        "| 端口组 | 方向统计 | 代表信号 |",
+        "| --- | --- | --- |",
+    ]
+    for group in groups[:limit]:
+        direction_counts = group.get("direction_counts", {})
+        direction_text = ", ".join(f"{key}:{value}" for key, value in sorted(direction_counts.items())) or "未记录"
+        signals = [item.get("name", "") for item in group.get("signals", [])]
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(_code(group.get("group"))),
+                _md_cell(direction_text),
+                _md_cell(_code_list(_clip_list(signals, 10))),
+            ])
+            + " |"
+        )
+    if len(groups) > limit:
+        lines.append(f"| ... | ... | 其余 {len(groups) - limit} 个端口组省略，详见 module_doc_card |")
+    return lines
+
+
+def _render_module_structure_diagram(module):
+    module_name = module.get("module_name", "")
+    position = module.get("system_position", {})
+    children = [
+        {"name": child, "label": child, "kind": "module"}
+        for child in position.get("children", [])
+        if child
+    ]
+    component_children = [
+        {"name": child, "label": child, "kind": "component"}
+        for child in position.get("component_children", [])
+        if child
+    ]
+    primary_components = module.get("internal_components", {}).get("primary_samples", [])
+    instance_nodes = []
+    seen_instance_keys = set()
+    for component in primary_components:
+        instance_name = component.get("instance_name", "")
+        module_type = component.get("module_type") or component.get("component_family") or ""
+        if not instance_name:
+            continue
+        key = (instance_name, module_type)
+        if key in seen_instance_keys:
+            continue
+        seen_instance_keys.add(key)
+        label = f"{instance_name}: {module_type}" if module_type else instance_name
+        instance_nodes.append({"name": instance_name, "label": label, "kind": "instance"})
+
+    nodes = _dedupe_diagram_nodes(instance_nodes + children + component_children)
+    lines = [
+        "",
+        "### 1.1 本模块结构图",
+        "",
+    ]
+    if not nodes:
+        lines.append("Manual Context 未记录本模块的内部实例或子模块结构。")
+        return lines
+
+    max_nodes = 24
+    selected = nodes[:max_nodes]
+    mermaid_lines = []
+    for item in selected:
+        edge_label = ""
+        if item.get("kind") == "component":
+            edge_label = "component"
+        elif item.get("kind") == "instance":
+            edge_label = "instance"
+        mermaid_lines.append(
+            _mermaid_edge(module_name, item["label"], edge_label=edge_label)
+        )
+
+    ascii_lines = [module_name]
+    for index, item in enumerate(selected):
+        connector = "`-- " if index == len(selected) - 1 else "|-- "
+        ascii_lines.append(f"{connector}{item['label']}")
+
+    lines.extend([
+        "```mermaid",
+        "flowchart TB",
+        *mermaid_lines,
+        "```",
+        "",
+        "```text",
+        *ascii_lines,
+        "```",
+    ])
+    if len(nodes) > max_nodes:
+        lines.append(f"- 图中仅展示前 {max_nodes} 个结构节点，其余 {len(nodes) - max_nodes} 个节点见层级字段或组件表。")
+    return lines
+
+
+def _render_module_interfaces(module, detail_level):
+    groups = module.get("interfaces", {}).get("interface_groups", [])
+    primary = [group for group in groups if group.get("doc_priority") == "primary"]
+    rows = primary or groups
+    limit = 24 if detail_level == "detailed" else 12 if detail_level == "standard" else 6
+    lines = [
+        "",
+        "## 3. Drive/Data/Free 契约",
+        "",
+        "| Interface | 方向 | Event | Payload | Free/backpressure |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    if not rows:
+        lines.append("| - | - | - | - | Manual Context 未提供接口分组 |")
+        return lines
+    for group in rows[:limit]:
+        event_signals = group.get("event_signals", [])
+        event = event_signals[0].get("name", "") if event_signals else ""
+        payloads = _format_signal_facts(group.get("payload_signals", []), max_items=5) or "未记录"
+        free_signals = [item.get("name", "") for item in group.get("free_backpressure_signals", []) if isinstance(item, dict)]
+        free_text = _code_list(free_signals) if free_signals else "未记录"
+        lines.append(
+            "| "
+            + " | ".join([
+                _md_cell(_code(group.get("interface_name"))),
+                _md_cell(group.get("direction", "")),
+                _md_cell(_code(event) if event else "-"),
+                _md_cell(payloads),
+                _md_cell(free_text),
+            ])
+            + " |"
+        )
+    if len(rows) > limit:
+        lines.append(f"| ... | ... | ... | ... | 其余 {len(rows) - limit} 个接口见 Manual Context |")
+    return lines
+
+
+def _render_module_flows(digest, module, detail_level):
+    flows = _load_module_flow_contexts(digest, module)
+    limit = 12 if detail_level == "detailed" else 6 if detail_level == "standard" else 3
+    lines = [
+        "",
+        "## 4. 主要 Drive-centered Flow",
+        "",
+    ]
+    if not flows:
+        lines.append("- 证据不足：Manual Context 未提供本模块 drive flow。")
+        return lines
+    for flow in flows[:limit]:
+        trigger = flow.get("trigger_event", {})
+        semantic = flow.get("semantic_meaning", {})
+        behavior = flow.get("branch_merge_behavior", {})
+        lines.extend([
+            f"### `{trigger.get('signal', '')}`",
+            "",
+            f"- 确定性事实：`{flow.get('title', '')}`；flow_id=`{flow.get('flow_id', '')}`。",
+            f"- Payload：{_format_payloads(flow.get('payloads', [])) or '未记录'}。",
+            f"- 输出/影响：{_format_effects_inline(flow.get('outputs_or_effects', [])) or '未记录'}。",
+            f"- 结构复杂度：branch={len(behavior.get('branch_points', []))}，join={len(behavior.get('join_points', []))}，blocking={len(behavior.get('blocking_points', []))}。",
+        ])
+        if semantic.get("value"):
+            lines.append(f"- {_claim_label(semantic)}：{_plain(semantic.get('value'))}")
+        lines.append("")
+    if len(flows) > limit:
+        lines.append(f"- 其余 {len(flows) - limit} 条 flow 保留在 Manual Context 的 flows 目录中。")
+    return lines
+
+
+def _render_module_components_assignments(module, detail_level):
+    component_limit = 12 if detail_level == "detailed" else 6 if detail_level == "standard" else 3
+    assignment_limit = 12 if detail_level == "detailed" else 6 if detail_level == "standard" else 3
+    components = module.get("internal_components", {}).get("primary_samples", [])
+    assignments = module.get("assignment_impact_summary", {}).get("primary_samples", [])
+    lines = [
+        "",
+        "## 5. 内部组件与 assign 影响",
+        "",
+        "### 5.1 内部组件",
+        "",
+        "| 实例 | 类型 | 输入事件 | 输出事件 |",
+        "| --- | --- | --- | --- |",
+    ]
+    if components:
+        for component in components[:component_limit]:
+            lines.append(
+                "| "
+                + " | ".join([
+                    _md_cell(_code(component.get("instance_name"))),
+                    _md_cell(_code(component.get("module_type") or component.get("component_family"))),
+                    _md_cell(_code_list(component.get("input_events", []))),
+                    _md_cell(_code_list(component.get("output_events", []))),
+                ])
+                + " |"
+            )
+        if len(components) > component_limit:
+            lines.append(f"| ... | ... | ... | ... | 其余 {len(components) - component_limit} 个组件省略 |")
+    else:
+        lines.append("| - | - | - | Manual Context 未提供 primary internal component |")
+    lines.extend([
+        "",
+        "### 5.2 assign 影响",
+        "",
+        "| Assign | Impact area | LHS | RHS 摘要 | 解释状态 |",
+        "| --- | --- | --- | --- | --- |",
+    ])
+    if assignments:
+        for assignment in assignments[:assignment_limit]:
+            interpretation = assignment.get("interpretation", {})
+            if interpretation.get("certainty") == "evidence_gap":
+                interpretation_text = f"证据不足：{_plain(interpretation.get('reason') or '未提供语义解释')}"
+            elif interpretation.get("value"):
+                interpretation_text = f"{_claim_label(interpretation)}：{_plain(interpretation.get('value'))}"
+            else:
+                interpretation_text = "证据不足：未提供语义解释"
+            lines.append(
+                "| "
+                + " | ".join([
+                    _md_cell(_code(assignment.get("assignment_id"))),
+                    _md_cell(assignment.get("impact_area", "")),
+                    _md_cell(_code(assignment.get("lhs"))),
+                    _md_cell(_shorten(assignment.get("rhs", ""), 96)),
+                    _md_cell(interpretation_text),
+                ])
+                + " |"
+            )
+        if len(assignments) > assignment_limit:
+            lines.append(f"| ... | ... | ... | ... | 其余 {len(assignments) - assignment_limit} 条 assign 省略 |")
+    else:
+        lines.append("| - | - | - | - | Manual Context 未提供 primary assign 影响 |")
+    return lines
+
+
+def _render_module_gaps(module):
+    rows = []
+    for gap in module.get("evidence_gaps", []):
+        rows.append(gap)
+    for gap in module.get("gap_file", {}).get("gaps", []):
+        rows.append(gap)
+    lines = [
+        "",
+        "## 6. 证据缺口",
+        "",
+    ]
+    if not rows:
+        lines.append("- 当前模块页未记录 evidence_gap。")
+        return lines
+    for gap in rows[:20]:
+        lines.append(f"- {_gap_review_question(gap)}（evidence={_refs_text(gap)}）")
+    if len(rows) > 20:
+        lines.append(f"- 其余 {len(rows) - 20} 个 gap 见 `gaps.json`。")
+    return lines
+
+
+def _load_module_flow_contexts(digest, module):
+    root = Path(digest.get("manual_context_dir", ""))
+    module_name = module.get("module_name", "")
+    flows = []
+    seen = set()
+    for ref in module.get("key_drive_flows", []):
+        source_file = ref.get("source_file", "")
+        if not source_file:
+            continue
+        path = root / "modules" / safe_filename(module_name) / source_file
+        if str(path) in seen or not path.exists():
+            continue
+        try:
+            flows.append(_read_json(path))
+            seen.add(str(path))
+        except Exception:
+            continue
+    return flows
+
+
+def _format_effects_inline(effects):
+    if not effects:
+        return ""
+    deterministic = [effect.get("signal") for effect in effects if effect.get("certainty") == "deterministic_fact" and effect.get("signal")]
+    gaps = [effect for effect in effects if effect.get("certainty") == "evidence_gap"]
+    parts = []
+    if deterministic:
+        parts.append(_code_list(deterministic))
+    if gaps:
+        parts.append("证据不足：" + "；".join(_plain(item.get("reason", "")) for item in gaps[:2]))
+    return "；".join(parts)
 
 
 def _collect_interface_rows(digest, limit=20):
@@ -2207,16 +3714,7 @@ def _certainty_label(value):
 
 
 def _claim_label(claim):
-    certainty = _certainty_label(claim.get("certainty", "") if isinstance(claim, dict) else "")
-    extras = []
-    if isinstance(claim, dict):
-        if claim.get("confidence"):
-            extras.append(f"confidence={claim.get('confidence')}")
-        if claim.get("review_status"):
-            extras.append(f"review_status={claim.get('review_status')}")
-        if claim.get("requires_rtl_source_review"):
-            extras.append("requires_rtl_source_review=true")
-    return certainty if not extras else f"{certainty}（{', '.join(extras)}）"
+    return _certainty_label(claim.get("certainty", "") if isinstance(claim, dict) else "")
 
 
 def _refs_text(item):
@@ -2271,11 +3769,27 @@ def safe_filename(value):
 def _review_manual_markdown(state, client, model):
     manual_path = Path(state.get("manual_output_path", ""))
     manual = manual_path.read_text(encoding="utf-8")
-    return _build_manual_sanity_review(state, manual)
+    module_pages = _read_module_pages_for_review(state, manual_path)
+    return _build_manual_sanity_review(state, manual, module_pages)
 
 
-def _build_manual_sanity_review(state, manual):
+def _read_module_pages_for_review(state, manual_path):
+    module_dir = Path(state.get("manual_module_pages_dir", "")) if state.get("manual_module_pages_dir") else manual_path.with_name(manual_path.stem + "_modules")
+    pages = {}
+    if not module_dir.exists():
+        return pages
+    for path in sorted(module_dir.glob("*.md")):
+        try:
+            pages[path.stem] = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return pages
+
+
+def _build_manual_sanity_review(state, manual, module_pages=None):
     digest = state.get("evidence_digest") or {}
+    module_pages = module_pages or {}
+    all_manual_text = manual + "\n" + "\n".join(module_pages.values())
     findings = []
 
     def add(severity, title, detail):
@@ -2286,14 +3800,43 @@ def _build_manual_sanity_review(state, manual):
         add("P1", "手册包含对话式开场", "最终 Markdown 不能包含模型对用户的寒暄或执行承诺。")
     if "manual_ir" in manual.lower() or "contextpack" in manual.lower():
         add("P1", "手册引用 legacy 主结构", "新主流程下最终手册不能把 legacy manual_ir/ContextPack 当作主证据结构。")
-    if "Validation" not in manual and "validation" not in manual:
-        add("P2", "缺少 validation 结果", "手册必须写入 validation_report 的 status 和 issue_count。")
-    if "证据缺口" not in manual:
-        add("P2", "缺少 evidence_gap 章节或标注", "手册必须显式呈现 Manual Context 中的 evidence gaps。")
-    if "AI 推断" not in manual and _digest_contains_ai_claims(digest):
+    if "层级样本" in manual or "主要模块摘要" in manual:
+        add("P1", "手册仍使用样本式章节", "主手册必须使用完整层级和全量模块索引，不能以样本表替代。")
+    if "AI 推断" not in all_manual_text and _digest_contains_ai_claims(digest):
         add("P1", "AI claim 未显式标注", "Manual Context 中存在 ai_inferred claim，最终手册必须出现 AI 推断标注。")
 
-    for line_no, line in enumerate(manual.splitlines(), start=1):
+    public_forbidden = (
+        "confidence=",
+        "review_status",
+        "requires_rtl_source_review",
+        "| Evidence |",
+        " evidence=",
+        "evidence_refs",
+        "详情级别",
+        "关键 Drive-centered Flow 索引",
+        "证据缺口与 Review 问题",
+        "证据边界与写作规则",
+    )
+    for pattern in public_forbidden:
+        if pattern in all_manual_text:
+            add("P1", "公开手册泄露内部证据字段", f"公开手册或模块页中出现 `{pattern}`。")
+
+    known_modules = digest.get("known_modules", [])
+    if known_modules:
+        missing_links = [
+            name for name in known_modules
+            if f"{safe_filename(name)}.md" not in manual
+        ]
+        if missing_links:
+            add("P1", "主手册未覆盖全部模块入口", f"缺少 {len(missing_links)} 个模块页入口，例如：{', '.join(missing_links[:8])}")
+        missing_pages = [
+            name for name in known_modules
+            if safe_filename(name) not in module_pages
+        ]
+        if missing_pages:
+            add("P1", "模块页文件不完整", f"缺少 {len(missing_pages)} 个模块页文件，例如：{', '.join(missing_pages[:8])}")
+
+    for line_no, line in enumerate(all_manual_text.splitlines(), start=1):
         stripped_line = line.strip()
         is_deterministic_claim_line = (
             stripped_line.startswith("- 确定性事实")
@@ -2302,8 +3845,28 @@ def _build_manual_sanity_review(state, manual):
         )
         if is_deterministic_claim_line and any(word in line for word in ("可能", "推断", "猜测", "需要 review")):
             add("P1", "确定性事实行混入推断措辞", f"第 {line_no} 行：{line.strip()}")
-        boundary_line = any(word in line for word in ("不得补写", "不补写", "禁止补写", "证据边界"))
-        if any(term in line for term in ("always", "寄存器更新语义", "时序保证")) and not boundary_line:
+        boundary_line = any(word in line for word in (
+            "不得补写",
+            "不补写",
+            "不会补写",
+            "禁止补写",
+            "不写入",
+            "不能推断",
+            "证据边界",
+            "请人工确认",
+            "证据不足",
+            "source review",
+            "源码复核",
+        ))
+        high_risk_terms = (
+            "always block",
+            "always-block",
+            "always 块",
+            "always 过程",
+            "寄存器更新语义",
+            "时序保证",
+        )
+        if any(term in line for term in high_risk_terms) and not boundary_line:
             add("P2", "出现高风险时序/过程逻辑表述", f"第 {line_no} 行包含 `{line.strip()}`，需要确认其来自 evidence_gap 或明确禁止边界。")
 
     free_mentions = len(re.findall(r"\bfree\b|Free|backpressure|反压", manual))
@@ -2315,7 +3878,7 @@ def _build_manual_sanity_review(state, manual):
         "# RTL 代码手册审查报告",
         "",
         f"- 审查目标：`{state.get('top_module', '')}`",
-        f"- 审查方式：Manual Context 结构化约束检查",
+        f"- 审查方式：Manual Context 结构化约束检查 + Source Review 承接检查",
         f"- 总体结论：{conclusion}",
         "",
         "## 检查结果",
@@ -2325,20 +3888,117 @@ def _build_manual_sanity_review(state, manual):
             lines.append(f"- {item['severity']} {item['title']}：{item['detail']}")
     else:
         lines.append("- 未发现确定性结构检查项违规。")
+    lines.extend(_render_review_source_review_section(digest))
+    lines.extend(_render_review_gap_section(digest))
     lines.extend([
         "",
         "## 已检查约束",
         "- final manual 不应包含对话式开场。",
         "- final manual 不应把 `manual_ir` 或 ContextPack 作为主证据结构。",
-        "- `ai_inferred` 内容必须在手册中标注为 AI 推断。",
-        "- `evidence_gap` 必须进入证据缺口或 review 章节。",
+        "- 主手册必须提供全量模块页入口，模块页文件必须覆盖 reachable modules。",
+        "- 手册不应以“样本”章节替代完整层级或完整模块索引。",
+        "- 公开手册不得输出 evidence refs、confidence、review_status、requires_rtl_source_review 等内部字段。",
+        "- `ai_inferred` 内容在公开手册中只标注为 AI 推断。",
+        "- `evidence_gap`、review questions 和 source-review 结果必须进入 review 文档。",
         "- `deterministic_fact` 行不得混入“可能/推断/需要 review”等不确定措辞。",
         "- `free` 只作为影响 drive availability/backpressure 的参考，不作为主流程解释入口。",
+        "",
+        "## 证据边界",
+    ])
+    for item in digest.get("evidence_boundary", []):
+        lines.append(f"- {item}")
+    lines.extend([
         "",
         "## 剩余风险",
         "- 本审查器只做结构化和文本边界检查；复杂 RTL 语义仍以 Manual Context 的 evidence_refs 和后续人工 RTL review 为准。",
     ])
     return "\n".join(lines)
+
+
+def _render_review_source_review_section(digest):
+    report = digest.get("source_review_report") or {}
+    lines = [
+        "",
+        "## Source Review 结果",
+    ]
+    if not report:
+        lines.append("- 未发现 `source_review_report.json`；需要源码复核的项仍应由人工确认。")
+    else:
+        lines.extend([
+            f"- 目标模块数：{report.get('target_count', 0)}",
+            f"- 已复核模块数：{report.get('reviewed_modules', 0)}",
+            f"- 写回 claim 数：{report.get('claim_count', 0)}",
+            f"- 未解决问题数：{report.get('unresolved_count', 0)}",
+        ])
+        for item in report.get("modules", [])[:40]:
+            lines.append(
+                f"- `{item.get('module', '')}`：status=`{item.get('status', '')}`，"
+                f"claims={item.get('claim_count', 0)}，open_questions={item.get('open_question_count', 0)}，"
+                f"report=`{item.get('report_file', '')}`"
+            )
+    reviewed_claims = []
+    open_questions = []
+    for module in digest.get("modules", []):
+        module_name = module.get("module_name", "")
+        for claim in module.get("source_review_claims", []) or []:
+            reviewed_claims.append((module_name, claim))
+        for question in (module.get("source_review_report", {}) or {}).get("open_questions", []) or []:
+            open_questions.append((module_name, question))
+    if reviewed_claims:
+        lines.extend(["", "### 已写回源码复核 Claim", ""])
+        for module_name, claim in reviewed_claims[:60]:
+            lines.append(
+                f"- `{module_name}` / `{claim.get('subject', '')}`："
+                f"{_certainty_label(claim.get('certainty', ''))}：{_plain(claim.get('summary', ''))}；"
+                f"source={_source_refs_text(claim)}；evidence={_refs_text(claim)}"
+            )
+    if open_questions:
+        lines.extend(["", "### 源码复核后仍需确认", ""])
+        for module_name, question in open_questions[:60]:
+            lines.append(
+                f"- `{module_name}` / `{question.get('subject', '')}`：{_plain(question.get('question', ''))}；"
+                f"source={_source_refs_text(question)}；evidence={_refs_text(question)}"
+            )
+    return lines
+
+
+def _render_review_gap_section(digest):
+    grouped = _collect_grouped_gaps(digest)
+    questions = _collect_review_questions(digest, limit=80)
+    lines = [
+        "",
+        "## 证据缺口与 Review 问题",
+    ]
+    if grouped:
+        lines.extend(["", "### Evidence gaps", ""])
+        for item in grouped[:80]:
+            lines.append(
+                f"- `{item.get('scope', '')}`：{item.get('question', '')}；evidence={item.get('evidence', '')}"
+            )
+    else:
+        lines.append("- 当前 Manual Context 未记录 evidence_gap。")
+    if questions:
+        lines.extend(["", "### Review questions", ""])
+        for question in questions:
+            lines.append(
+                f"- `{question.get('subject', '')}`：{_plain(question.get('question', ''))}；evidence={_refs_text(question)}"
+            )
+    return lines
+
+
+def _source_refs_text(item):
+    refs = item.get("source_refs", []) if isinstance(item, dict) else []
+    if not refs:
+        return "未记录"
+    values = []
+    for ref in refs[:4]:
+        if not isinstance(ref, dict):
+            continue
+        file_name = ref.get("file", "")
+        start = ref.get("line_start", "")
+        end = ref.get("line_end", "")
+        values.append(f"`{file_name}:{start}-{end}`")
+    return ", ".join(values) or "未记录"
 
 
 def _digest_contains_ai_claims(digest):
@@ -2355,6 +4015,9 @@ def _digest_contains_ai_claims(digest):
 
 
 def _manual_output_path(state, text):
+    if state.get("manual_output_override"):
+        return Path(state["manual_output_override"])
+
     explicit = _match_value(
         text or "",
         (
@@ -2375,7 +4038,7 @@ def _manual_output_path(state, text):
 
 
 def _review_output_path(state):
-    manual_output_path = state.get("manual_output_path")
+    manual_output_path = state.get("manual_output_path") or state.get("manual_output_override")
     if manual_output_path:
         path = Path(manual_output_path)
         return path.with_name(path.stem + "_review.md")
@@ -2398,6 +4061,8 @@ def _build_manual_summary(manual, state):
         "chapter_plan_count": len(chapter_plan),
         "evidence_mode": state.get("evidence_mode", PROJECT_EVIDENCE_MODE),
         "top_module": state.get("top_module", ""),
+        "module_page_count": state.get("manual_module_page_count", 0),
+        "module_pages_dir": state.get("manual_module_pages_dir", ""),
     }
 
 
@@ -2410,6 +4075,7 @@ def _format_manual_summary(summary):
         f"- 章节规划数：{summary.get('chapter_plan_count', 0)}",
         f"- 字符数：{summary.get('chars', 0)}",
         f"- 行数：{summary.get('lines', 0)}",
+        f"- 模块页数：{summary.get('module_page_count', 0)}",
     ])
 
 
@@ -2458,6 +4124,12 @@ def _tool_failed(result):
 
 def _read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _write_json(path, payload):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _clip_text(text, limit=6000):

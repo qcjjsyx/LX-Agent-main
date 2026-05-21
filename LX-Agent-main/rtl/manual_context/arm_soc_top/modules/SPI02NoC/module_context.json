@@ -100,8 +100,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "Bridge module converting NoC drive events into SPI flash read/write transactions and returning status/read data to the NoC.",
-      "explanation": "The module receives a drive event from the mesh (i_driveFrmMesh) with a 51-bit payload (i_dataFrmNoc), extracts an address and control/data fields, drives a flash state machine (u_flash), and returns a status register or read data payload (o_data2Noc) via a delayed drive event (o_driveNextToMesh). The free signals (o_freeToMesh, i_freeNextFrmMesh) implement a two-way handshake for flow control.",
+      "value": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
+      "explanation": "模块接收来自 Mesh 的驱动事件 (i_driveFrmMesh) 和 51 位数据 (i_dataFrmNoc)，通过内部 FIFO 和延迟单元进行流水线处理，最终驱动 SPI Flash 控制器 (u_flash) 并输出地址和数据到 NoC。其内部事件流 (flow_000_SPI02NoC_i_driveFrmMesh) 清晰地展示了从输入驱动到输出驱动的完整路径。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -114,13 +114,13 @@
         "i_dataFrmNoc",
         "o_driveNextToMesh",
         "o_data2Noc",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
+        "address"
       ],
       "instances": [
         "cFifo1",
         "cFifo2",
         "u_flash",
+        "delay1",
         "fire2SyncPluse_u"
       ],
       "related_flows": [
@@ -143,8 +143,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "Bridge module converting NoC drive events into SPI flash read/write transactions and returning status/read data to the NoC.",
-        "explanation": "The module receives a drive event from the mesh (i_driveFrmMesh) with a 51-bit payload (i_dataFrmNoc), extracts an address and control/data fields, drives a flash state machine (u_flash), and returns a status register or read data payload (o_data2Noc) via a delayed drive event (o_driveNextToMesh). The free signals (o_freeToMesh, i_freeNextFrmMesh) implement a two-way handshake for flow control.",
+        "value": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
+        "explanation": "模块接收来自 Mesh 的驱动事件 (i_driveFrmMesh) 和 51 位数据 (i_dataFrmNoc)，通过内部 FIFO 和延迟单元进行流水线处理，最终驱动 SPI Flash 控制器 (u_flash) 并输出地址和数据到 NoC。其内部事件流 (flow_000_SPI02NoC_i_driveFrmMesh) 清晰地展示了从输入驱动到输出驱动的完整路径。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -157,13 +157,13 @@
           "i_dataFrmNoc",
           "o_driveNextToMesh",
           "o_data2Noc",
-          "o_freeToMesh",
-          "i_freeNextFrmMesh"
+          "address"
         ],
         "instances": [
           "cFifo1",
           "cFifo2",
           "u_flash",
+          "delay1",
           "fire2SyncPluse_u"
         ],
         "related_flows": [
@@ -185,8 +185,8 @@
         ]
       },
       {
-        "value": "Decodes the incoming NoC payload to select a SPI register (CR, SR, TDR, RDR) and performs read or write operations via the flash state machine.",
-        "explanation": "The assign w_data2noc selects a register based on address[3:0] and returns its value to the NoC. The assign startRead_fire triggers a flash read when address[3:0] equals TDR and w_en is asserted. The assign w_en_tmp qualifies writes to address 8'h64. The assign r_en enables reads when w_en is low and dataReady is high.",
+        "value": "模块将 NoC 的驱动事件和地址/数据负载，转换为对内部 SPI 控制/状态寄存器的读写操作，并驱动 SPI Flash 接口。",
+        "explanation": "输入数据 i_dataFrmNoc 的 [49:42] 位被直接赋值给 address 信号，用于选择 SPI 寄存器 (CR, SR, TDR, RDR)。赋值语句 (assign index 2) 根据地址选择将相应寄存器的值组合成 w_data2noc，最终输出到 o_data2Noc。写使能信号 w_en 和地址 8'h64 的组合用于生成 w_en_tmp，表明存在特定的写操作触发条件。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -196,15 +196,10 @@
         "doc_priority": "primary",
         "signals": [
           "address",
-          "w_data2noc",
-          "startRead_fire",
-          "w_en_tmp",
-          "r_en",
           "i_dataFrmNoc",
-          "w_SR",
-          "r_CR",
-          "r_TDR",
-          "w_RDR"
+          "o_data2Noc",
+          "w_en",
+          "w_en_tmp"
         ],
         "instances": [
           "u_flash"
@@ -220,6 +215,9 @@
         ],
         "semantic_evidence": [
           {
+            "source": "knowledge_ir/modules/SPI02NoC.json"
+          },
+          {
             "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
           }
         ]
@@ -227,55 +225,17 @@
     ],
     "documentation_focus": [
       {
-        "value": "The manual should document the NoC payload format, register address map (CR, SR, TDR, RDR, and address 8'h64), and the sequence of operations for read/write.",
-        "explanation": "The assign dependencies reveal a register-based interface where the NoC writes to TDR to trigger a flash read, reads RDR for data, and reads SR for status. The address 8'h64 appears to be a special control register. The payload format (address in bits 49:42) and write enable semantics need clear documentation.",
+        "value": "手册应重点描述从 NoC 驱动事件到 SPI Flash 操作完成，再到结果返回的完整流水线时序。",
+        "explanation": "内部事件流 (flow_000_SPI02NoC_i_driveFrmMesh) 和关键组件连接 (cFifo1 -> delay1 -> cFifo2) 揭示了事件经过两级 FIFO 和一级延迟单元。手册需要解释这种流水线设计如何满足 SPI Flash 的访问延迟，以及如何通过 free 信号 (o_freeToMesh, i_freeNextFrmMesh) 进行流控。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:SPI02NoC:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_dataFrmNoc",
-          "address",
-          "w_en",
-          "w_data2noc",
-          "startRead_fire",
-          "w_en_tmp"
-        ],
-        "instances": [
-          "u_flash"
-        ],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
-      },
-      {
-        "value": "The manual should explain the two-stage FIFO pipeline (cFifo1, delay1, cFifo2) and how it synchronizes the flash operation with the NoC drive handshake.",
-        "explanation": "The pipeline introduces a delay between the incoming drive event and the outgoing response. This delay likely accounts for flash operation latency. The free signals provide backpressure to prevent data loss. The exact timing and conditions for free assertion need RTL review.",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:documentation_focus:002",
-        "doc_priority": "secondary",
-        "signals": [
           "i_driveFrmMesh",
-          "w_driveNext",
-          "w_driveNext_delay",
           "o_driveNextToMesh",
           "o_freeToMesh",
           "i_freeNextFrmMesh"
@@ -283,18 +243,22 @@
         "instances": [
           "cFifo1",
           "cFifo2",
-          "delay1"
+          "delay1",
+          "u_flash"
         ],
         "related_flows": [
           "flow_000_SPI02NoC_i_driveFrmMesh"
         ],
         "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:SPI02NoC:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/SPI02NoC.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
           }
@@ -428,8 +392,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_SPI02NoC_i_driveFrmMesh.json",
       "reader_takeaway": {
-        "value": "The manual should emphasize the event propagation path through two FIFO stages with an intervening delay, and note the absence of explicit payload or backpressure information.",
-        "explanation": "The flow is a simple drive chain with two potential blocking points (the FIFO stages) and a fixed delay. The payload and backpressure signals are not part of the described flow, so the manual should clearly state that these aspects are not covered by this flow analysis.",
+        "value": "最终手册应重点描述两级FIFO的缓冲行为（深度、空满标志、门控条件）以及延迟单元的延迟周期数。",
+        "explanation": "当前流的核心结构是cFifo1→delay1→cFifo2的串行管道。FIFO级可能引入事件门控或背压，延迟单元影响时序。手册需明确这些组件的具体参数和行为，以便用户理解事件传输的延迟和可靠性。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -452,22 +416,26 @@
         "related_assignments": [
           "0"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
           "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/SPI02NoC.json",
-            "path": "internal_event_flow"
+            "source": "flow.steps",
+            "path": "parser_module"
+          },
+          {
+            "source": "instances.connections",
+            "path": "parser_module"
           }
         ],
         "supporting_claims": [
           {
-            "value": "This drive flow propagates an event from the mesh input through two FIFO stages with an intervening delay, producing the output event to the mesh.",
-            "explanation": "The flow starts at i_driveFrmMesh, passes through cFifo1 (first FIFO stage), then through delay1 (a transparent delay element), then through cFifo2 (second FIFO stage), and finally exits at o_driveNextToMesh. The delay element is placed between the two FIFO stages, not at the start or end.",
+            "value": "从Mesh侧输入的驱动事件经过两级FIFO缓冲和一级透明延迟后输出到Mesh侧，形成一条单向的事件传输管道。",
+            "explanation": "该流从输入端口i_driveFrmMesh开始，依次经过cFifo1、delay1、cFifo2三个实例，最终从输出端口o_driveNextToMesh送出。cFifo1和cFifo2作为FIFO级可能对事件进行缓冲或门控，delay1提供透明延迟但不改变事件语义。整个流没有分支或合并点，是一条纯粹的串行事件驱动路径。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -498,18 +466,55 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "internal_event_flow"
+                "source": "instances.connections",
+                "path": "parser_module"
               },
               {
-                "source": "parser_pipeline_rtl/modules/SPI02NoC.json",
-                "path": "flow_graph.transparent_flows"
+                "source": "transparent_flows",
+                "path": "parser_module"
               }
             ]
           },
           {
-            "value": "The input event has an associated free signal o_freeToMesh, and the output event has an associated free signal i_freeNextFrmMesh, but their relationship to this flow is not defined.",
-            "explanation": "The interface payload contracts list o_freeToMesh as the free signal for i_driveFrmMesh and i_freeNextFrmMesh for o_driveNextToMesh. However, the flow steps do not include these signals, and there is no evidence of backpressure or completion logic in the supplied context.",
+            "value": "输入事件i_driveFrmMesh携带51位数据i_dataFrmNoc，其中地址字段被提取用于内部处理。",
+            "explanation": "接口契约显示i_driveFrmMesh事件伴随i_dataFrmNoc[50:0]数据输入。赋值0从该数据中提取地址字段，表明事件携带的数据包含控制信息（地址），但该地址在当前流中未直接参与事件传输，可能用于其他并行逻辑。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_driveFrmMesh",
+              "i_dataFrmNoc",
+              "address"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "0"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+              "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface_payload_contracts",
+                "path": "parser_module"
+              },
+              {
+                "source": "related_assign_dependencies",
+                "path": "parser_module"
+              }
+            ]
+          },
+          {
+            "value": "输入事件有对应的空闲信号o_freeToMesh，输出事件有对应的空闲信号i_freeNextFrmMesh，但当前流中未显示它们与事件传输的直接耦合关系。",
+            "explanation": "接口契约列出了输入事件i_driveFrmMesh的free_signal为o_freeToMesh，输出事件o_driveNextToMesh的free_signal为i_freeNextFrmMesh。这表明模块可能使用握手协议控制事件传输，但当前流步骤和连接中未包含这些信号，无法确定背压机制的具体实现。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -535,45 +540,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "interface_data_contract"
-              }
-            ]
-          },
-          {
-            "value": "The input event i_driveFrmMesh is accompanied by a payload i_dataFrmNoc, but the payload is not explicitly propagated through the flow steps.",
-            "explanation": "The flow steps only describe event drive signals (i_driveFrmMesh, w_driveNext, w_driveNext_delay, o_driveNextToMesh). The payload i_dataFrmNoc is associated with the input event, but there is no evidence that it is passed through the FIFO stages or delay. The output event o_driveNextToMesh has no listed payload.",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:data_control_effect:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "i_driveFrmMesh",
-              "i_dataFrmNoc",
-              "o_driveNextToMesh"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [
-              "0"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
-              "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "interface_data_contract"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/SPI02NoC.json",
-                "path": "interface"
+                "source": "interface_payload_contracts",
+                "path": "parser_module"
               }
             ]
           }
@@ -656,47 +624,20 @@
         "busy",
         "w_finish"
       ],
-      "impact_area": "control_path",
+      "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "Assembles the SPI status register from internal flags.",
-        "explanation": "w_SR is a concatenation of dataReady, w_TXE, busy, w_finish, and 4'b0. This provides a status word that can be read by the NoC to monitor flash operation progress.",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:assignment_interpretation:003",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_SR",
-          "dataReady",
-          "w_TXE",
-          "busy",
-          "w_finish"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "1"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:assignments"
@@ -721,48 +662,20 @@
         "RDR",
         "w_RDR"
       ],
-      "impact_area": "control_path",
+      "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "Multiplexes SPI register values into the NoC response payload based on address.",
-        "explanation": "This assign selects one of four registers (CR, SR, TDR, RDR) to return to the NoC. The selection is based on address[3:0], implying a 16-register address space with at least these four implemented. The output is 32 bits, padded with 24'b0.",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:assignment_interpretation:002",
-        "doc_priority": "primary",
-        "signals": [
-          "w_data2noc",
-          "address",
-          "r_CR",
-          "w_SR",
-          "r_TDR",
-          "w_RDR"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "2"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:assignments"
@@ -785,43 +698,17 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "Generates a trigger to start a flash read when a write to TDR occurs.",
-        "explanation": "This assign asserts when address[3:0] equals TDR and w_en is high, using w_fire_2[1] as a qualifier. This suggests writing to the TDR register initiates a flash read operation.",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:assignment_interpretation:004",
-        "doc_priority": "primary",
-        "signals": [
-          "startRead_fire",
-          "address",
-          "w_en",
-          "w_fire_2"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "5"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:assignments"
@@ -839,45 +726,20 @@
         "w_en",
         "address"
       ],
-      "impact_area": "control_path",
+      "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "Qualifies write enable for a specific address (8'h64).",
-        "explanation": "w_en_tmp is asserted only when w_en is high and address equals 8'h64. This suggests address 8'h64 is a special control register that requires qualified write access.",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:assignment_interpretation:005",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_en_tmp",
-          "w_en",
-          "address"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "6"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:assignments"
@@ -894,47 +756,20 @@
       "rhs_terms": [
         "i_dataFrmNoc"
       ],
-      "impact_area": "control_path",
+      "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "Extracts the register address from the NoC payload for SPI register selection.",
-        "explanation": "address is assigned from i_dataFrmNoc[49:42], indicating the upper 8 bits of the 51-bit payload carry the register address. This address is used in subsequent assignments to select CR, SR, TDR, or RDR.",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:assignment_interpretation:001",
-        "doc_priority": "primary",
-        "signals": [
-          "address",
-          "i_dataFrmNoc"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "0",
-          "2",
-          "5",
-          "6"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:assignments"
@@ -955,42 +790,17 @@
       "impact_area": "data_path",
       "doc_priority": "secondary",
       "interpretation": {
-        "value": "Enables read operations when not writing and data is ready.",
-        "explanation": "r_en is asserted when w_en is low and dataReady is high, indicating a read is permitted only when no write is in progress and the flash has data available.",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:SPI02NoC:assignment_interpretation:006",
-        "doc_priority": "secondary",
-        "signals": [
-          "r_en",
-          "w_en",
-          "dataReady"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_SPI02NoC_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "3"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:SPI02NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:assignments"
@@ -1029,7 +839,24 @@
   ],
   "important_internal_signals": [
     {
-      "signal": "address",
+      "signal": "o_driveNextToMesh",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 27,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:knowledge_module",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_driveFrmMesh",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 24,
@@ -1041,14 +868,15 @@
       ],
       "evidence_refs": [
         "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:knowledge_module",
         "ev:SPI02NoC:semantic_module"
       ]
     },
     {
-      "signal": "i_driveFrmMesh",
+      "signal": "address",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 22,
+      "importance_score": 20,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1057,7 +885,6 @@
       ],
       "evidence_refs": [
         "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:knowledge_module",
         "ev:SPI02NoC:semantic_module"
       ]
     },
@@ -1065,39 +892,6 @@
       "signal": "i_dataFrmNoc",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 22,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_driveNextToMesh",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 21,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:knowledge_module",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToMesh",
-      "kind": "interface_or_inferred",
-      "width_text": "",
       "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -1111,7 +905,7 @@
       ]
     },
     {
-      "signal": "i_freeNextFrmMesh",
+      "signal": "o_data2Noc",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 18,
@@ -1123,134 +917,6 @@
       ],
       "evidence_refs": [
         "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_RDR",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "busy",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "startRead_fire",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "sclk",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "mosi",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "miso",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "cs_n",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_data2noc",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
         "ev:SPI02NoC:semantic_module"
       ]
     },
@@ -1258,7 +924,7 @@
       "signal": "w_driveNext",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 12,
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1276,7 +942,7 @@
       "signal": "w_driveNext_delay",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 12,
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1291,10 +957,26 @@
       ]
     },
     {
+      "signal": "w_en",
+      "kind": "reg",
+      "width_text": "1",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:parser_module",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
       "signal": "startRead",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1307,42 +989,106 @@
       ]
     },
     {
-      "signal": "dataReady",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_en",
-      "kind": "reg",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_data2Noc",
+      "signal": "busy",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 10,
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "sclk",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "mosi",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "cs_n",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "miso",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeToMesh",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:interface",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeNextFrmMesh",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1358,7 +1104,7 @@
       "signal": "w_en_tmp",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 10,
+      "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1371,10 +1117,26 @@
       ]
     },
     {
-      "signal": "w_SR",
+      "signal": "dataReady",
       "kind": "wire",
-      "width_text": "[7:0]",
-      "importance_score": 10,
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:parser_module",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_data2noc",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1390,7 +1152,23 @@
       "signal": "r_CR",
       "kind": "reg",
       "width_text": "[7:0]",
-      "importance_score": 8,
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:parser_module",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_SR",
+      "kind": "wire",
+      "width_text": "[7:0]",
+      "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1406,7 +1184,7 @@
       "signal": "r_TDR",
       "kind": "reg",
       "width_text": "[31:0]",
-      "importance_score": 8,
+      "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1419,10 +1197,26 @@
       ]
     },
     {
-      "signal": "r_en",
+      "signal": "w_RDR",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:parser_module",
+        "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "signal": "startRead_fire",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 6,
+      "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1454,80 +1248,42 @@
       "signal": "clk",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 4,
+      "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
+        "ev:SPI02NoC:interface"
       ]
     },
     {
       "signal": "rst",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 4,
+      "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
+        "ev:SPI02NoC:interface"
       ]
     },
     {
       "signal": "rst_finish",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:interface",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_TXE",
-      "kind": "wire",
-      "width_text": "1",
       "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "parse",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_finish",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:parser_module",
-        "ev:SPI02NoC:semantic_module"
+        "ev:SPI02NoC:interface"
       ]
     }
   ],
@@ -1623,19 +1379,8 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "The compact context shows u_flash as a black box with only dataReady and busy outputs. The internal states, timing, and command sequences need RTL review for accurate documentation.",
-      "subject": "Flash state machine (u_flash) internal operation",
-      "needed_source_slice": "module declaration, always block",
-      "source_layers": [
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:semantic_module"
-      ]
-    },
-    {
-      "question": "The compact context shows the pipeline structure but does not reveal the exact conditions for free signal assertion or the delay1 implementation. RTL source is needed to document the handshake protocol.",
-      "subject": "Event pipeline timing and free signal logic",
+      "question": "事件-负载合约 (event_payload_contracts) 对输出事件 o_driveNextToMesh 的负载绑定置信度为低，且未列出具体负载信号。需要查看 RTL 源代码以确认 o_data2Noc 是否与 o_driveNextToMesh 同步输出。",
+      "subject": "输出事件与数据负载的精确绑定",
       "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
@@ -1645,14 +1390,26 @@
       ]
     },
     {
-      "question": "The compact context shows fire2SyncPluse_u generates startRead from startRead_fire, but the synchronization mechanism and pulse generation logic are not detailed.",
-      "subject": "fire2SyncPluse_u and startRead generation",
-      "needed_source_slice": "module declaration, always block",
+      "question": "赋值语句 (assign index 5) 使用了 w_fire_2[1]，但上下文中未提供 w_fire_2 的定义。需要查看 RTL 源代码以理解其生成逻辑，这对于理解 startRead_fire 的触发条件至关重要。",
+      "subject": "w_fire_2 信号的生成逻辑",
+      "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
       ],
       "evidence_refs": [
         "ev:SPI02NoC:semantic_module"
+      ]
+    },
+    {
+      "question": "Review semantic meaning for flow flow_000_SPI02NoC_i_driveFrmMesh.",
+      "subject": "flow_000_SPI02NoC_i_driveFrmMesh",
+      "source_layers": [
+        "semantic_layer",
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
       ]
     }
   ],
@@ -1660,5 +1417,843 @@
     "knowledge_ir": "modules/SPI02NoC.json",
     "ai_context": "ai_context/modules/SPI02NoC.json",
     "semantic_layer": "semantic:module:SPI02NoC"
+  },
+  "module_doc_card": {
+    "schema": "manual_context_module_doc_card",
+    "schema_version": "0.1",
+    "top_module": "arm_soc_top",
+    "module": "SPI02NoC",
+    "source_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+    "module_role": "submodule",
+    "page_policy": {
+      "module_page_required": true,
+      "detail_level": "detailed",
+      "reason": "structural or flow-heavy module",
+      "fixed_sections": [
+        "responsibility",
+        "position",
+        "interface_contract",
+        "drive_flows",
+        "internal_components_and_assignments",
+        "evidence_gaps"
+      ],
+      "review_needed": false
+    },
+    "purpose": {
+      "value": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
+      "explanation": "模块接收来自 Mesh 的驱动事件 (i_driveFrmMesh) 和 51 位数据 (i_dataFrmNoc)，通过内部 FIFO 和延迟单元进行流水线处理，最终驱动 SPI Flash 控制器 (u_flash) 并输出地址和数据到 NoC。其内部事件流 (flow_000_SPI02NoC_i_driveFrmMesh) 清晰地展示了从输入驱动到输出驱动的完整路径。",
+      "certainty": "ai_inferred",
+      "confidence": "high",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "semantic_claim_id": "semantic:module:SPI02NoC:module_role:001",
+      "doc_priority": "primary",
+      "signals": [
+        "i_driveFrmMesh",
+        "i_dataFrmNoc",
+        "o_driveNextToMesh",
+        "o_data2Noc",
+        "address"
+      ],
+      "instances": [
+        "cFifo1",
+        "cFifo2",
+        "u_flash",
+        "delay1",
+        "fire2SyncPluse_u"
+      ],
+      "related_flows": [
+        "flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "related_assignments": [],
+      "requires_rtl_source_review": false,
+      "review_status": "ready",
+      "evidence_refs": [
+        "ev:SPI02NoC:semantic_module"
+      ],
+      "semantic_evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
+        }
+      ]
+    },
+    "hierarchy": {
+      "parents": [
+        "IONet_slot"
+      ],
+      "children": [
+        "fire2SyncPluse",
+        "flash_state"
+      ],
+      "component_children": [
+        "cFifo1"
+      ],
+      "upstream_modules": [
+        "IONetwork"
+      ],
+      "downstream_modules": [
+        "IONetwork"
+      ],
+      "region": {
+        "value": "noc",
+        "certainty": "derived_fact",
+        "confidence": "medium",
+        "source_layers": [
+          "manual_context",
+          "parse"
+        ],
+        "evidence_refs": [
+          "ev:SPI02NoC:parser_module"
+        ],
+        "classification_rule": "module_name_and_source_path_keyword"
+      }
+    },
+    "port_summary": {
+      "counts": {
+        "event_inputs": 1,
+        "event_outputs": 1,
+        "data_inputs": 1,
+        "data_outputs": 2,
+        "control_inputs": 0,
+        "control_outputs": 0,
+        "free_inputs": 1,
+        "free_outputs": 1,
+        "unknown_inputs": 3,
+        "unknown_outputs": 5,
+        "inout_ports": 0,
+        "primary_event_ports": 2,
+        "total_ports": 15
+      },
+      "event_inputs": [
+        {
+          "name": "i_driveFrmMesh",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "event_outputs": [
+        {
+          "name": "o_driveNextToMesh",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "data_inputs": [
+        {
+          "name": "i_dataFrmNoc",
+          "direction": "input",
+          "width_text": "[50:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "data_outputs": [
+        {
+          "name": "address",
+          "direction": "output",
+          "width_text": "[7:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "o_data2Noc",
+          "direction": "output",
+          "width_text": "[50:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "control_inputs": [],
+      "control_outputs": [],
+      "free_inputs": [
+        {
+          "name": "i_freeNextFrmMesh",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "free_outputs": [
+        {
+          "name": "o_freeToMesh",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "unknown_inputs": [
+        {
+          "name": "clk",
+          "direction": "input",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "miso",
+          "direction": "input",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "rst_finish",
+          "direction": "input",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "unknown_outputs": [
+        {
+          "name": "busy",
+          "direction": "output",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "cs_n",
+          "direction": "output",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "mosi",
+          "direction": "output",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "sclk",
+          "direction": "output",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        },
+        {
+          "name": "startRead",
+          "direction": "output",
+          "width_text": "1",
+          "role": "unknown",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ]
+        }
+      ],
+      "inout_ports": [],
+      "external_port_groups": [
+        {
+          "group": "clock_reset_init",
+          "signals": [
+            {
+              "name": "clk",
+              "direction": "input",
+              "width_text": "1",
+              "role": "unknown"
+            },
+            {
+              "name": "rst_finish",
+              "direction": "input",
+              "width_text": "1",
+              "role": "unknown"
+            },
+            {
+              "name": "sclk",
+              "direction": "output",
+              "width_text": "1",
+              "role": "unknown"
+            }
+          ],
+          "direction_counts": {
+            "input": 2,
+            "output": 1
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ],
+          "summary": "clock_reset_init ports, count=3, directions=input:2, output:1",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        },
+        {
+          "group": "drive_event",
+          "signals": [
+            {
+              "name": "i_driveFrmMesh",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_drive"
+            },
+            {
+              "name": "o_driveNextToMesh",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_drive"
+            }
+          ],
+          "direction_counts": {
+            "input": 1,
+            "output": 1
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ],
+          "summary": "drive_event ports, count=2, directions=input:1, output:1",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        },
+        {
+          "group": "free_backpressure",
+          "signals": [
+            {
+              "name": "i_freeNextFrmMesh",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_free"
+            },
+            {
+              "name": "o_freeToMesh",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_free"
+            }
+          ],
+          "direction_counts": {
+            "input": 1,
+            "output": 1
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ],
+          "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        },
+        {
+          "group": "other_ports",
+          "signals": [
+            {
+              "name": "i_dataFrmNoc",
+              "direction": "input",
+              "width_text": "[50:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "address",
+              "direction": "output",
+              "width_text": "[7:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "o_data2Noc",
+              "direction": "output",
+              "width_text": "[50:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "miso",
+              "direction": "input",
+              "width_text": "1",
+              "role": "unknown"
+            },
+            {
+              "name": "busy",
+              "direction": "output",
+              "width_text": "1",
+              "role": "unknown"
+            },
+            {
+              "name": "cs_n",
+              "direction": "output",
+              "width_text": "1",
+              "role": "unknown"
+            },
+            {
+              "name": "mosi",
+              "direction": "output",
+              "width_text": "1",
+              "role": "unknown"
+            },
+            {
+              "name": "startRead",
+              "direction": "output",
+              "width_text": "1",
+              "role": "unknown"
+            }
+          ],
+          "direction_counts": {
+            "input": 2,
+            "output": 6
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:SPI02NoC:interface"
+          ],
+          "summary": "other_ports ports, count=8, directions=input:2, output:6",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        }
+      ],
+      "natural_language_rule": "summarize port groups by role and direction; do not dump every port unless the module page is detailed"
+    },
+    "key_flow_refs": [
+      {
+        "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh",
+        "title": "i_driveFrmMesh to o_driveNextToMesh",
+        "trigger_event": "i_driveFrmMesh",
+        "manual_importance": "high",
+        "doc_priority": "primary",
+        "source_file": "flows/flow_000_SPI02NoC_i_driveFrmMesh.json",
+        "reader_takeaway": {
+          "value": "最终手册应重点描述两级FIFO的缓冲行为（深度、空满标志、门控条件）以及延迟单元的延迟周期数。",
+          "explanation": "当前流的核心结构是cFifo1→delay1→cFifo2的串行管道。FIFO级可能引入事件门控或背压，延迟单元影响时序。手册需明确这些组件的具体参数和行为，以便用户理解事件传输的延迟和可靠性。",
+          "certainty": "ai_inferred",
+          "confidence": "medium",
+          "source_layers": [
+            "semantic_layer"
+          ],
+          "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:documentation_focus:001",
+          "doc_priority": "primary",
+          "signals": [
+            "i_driveFrmMesh",
+            "w_driveNext",
+            "w_driveNext_delay",
+            "o_driveNextToMesh"
+          ],
+          "instances": [
+            "cFifo1",
+            "delay1",
+            "cFifo2"
+          ],
+          "related_flows": [],
+          "related_assignments": [
+            "0"
+          ],
+          "requires_rtl_source_review": true,
+          "review_status": "needs_review",
+          "evidence_refs": [
+            "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+            "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
+          ],
+          "semantic_evidence": [
+            {
+              "source": "flow.steps",
+              "path": "parser_module"
+            },
+            {
+              "source": "instances.connections",
+              "path": "parser_module"
+            }
+          ],
+          "supporting_claims": [
+            {
+              "value": "从Mesh侧输入的驱动事件经过两级FIFO缓冲和一级透明延迟后输出到Mesh侧，形成一条单向的事件传输管道。",
+              "explanation": "该流从输入端口i_driveFrmMesh开始，依次经过cFifo1、delay1、cFifo2三个实例，最终从输出端口o_driveNextToMesh送出。cFifo1和cFifo2作为FIFO级可能对事件进行缓冲或门控，delay1提供透明延迟但不改变事件语义。整个流没有分支或合并点，是一条纯粹的串行事件驱动路径。",
+              "certainty": "ai_inferred",
+              "confidence": "medium",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:flow_intent:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_driveFrmMesh",
+                "w_driveNext",
+                "w_driveNext_delay",
+                "o_driveNextToMesh"
+              ],
+              "instances": [
+                "cFifo1",
+                "delay1",
+                "cFifo2"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "0"
+              ],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+                "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "instances.connections",
+                  "path": "parser_module"
+                },
+                {
+                  "source": "transparent_flows",
+                  "path": "parser_module"
+                }
+              ]
+            },
+            {
+              "value": "输入事件i_driveFrmMesh携带51位数据i_dataFrmNoc，其中地址字段被提取用于内部处理。",
+              "explanation": "接口契约显示i_driveFrmMesh事件伴随i_dataFrmNoc[50:0]数据输入。赋值0从该数据中提取地址字段，表明事件携带的数据包含控制信息（地址），但该地址在当前流中未直接参与事件传输，可能用于其他并行逻辑。",
+              "certainty": "ai_inferred",
+              "confidence": "medium",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:data_control_effect:001",
+              "doc_priority": "secondary",
+              "signals": [
+                "i_driveFrmMesh",
+                "i_dataFrmNoc",
+                "address"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [
+                "0"
+              ],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+                "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "interface_payload_contracts",
+                  "path": "parser_module"
+                },
+                {
+                  "source": "related_assign_dependencies",
+                  "path": "parser_module"
+                }
+              ]
+            },
+            {
+              "value": "输入事件有对应的空闲信号o_freeToMesh，输出事件有对应的空闲信号i_freeNextFrmMesh，但当前流中未显示它们与事件传输的直接耦合关系。",
+              "explanation": "接口契约列出了输入事件i_driveFrmMesh的free_signal为o_freeToMesh，输出事件o_driveNextToMesh的free_signal为i_freeNextFrmMesh。这表明模块可能使用握手协议控制事件传输，但当前流步骤和连接中未包含这些信号，无法确定背压机制的具体实现。",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:completion_backpressure:001",
+              "doc_priority": "secondary",
+              "signals": [
+                "o_freeToMesh",
+                "i_freeNextFrmMesh"
+              ],
+              "instances": [
+                "cFifo1",
+                "cFifo2"
+              ],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+                "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "interface_payload_contracts",
+                  "path": "parser_module"
+                }
+              ]
+            }
+          ]
+        },
+        "evidence_refs": [
+          "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
+          "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
+        ]
+      }
+    ],
+    "counts": {
+      "interfaces": 15,
+      "flows": 1,
+      "components": 2,
+      "assignments": 7,
+      "evidence_gaps": 0,
+      "review_questions": 3
+    },
+    "source_review_context": {
+      "module": "SPI02NoC",
+      "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+      "allowed": true,
+      "allowed_use": [
+        "external port grouping",
+        "one-line module purpose hint",
+        "port role review when Manual Context only records unknown ports"
+      ],
+      "not_allowed_use": [
+        "inventing connections",
+        "inventing flows",
+        "inventing FSM or always-block behavior",
+        "promoting AI interpretation to deterministic_fact"
+      ],
+      "certainty_policy": "source review text must be marked ai_inferred or evidence_gap unless already present as parser/Knowledge IR fact",
+      "evidence_refs": [
+        "ev:SPI02NoC:parser_module",
+        "ev:SPI02NoC:knowledge_module"
+      ]
+    },
+    "evidence_refs": [
+      "ev:SPI02NoC:knowledge_module",
+      "ev:SPI02NoC:parser_module"
+    ]
+  },
+  "source_review_claims": [
+    {
+      "subject": "输出事件与数据负载的精确绑定",
+      "summary": "o_data2Noc 在 w_fire_2[1] 的上升沿更新，并将更新后的值持续输出，与 o_driveNextToMesh 同步输出成立",
+      "explanation": "从第117-139行可以看到，在posedge w_fire_2[1]触发的同一个always块中，第137行赋值o_data2Noc；从第76-85行cFifo2实例化可以看到，o_driveNextToMesh也是由w_fire_2[1]（对应cFifo2的o_fire_1）驱动。因此两者在同一事件后更新，支持手册所需的同步输出关系",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "o_data2Noc",
+        "o_driveNextToMesh",
+        "w_fire_2"
+      ],
+      "instances": [
+        "cFifo2"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 76,
+          "line_end": 85
+        },
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 117,
+          "line_end": 139
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:semantic_module",
+        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh",
+        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "w_fire_2 信号的生成逻辑",
+      "summary": "w_fire_2[0]来自cFifo1的o_fire_1，w_fire_2[1]来自cFifo2的o_fire_1",
+      "explanation": "第64-70行实例化cFifo1时，其o_fire_1连接到w_fire_2[0]；第76-85行实例化cFifo2时，其o_fire_1连接到w_fire_2[1]。因此w_fire_2的两个bit分别由两个FIFO的fire输出产生",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "w_fire_2",
+        "cFifo1.o_fire_1",
+        "cFifo2.o_fire_1"
+      ],
+      "instances": [
+        "cFifo1",
+        "cFifo2"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 64,
+          "line_end": 70
+        },
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 76,
+          "line_end": 85
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:semantic_module",
+        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh",
+        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "review_status": "ready"
+    },
+    {
+      "subject": "i_driveFrmMesh 的语义流",
+      "summary": "i_driveFrmMesh作为cFifo1的输入驱动整个流，经过delay和cFifo2后输出o_driveNextToMesh",
+      "explanation": "第64-70行cFifo1的i_drive连接i_driveFrmMesh，其o_driveNext经delay单元后送入cFifo2的i_drive（第75-78行），cFifo2的o_driveNext连接到o_driveNextToMesh（第82行）。该流描述了两级FIFO加延迟的结构",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_driveFrmMesh",
+        "w_driveNext",
+        "w_driveNext_delay",
+        "o_driveNextToMesh"
+      ],
+      "instances": [
+        "cFifo1",
+        "delay4U",
+        "cFifo2"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 64,
+          "line_end": 70
+        },
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 75,
+          "line_end": 85
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:semantic_module",
+        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh",
+        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "review_status": "ready"
+    }
+  ],
+  "source_review_report": {
+    "status": "reviewed",
+    "claim_count": 3,
+    "open_question_count": 2,
+    "source_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+    "report_file": "source_review_report.json"
   }
 }

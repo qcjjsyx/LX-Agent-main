@@ -62,9 +62,9 @@
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "SPI serial interface controller with CRC support and configurable data width",
+      "summary": "SPI从机核心数据收发与CRC校验控制模块",
       "subject": "spi_s",
-      "explanation": "Module has data inputs TXCRC and data_in, data output data_out, and internal signals for tx/rx completion, CRC done, and clock edge detection. Assignments show transmit gating by rxonly and CPHA, and configurable bit counter width via DFF.",
+      "explanation": "该模块作为SPI从机，负责接收主机发送的数据(data_in)并输出响应数据(data_out)，同时支持CRC校验功能(TXCRC输入)，通过内部状态机控制发送(tx)、接收(rx_done)和CRC计算(crc_done)的时序。",
       "signals": [
         "data_in",
         "data_out",
@@ -73,8 +73,7 @@
         "tx",
         "rx_done",
         "tx_done",
-        "crc_done",
-        "sclk_rise"
+        "crc_done"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -95,22 +94,16 @@
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "Manages SPI transmit and receive data paths, CRC computation, and busy indication based on enable, TXE, and CRC enable.",
-      "subject": "serial data transfer with CRC",
-      "explanation": "Busy is driven by enable, TXE, and crc_en. Transmit data tx is gated by rxonly and CPHA. Completion signals rx_done, tx_done, crc_done use configurable bit counter width (DFF). SCLK rise detection is gated by S_en.",
+      "summary": "根据SPI协议时序控制数据移位发送、接收完成标志生成及CRC校验完成标志生成",
+      "subject": "SPI从机数据收发与CRC校验",
+      "explanation": "通过assign依赖分析，模块根据DFF配置位宽(8/16位)生成rx_done/tx_done/crc_done完成信号，tx信号在rxonly模式下强制为0，否则根据CPHA和tx_cnt选择发送寄存器值。busy信号由enable、TXE和crc_en共同驱动，指示模块工作状态。",
       "signals": [
         "busy",
         "tx",
         "rx_done",
         "tx_done",
         "crc_done",
-        "sclk_rise",
-        "enable",
-        "TXE",
-        "crc_en",
-        "rxonly",
-        "CPHA",
-        "DFF"
+        "sclk_rise"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -132,21 +125,21 @@
         "module": "spi_s"
       },
       "subject": "busy",
-      "summary": "Busy indication combines enable, transmit empty, and CRC enable states.",
-      "explanation": "Busy is asserted when enable is high, or TXE is low (FIFO not empty), or crc_en is active. This indicates module is actively transferring or computing CRC.",
+      "summary": "模块忙状态指示，由使能、发送FIFO空标志和CRC使能共同决定",
+      "explanation": "busy = enable | !TXE | crc_en，表明模块在使能、发送数据未空或CRC使能时均视为忙状态，用于外部同步或状态指示。",
       "signals": [
         "busy",
         "enable",
         "TXE",
         "crc_en"
       ],
-      "related_assignments": [
-        "0"
-      ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_s.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_s.json"
         }
@@ -160,23 +153,23 @@
         "module": "spi_s"
       },
       "subject": "tx",
-      "summary": "Transmit data selection with rxonly override and CPHA-dependent register choice.",
-      "explanation": "When rxonly is set, tx is forced to 0. Otherwise, tx selects between tx_reg (CPHA=1) or tx_reg0/tx_reg based on tx_cnt being zero. This implements half-duplex receive-only mode and phase-dependent data alignment.",
+      "summary": "SPI从机发送数据选择，受rxonly模式和CPHA相位控制",
+      "explanation": "在rxonly模式下tx强制为0；否则根据CPHA选择tx_reg或(tx_cnt为0时选择tx_reg0)，实现SPI相位适配的数据发送。",
       "signals": [
         "tx",
         "rxonly",
         "CPHA",
         "tx_reg",
-        "tx_reg0",
-        "tx_cnt"
+        "tx_cnt",
+        "tx_reg0"
       ],
-      "related_assignments": [
-        "1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_s.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_s.json"
         }
@@ -190,8 +183,8 @@
         "module": "spi_s"
       },
       "subject": "rx_done, tx_done, crc_done",
-      "summary": "Configurable bit counter completion signals using DFF to select 8 or 16-bit transfers.",
-      "explanation": "When DFF is 1, completion occurs when bit counter reaches bit 3 (16 bits). When DFF is 0, completion at bit 2 (8 bits). This allows 8/16-bit data frame selection.",
+      "summary": "根据DFF配置生成8位或16位数据/CRC传输完成标志",
+      "explanation": "三个完成信号均通过DFF选择位宽：DFF为1时使用rx_cnt[3]/tx_cnt[3]/crc_cnt[3]（16位），否则使用[2]（8位），并与cnt_buf_*信号相与产生脉冲。",
       "signals": [
         "rx_done",
         "tx_done",
@@ -204,15 +197,13 @@
         "cnt_buf_tx",
         "cnt_buf_crc"
       ],
-      "related_assignments": [
-        "2",
-        "3",
-        "5"
-      ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_s.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_s.json"
         }
@@ -226,21 +217,21 @@
         "module": "spi_s"
       },
       "subject": "sclk_rise",
-      "summary": "SCLK rising edge detection gated by SPI enable.",
-      "explanation": "When S_en is active, sclk_rise is asserted on the rising edge of sclk (detected as sclk high while sclk_buf low). When S_en is inactive, sclk_rise is forced to 0.",
+      "summary": "SPI时钟上升沿检测信号，仅在S_en使能时有效",
+      "explanation": "sclk_rise = S_en ? (~sclk_buf) & sclk : 1'b0，通过sclk_buf延迟采样检测sclk上升沿，用于SPI时序控制。",
       "signals": [
         "sclk_rise",
         "S_en",
         "sclk_buf",
         "sclk"
       ],
-      "related_assignments": [
-        "4"
-      ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/spi_s.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_s.json"
         }
@@ -253,9 +244,9 @@
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "Parallel data interface for SPI transmit and receive payload.",
-      "subject": "data_in and data_out",
-      "explanation": "data_in provides 16-bit data to be serialized and transmitted. data_out receives deserialized 16-bit data from SPI bus. TXCRC provides CRC input for transmit CRC computation.",
+      "summary": "16位并行数据接口，支持CRC校验数据输入和普通数据收发",
+      "subject": "数据输入输出接口",
+      "explanation": "data_in和TXCRC均为16位数据输入，data_out为16位数据输出，表明模块支持16位SPI数据帧传输，TXCRC可能用于发送数据的CRC校验值输入。",
       "signals": [
         "data_in",
         "data_out",
@@ -267,6 +258,9 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_s.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/spi_s.json"
         }
       ],
       "id": "semantic:module:spi_s:interface_intent:001"
@@ -277,17 +271,16 @@
         "type": "module",
         "module": "spi_s"
       },
-      "reason": "Control signals (enable, TXE, crc_en, rxonly, CPHA, DFF, S_en) are used in assignments but not listed as ports. Need to verify if they are top-level ports or internal registers.",
-      "subject": "module port list",
-      "needed_source_slice": "module declaration",
+      "reason": "需要RTL源码中的always块来理解tx_reg、tx_reg0、rx_cnt、tx_cnt、crc_cnt等寄存器的更新条件和SPI状态机转移",
+      "subject": "内部寄存器更新逻辑",
+      "needed_source_slice": "always block",
       "signals": [
-        "enable",
-        "TXE",
-        "crc_en",
-        "rxonly",
-        "CPHA",
-        "DFF",
-        "S_en"
+        "tx_reg",
+        "tx_reg0",
+        "rx_cnt",
+        "tx_cnt",
+        "crc_cnt",
+        "sclk_buf"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -302,16 +295,16 @@
   ],
   "evidence_gaps": [
     {
-      "field": "internal event flow",
-      "reason": "No internal event flow refs provided. Cannot determine sequencing of tx_done, rx_done, crc_done or handshake with external controller."
+      "field": "内部状态机与寄存器更新逻辑",
+      "reason": "缺少always块和寄存器赋值信息，无法推断tx_reg、tx_reg0、rx_cnt等内部寄存器的更新时序和SPI状态机转移条件"
     },
     {
-      "field": "key component connections",
-      "reason": "No key component connections provided. Cannot determine register structure, shift registers, or CRC computation block."
+      "field": "实例化组件与子模块",
+      "reason": "key_instances和component_families均为空，无法分析模块内部子模块连接和功能划分"
     },
     {
-      "field": "control inputs",
-      "reason": "No control inputs listed. Signals like enable, TXE, crc_en, rxonly, CPHA, DFF, S_en are used but not declared as ports. Need RTL source to determine if they are ports or internal registers."
+      "field": "事件流与接口协议",
+      "reason": "event_inputs/event_outputs和internal_event_flow_refs均为空，无法推断SPI从机与外部的事件握手协议"
     }
   ]
 }

@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 12,
+    "count": 8,
     "by_type": {
       "assignment_interpretation": 1,
-      "component_role": 3,
+      "component_role": 2,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 3,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,40 +64,39 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "summary": "Drive-event pipeline slot that stages and delays a single drive event through two FIFO stages before forwarding to the mesh.",
+      "summary": "外围设备插槽模块，负责在Mesh网络与外围设备之间进行驱动事件和释放事件的流水线缓冲与延迟同步。",
       "subject": "perip_slot",
-      "explanation": "The module receives a single drive event i_driveFrmMesh, passes it through cFifo_1, then through two delay stages (delay0, delay1), then through cFifo_2, and outputs o_driveNextToMesh. Free signals flow in reverse: i_freeNextFrmMesh goes to cFifo_2, and cFifo_1 outputs o_freeToMesh. This forms a pipelined drive slot with backpressure.",
+      "explanation": "模块通过两个cFifo1实例（cFifo_1和cFifo_2）以及两级延迟单元（delay0、delay1）构成驱动事件链，将来自Mesh的驱动事件（i_driveFrmMesh）经过缓冲和延迟后输出到Mesh（o_driveNextToMesh），同时处理释放事件（i_freeNextFrmMesh、o_freeToMesh）的同步。数据端口（data_from、data_to、addr_i、data_i、data_o）表明模块还承担数据路径的桥接角色，但事件与数据的关联契约证据不足。",
       "signals": [
         "i_driveFrmMesh",
         "o_driveNextToMesh",
         "i_freeNextFrmMesh",
-        "o_freeToMesh"
+        "o_freeToMesh",
+        "data_from",
+        "data_to",
+        "addr_i",
+        "data_i",
+        "data_o"
       ],
       "instances": [
         "cFifo_1",
-        "cFifo_2",
-        "delay0",
-        "delay1",
-        "f2p_we"
+        "cFifo_2"
       ],
       "related_flows": [
         "flow_000_perip_slot_i_driveFrmMesh"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/perip_slot.json"
         },
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "internal_event_flow"
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
         },
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_instances"
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
       "id": "semantic:module:perip_slot:module_role:001"
@@ -108,13 +107,15 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "summary": "Provides a two-stage FIFO pipeline with inter-stage delays for drive event propagation, with reverse free-signal flow for backpressure.",
-      "subject": "drive event pipeline",
-      "explanation": "The drive event enters cFifo_1, then passes through two delay elements (delay0, delay1) before entering cFifo_2 and exiting. Free signals flow opposite: i_freeNextFrmMesh enters cFifo_2, and cFifo_1 outputs o_freeToMesh. This structure suggests a slot that can hold and delay a drive event while managing flow control.",
+      "summary": "模块通过两级FIFO和两级延迟单元构成驱动事件的流水线缓冲与延迟链，确保事件在Mesh与外围设备之间的时序对齐。",
+      "subject": "驱动事件流水线",
+      "explanation": "驱动事件从i_driveFrmMesh进入cFifo_1，输出到delay0，经过delay0和delay1两级延迟后，输入cFifo_2，最终输出o_driveNextToMesh。这种结构表明模块对驱动事件进行了深度流水线处理，可能用于匹配外围设备的访问延迟或Mesh网络的时序要求。",
       "signals": [
+        "i_driveFrmMesh",
         "w_drv2Fifo2",
         "w_drv2Fifo2_delay1",
-        "w_drv2Fifo2_delay2"
+        "w_drv2Fifo2_delay2",
+        "o_driveNextToMesh"
       ],
       "instances": [
         "cFifo_1",
@@ -126,16 +127,14 @@
         "flow_000_perip_slot_i_driveFrmMesh"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "internal_event_flow"
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
         },
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
       "id": "semantic:module:perip_slot:structural_responsibility:001"
@@ -146,35 +145,28 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "subject": "cFifo_1 and cFifo_2 (Fifo1 family)",
-      "summary": "Two single-entry FIFOs that buffer the drive event at pipeline entry and exit, enabling backpressure via free signals.",
-      "explanation": "cFifo_1 receives the incoming drive event and outputs o_freeToMesh when it can accept new events. cFifo_2 receives the delayed drive event and outputs o_driveNextToMesh, with i_freeNextFrmMesh providing backpressure from the downstream mesh. This creates a controlled pipeline stage.",
+      "subject": "cFifo_1",
+      "summary": "驱动事件输入缓冲器，接收来自Mesh的驱动事件并输出到延迟链。",
+      "explanation": "cFifo_1的输入事件为i_driveFrmMesh，输出事件为w_drv2Fifo2，作为驱动事件流水线的第一级缓冲，可能用于处理事件握手或速率匹配。",
       "signals": [
         "i_driveFrmMesh",
-        "w_drv2Fifo2",
-        "w_drv2Fifo2_delay2",
-        "o_driveNextToMesh",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
+        "w_drv2Fifo2"
       ],
       "instances": [
-        "cFifo_1",
-        "cFifo_2"
+        "cFifo_1"
       ],
       "related_flows": [
         "flow_000_perip_slot_i_driveFrmMesh"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
         },
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
       "id": "semantic:module:perip_slot:component_role:001"
@@ -185,66 +177,32 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "subject": "delay0 and delay1",
-      "summary": "Two sequential delay stages between the FIFOs that introduce pipeline latency for the drive event.",
-      "explanation": "The drive event passes from cFifo_1 through delay0, then delay1, then to cFifo_2. The signals w_drv2Fifo2, w_drv2Fifo2_delay1, and w_drv2Fifo2_delay2 indicate a shift-register or counter-based delay chain. This likely provides timing alignment or debounce for the drive event.",
+      "subject": "cFifo_2",
+      "summary": "驱动事件输出缓冲器，接收延迟后的驱动事件并输出到Mesh。",
+      "explanation": "cFifo_2的输入事件为w_drv2Fifo2_delay2（经过两级延迟），输出事件为o_driveNextToMesh，作为驱动事件流水线的最后一级缓冲，同时接收来自Mesh的释放事件i_freeNextFrmMesh，表明其可能参与释放同步。",
       "signals": [
-        "w_drv2Fifo2",
-        "w_drv2Fifo2_delay1",
-        "w_drv2Fifo2_delay2"
+        "w_drv2Fifo2_delay2",
+        "o_driveNextToMesh",
+        "i_freeNextFrmMesh"
       ],
       "instances": [
-        "delay0",
-        "delay1"
+        "cFifo_2"
       ],
       "related_flows": [
         "flow_000_perip_slot_i_driveFrmMesh"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
       "id": "semantic:module:perip_slot:component_role:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "perip_slot"
-      },
-      "subject": "f2p_we",
-      "summary": "Write-enable generation block that produces the we signal from a rising edge detection on an unknown input.",
-      "explanation": "The assign dependency shows we = (!we_r) & rise, indicating a rising-edge-triggered pulse generator. The f2p_we instance receives clk, rst, and rst_finish, suggesting it is a clocked block that generates a write-enable pulse. The source of rise and we_r is not specified in the context.",
-      "signals": [
-        "we",
-        "we_r",
-        "rise",
-        "clk",
-        "rst",
-        "rst_finish"
-      ],
-      "instances": [
-        "f2p_we"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "assign_dependencies"
-        },
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:perip_slot:component_role:003"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -253,20 +211,28 @@
         "module": "perip_slot"
       },
       "subject": "we",
-      "summary": "Rising-edge-detected pulse generator for write-enable, likely used for data path control.",
-      "explanation": "The assign we = (!we_r) & rise creates a single-cycle pulse when rise transitions high while we_r is low. This is a standard edge detector. The we signal likely controls data writes to a register or FIFO, but the data path is not described in the context.",
+      "summary": "写使能信号生成，基于上升沿检测和延迟版本信号。",
+      "explanation": "赋值we = (!we_r) & rise表明we是上升沿检测的结果，可能用于控制数据写入或事件触发，但具体作用域（如f2p_we实例）需要RTL源码确认。",
       "signals": [
         "we",
         "we_r",
         "rise"
       ],
+      "related_assignments": [
+        "0"
+      ],
+      "related_flows": [
+        "flow_000_perip_slot_i_driveFrmMesh"
+      ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "assign_dependencies"
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
       "id": "semantic:module:perip_slot:assignment_interpretation:001"
@@ -277,56 +243,34 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "summary": "A single-drive-event pipeline with forward drive and reverse free signals, forming a credit-based flow control boundary.",
-      "subject": "drive event interface",
-      "explanation": "The module has one drive event input (i_driveFrmMesh) and one output (o_driveNextToMesh), with corresponding free signals (o_freeToMesh output, i_freeNextFrmMesh input). This is a classic handshake: drive events flow forward, free signals flow backward to indicate readiness. The event_payload_contracts show no payloads, suggesting pure control events.",
+      "summary": "驱动事件输入（i_driveFrmMesh）与释放事件输出（o_freeToMesh）构成一对，驱动事件输出（o_driveNextToMesh）与释放事件输入（i_freeNextFrmMesh）构成另一对，表明模块采用请求-释放握手协议。",
+      "subject": "驱动事件与释放事件配对",
+      "explanation": "事件-释放契约显示i_driveFrmMesh的释放信号为o_freeToMesh，o_driveNextToMesh的释放信号为i_freeNextFrmMesh，这种配对关系表明模块在Mesh与外围设备之间实现了基于事件的流控机制，但具体协议细节（如释放条件）需要RTL源码确认。",
       "signals": [
         "i_driveFrmMesh",
-        "o_driveNextToMesh",
         "o_freeToMesh",
+        "o_driveNextToMesh",
         "i_freeNextFrmMesh"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "interface"
-        },
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "event_payload_contracts"
-        }
-      ],
-      "id": "semantic:module:perip_slot:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "perip_slot"
-      },
-      "summary": "Data ports (data_from, data_o, addr_i, data_i, data_to) exist but have no documented connection to the drive event flow, suggesting a separate or undocumented data path.",
-      "subject": "data interface",
-      "explanation": "The module has 51-bit data_from and data_to ports, and 32-bit data_o, addr_i, and data_i ports. However, no key component connections or event_payload_contracts link these to the drive pipeline. The data path may be independent or the context is incomplete.",
-      "signals": [
+      "related_payload": [
         "data_from",
-        "data_o",
+        "data_to",
         "addr_i",
         "data_i",
-        "data_to"
+        "data_o"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/perip_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
         }
       ],
-      "id": "semantic:module:perip_slot:interface_intent:002"
+      "id": "semantic:module:perip_slot:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -334,17 +278,15 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "summary": "Emphasize the two-stage FIFO pipeline with delays as the core function, and document the data path separately if it exists.",
-      "subject": "drive event pipeline",
-      "explanation": "The drive event pipeline is well-documented with high confidence connections and flow. The data ports are present but disconnected in the context. The manual should focus on the drive pipeline as the primary function, and note the data path as requiring RTL source review.",
+      "summary": "手册应重点描述驱动事件从输入到输出的流水线级数、延迟单元的作用以及FIFO的缓冲深度，以帮助理解模块的时序特性。",
+      "subject": "驱动事件流水线深度与延迟链",
+      "explanation": "驱动事件经过cFifo_1、delay0、delay1、cFifo_2共四级处理，这种流水线结构是模块的核心功能，直接影响外围设备访问的延迟和吞吐量。延迟单元（delay0、delay1）的具体延迟周期数需要RTL源码确认。",
       "signals": [
         "i_driveFrmMesh",
-        "o_driveNextToMesh",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh",
         "w_drv2Fifo2",
         "w_drv2Fifo2_delay1",
-        "w_drv2Fifo2_delay2"
+        "w_drv2Fifo2_delay2",
+        "o_driveNextToMesh"
       ],
       "instances": [
         "cFifo_1",
@@ -356,16 +298,14 @@
         "flow_000_perip_slot_i_driveFrmMesh"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "internal_event_flow"
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
         },
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
       "id": "semantic:module:perip_slot:documentation_focus:001"
@@ -376,94 +316,55 @@
         "type": "module",
         "module": "perip_slot"
       },
-      "reason": "Data ports (data_from, data_o, addr_i, data_i, data_to) have no documented connections to instances or the drive pipeline. Their role and connectivity are unknown.",
-      "subject": "data path connectivity",
-      "needed_source_slice": "module declaration, instance connections, assign blocks",
+      "reason": "紧凑上下文未提供数据端口（data_from、data_to、addr_i、data_i、data_o）与驱动/释放事件之间的连接关系，无法确定数据是在事件触发时传输还是独立于事件流。",
+      "subject": "数据路径与事件路径的关联",
+      "needed_source_slice": "instance connections, assign block, always block",
       "signals": [
         "data_from",
-        "data_o",
+        "data_to",
         "addr_i",
         "data_i",
-        "data_to"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "interface"
-        }
-      ],
-      "id": "semantic:module:perip_slot:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "perip_slot"
-      },
-      "reason": "The we assign is documented but its source signals (rise, we_r) and connection to the data path or drive pipeline are unknown. The f2p_we instance receives clk, rst, and rst_finish but its output is not shown.",
-      "subject": "f2p_we and we signal",
-      "needed_source_slice": "always blocks, assign blocks, instance connections",
-      "signals": [
-        "we",
-        "we_r",
-        "rise",
-        "clk",
-        "rst",
-        "rst_finish"
+        "data_o",
+        "i_driveFrmMesh",
+        "o_driveNextToMesh"
       ],
       "instances": [
+        "cFifo_1",
+        "cFifo_2",
         "f2p_we"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "assign_dependencies"
-        },
-        {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:perip_slot:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "perip_slot"
-      },
-      "reason": "The delay stages are shown as connections but their internal logic (counter, shift register, or combinational) is not specified. Their delay value or purpose is unknown.",
-      "subject": "delay0 and delay1 implementation",
-      "needed_source_slice": "module declaration, always blocks, assign blocks",
-      "signals": [
-        "w_drv2Fifo2",
-        "w_drv2Fifo2_delay1",
-        "w_drv2Fifo2_delay2"
-      ],
-      "instances": [
-        "delay0",
-        "delay1"
       ],
       "related_flows": [
         "flow_000_perip_slot_i_driveFrmMesh"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/perip_slot.json",
-          "path": "key_component_connections"
+          "source": "knowledge_ir/modules/perip_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/perip_slot.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
         }
       ],
-      "id": "semantic:module:perip_slot:source_review_request:003"
+      "id": "semantic:module:perip_slot:source_review_request:001"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "数据端口与事件路径的关联",
+      "reason": "紧凑上下文未提供数据端口（data_from、data_to、addr_i、data_i、data_o）与驱动/释放事件之间的连接关系，无法确定数据是在事件触发时传输还是独立于事件流。"
+    },
+    {
+      "field": "延迟单元（delay0、delay1）的延迟周期数",
+      "reason": "紧凑上下文未提供延迟单元的具体延迟周期数，无法确定驱动事件流水线的总延迟。"
+    },
+    {
+      "field": "释放事件（i_freeNextFrmMesh、o_freeToMesh）的触发条件",
+      "reason": "紧凑上下文未提供释放事件与驱动事件或数据路径之间的具体逻辑关系，无法确定释放协议。"
+    }
+  ]
 }

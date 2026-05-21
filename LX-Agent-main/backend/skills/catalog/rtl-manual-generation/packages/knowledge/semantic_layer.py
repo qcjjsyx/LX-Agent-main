@@ -313,7 +313,9 @@ def build_module_messages(context: Dict[str, Any]) -> List[Dict[str, str]]:
         "Generate only reusable semantic claims that add interpretation for later manual generation. "
         "Every claim must be grounded in supplied AI context evidence. Use confidence high, medium, or low. "
         "If the compact context is insufficient for intent-level semantics, write SOURCE_REVIEW_REQUEST or "
-        "EVIDENCE_GAP instead of guessing."
+        "EVIDENCE_GAP instead of guessing. "
+        "All human-readable summary, explanation, and reason fields must be written in Simplified Chinese; "
+        "keep module names, signal names, instance names, and field tags exactly as they appear in the RTL/context."
     )
     user_prompt = (
         f"Enrich module-level semantics for module {module_name}.\n\n"
@@ -414,7 +416,9 @@ def build_flow_messages(context: Dict[str, Any]) -> List[Dict[str, str]]:
         "You are a Knowledge IR flow semantic claim engine for RTL manuals. "
         "Return tagged key-value text only. Do not return JSON, Markdown tables, or code fences. "
         "Explain only the supplied single drive-based flow. Do not restate the raw step list or complete "
-        "missing endpoints by guesswork. Generate compact interpretive claims for later manual generation."
+        "missing endpoints by guesswork. Generate compact interpretive claims for later manual generation. "
+        "All human-readable summary, explanation, and reason fields must be written in Simplified Chinese; "
+        "keep module names, signal names, instance names, flow ids, and field tags exactly as they appear in the RTL/context."
     )
     user_prompt = (
         f"Enrich flow semantics for module {module_name}, flow {flow_id}.\n\n"

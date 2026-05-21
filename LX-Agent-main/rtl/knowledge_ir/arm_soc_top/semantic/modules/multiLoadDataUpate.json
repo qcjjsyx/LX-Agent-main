@@ -46,12 +46,10 @@
     }
   ],
   "claim_summary": {
-    "count": 7,
+    "count": 5,
     "by_type": {
       "assignment_interpretation": 3,
-      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -62,9 +60,9 @@
         "type": "module",
         "module": "multiLoadDataUpate"
       },
-      "summary": "Sequential multi-load data update and address generation unit for LSU",
+      "summary": "多加载数据更新与写回控制模块，负责从加载数据路由中选择并重组数据，生成写回使能、结束标志及下一轮地址/寄存器列表。",
       "subject": "multiLoadDataUpate",
-      "explanation": "Module takes address, data routing info, and register list to produce updated writeback data, next address, next register list, and completion flags. Assignments show conditional data selection based on internal counters (num, r_count_2) and register list tracking.",
+      "explanation": "模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志以及下一轮地址和寄存器列表，表明其是加载单元中数据更新和迭代控制的核心。",
       "signals": [
         "i_address_32",
         "i_fromDataRoutData_64",
@@ -83,12 +81,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/multiLoadDataUpate.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json",
-          "path": "assignments"
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
         }
       ],
       "id": "semantic:module:multiLoadDataUpate:module_role:001"
@@ -99,28 +98,31 @@
         "type": "module",
         "module": "multiLoadDataUpate"
       },
-      "summary": "Tracks remaining register loads and generates next address and writeback data for multi-load operations",
-      "subject": "multi-load data update sequencing",
-      "explanation": "Module uses internal registers r_registerList_16 to track pending loads, r_nextAddress_32 for address progression, and r_k_4/r_j_4 for destination register indices. Outputs o_endFlag_1 when register list is empty, and o_wbackData_64 selects between full 64-bit or half-width data based on num and r_count_2.",
+      "summary": "根据内部计数器和寄存器列表状态，从加载数据路由中选择并重组数据，生成写回数据、写回使能、结束标志以及下一轮地址和寄存器列表。",
+      "subject": "多加载数据更新与写回控制",
+      "explanation": "通过assign依赖关系可见，o_wbackData_64根据num和r_count_2从i_fromDataRoutData_64中选择32位数据并扩展至64位；o_wbackWen_2根据num生成写回使能；o_endFlag_1根据r_registerList_16是否全零生成结束标志；o_nextAddress_32和o_nextRegisterList_16直接由内部寄存器驱动，表明模块负责迭代更新。",
       "signals": [
-        "i_registerList_16",
-        "o_nextRegisterList_16",
-        "o_nextAddress_32",
-        "o_endFlag_1",
         "o_wbackData_64",
-        "o_wbackWen_2"
+        "o_wbackWen_2",
+        "o_endFlag_1",
+        "o_nextAddress_32",
+        "o_nextRegisterList_16",
+        "i_fromDataRoutData_64",
+        "i_fromDataRout_1",
+        "i_registerList_16"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/multiLoadDataUpate.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json",
-          "path": "assignments"
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
         }
       ],
       "id": "semantic:module:multiLoadDataUpate:structural_responsibility:001"
@@ -132,8 +134,8 @@
         "module": "multiLoadDataUpate"
       },
       "subject": "o_wbackData_64",
-      "summary": "Conditional writeback data selection based on load width and data routing",
-      "explanation": "When num==2'b10 (double load), passes full i_fromDataRoutData_64. When num==2'b01 (single load), selects upper or lower 32 bits based on r_count_2. Otherwise zero. Indicates support for both 32-bit and 64-bit load types.",
+      "summary": "根据num和r_count_2从i_fromDataRoutData_64中选择32位数据并扩展至64位，实现加载数据的选择与对齐。",
+      "explanation": "当num==2'b10时，直接输出64位数据；当num==2'b01时，根据r_count_2选择高32位或低32位并扩展至64位；否则输出0。这表明模块支持不同宽度的加载数据更新。",
       "signals": [
         "o_wbackData_64",
         "i_fromDataRoutData_64",
@@ -148,8 +150,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json",
-          "path": "assignments[2]"
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
         }
       ],
       "id": "semantic:module:multiLoadDataUpate:assignment_interpretation:001"
@@ -161,8 +168,8 @@
         "module": "multiLoadDataUpate"
       },
       "subject": "o_wbackWen_2",
-      "summary": "Write enable generation based on load count",
-      "explanation": "When num==2'b01 (single load), enables only lower byte (2'b01). When num==2'b10 (double load), enables both bytes (2'b11). Otherwise disabled. Controls writeback granularity per load type.",
+      "summary": "根据num生成写回使能信号，控制写回数据的有效字节。",
+      "explanation": "当num==2'b01时，使能低字节；当num==2'b10时，使能全部字节；否则不使能。这表明写回使能与加载数据宽度相关。",
       "signals": [
         "o_wbackWen_2",
         "num"
@@ -175,8 +182,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json",
-          "path": "assignments[3]"
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
         }
       ],
       "id": "semantic:module:multiLoadDataUpate:assignment_interpretation:002"
@@ -188,8 +200,8 @@
         "module": "multiLoadDataUpate"
       },
       "subject": "o_endFlag_1",
-      "summary": "Completion flag when all register loads are processed",
-      "explanation": "Asserts when r_registerList_16 is all zeros, indicating no remaining pending loads in the multi-load sequence.",
+      "summary": "根据r_registerList_16是否全零生成结束标志，指示多加载操作是否完成。",
+      "explanation": "当r_registerList_16所有位为0时，o_endFlag_1置1，表示所有寄存器加载完成。",
       "signals": [
         "o_endFlag_1",
         "r_registerList_16"
@@ -199,87 +211,66 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json",
-          "path": "assignments[4]"
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
         }
       ],
       "id": "semantic:module:multiLoadDataUpate:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "multiLoadDataUpate"
-      },
-      "summary": "i_fromDataRoutData_64 and i_fromDataRout_1 provide data and control from data routing stage",
-      "subject": "data routing interface",
-      "explanation": "i_fromDataRoutData_64 carries the actual load data (64-bit), while i_fromDataRout_1 likely indicates valid or routing control. Together they form the data input contract from the data routing pipeline stage.",
-      "signals": [
-        "i_fromDataRoutData_64",
-        "i_fromDataRout_1"
-      ],
-      "related_payload": [
-        "o_wbackData_64"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/multiLoadDataUpate.json",
-          "path": "interface"
-        }
-      ],
-      "id": "semantic:module:multiLoadDataUpate:interface_intent:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "multiLoadDataUpate"
-      },
-      "reason": "Assignments show output dependencies on r_*, r_count_2, num but their sequential update logic is missing from compact context",
-      "subject": "internal register update logic",
-      "needed_source_slice": "always block",
-      "signals": [
-        "r_registerList_16",
-        "r_nextAddress_32",
-        "r_k_4",
-        "r_j_4",
-        "r_count_2",
-        "num"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json",
-          "path": "assignments"
-        },
-        {
-          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v",
-          "path": "module_source"
-        }
-      ],
-      "id": "semantic:module:multiLoadDataUpate:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "internal state machine",
-      "reason": "No internal event flow or state machine description provided. Module likely uses sequential logic with registers (r_*, r_count_2, num) but their update logic is not captured in assignments."
+      "field": "内部状态机（r_k_4, r_j_4, r_count_2, num）的更新逻辑",
+      "reason": "当前上下文仅包含assign依赖，缺少always块或状态机描述，无法推断内部寄存器的更新条件和时序关系。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
+        }
+      ]
     },
     {
-      "field": "register list encoding",
-      "reason": "i_registerList_16 and o_nextRegisterList_16 semantics (bitmask vs. index list) not specified. Assignment shows r_registerList_16 drives output but update logic missing."
+      "field": "i_fromDataRout_1 的语义",
+      "reason": "该信号作为数据输入，但未在assign依赖中直接使用，其作用不明确，可能用于控制状态机或数据选择。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
+        }
+      ]
     },
     {
-      "field": "num signal source",
-      "reason": "Signal 'num' appears in multiple assignments but its source and update logic are not provided. Likely an internal register or wire derived from i_fromDataRout_1 or other control."
+      "field": "o_dHi_4 和 o_dLo_4 的语义",
+      "reason": "这两个输出信号由内部寄存器r_k_4和r_j_4直接驱动，但当前上下文未说明其用途，可能用于调试或外部状态指示。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
+        }
+      ]
     }
   ]
 }

@@ -96,8 +96,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "Central pop sequencer that decodes a single DR-originated exception/interrupt request into four prioritized target drive events and merges a Top-originated request into the DR path.",
-      "explanation": "The module receives two event inputs: i_driveFromDR (split into two paths via u0_cSplitter2_NoData) and i_driveFromTop (merged with a feedback path via u0_cMutexMerge2_NoData). The DR path drives SP, WGRF, and WPSR outputs after delay; the Top path drives only DR output. Free signals from each target return to the module and propagate back to DR or Top.",
+      "value": "中断与异常出栈调度器，负责将来自DR（数据读取器）和Top（顶层）的出栈请求分发到SP（栈指针）、WGRF（通用寄存器文件写入）和WPSR（程序状态字写入）等目标单元。",
+      "explanation": "模块接收两个驱动事件输入（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将请求路由到四个输出驱动事件，并携带相应的数据负载（地址、SP值、寄存器数据、PSR数据）。自由信号（free）用于握手确认。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -140,8 +140,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "Central pop sequencer that decodes a single DR-originated exception/interrupt request into four prioritized target drive events and merges a Top-originated request into the DR path.",
-        "explanation": "The module receives two event inputs: i_driveFromDR (split into two paths via u0_cSplitter2_NoData) and i_driveFromTop (merged with a feedback path via u0_cMutexMerge2_NoData). The DR path drives SP, WGRF, and WPSR outputs after delay; the Top path drives only DR output. Free signals from each target return to the module and propagate back to DR or Top.",
+        "value": "中断与异常出栈调度器，负责将来自DR（数据读取器）和Top（顶层）的出栈请求分发到SP（栈指针）、WGRF（通用寄存器文件写入）和WPSR（程序状态字写入）等目标单元。",
+        "explanation": "模块接收两个驱动事件输入（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将请求路由到四个输出驱动事件，并携带相应的数据负载（地址、SP值、寄存器数据、PSR数据）。自由信号（free）用于握手确认。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -183,8 +183,8 @@
         ]
       },
       {
-        "value": "Arbitrates between DR and Top pop requests, dispatches DR pop to SP/WGRF/WPSR with address calculation, and dispatches Top pop to DR.",
-        "explanation": "The DR pop flow (flow_000) splits into two paths: one drives SP directly via u0_cSelector2_1b, the other drives WGRF and WPSR after two delay stages. The Top pop flow (flow_001) merges with the SP-to-DR feedback path via u0_cMutexMerge2_NoData to drive DR. Address calculation uses i_SP_32 with offsets 0,8,16,24 selected by r_outNum_2.",
+        "value": "模块将单个入栈请求（来自DR或Top）分解为最多四个并行的出栈操作，每个操作针对不同的目标单元，并生成相应的地址或数据负载。",
+        "explanation": "来自DR的请求通过Splitter分为两路：一路经两级延迟后驱动到WGRF和WPSR（携带72位和32位数据），另一路驱动到SP（携带更新后的SP值）。来自Top的请求与SP路径的返回事件通过MutexMerge合并后驱动到DR（携带基于SP计算的地址）。数据路径通过assign语句实现SP偏移计算和多路选择。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -200,7 +200,9 @@
           "o_driveToWGRF",
           "o_driveToWPSR",
           "o_addrToDR_32",
-          "o_SP_32"
+          "o_SP_32",
+          "o_dataToWGRF_72",
+          "o_dataToWPSR_32"
         ],
         "instances": [
           "u0_cSplitter2_NoData_intAndExc_pop",
@@ -230,22 +232,21 @@
     ],
     "documentation_focus": [
       {
-        "value": "Manual should emphasize the four-slot pop mechanism, address calculation, and the two-phase DR pop flow (SP dispatch then WGRF/WPSR dispatch after delay).",
-        "explanation": "The DR pop flow splits into SP dispatch (immediate) and WGRF/WPSR dispatch (after two delay stages). The r_outNum_2 state selects which of four slots is being popped. The SP feedback path (w_drive2) ensures DR is driven after SP dispatch completes.",
+        "value": "文档应重点描述出栈请求如何从输入事件分发到四个目标单元，以及地址和数据的生成逻辑。",
+        "explanation": "核心逻辑包括：SP偏移地址计算（+0/+8/+16/+24）、基于r_outNum_2的多路选择、SP值更新（+32）、以及WGRF/WPSR的数据路径。这些是理解模块功能的关键。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:intAndExc_pop:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_driveFromDR",
-          "o_driveToSP",
-          "o_driveToWGRF",
-          "o_driveToWPSR",
           "o_addrToDR_32",
           "o_SP_32",
+          "o_dataToWGRF_72",
+          "o_dataToWPSR_32",
+          "i_SP_32",
           "r_outNum_2"
         ],
         "instances": [
@@ -253,6 +254,43 @@
           "u0_cSelector2_1b_intAndExc_pop",
           "u0_cSelector2_73b_intAndExc_pop",
           "u0_cMutexMerge2_NoData_intAndExc_pop"
+        ],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/intAndExc_pop.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
+      },
+      {
+        "value": "文档应说明WGRF/WPSR路径上的两级延迟（Delay0和Delay1）的作用，可能用于等待数据就绪或对齐时序。",
+        "explanation": "来自Splitter的w_drive0经过Delay0和Delay1后生成w_drive0Delay1，才驱动到Selector2_73b。这种延迟可能用于等待DR数据（i_DRdata_64）到达或满足时序约束。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:documentation_focus:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_drive0",
+          "w_drive0Delay",
+          "w_drive0Delay1"
+        ],
+        "instances": [
+          "Delay0",
+          "Delay1"
         ],
         "related_flows": [
           "flow_000_intAndExc_pop_i_driveFromDR"
@@ -536,8 +574,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_intAndExc_pop_i_driveFromDR.json",
       "reader_takeaway": {
-        "value": "The DR event directly drives SP output with an incremented SP value.",
-        "explanation": "The event path from i_driveFromDR through the splitter and 1b selector to o_driveToSP carries no data payload itself, but the associated assignment o_SP_32 = i_SP_32 + 32 provides the data for the SP output. The event and data are coupled at the module boundary.",
+        "value": "事件o_driveToSP携带递增后的SP地址负载。",
+        "explanation": "赋值9显示o_SP_32由i_SP_32加32得到，且o_driveToSP事件通过cSelector2_1b输出。这表明SP写操作的事件与地址负载紧密耦合，每次事件触发都会更新SP指针。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -546,7 +584,6 @@
         "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_driveFromDR",
           "o_driveToSP",
           "o_SP_32",
           "i_SP_32"
@@ -564,18 +601,78 @@
         ],
         "semantic_evidence": [
           {
-            "source": "module_facts",
-            "path": "knowledge_ir/modules/intAndExc_pop.json"
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+            "path": "assignments"
           },
           {
-            "source": "parser_module",
-            "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+            "path": "interface_data_contract"
           }
         ],
         "supporting_claims": [
           {
-            "value": "Emphasize the fork-merge structure with delayed path and arbitration point.",
-            "explanation": "The flow has a clear structure: a NoData splitter forks the event, one path goes through delays to a selector for WGRF/WPSR, the other path goes to a selector for SP and a MutexMerge for DR. The delays and arbitration are key features that should be documented.",
+            "value": "事件o_driveToWGRF携带73位写数据负载。",
+            "explanation": "接口负载契约显示o_driveToWGRF事件关联73位数据o_dataToWGRF_72，且该数据由cSelector2_73b直接输出。这表明WGRF写操作的事件与数据在同一个选择器实例中同步分发。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:002",
+            "doc_priority": "primary",
+            "signals": [
+              "o_driveToWGRF",
+              "o_dataToWGRF_72"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                "path": "interface_data_contract"
+              }
+            ]
+          },
+          {
+            "value": "事件o_driveToWPSR携带32位写数据负载。",
+            "explanation": "接口负载契约显示o_driveToWPSR事件关联32位数据o_dataToWPSR_32，且该数据由cSelector2_73b直接输出。这表明WPSR写操作的事件与数据在同一个选择器实例中同步分发。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:003",
+            "doc_priority": "primary",
+            "signals": [
+              "o_driveToWPSR",
+              "o_dataToWPSR_32"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                "path": "interface_data_contract"
+              }
+            ]
+          },
+          {
+            "value": "文档应重点描述事件如何从i_driveFromDR分支，经延迟同步后，通过选择器和合并器分发至四个目标。",
+            "explanation": "该流的核心是事件的分发路径：cSplitter2_NoData的分支、两级延迟的对齐、cSelector2_1b的选择（SP或DR合并）、cMutexMerge2的仲裁以及cSelector2_73b的最终分发。这些组件的交互定义了流的语义，应详细说明。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -585,6 +682,11 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromDR",
+              "w_drive0",
+              "w_drive1",
+              "w_drive0Delay",
+              "w_drive0Delay1",
+              "w_drive2",
               "o_driveToSP",
               "o_driveToDR",
               "o_driveToWGRF",
@@ -592,15 +694,51 @@
             ],
             "instances": [
               "u0_cSplitter2_NoData_intAndExc_pop",
-              "u0_cSelector2_1b_intAndExc_pop",
-              "u0_cSelector2_73b_intAndExc_pop",
-              "u0_cMutexMerge2_NoData_intAndExc_pop",
               "Delay0",
-              "Delay1"
+              "Delay1",
+              "u0_cSelector2_1b_intAndExc_pop",
+              "u0_cMutexMerge2_NoData_intAndExc_pop",
+              "u0_cSelector2_73b_intAndExc_pop"
             ],
             "related_flows": [],
             "related_assignments": [
               "0",
+              "9"
+            ],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                "path": "flow_graph.assignment_dependencies"
+              }
+            ]
+          },
+          {
+            "value": "文档应明确每个输出事件携带的数据负载及其来源。",
+            "explanation": "o_driveToSP携带递增的SP地址（赋值9），o_driveToWGRF和o_driveToWPSR分别携带73位和32位数据（来自cSelector2_73b），而o_driveToDR的地址负载由r_outNum_2选择（赋值5）。这些数据关联是理解事件语义的关键。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:documentation_focus:002",
+            "doc_priority": "primary",
+            "signals": [
+              "o_SP_32",
+              "o_dataToWGRF_72",
+              "o_dataToWPSR_32",
+              "o_addrToDR_32"
+            ],
+            "instances": [
+              "u0_cSelector2_73b_intAndExc_pop"
+            ],
+            "related_flows": [],
+            "related_assignments": [
               "5",
               "9"
             ],
@@ -612,18 +750,14 @@
             ],
             "semantic_evidence": [
               {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/intAndExc_pop.json"
-              },
-              {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                "path": "interface_data_contract"
               }
             ]
           },
           {
-            "value": "This flow distributes an incoming exception/interrupt drive event from DR to four output endpoints, with a delayed branch for WGRF/WPSR and a merged branch for DR.",
-            "explanation": "The flow starts at i_driveFromDR, splits into two paths via a NoData splitter. One path goes through two delays to a 73b selector that drives WGRF and WPSR. The other path goes to a 1b selector that drives SP directly and also feeds a MutexMerge that arbitrates with i_driveFromTop to drive DR. This structure suggests the DR event can be forwarded to SP, WGRF, WPSR, and back to DR (possibly after arbitration with another source).",
+            "value": "来自DR的单一事件驱动，经拆分、延迟、选择与互斥合并后，分发至SP、DR、WGRF和WPSR四个目标。",
+            "explanation": "该流从输入端口i_driveFromDR发起，通过cSplitter2_NoData实例分为两路：一路经两级延迟后由cSelector2_73b分发至WGRF和WPSR；另一路经cSelector2_1b选择后，一路直接输出至SP，另一路与来自顶层的i_driveFromTop在cMutexMerge2中合并后输出至DR。整个流体现了事件的分支、延迟同步和仲裁合并。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -633,6 +767,11 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromDR",
+              "w_drive0",
+              "w_drive1",
+              "w_drive0Delay",
+              "w_drive0Delay1",
+              "w_drive2",
               "o_driveToSP",
               "o_driveToDR",
               "o_driveToWGRF",
@@ -640,11 +779,11 @@
             ],
             "instances": [
               "u0_cSplitter2_NoData_intAndExc_pop",
-              "u0_cSelector2_1b_intAndExc_pop",
-              "u0_cSelector2_73b_intAndExc_pop",
-              "u0_cMutexMerge2_NoData_intAndExc_pop",
               "Delay0",
-              "Delay1"
+              "Delay1",
+              "u0_cSelector2_1b_intAndExc_pop",
+              "u0_cMutexMerge2_NoData_intAndExc_pop",
+              "u0_cSelector2_73b_intAndExc_pop"
             ],
             "related_flows": [],
             "related_assignments": [
@@ -660,121 +799,12 @@
             ],
             "semantic_evidence": [
               {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/intAndExc_pop.json"
+                "source": "knowledge_ir/modules/intAndExc_pop.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-              }
-            ]
-          },
-          {
-            "value": "The delayed DR event path carries separate data payloads for WGRF and WPSR outputs.",
-            "explanation": "The event path through the delays to the 73b selector carries no data, but the selector outputs have associated data signals (o_dataToWGRF_72 and o_dataToWPSR_32). The data selection logic is not specified in the flow context.",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:002",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFromDR",
-              "o_driveToWGRF",
-              "o_driveToWPSR",
-              "o_dataToWGRF_72",
-              "o_dataToWPSR_32"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
-              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/intAndExc_pop.json"
-              },
-              {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-              }
-            ]
-          },
-          {
-            "value": "The DR event can loop back to DR output after arbitration with an external Top event.",
-            "explanation": "The event path through the splitter and 1b selector to the MutexMerge can drive the DR output, but must arbitrate with i_driveFromTop. The associated address data (o_addrToDR_32) is selected from multiple sources based on internal state.",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:003",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFromDR",
-              "o_driveToDR",
-              "o_addrToDR_32",
-              "i_driveFromTop"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [
-              "0",
-              "5"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
-              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/intAndExc_pop.json"
-              },
-              {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-              }
-            ]
-          },
-          {
-            "value": "Free signals exist at each output endpoint but their relationship to the flow is not specified.",
-            "explanation": "The interface payload contracts list free signals (o_freeToDR, i_freeFromDR, i_freeFromSP, i_freeFromWGRF, i_freeFromWPSR) but the flow context does not show how they connect to the internal components. Backpressure and completion semantics cannot be determined from the supplied context.",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:completion_backpressure:001",
-            "doc_priority": "reference",
-            "signals": [
-              "o_freeToDR",
-              "i_freeFromDR",
-              "i_freeFromSP",
-              "i_freeFromWGRF",
-              "i_freeFromWPSR"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
-              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/intAndExc_pop.json"
+                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                "path": "flow_graph.assignment_dependencies"
               }
             ]
           }
@@ -793,27 +823,26 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_intAndExc_pop_i_driveFromTop.json",
       "reader_takeaway": {
-        "value": "The output address payload o_addrToDR_32 is selected based on r_outNum_2, which is likely the result of the MutexMerge arbitration, coupling the event flow to data selection.",
-        "explanation": "The assignment for o_addrToDR_32 uses r_outNum_2 as a selector to choose among four address sources. This r_outNum_2 signal is likely driven by the MutexMerge's arbitration result, meaning the event flow (which event path won arbitration) directly controls which address payload is sent to the DR. This couples the event drive flow to the data path.",
+        "value": "手册应重点描述MutexMerge的仲裁行为及其对输出事件时机的影响",
+        "explanation": "流中唯一实例是合并器，且为阻塞点，说明事件路径在此处可能因仲裁而延迟或丢弃。手册需说明i_driveFromTop和w_drive2的优先级或互斥规则，以及如何影响o_driveToDR的生成。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "o_addrToDR_32",
-          "r_outNum_2",
-          "w_addrToDR0_32",
-          "w_addrToDR1_32",
-          "w_addrToDR2_32",
-          "w_addrToDR3_32"
+          "i_driveFromTop",
+          "w_drive2",
+          "o_driveToDR"
         ],
-        "instances": [],
+        "instances": [
+          "u0_cMutexMerge2_NoData_intAndExc_pop"
+        ],
         "related_flows": [],
         "related_assignments": [
-          "5"
+          "assign 0"
         ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
@@ -823,56 +852,16 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-            "path": "assignments"
+            "source": "flow.blocking_points"
+          },
+          {
+            "source": "flow.join_points"
           }
         ],
         "supporting_claims": [
           {
-            "value": "The final manual should emphasize the MutexMerge's arbitration role in this flow and how the arbitration result selects the output address payload.",
-            "explanation": "The flow's key semantic is that an external event must win arbitration against an internal event to propagate, and the winner determines which address is sent. This is a critical design point for understanding event priority and data consistency. The manual should explain the arbitration scheme (if known) and the coupling between the event flow and the address mux.",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFromTop",
-              "w_drive2",
-              "o_driveToDR",
-              "o_addrToDR_32",
-              "r_outNum_2"
-            ],
-            "instances": [
-              "u0_cMutexMerge2_NoData_intAndExc_pop"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "0",
-              "5"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
-              "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "flow_graph.assignment_dependencies"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "assignments"
-              }
-            ]
-          },
-          {
-            "value": "This drive flow propagates an external event from the top-level input i_driveFromTop through a single MutexMerge instance to the output o_driveToDR, where it may arbitrate with an internal event path w_drive2.",
-            "explanation": "The flow is a single-step, point-to-point event drive from the module boundary to the output, with a mandatory arbitration point at the MutexMerge. The MutexMerge acts as a gate that can block or select between the external event and an internal event from a selector component.",
+            "value": "顶层驱动事件通过互斥合并器仲裁后，作为唯一输出事件驱动到下游DR模块",
+            "explanation": "该流仅包含一个实例步骤，i_driveFromTop与内部选择器产生的w_drive2在MutexMerge实例处合并，合并后的输出直接驱动o_driveToDR。流中无分支，合并点即阻塞点，表明事件路径在此仲裁。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -890,7 +879,45 @@
             ],
             "related_flows": [],
             "related_assignments": [
-              "0"
+              "assign 0"
+            ],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
+              "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "instances.connections"
+              },
+              {
+                "source": "transparent_flows"
+              }
+            ]
+          },
+          {
+            "value": "输出地址由r_outNum_2选择，与事件流无直接数据耦合",
+            "explanation": "o_addrToDR_32通过多路选择器从四个候选地址中选出，选择信号r_outNum_2可能由合并器内部状态决定。该地址与事件流中的i_driveFromTop或w_drive2无直接赋值依赖，表明事件流仅控制输出时机，不携带地址数据。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "o_addrToDR_32",
+              "r_outNum_2",
+              "w_addrToDR0_32",
+              "w_addrToDR1_32",
+              "w_addrToDR2_32",
+              "w_addrToDR3_32"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "assign 5"
             ],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
@@ -900,25 +927,20 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/intAndExc_pop.json",
-                "path": "internal_event_flow"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "parser_module.assignments"
               }
             ]
           },
           {
-            "value": "The flow has free/backpressure signals at both endpoints, but their exact relationship to the MutexMerge's internal handshake is unclear from the supplied context.",
-            "explanation": "The interface contracts indicate o_freeToTop is associated with i_driveFromTop and i_freeFromDR with o_driveToDR. These likely form a handshake pair for flow control. However, the supplied context does not show how these free signals connect to the MutexMerge or if they are used internally. The MutexMerge may implement its own backpressure mechanism.",
+            "value": "输入事件有free信号但证据不足，输出事件有free信号但未在流中体现",
+            "explanation": "接口合同显示i_driveFromTop有o_freeToTop（低置信度），o_driveToDR有i_freeFromDR（中置信度）。但流上下文未提供这些free信号与合并器或事件传播的交互关系，无法判断是否构成背压或完成握手。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:completion_backpressure:001",
-            "doc_priority": "secondary",
+            "doc_priority": "reference",
             "signals": [
               "o_freeToTop",
               "i_freeFromDR"
@@ -936,8 +958,7 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/intAndExc_pop.json",
-                "path": "interface_data_contract"
+                "source": "interface_payload_contracts"
               }
             ]
           }
@@ -966,25 +987,25 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "Mutex merge that arbitrates between Top pop requests and SP feedback events to drive DR.",
-        "explanation": "Receives i_driveFromTop and w_drive2 (feedback from SP dispatch), outputs o_driveToDR. Its o_free0 output propagates to Top as o_freeToTop. This ensures mutual exclusion between external Top requests and internal SP feedback.",
+        "value": "互斥合并来自Top的直接请求和SP路径的返回事件，确保两者不会同时驱动DR，并将合并后的请求输出到DR。",
+        "explanation": "该组件是MutexMerge家族的无数据合并器，接收i_driveFromTop和w_drive2事件，输出o_driveToDR。它确保两个输入事件互斥，避免冲突。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:intAndExc_pop:component_role:004",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "i_driveFromTop",
           "w_drive2",
-          "o_driveToDR",
-          "o_freeToTop"
+          "o_driveToDR"
         ],
         "instances": [
           "u0_cMutexMerge2_NoData_intAndExc_pop"
         ],
         "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR",
           "flow_001_intAndExc_pop_i_driveFromTop"
         ],
         "related_assignments": [],
@@ -1019,15 +1040,15 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "SP dispatch selector that forwards the DR pop event to SP and generates a feedback event to the DR merge path.",
-        "explanation": "Receives w_drive1 from the splitter, outputs o_driveToSP as the primary dispatch, and outputs w_drive2 as a feedback event that merges with i_driveFromTop via u0_cMutexMerge2_NoData to drive DR.",
+        "value": "在SP更新路径上，将来自Splitter的请求事件路由到SP输出，并将返回事件反馈给MutexMerge。",
+        "explanation": "该组件是SelSplit家族的1位选择器，接收w_drive1事件，输出o_driveToSP（驱动SP更新）和w_drive2（返回事件，与Top请求合并后驱动DR）。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:intAndExc_pop:component_role:002",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "w_drive1",
           "o_driveToSP",
@@ -1074,15 +1095,15 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "WGRF/WPSR dispatch selector that forwards the delayed DR pop event to both WGRF and WPSR with associated data payloads.",
-        "explanation": "Receives w_drive0Delay1 after two delay stages, outputs o_driveToWGRF with o_dataToWGRF_72 and o_driveToWPSR with o_dataToWPSR_32. Free signals from WGRF and WPSR return to this component.",
+        "value": "在WGRF/WPSR数据路径上，将延迟后的请求事件路由到WGRF和WPSR，并携带相应的数据负载。",
+        "explanation": "该组件是SelSplit家族的73位选择器，接收延迟后的w_drive0Delay1事件，输出o_driveToWGRF（携带72位数据o_dataToWGRF_72）和o_driveToWPSR（携带32位数据o_dataToWPSR_32）。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:intAndExc_pop:component_role:003",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "w_drive0Delay1",
           "o_driveToWGRF",
@@ -1128,20 +1149,19 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "Fan-out splitter that replicates the DR pop event into two parallel paths: one for SP dispatch and one for WGRF/WPSR dispatch.",
-        "explanation": "Receives i_driveFromDR and produces w_drive0 (to delay chain for WGRF/WPSR) and w_drive1 (to u0_cSelector2_1b for SP). Its o_free output propagates back to DR as o_freeToDR.",
+        "value": "将来自DR的单个出栈请求事件拆分为两个并行事件流，分别导向SP更新路径和WGRF/WPSR数据路径。",
+        "explanation": "该组件是SelSplit家族的无数据拆分器，接收i_driveFromDR事件，输出w_drive0（经延迟后驱动WGRF和WPSR）和w_drive1（直接驱动SP选择器）。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:intAndExc_pop:component_role:001",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "i_driveFromDR",
           "w_drive0",
-          "w_drive1",
-          "o_freeToDR"
+          "w_drive1"
         ],
         "instances": [
           "u0_cSplitter2_NoData_intAndExc_pop"
@@ -1181,17 +1201,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。",
+        "explanation": "这些assign语句将输入i_SP_32加上固定偏移量，生成四个候选地址，用于后续多路选择。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_addrToDR0_32",
+          "w_addrToDR1_32",
+          "w_addrToDR2_32",
+          "w_addrToDR3_32",
+          "i_SP_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1211,17 +1261,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。",
+        "explanation": "这些assign语句将输入i_SP_32加上固定偏移量，生成四个候选地址，用于后续多路选择。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_addrToDR0_32",
+          "w_addrToDR1_32",
+          "w_addrToDR2_32",
+          "w_addrToDR3_32",
+          "i_SP_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1241,17 +1321,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。",
+        "explanation": "这些assign语句将输入i_SP_32加上固定偏移量，生成四个候选地址，用于后续多路选择。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_addrToDR0_32",
+          "w_addrToDR1_32",
+          "w_addrToDR2_32",
+          "w_addrToDR3_32",
+          "i_SP_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1271,17 +1381,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。",
+        "explanation": "这些assign语句将输入i_SP_32加上固定偏移量，生成四个候选地址，用于后续多路选择。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_addrToDR0_32",
+          "w_addrToDR1_32",
+          "w_addrToDR2_32",
+          "w_addrToDR3_32",
+          "i_SP_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1305,17 +1445,45 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "根据内部状态r_outNum_2从四个候选地址中选择一个输出到DR，实现出栈地址的多路选择。",
+        "explanation": "assign o_addrToDR_32 = (r_outNum_2 == 2'b00)? w_addrToDR0_32: (r_outNum_2 == 2'b01)? w_addrToDR1_32: (r_outNum_2 == 2'b10)? w_addrToDR2_32: w_addrToDR3_32; 该选择器基于出栈序号决定读取哪个地址。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:003",
+        "doc_priority": "secondary",
+        "signals": [
+          "o_addrToDR_32",
+          "r_outNum_2",
+          "w_addrToDR0_32",
+          "w_addrToDR1_32",
+          "w_addrToDR2_32",
+          "w_addrToDR3_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [
+          "5"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1335,17 +1503,41 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "更新后的栈指针值，为当前SP值加32，表示出栈操作后栈顶指针的上移。",
+        "explanation": "assign o_SP_32 = i_SP_32 + 32; 该输出驱动到SP单元，用于更新栈指针。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:004",
+        "doc_priority": "secondary",
+        "signals": [
+          "o_SP_32",
+          "i_SP_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR"
+        ],
+        "related_assignments": [
+          "9"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1366,17 +1558,43 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "生成驱动DR的触发信号，由Top直接请求或SP路径返回事件触发。",
+        "explanation": "assign w_fire0 = i_driveFromTop | w_drive2; 该信号是MutexMerge的输入事件之一，控制DR地址的输出时机。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:intAndExc_pop:assignment_interpretation:001",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_fire0",
+          "i_driveFromTop",
+          "w_drive2"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_intAndExc_pop_i_driveFromDR",
+          "flow_001_intAndExc_pop_i_driveFromTop"
+        ],
+        "related_assignments": [
+          "0"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:intAndExc_pop:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:assignments"
@@ -1475,74 +1693,6 @@
   ],
   "important_internal_signals": [
     {
-      "signal": "i_driveFromDR",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 28,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:knowledge_module",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_driveToSP",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 27,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:knowledge_module",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_driveToWGRF",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 27,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:knowledge_module",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_driveToWPSR",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 27,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:knowledge_module",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
       "signal": "i_driveFromTop",
       "kind": "interface_or_inferred",
       "width_text": "",
@@ -1563,7 +1713,75 @@
       "signal": "o_driveToDR",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 24,
+      "importance_score": 26,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface",
+        "ev:intAndExc_pop:knowledge_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_driveFromDR",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 22,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface",
+        "ev:intAndExc_pop:knowledge_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_driveToSP",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 21,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface",
+        "ev:intAndExc_pop:knowledge_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_driveToWGRF",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 21,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface",
+        "ev:intAndExc_pop:knowledge_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_driveToWPSR",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 21,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1580,7 +1798,7 @@
       "signal": "o_addrToDR_32",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 18,
+      "importance_score": 14,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1589,40 +1807,6 @@
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_SP_32",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_drive2",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:parser_module",
-        "ev:intAndExc_pop:knowledge_module",
         "ev:intAndExc_pop:semantic_module"
       ]
     },
@@ -1659,7 +1843,23 @@
       ]
     },
     {
-      "signal": "w_drive1",
+      "signal": "o_SP_32",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_drive2",
       "kind": "wire",
       "width_text": "1",
       "importance_score": 12,
@@ -1673,22 +1873,6 @@
       "evidence_refs": [
         "ev:intAndExc_pop:parser_module",
         "ev:intAndExc_pop:knowledge_module",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_outNum_2",
-      "kind": "reg",
-      "width_text": "[1:0]",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:parser_module",
         "ev:intAndExc_pop:semantic_module"
       ]
     },
@@ -1707,22 +1891,6 @@
       "evidence_refs": [
         "ev:intAndExc_pop:parser_module",
         "ev:intAndExc_pop:knowledge_module",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToDR",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface",
         "ev:intAndExc_pop:semantic_module"
       ]
     },
@@ -1761,10 +1929,62 @@
       ]
     },
     {
-      "signal": "o_freeToTop",
+      "signal": "w_drive1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:parser_module",
+        "ev:intAndExc_pop:knowledge_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_outNum_2",
+      "kind": "reg",
+      "width_text": "[1:0]",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:parser_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_drive0Delay",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:parser_module",
+        "ev:intAndExc_pop:knowledge_module",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeFromDR",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 8,
+      "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1821,24 +2041,6 @@
       ],
       "evidence_refs": [
         "ev:intAndExc_pop:interface",
-        "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_drive0Delay",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:parser_module",
-        "ev:intAndExc_pop:knowledge_module",
         "ev:intAndExc_pop:semantic_module"
       ]
     },
@@ -1907,6 +2109,22 @@
       ]
     },
     {
+      "signal": "i_DRdata_64",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface",
+        "ev:intAndExc_pop:semantic_module"
+      ]
+    },
+    {
       "signal": "w_fire0",
       "kind": "wire",
       "width_text": "1",
@@ -1920,20 +2138,6 @@
       "evidence_refs": [
         "ev:intAndExc_pop:parser_module",
         "ev:intAndExc_pop:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_freeFromDR",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:intAndExc_pop:interface"
       ]
     },
     {
@@ -1951,7 +2155,21 @@
       ]
     },
     {
-      "signal": "i_DRdata_64",
+      "signal": "o_freeToDR",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc_pop:interface"
+      ]
+    },
+    {
+      "signal": "o_freeToTop",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -2081,9 +2299,9 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "The r_outNum_2 signal is referenced in address selection but its source (register/state machine) is not visible in the compact context. RTL source review needed to understand how this state is updated and reset.",
-      "subject": "r_outNum_2 state machine",
-      "needed_source_slice": "always block, register declarations",
+      "question": "紧凑上下文未提供延迟链的详细实现（如延迟周期数、触发条件），无法确定其确切目的（数据同步、流水线平衡或时序调整）。",
+      "subject": "延迟链Delay0和Delay1",
+      "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2092,9 +2310,9 @@
       ]
     },
     {
-      "question": "The data outputs o_dataToWGRF_72 and o_dataToWPSR_32 are connected from u0_cSelector2_73b but their source (internal registers, input data) is not visible in the compact context.",
-      "subject": "Data payload sources for WGRF and WPSR",
-      "needed_source_slice": "assign blocks, instance connections, data path",
+      "question": "紧凑上下文未提供r_outNum_2的赋值逻辑和更新条件，无法确定出栈序号的选择机制（如循环计数、基于数据内容或外部控制）。",
+      "subject": "r_outNum_2状态寄存器",
+      "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2103,9 +2321,9 @@
       ]
     },
     {
-      "question": "The delay chain (Delay0, Delay1) between splitter and WGRF/WPSR selector is referenced but its implementation (pipeline stages, reset behavior) is not detailed in the compact context.",
-      "subject": "Delay0 and Delay1 implementation",
-      "needed_source_slice": "instance connections, module declarations",
+      "question": "紧凑上下文未显示i_DRdata_64如何连接到内部组件或数据路径，无法确定其如何影响WGRF/WPSR的数据输出。",
+      "subject": "i_DRdata_64数据输入",
+      "needed_source_slice": "instance connections, assign block",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2130,5 +2348,983 @@
     "knowledge_ir": "modules/intAndExc_pop.json",
     "ai_context": "ai_context/modules/intAndExc_pop.json",
     "semantic_layer": "semantic:module:intAndExc_pop"
+  },
+  "module_doc_card": {
+    "schema": "manual_context_module_doc_card",
+    "schema_version": "0.1",
+    "top_module": "arm_soc_top",
+    "module": "intAndExc_pop",
+    "source_file": "rtl/rtl/int/intAndExc_pop.v",
+    "module_role": "submodule",
+    "page_policy": {
+      "module_page_required": true,
+      "detail_level": "detailed",
+      "reason": "structural or flow-heavy module",
+      "fixed_sections": [
+        "responsibility",
+        "position",
+        "interface_contract",
+        "drive_flows",
+        "internal_components_and_assignments",
+        "evidence_gaps"
+      ],
+      "review_needed": false
+    },
+    "purpose": {
+      "value": "中断与异常出栈调度器，负责将来自DR（数据读取器）和Top（顶层）的出栈请求分发到SP（栈指针）、WGRF（通用寄存器文件写入）和WPSR（程序状态字写入）等目标单元。",
+      "explanation": "模块接收两个驱动事件输入（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将请求路由到四个输出驱动事件，并携带相应的数据负载（地址、SP值、寄存器数据、PSR数据）。自由信号（free）用于握手确认。",
+      "certainty": "ai_inferred",
+      "confidence": "high",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "semantic_claim_id": "semantic:module:intAndExc_pop:module_role:001",
+      "doc_priority": "primary",
+      "signals": [
+        "i_driveFromDR",
+        "i_driveFromTop",
+        "o_driveToDR",
+        "o_driveToSP",
+        "o_driveToWGRF",
+        "o_driveToWPSR"
+      ],
+      "instances": [
+        "u0_cSplitter2_NoData_intAndExc_pop",
+        "u0_cSelector2_1b_intAndExc_pop",
+        "u0_cSelector2_73b_intAndExc_pop",
+        "u0_cMutexMerge2_NoData_intAndExc_pop"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR",
+        "flow_001_intAndExc_pop_i_driveFromTop"
+      ],
+      "related_assignments": [],
+      "requires_rtl_source_review": false,
+      "review_status": "ready",
+      "evidence_refs": [
+        "ev:intAndExc_pop:semantic_module"
+      ],
+      "semantic_evidence": [
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+        }
+      ]
+    },
+    "hierarchy": {
+      "parents": [
+        "intAndExc"
+      ],
+      "children": [],
+      "component_children": [
+        "cMutexMerge2_NoData_intAndExc_pop",
+        "cSelector2_1b_intAndExc_pop",
+        "cSelector2_73b_intAndExc_pop",
+        "cSplitter2_NoData_intAndExc_pop"
+      ],
+      "upstream_modules": [],
+      "downstream_modules": [],
+      "region": {
+        "value": "cpu",
+        "certainty": "derived_fact",
+        "confidence": "medium",
+        "source_layers": [
+          "manual_context",
+          "parse"
+        ],
+        "evidence_refs": [
+          "ev:intAndExc_pop:parser_module"
+        ],
+        "classification_rule": "module_name_and_source_path_keyword"
+      }
+    },
+    "port_summary": {
+      "counts": {
+        "event_inputs": 2,
+        "event_outputs": 4,
+        "data_inputs": 2,
+        "data_outputs": 4,
+        "control_inputs": 0,
+        "control_outputs": 0,
+        "free_inputs": 4,
+        "free_outputs": 2,
+        "unknown_inputs": 0,
+        "unknown_outputs": 0,
+        "inout_ports": 0,
+        "primary_event_ports": 6,
+        "total_ports": 18
+      },
+      "event_inputs": [
+        {
+          "name": "i_driveFromDR",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "i_driveFromTop",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        }
+      ],
+      "event_outputs": [
+        {
+          "name": "o_driveToDR",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_driveToSP",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_driveToWGRF",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_driveToWPSR",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_drive",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        }
+      ],
+      "data_inputs": [
+        {
+          "name": "i_DRdata_64",
+          "direction": "input",
+          "width_text": "[63:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "i_SP_32",
+          "direction": "input",
+          "width_text": "[31:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        }
+      ],
+      "data_outputs": [
+        {
+          "name": "o_SP_32",
+          "direction": "output",
+          "width_text": "[31:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_addrToDR_32",
+          "direction": "output",
+          "width_text": "[31:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_dataToWGRF_72",
+          "direction": "output",
+          "width_text": "[71:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_dataToWPSR_32",
+          "direction": "output",
+          "width_text": "[31:0]",
+          "role": "payload_data",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        }
+      ],
+      "control_inputs": [],
+      "control_outputs": [],
+      "free_inputs": [
+        {
+          "name": "i_freeFromDR",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "i_freeFromSP",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "i_freeFromWGRF",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "i_freeFromWPSR",
+          "direction": "input",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        }
+      ],
+      "free_outputs": [
+        {
+          "name": "o_freeToDR",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        },
+        {
+          "name": "o_freeToTop",
+          "direction": "output",
+          "width_text": "1",
+          "role": "event_free",
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ]
+        }
+      ],
+      "unknown_inputs": [],
+      "unknown_outputs": [],
+      "inout_ports": [],
+      "external_port_groups": [
+        {
+          "group": "drive_event",
+          "signals": [
+            {
+              "name": "i_driveFromDR",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_drive"
+            },
+            {
+              "name": "i_driveFromTop",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_drive"
+            },
+            {
+              "name": "o_driveToDR",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_drive"
+            },
+            {
+              "name": "o_driveToSP",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_drive"
+            },
+            {
+              "name": "o_driveToWGRF",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_drive"
+            },
+            {
+              "name": "o_driveToWPSR",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_drive"
+            }
+          ],
+          "direction_counts": {
+            "input": 2,
+            "output": 4
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ],
+          "summary": "drive_event ports, count=6, directions=input:2, output:4",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        },
+        {
+          "group": "free_backpressure",
+          "signals": [
+            {
+              "name": "i_freeFromDR",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_free"
+            },
+            {
+              "name": "i_freeFromSP",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_free"
+            },
+            {
+              "name": "i_freeFromWGRF",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_free"
+            },
+            {
+              "name": "i_freeFromWPSR",
+              "direction": "input",
+              "width_text": "1",
+              "role": "event_free"
+            },
+            {
+              "name": "o_freeToDR",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_free"
+            },
+            {
+              "name": "o_freeToTop",
+              "direction": "output",
+              "width_text": "1",
+              "role": "event_free"
+            }
+          ],
+          "direction_counts": {
+            "input": 4,
+            "output": 2
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ],
+          "summary": "free_backpressure ports, count=6, directions=input:4, output:2",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        },
+        {
+          "group": "other_ports",
+          "signals": [
+            {
+              "name": "i_DRdata_64",
+              "direction": "input",
+              "width_text": "[63:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "i_SP_32",
+              "direction": "input",
+              "width_text": "[31:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "o_SP_32",
+              "direction": "output",
+              "width_text": "[31:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "o_addrToDR_32",
+              "direction": "output",
+              "width_text": "[31:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "o_dataToWGRF_72",
+              "direction": "output",
+              "width_text": "[71:0]",
+              "role": "payload_data"
+            },
+            {
+              "name": "o_dataToWPSR_32",
+              "direction": "output",
+              "width_text": "[31:0]",
+              "role": "payload_data"
+            }
+          ],
+          "direction_counts": {
+            "input": 2,
+            "output": 4
+          },
+          "certainty": "deterministic_fact",
+          "source_layers": [
+            "knowledge_ir",
+            "parse"
+          ],
+          "evidence_refs": [
+            "ev:intAndExc_pop:interface"
+          ],
+          "summary": "other_ports ports, count=6, directions=input:2, output:4",
+          "source_review_context": {
+            "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent"
+          }
+        }
+      ],
+      "natural_language_rule": "summarize port groups by role and direction; do not dump every port unless the module page is detailed"
+    },
+    "key_flow_refs": [
+      {
+        "flow_id": "flow_000_intAndExc_pop_i_driveFromDR",
+        "title": "i_driveFromDR to o_driveToSP, o_driveToDR, o_driveToWGRF",
+        "trigger_event": "i_driveFromDR",
+        "manual_importance": "high",
+        "doc_priority": "primary",
+        "source_file": "flows/flow_000_intAndExc_pop_i_driveFromDR.json",
+        "reader_takeaway": {
+          "value": "事件o_driveToSP携带递增后的SP地址负载。",
+          "explanation": "赋值9显示o_SP_32由i_SP_32加32得到，且o_driveToSP事件通过cSelector2_1b输出。这表明SP写操作的事件与地址负载紧密耦合，每次事件触发都会更新SP指针。",
+          "certainty": "ai_inferred",
+          "confidence": "high",
+          "source_layers": [
+            "semantic_layer"
+          ],
+          "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:001",
+          "doc_priority": "primary",
+          "signals": [
+            "o_driveToSP",
+            "o_SP_32",
+            "i_SP_32"
+          ],
+          "instances": [],
+          "related_flows": [],
+          "related_assignments": [
+            "9"
+          ],
+          "requires_rtl_source_review": false,
+          "review_status": "ready",
+          "evidence_refs": [
+            "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+            "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+          ],
+          "semantic_evidence": [
+            {
+              "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+              "path": "assignments"
+            },
+            {
+              "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+              "path": "interface_data_contract"
+            }
+          ],
+          "supporting_claims": [
+            {
+              "value": "事件o_driveToWGRF携带73位写数据负载。",
+              "explanation": "接口负载契约显示o_driveToWGRF事件关联73位数据o_dataToWGRF_72，且该数据由cSelector2_73b直接输出。这表明WGRF写操作的事件与数据在同一个选择器实例中同步分发。",
+              "certainty": "ai_inferred",
+              "confidence": "high",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:002",
+              "doc_priority": "primary",
+              "signals": [
+                "o_driveToWGRF",
+                "o_dataToWGRF_72"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+                "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                  "path": "interface_data_contract"
+                }
+              ]
+            },
+            {
+              "value": "事件o_driveToWPSR携带32位写数据负载。",
+              "explanation": "接口负载契约显示o_driveToWPSR事件关联32位数据o_dataToWPSR_32，且该数据由cSelector2_73b直接输出。这表明WPSR写操作的事件与数据在同一个选择器实例中同步分发。",
+              "certainty": "ai_inferred",
+              "confidence": "high",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:003",
+              "doc_priority": "primary",
+              "signals": [
+                "o_driveToWPSR",
+                "o_dataToWPSR_32"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+                "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                  "path": "interface_data_contract"
+                }
+              ]
+            },
+            {
+              "value": "文档应重点描述事件如何从i_driveFromDR分支，经延迟同步后，通过选择器和合并器分发至四个目标。",
+              "explanation": "该流的核心是事件的分发路径：cSplitter2_NoData的分支、两级延迟的对齐、cSelector2_1b的选择（SP或DR合并）、cMutexMerge2的仲裁以及cSelector2_73b的最终分发。这些组件的交互定义了流的语义，应详细说明。",
+              "certainty": "ai_inferred",
+              "confidence": "high",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:documentation_focus:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_driveFromDR",
+                "w_drive0",
+                "w_drive1",
+                "w_drive0Delay",
+                "w_drive0Delay1",
+                "w_drive2",
+                "o_driveToSP",
+                "o_driveToDR",
+                "o_driveToWGRF",
+                "o_driveToWPSR"
+              ],
+              "instances": [
+                "u0_cSplitter2_NoData_intAndExc_pop",
+                "Delay0",
+                "Delay1",
+                "u0_cSelector2_1b_intAndExc_pop",
+                "u0_cMutexMerge2_NoData_intAndExc_pop",
+                "u0_cSelector2_73b_intAndExc_pop"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "0",
+                "9"
+              ],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+                "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                  "path": "flow_graph.assignment_dependencies"
+                }
+              ]
+            },
+            {
+              "value": "文档应明确每个输出事件携带的数据负载及其来源。",
+              "explanation": "o_driveToSP携带递增的SP地址（赋值9），o_driveToWGRF和o_driveToWPSR分别携带73位和32位数据（来自cSelector2_73b），而o_driveToDR的地址负载由r_outNum_2选择（赋值5）。这些数据关联是理解事件语义的关键。",
+              "certainty": "ai_inferred",
+              "confidence": "high",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:documentation_focus:002",
+              "doc_priority": "primary",
+              "signals": [
+                "o_SP_32",
+                "o_dataToWGRF_72",
+                "o_dataToWPSR_32",
+                "o_addrToDR_32"
+              ],
+              "instances": [
+                "u0_cSelector2_73b_intAndExc_pop"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "5",
+                "9"
+              ],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+                "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                  "path": "interface_data_contract"
+                }
+              ]
+            },
+            {
+              "value": "来自DR的单一事件驱动，经拆分、延迟、选择与互斥合并后，分发至SP、DR、WGRF和WPSR四个目标。",
+              "explanation": "该流从输入端口i_driveFromDR发起，通过cSplitter2_NoData实例分为两路：一路经两级延迟后由cSelector2_73b分发至WGRF和WPSR；另一路经cSelector2_1b选择后，一路直接输出至SP，另一路与来自顶层的i_driveFromTop在cMutexMerge2中合并后输出至DR。整个流体现了事件的分支、延迟同步和仲裁合并。",
+              "certainty": "ai_inferred",
+              "confidence": "high",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:flow_intent:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_driveFromDR",
+                "w_drive0",
+                "w_drive1",
+                "w_drive0Delay",
+                "w_drive0Delay1",
+                "w_drive2",
+                "o_driveToSP",
+                "o_driveToDR",
+                "o_driveToWGRF",
+                "o_driveToWPSR"
+              ],
+              "instances": [
+                "u0_cSplitter2_NoData_intAndExc_pop",
+                "Delay0",
+                "Delay1",
+                "u0_cSelector2_1b_intAndExc_pop",
+                "u0_cMutexMerge2_NoData_intAndExc_pop",
+                "u0_cSelector2_73b_intAndExc_pop"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "0",
+                "5",
+                "9"
+              ],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+                "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "knowledge_ir/modules/intAndExc_pop.json",
+                  "path": "internal_event_flow"
+                },
+                {
+                  "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
+                  "path": "flow_graph.assignment_dependencies"
+                }
+              ]
+            }
+          ]
+        },
+        "evidence_refs": [
+          "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+          "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+        ]
+      },
+      {
+        "flow_id": "flow_001_intAndExc_pop_i_driveFromTop",
+        "title": "i_driveFromTop to o_driveToDR",
+        "trigger_event": "i_driveFromTop",
+        "manual_importance": "high",
+        "doc_priority": "primary",
+        "source_file": "flows/flow_001_intAndExc_pop_i_driveFromTop.json",
+        "reader_takeaway": {
+          "value": "手册应重点描述MutexMerge的仲裁行为及其对输出事件时机的影响",
+          "explanation": "流中唯一实例是合并器，且为阻塞点，说明事件路径在此处可能因仲裁而延迟或丢弃。手册需说明i_driveFromTop和w_drive2的优先级或互斥规则，以及如何影响o_driveToDR的生成。",
+          "certainty": "ai_inferred",
+          "confidence": "medium",
+          "source_layers": [
+            "semantic_layer"
+          ],
+          "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:documentation_focus:001",
+          "doc_priority": "primary",
+          "signals": [
+            "i_driveFromTop",
+            "w_drive2",
+            "o_driveToDR"
+          ],
+          "instances": [
+            "u0_cMutexMerge2_NoData_intAndExc_pop"
+          ],
+          "related_flows": [],
+          "related_assignments": [
+            "assign 0"
+          ],
+          "requires_rtl_source_review": true,
+          "review_status": "needs_review",
+          "evidence_refs": [
+            "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
+            "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
+          ],
+          "semantic_evidence": [
+            {
+              "source": "flow.blocking_points"
+            },
+            {
+              "source": "flow.join_points"
+            }
+          ],
+          "supporting_claims": [
+            {
+              "value": "顶层驱动事件通过互斥合并器仲裁后，作为唯一输出事件驱动到下游DR模块",
+              "explanation": "该流仅包含一个实例步骤，i_driveFromTop与内部选择器产生的w_drive2在MutexMerge实例处合并，合并后的输出直接驱动o_driveToDR。流中无分支，合并点即阻塞点，表明事件路径在此仲裁。",
+              "certainty": "ai_inferred",
+              "confidence": "medium",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:flow_intent:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_driveFromTop",
+                "w_drive2",
+                "o_driveToDR"
+              ],
+              "instances": [
+                "u0_cMutexMerge2_NoData_intAndExc_pop"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "assign 0"
+              ],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
+                "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "instances.connections"
+                },
+                {
+                  "source": "transparent_flows"
+                }
+              ]
+            },
+            {
+              "value": "输出地址由r_outNum_2选择，与事件流无直接数据耦合",
+              "explanation": "o_addrToDR_32通过多路选择器从四个候选地址中选出，选择信号r_outNum_2可能由合并器内部状态决定。该地址与事件流中的i_driveFromTop或w_drive2无直接赋值依赖，表明事件流仅控制输出时机，不携带地址数据。",
+              "certainty": "ai_inferred",
+              "confidence": "medium",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:data_control_effect:001",
+              "doc_priority": "secondary",
+              "signals": [
+                "o_addrToDR_32",
+                "r_outNum_2",
+                "w_addrToDR0_32",
+                "w_addrToDR1_32",
+                "w_addrToDR2_32",
+                "w_addrToDR3_32"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [
+                "assign 5"
+              ],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
+                "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "parser_module.assignments"
+                }
+              ]
+            },
+            {
+              "value": "输入事件有free信号但证据不足，输出事件有free信号但未在流中体现",
+              "explanation": "接口合同显示i_driveFromTop有o_freeToTop（低置信度），o_driveToDR有i_freeFromDR（中置信度）。但流上下文未提供这些free信号与合并器或事件传播的交互关系，无法判断是否构成背压或完成握手。",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_001_intAndExc_pop_i_driveFromTop:completion_backpressure:001",
+              "doc_priority": "reference",
+              "signals": [
+                "o_freeToTop",
+                "i_freeFromDR"
+              ],
+              "instances": [
+                "u0_cMutexMerge2_NoData_intAndExc_pop"
+              ],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
+                "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "interface_payload_contracts"
+                }
+              ]
+            }
+          ]
+        },
+        "evidence_refs": [
+          "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
+          "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
+        ]
+      }
+    ],
+    "counts": {
+      "interfaces": 18,
+      "flows": 2,
+      "components": 4,
+      "assignments": 10,
+      "evidence_gaps": 0,
+      "review_questions": 4
+    },
+    "source_review_context": {
+      "module": "intAndExc_pop",
+      "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+      "allowed": true,
+      "allowed_use": [
+        "external port grouping",
+        "one-line module purpose hint",
+        "port role review when Manual Context only records unknown ports"
+      ],
+      "not_allowed_use": [
+        "inventing connections",
+        "inventing flows",
+        "inventing FSM or always-block behavior",
+        "promoting AI interpretation to deterministic_fact"
+      ],
+      "certainty_policy": "source review text must be marked ai_inferred or evidence_gap unless already present as parser/Knowledge IR fact",
+      "evidence_refs": [
+        "ev:intAndExc_pop:parser_module",
+        "ev:intAndExc_pop:knowledge_module"
+      ]
+    },
+    "evidence_refs": [
+      "ev:intAndExc_pop:knowledge_module",
+      "ev:intAndExc_pop:parser_module"
+    ]
   }
 }

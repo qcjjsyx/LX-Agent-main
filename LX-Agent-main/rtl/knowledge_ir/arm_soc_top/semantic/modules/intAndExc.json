@@ -46,15 +46,15 @@
     }
   ],
   "claim_summary": {
-    "count": 16,
+    "count": 12,
     "by_type": {
       "assignment_interpretation": 2,
       "component_role": 4,
-      "documentation_focus": 3,
-      "interface_intent": 3,
+      "documentation_focus": 1,
+      "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 1,
-      "structural_responsibility": 2
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -64,37 +64,37 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "Central interrupt and exception arbitration and vectoring module that collects events from pipeline stages, selects the highest-priority exception or interrupt, and drives the resulting vector address and data to the appropriate register files and data route.",
+      "summary": "中断与异常集中仲裁与分发中心，负责收集来自流水线各阶段的中断/异常事件，仲裁优先级，并驱动后续的栈操作、数据路由和PC重定向。",
       "subject": "intAndExc",
-      "explanation": "The module receives event drives from IF, Dec, Exe, LSU, WB, DR, RGRF, and RPSR, each with associated payloads (PC and exception number). It uses a hierarchy of merge and selector components to arbitrate between interrupt and exception sources, compute the vector address, and route the resulting data to WGRF, WPSR, and the data route. The free signals form a handshake protocol for each event source.",
+      "explanation": "模块接收来自IF、Dec、Exe、Lsu、WB、DR、RGRF、RPSR等多个流水线阶段的中断/异常驱动事件，通过内部仲裁和选择逻辑，最终产生驱动信号和数据输出到IF、DataRoute、WGRF、WPSR、RGRF、RPSR等目标。同时管理对应的释放信号，形成完整的请求-释放握手协议。",
       "signals": [
-        "i_intDriveFromIF",
-        "i_excDriveFromIF",
-        "i_excDriveFromDec",
-        "i_excDriveFromExe",
-        "i_excDriveFromLsu",
-        "i_driveFromWB",
         "i_driveFromDR_1",
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
+        "i_driveFromWB",
+        "i_excDriveFromDec",
+        "i_excDriveFromExe",
+        "i_excDriveFromIF",
+        "i_excDriveFromLsu",
+        "i_intDriveFromIF",
         "o_DriveToIf_1",
         "o_driveToDataRoute_1",
-        "o_driveToWGRF_1",
-        "o_driveToWPSR_1",
         "o_driveToRGRF_1",
-        "o_driveToRPSR_1"
+        "o_driveToRPSR_1",
+        "o_driveToWGRF_1",
+        "o_driveToWPSR_1"
       ],
       "instances": [
-        "cmpMerge",
-        "intAndExeSele",
-        "vectorSpli",
         "u_inStack",
         "u_outStack",
-        "dataRoteMerge",
+        "cmpMerge",
+        "intAndExeSele",
         "DRSelector",
+        "dataRoteMerge",
+        "SRMerge",
         "WbMerge",
         "WbtopcMerge",
-        "SRMerge",
+        "vectorSpli",
         "preStackSpli",
         "inOutSele",
         "SRDriveTap",
@@ -136,23 +136,29 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "Collects and arbitrates between interrupt and exception events from all pipeline stages, selecting the highest-priority exception or interrupt for processing.",
-      "subject": "interrupt and exception arbitration",
-      "explanation": "The cmpMerge instance (cWaitMerge5_180b_int) receives event drives from IF (interrupt and exception), Dec, Exe, and LSU, along with a feedback path from intAndExeSele. This merge component likely implements priority arbitration, outputting the winning exception number and PC. The intAndExeSele component then selects between the merged exception and the SR (stack pointer) drive.",
+      "summary": "模块通过cmpMerge（WaitMerge5）收集来自IF、Dec、Exe、Lsu的中断/异常事件，结合intAndExeSele进行优先级选择，决定当前最高优先级的中断/异常，并驱动后续的栈操作、PC重定向和数据路由。",
+      "subject": "中断与异常优先级仲裁与分发",
+      "explanation": "cmpMerge接收i_excDriveFromIF、i_excDriveFromDec、i_excDriveFromExe、i_excDriveFromLsu和i_intDriveFromIF五个事件，输出w_cmpMerDrive_1。该信号经Delay3后驱动intAndExeSele，intAndExeSele根据优先级选择结果，输出w_intSeleDrive_1和w_intAndExeSeleDriveToMe，分别驱动向量地址计算和后续的栈操作。同时，assign_dependencies中的assign 11和assign 14显示了基于异常号选择PC和向量地址的逻辑。",
       "signals": [
-        "i_intDriveFromIF",
         "i_excDriveFromIF",
         "i_excDriveFromDec",
         "i_excDriveFromExe",
         "i_excDriveFromLsu",
+        "i_intDriveFromIF",
         "w_cmpMerDrive_1",
-        "w_allExcNum_20",
-        "w_intAndExeValid_1"
+        "w_intSeleDrive_1",
+        "w_intAndExeSeleDriveToMe",
+        "w_pc_32",
+        "w_pcToif_32",
+        "w_vecAddr_32"
       ],
       "instances": [
         "cmpMerge",
         "intAndExeSele",
-        "Delay3"
+        "Delay3",
+        "preDelay0",
+        "preStackSpli",
+        "vectorSpli"
       ],
       "related_flows": [
         "flow_003_intAndExc_i_excDriveFromDec",
@@ -163,11 +169,15 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "key_instances"
+          "path": "internal_event_flow"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc.json",
+          "path": "key_component_connections"
         },
         {
           "source": "knowledge_ir/modules/intAndExc.json",
@@ -177,87 +187,35 @@
       "id": "semantic:module:intAndExc:structural_responsibility:001"
     },
     {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "summary": "Computes the vector address for the selected exception or interrupt and routes the resulting PC and data to the IF stage, data route, and register files.",
-      "subject": "vector address computation and routing",
-      "explanation": "Assign dependencies show vector address computation (w_vecAddr_32, w_pcToif_32) based on the selected exception number (w_excNum_4). The vectorSpli component routes the computed PC to the IF stage (o_DriveToIf_1, o_intPC_32). The dataRoteMerge combines data from the inStack (register file data) and the PC/PSR data for routing to the data route (o_dataRouteData_104). The u_outStack pops the saved data to WGRF and WPSR.",
-      "signals": [
-        "w_vecAddr_32",
-        "w_pcToif_32",
-        "w_pc_32",
-        "w_excNum_4",
-        "o_DriveToIf_1",
-        "o_intPC_32",
-        "o_dataRouteData_104",
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32"
-      ],
-      "instances": [
-        "vectorSpli",
-        "dataRoteMerge",
-        "u_outStack",
-        "WbtopcMerge",
-        "preStackSpli"
-      ],
-      "related_flows": [
-        "flow_002_intAndExc_i_driveFromDR_1",
-        "flow_007_intAndExc_i_intDriveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "assign_dependencies"
-        },
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "key_instances"
-        }
-      ],
-      "id": "semantic:module:intAndExc:structural_responsibility:002"
-    },
-    {
       "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "cmpMerge",
-      "summary": "Central priority arbiter for all interrupt and exception events from pipeline stages.",
-      "explanation": "This cWaitMerge5_180b_int instance receives event drives from IF (interrupt and exception), Dec, Exe, and LSU. It merges these events, likely implementing a priority scheme, and outputs the winning exception data (w_allExcNum_20) and a drive signal (w_cmpMerDrive_1). The free outputs (o_excFreeToDec, o_excFreeToExe, etc.) indicate it also manages the handshake back to each source.",
+      "subject": "u_inStack (inStack)",
+      "summary": "入栈控制器，负责处理来自RGRF和RPSR的寄存器数据入栈操作，并产生SP递减驱动信号。",
+      "explanation": "u_inStack接收i_driveFromRGRF_1和i_driveFromRPSR_1事件，以及i_grfData_192和i_psrData_32数据。它输出o_driveToRGRF_1和o_driveToRPSR_1驱动信号，以及w_driveFrominStackSP信号，该信号驱动SRMerge进行SP递减操作。同时，它接收来自inOutSele的w_inOutDriToDataSpli_1数据，用于构建入栈数据。",
       "signals": [
-        "i_intDriveFromIF",
-        "i_excDriveFromIF",
-        "i_excDriveFromDec",
-        "i_excDriveFromExe",
-        "i_excDriveFromLsu",
-        "w_cmpMerDrive_1",
-        "w_allExcNum_20",
-        "o_excFreeToDec",
-        "o_excFreeToExe",
-        "o_excFreeToIf",
-        "o_excFreeToLsu",
-        "o_intFreeToIF"
+        "i_driveFromRGRF_1",
+        "i_driveFromRPSR_1",
+        "i_grfData_192",
+        "i_psrData_32",
+        "w_inOutDriToDataSpli_1",
+        "o_driveToRGRF_1",
+        "o_driveToRPSR_1",
+        "w_driveFrominStackSP",
+        "w_inData_96"
       ],
       "instances": [
-        "cmpMerge"
+        "u_inStack"
       ],
       "related_flows": [
-        "flow_003_intAndExc_i_excDriveFromDec",
-        "flow_004_intAndExc_i_excDriveFromExe",
-        "flow_005_intAndExc_i_excDriveFromIF",
-        "flow_006_intAndExc_i_excDriveFromLsu",
-        "flow_007_intAndExc_i_intDriveFromIF"
+        "flow_000_intAndExc_i_driveFromRGRF_1",
+        "flow_001_intAndExc_i_driveFromRPSR_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
@@ -276,30 +234,26 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "u_inStack",
-      "summary": "Manages the push side of the interrupt/exception stack, saving register file and PSR data.",
-      "explanation": "This inStack instance receives event drives from RGRF and RPSR, along with the corresponding data (i_grfData_192, i_psrData_32). It also receives a data split signal (w_inOutDriToDataSpli_1) from inOutSele. It outputs a drive signal for the SR (stack pointer) merge (w_driveFrominStackSP) and the saved data (w_inData_96) for routing to the data route.",
+      "subject": "u_outStack (intAndExc_pop)",
+      "summary": "出栈控制器，负责将栈顶数据弹出并分发到WGRF和WPSR，同时产生SP递增驱动信号。",
+      "explanation": "u_outStack接收来自DRSelector的w_DRdata_64数据，输出o_driveToWGRF_1和o_driveToWPSR_1驱动信号，以及w_driveFromoutStackSP信号，该信号驱动SRMerge进行SP递增操作。它还将数据输出为o_dataToWGRF_72和o_dataToWPSR_32。",
       "signals": [
-        "i_driveFromRGRF_1",
-        "i_driveFromRPSR_1",
-        "i_grfData_192",
-        "i_psrData_32",
-        "w_inOutDriToDataSpli_1",
-        "w_driveFrominStackSP",
-        "w_inData_96",
-        "o_driveToRGRF_1",
-        "o_driveToRPSR_1"
+        "w_DRdata_64",
+        "o_driveToWGRF_1",
+        "o_driveToWPSR_1",
+        "w_driveFromoutStackSP",
+        "o_dataToWGRF_72",
+        "o_dataToWPSR_32"
       ],
       "instances": [
-        "u_inStack"
+        "u_outStack"
       ],
       "related_flows": [
-        "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1"
+        "flow_002_intAndExc_i_driveFromDR_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
@@ -318,26 +272,26 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "u_outStack",
-      "summary": "Manages the pop side of the interrupt/exception stack, restoring data to WGRF and WPSR.",
-      "explanation": "This intAndExc_pop instance receives data from the DRSelector (w_DRdata_64) and outputs the restored data to WGRF (o_dataToWGRF_72) and WPSR (o_dataToWPSR_32). It also outputs a drive signal for the SR merge (w_driveFromoutStackSP) and the final drive signals to WGRF and WPSR.",
+      "subject": "SRMerge (MutexMerge) 与 SRDriveTap (contTap)",
+      "summary": "SP更新仲裁与请求生成器，负责仲裁来自入栈和出栈的SP更新请求，并生成SP更新驱动信号。",
+      "explanation": "SRMerge接收来自u_inStack的w_driveFrominStackSP和来自u_outStack的w_driveFromoutStackSP，通过互斥仲裁输出w_SRDrive_1。该信号驱动SRDriveTap，SRDriveTap生成w_SRDriveReq_1，用于触发SP寄存器的更新。同时，w_SRDrive_1也驱动intAndExeSele和firstTap。",
       "signals": [
-        "w_DRdata_64",
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32",
+        "w_driveFrominStackSP",
         "w_driveFromoutStackSP",
-        "o_driveToWGRF_1",
-        "o_driveToWPSR_1"
+        "w_SRDrive_1",
+        "w_SRDriveReq_1"
       ],
       "instances": [
-        "u_outStack"
+        "SRMerge",
+        "SRDriveTap"
       ],
       "related_flows": [
-        "flow_002_intAndExc_i_driveFromDR_1"
+        "flow_000_intAndExc_i_driveFromRGRF_1",
+        "flow_001_intAndExc_i_driveFromRPSR_1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
@@ -356,21 +310,27 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "SRMerge",
-      "summary": "Mutex merge for stack pointer update requests from the inStack and outStack.",
-      "explanation": "This cMutexMerge2_32b_int instance receives drive signals from the inStack (w_driveFrominStackSP) and outStack (w_driveFromoutStackSP). It outputs a single drive signal (w_SRDrive_1) that triggers the stack pointer update logic. The mutex nature ensures only one stack operation occurs at a time.",
+      "subject": "dataRoteMerge (MutexMerge)",
+      "summary": "数据路由合并器，负责将来自PC更新路径和栈操作路径的数据合并，输出到DataRoute模块。",
+      "explanation": "dataRoteMerge接收来自WbtopcMerge的w_pcDriveToDataRoute_1和来自u_inStack的w_inStackDriToDR_1，以及来自u_outStack的w_outMerDriToDR_1。它输出o_driveToDataRoute_1和o_dataRouteData_104，其中数据部分包含来自u_inStack的w_inData_96加上前缀。",
       "signals": [
-        "w_driveFrominStackSP",
-        "w_driveFromoutStackSP",
-        "w_SRDrive_1"
+        "w_pcDriveToDataRoute_1",
+        "w_inStackDriToDR_1",
+        "w_outMerDriToDR_1",
+        "o_driveToDataRoute_1",
+        "o_dataRouteData_104"
       ],
       "instances": [
-        "SRMerge"
+        "dataRoteMerge"
       ],
       "related_flows": [
-        "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1",
-        "flow_002_intAndExc_i_driveFromDR_1"
+        "flow_002_intAndExc_i_driveFromDR_1",
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF",
+        "flow_008_intAndExc_i_driveFromWB"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
@@ -393,24 +353,33 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "w_pcToif_32",
-      "summary": "Computes the target PC for the IF stage based on the selected exception number.",
-      "explanation": "This assign (index 14) implements a lookup table that maps exception numbers (w_excNum_4) to specific vector addresses (e.g., 32'h0000_1200 for reset, 32'h0000_1224 for data abort). For undefined exception (4'b0010), it uses the saved PC from the stack (w_pcAndPsr_64[63:32]). This is the core vector address calculation for the module.",
+      "subject": "w_pc_32 (assign 11)",
+      "summary": "根据异常号选择对应的PC值，用于后续的向量地址计算或PC重定向。",
+      "explanation": "该赋值通过多级条件选择器，根据w_excNum_4的值，从w_intPC1_32、w_ifPC1_32、w_decPC1_32、w_exePC1_32、w_lsuPC1_32中选择对应的PC。这体现了模块对来自不同流水线阶段的异常PC进行优先级选择的功能。",
       "signals": [
-        "w_pcToif_32",
+        "w_pc_32",
         "w_excNum_4",
-        "w_pcAndPsr_64"
+        "w_intPC1_32",
+        "w_ifPC1_32",
+        "w_decPC1_32",
+        "w_exePC1_32",
+        "w_lsuPC1_32"
       ],
       "related_assignments": [
-        "13",
-        "11"
+        "assign 12",
+        "assign 13",
+        "assign 14"
       ],
       "related_flows": [
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
         "flow_007_intAndExc_i_intDriveFromIF"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
@@ -425,32 +394,25 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "w_pc_32",
-      "summary": "Selects the PC associated with the highest-priority exception source.",
-      "explanation": "This assign (index 11) implements a priority selector that chooses the PC from the winning exception source (interrupt, IF, Dec, Exe, or LSU) based on the exception number (w_excNum_4). This is a critical data path for determining the exception context.",
+      "subject": "w_pcToif_32 (assign 14)",
+      "summary": "根据异常号计算重定向到IF阶段的PC值，包括处理软件中断和硬件异常向量地址。",
+      "explanation": "该赋值根据w_excNum_4的值，为不同的异常类型分配固定的向量地址（如0x1200, 0x1204等），对于软件中断（4'b0010）则使用w_pcAndPsr_64中的PC值。这实现了异常向量表的硬件映射。",
       "signals": [
-        "w_pc_32",
+        "w_pcToif_32",
         "w_excNum_4",
-        "w_intPC1_32",
-        "w_ifPC1_32",
-        "w_decPC1_32",
-        "w_exePC1_32",
-        "w_lsuPC1_32"
+        "w_pcAndPsr_64"
       ],
       "related_assignments": [
-        "9",
-        "14"
+        "assign 11",
+        "assign 12",
+        "assign 13"
       ],
       "related_flows": [
-        "flow_003_intAndExc_i_excDriveFromDec",
-        "flow_004_intAndExc_i_excDriveFromExe",
-        "flow_005_intAndExc_i_excDriveFromIF",
-        "flow_006_intAndExc_i_excDriveFromLsu",
         "flow_007_intAndExc_i_intDriveFromIF"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
@@ -465,38 +427,36 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "Each event input (i_driveFrom*) has a corresponding free output (o_freeTo*) forming a point-to-point handshake protocol for flow control.",
-      "subject": "event_drive and event_free handshake",
-      "explanation": "The event_payload_contracts show a consistent pattern where each event drive input has a paired free output. This indicates a simple handshake where the source asserts the drive, and the module asserts the free when it has accepted the event. This is a fundamental interface contract for all event sources.",
+      "summary": "模块的所有输入事件（i_drive*）和输出事件（o_drive*）都配对的释放信号（i_free*和o_free*），形成请求-释放握手协议，确保模块间数据流同步。",
+      "subject": "事件驱动与释放握手协议",
+      "explanation": "每个输入事件（如i_driveFromDR_1）都有一个对应的输出释放信号（如o_freeToDR_1），每个输出事件（如o_driveToDataRoute_1）都有一个对应的输入释放信号（如i_freeFromDataRoute_1）。这种设计表明模块使用握手协议来管理数据流，防止数据丢失或冲突。",
       "signals": [
         "i_driveFromDR_1",
         "o_freeToDR_1",
+        "o_driveToDataRoute_1",
+        "i_freeFromDataRoute_1",
         "i_driveFromRGRF_1",
         "o_freeToRGRF_1",
+        "o_driveToRGRF_1",
+        "i_freeFromRGRF_1",
         "i_driveFromRPSR_1",
         "o_freeToRPSR_1",
+        "o_driveToRPSR_1",
+        "i_freeFromRPSR_1",
         "i_driveFromWB",
         "o_freeToWB",
-        "i_excDriveFromDec",
-        "o_excFreeToDec",
-        "i_excDriveFromExe",
-        "o_excFreeToExe",
-        "i_excDriveFromIF",
-        "o_excFreeToIf",
-        "i_excDriveFromLsu",
-        "o_excFreeToLsu",
-        "i_intDriveFromIF",
-        "o_intFreeToIF"
+        "o_driveToWGRF_1",
+        "i_freeFromWGRF_1",
+        "o_driveToWPSR_1",
+        "i_freeFromWPSR_1"
       ],
       "related_payload": [
         "i_DRdata_64",
+        "o_dataRouteData_104",
         "i_grfData_192",
+        "o_dataToWGRF_72",
         "i_psrData_32",
-        "i_decPCAndNum_36",
-        "i_exePCAndNum_36",
-        "i_ifPCAndNum_36",
-        "i_lsuPCAndNum_36",
-        "i_intPCAndIntNum_38"
+        "o_dataToWPSR_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -519,65 +479,35 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "Exception payloads are 36-bit bundles containing a 32-bit PC and a 4-bit exception number.",
-      "subject": "exception payload format",
-      "explanation": "Assign dependencies (index 3-6) show that input payloads like i_ifPCAndNum_36 are split into {w_ifPC_32, w_ifExcNum_4}. This consistent 32+4 bit format across IF, Dec, Exe, and LSU indicates a standard exception reporting interface from each pipeline stage.",
+      "summary": "来自IF、Dec、Exe、Lsu的异常驱动事件（i_excDriveFrom*）与对应的PC和异常号数据（i_*PCAndNum_36）绑定，形成事件-数据对。",
+      "subject": "异常事件与PC/异常号数据绑定",
+      "explanation": "每个i_excDriveFrom*事件都有一个对应的i_*PCAndNum_36数据输入，该数据包含32位PC和4位异常号。这表明模块在接收异常事件时，同时接收相关的PC和异常号信息，用于后续的优先级仲裁和向量地址计算。",
       "signals": [
+        "i_excDriveFromIF",
+        "i_ifPCAndNum_36",
+        "i_excDriveFromDec",
+        "i_decPCAndNum_36",
+        "i_excDriveFromExe",
+        "i_exePCAndNum_36",
+        "i_excDriveFromLsu",
+        "i_lsuPCAndNum_36"
+      ],
+      "related_payload": [
         "i_ifPCAndNum_36",
         "i_decPCAndNum_36",
         "i_exePCAndNum_36",
-        "i_lsuPCAndNum_36",
-        "i_intPCAndIntNum_38"
+        "i_lsuPCAndNum_36"
       ],
-      "related_payload": [
-        "w_ifPC_32",
-        "w_ifExcNum_4",
-        "w_decPC_32",
-        "w_decExcNum_4",
-        "w_exePC_32",
-        "w_exeExcNum_4",
-        "w_lsuPC_32",
-        "w_lsuExcNum_4"
-      ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "assign_dependencies"
+          "path": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:intAndExc:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "summary": "Interrupt payload is a 38-bit bundle containing a 32-bit PC and a 6-bit type field.",
-      "subject": "interrupt payload format",
-      "explanation": "Assign dependency (index 2) shows that i_intPCAndIntNum_38 is split into {w_intPC_32, w_intType_6}. The 6-bit type field (w_intType_6) is also output as o_intNewType_6, suggesting it carries interrupt type information for external use.",
-      "signals": [
-        "i_intPCAndIntNum_38",
-        "o_intNewType_6",
-        "w_intPC_32",
-        "w_intType_6"
-      ],
-      "related_payload": [
-        "i_intPCAndIntNum_38"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:intAndExc:interface_intent:003"
     },
     {
       "claim_type": "documentation_focus",
@@ -585,17 +515,17 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "The manual should emphasize the priority arbitration between interrupt and exception sources, as this is the core function of the module.",
-      "subject": "arbitration and priority scheme",
-      "explanation": "The module's primary role is to collect events from multiple pipeline stages and select the highest-priority one. The cmpMerge component and the priority selector logic (assign index 11) are central to this function. The documentation should explain the priority order and how the arbitration works.",
+      "summary": "文档应重点描述模块如何仲裁来自不同流水线阶段的中断和异常，以及如何确定最高优先级的事件。",
+      "subject": "中断与异常优先级仲裁逻辑",
+      "explanation": "模块的核心功能是集中仲裁，但当前上下文未提供具体的优先级编码或仲裁算法。文档需要基于RTL源码详细说明仲裁规则，包括中断与异常之间的优先级、同一类型事件的优先级（如异常优先级高于中断）等。",
       "signals": [
-        "i_intDriveFromIF",
         "i_excDriveFromIF",
         "i_excDriveFromDec",
         "i_excDriveFromExe",
         "i_excDriveFromLsu",
+        "i_intDriveFromIF",
         "w_allExcNum_20",
-        "w_excNum_4"
+        "w_intAndExeValid_1"
       ],
       "instances": [
         "cmpMerge",
@@ -609,96 +539,19 @@
         "flow_007_intAndExc_i_intDriveFromIF"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:intAndExc:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "summary": "The manual should detail the vector address calculation logic, including the lookup table for exception numbers.",
-      "subject": "vector address calculation",
-      "explanation": "The assign dependencies show a complex vector address calculation (w_pcToif_32) that maps exception numbers to specific memory addresses. This is a critical architectural detail that must be documented for software developers and hardware verifiers.",
-      "signals": [
-        "w_pcToif_32",
-        "w_excNum_4",
-        "w_vecAddr_32",
-        "w_exeAddr_32"
-      ],
-      "instances": [
-        "vectorSpli"
-      ],
-      "related_flows": [
-        "flow_007_intAndExc_i_intDriveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
           "path": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:intAndExc:documentation_focus:002"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "summary": "The manual should explain the stack push (u_inStack) and pop (u_outStack) operations, including the data saved and restored.",
-      "subject": "stack push/pop operation",
-      "explanation": "The u_inStack saves register file and PSR data during exception entry, while u_outStack restores data during exception return. The SRMerge and associated delay components manage the stack pointer update. This is a key architectural feature for context switching.",
-      "signals": [
-        "i_grfData_192",
-        "i_psrData_32",
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32",
-        "w_SRDrive_1",
-        "w_SP_32"
-      ],
-      "instances": [
-        "u_inStack",
-        "u_outStack",
-        "SRMerge",
-        "SRDriveTap",
-        "SRDelay0",
-        "SRDriveDelay"
-      ],
-      "related_flows": [
-        "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1",
-        "flow_002_intAndExc_i_driveFromDR_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "key_instances"
         },
         {
           "source": "knowledge_ir/modules/intAndExc.json",
           "path": "key_component_connections"
         }
       ],
-      "id": "semantic:module:intAndExc:documentation_focus:003"
+      "id": "semantic:module:intAndExc:documentation_focus:001"
     },
     {
       "claim_type": "source_review_request",
@@ -706,37 +559,33 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "reason": "The compact context does not provide visibility into the internal state machine, delay components (Delay0, Delay1, Delay3, preDelay0), or the exact timing of the arbitration and vectoring process. The role of the SRDriveTap and firstTap instances is also unclear without RTL source.",
-      "subject": "internal state machine and timing",
-      "needed_source_slice": "always block, module declaration, comments",
+      "reason": "当前上下文仅提供了组件连接和部分赋值，但未明确说明优先级仲裁的具体逻辑（如w_allExcNum_20的编码方式、优先级比较器等）。需要查看RTL源码中的always块或组合逻辑来理解仲裁规则。",
+      "subject": "中断与异常优先级仲裁算法",
+      "needed_source_slice": "always block, assign block",
       "signals": [
-        "w_intAndExeSeleDriveToMe",
+        "w_allExcNum_20",
+        "w_intAndExeValid_1",
         "w_intSeleDrive_1",
-        "w_SRDriveReq_1",
-        "w_intSeleDrive1_1"
+        "w_intAndExeSeleDriveToMe"
       ],
       "instances": [
-        "SRDriveTap",
-        "firstTap",
-        "Delay0",
-        "Delay1",
-        "Delay3",
-        "preDelay0",
-        "SRDelay0",
-        "SRDriveDelay"
+        "cmpMerge",
+        "intAndExeSele"
       ],
       "related_flows": [
-        "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1",
-        "flow_002_intAndExc_i_driveFromDR_1"
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "key_instances"
+          "path": "assign_dependencies"
         },
         {
           "source": "knowledge_ir/modules/intAndExc.json",

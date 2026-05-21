@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 17,
+    "count": 11,
     "by_type": {
-      "assignment_interpretation": 6,
+      "assignment_interpretation": 3,
       "component_role": 2,
-      "documentation_focus": 2,
-      "interface_intent": 2,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 3,
+      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -64,21 +64,21 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "Bridge module converting NoC drive events into SPI flash read/write transactions and returning status/read data to the NoC.",
+      "summary": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
       "subject": "SPI02NoC",
-      "explanation": "The module receives a drive event from the mesh (i_driveFrmMesh) with a 51-bit payload (i_dataFrmNoc), extracts an address and control/data fields, drives a flash state machine (u_flash), and returns a status register or read data payload (o_data2Noc) via a delayed drive event (o_driveNextToMesh). The free signals (o_freeToMesh, i_freeNextFrmMesh) implement a two-way handshake for flow control.",
+      "explanation": "模块接收来自 Mesh 的驱动事件 (i_driveFrmMesh) 和 51 位数据 (i_dataFrmNoc)，通过内部 FIFO 和延迟单元进行流水线处理，最终驱动 SPI Flash 控制器 (u_flash) 并输出地址和数据到 NoC。其内部事件流 (flow_000_SPI02NoC_i_driveFrmMesh) 清晰地展示了从输入驱动到输出驱动的完整路径。",
       "signals": [
         "i_driveFrmMesh",
         "i_dataFrmNoc",
         "o_driveNextToMesh",
         "o_data2Noc",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
+        "address"
       ],
       "instances": [
         "cFifo1",
         "cFifo2",
         "u_flash",
+        "delay1",
         "fire2SyncPluse_u"
       ],
       "related_flows": [
@@ -103,20 +103,15 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "Decodes the incoming NoC payload to select a SPI register (CR, SR, TDR, RDR) and performs read or write operations via the flash state machine.",
-      "subject": "NoC-to-SPI command decoding and response",
-      "explanation": "The assign w_data2noc selects a register based on address[3:0] and returns its value to the NoC. The assign startRead_fire triggers a flash read when address[3:0] equals TDR and w_en is asserted. The assign w_en_tmp qualifies writes to address 8'h64. The assign r_en enables reads when w_en is low and dataReady is high.",
+      "summary": "模块将 NoC 的驱动事件和地址/数据负载，转换为对内部 SPI 控制/状态寄存器的读写操作，并驱动 SPI Flash 接口。",
+      "subject": "事件驱动的 SPI 寄存器访问桥接",
+      "explanation": "输入数据 i_dataFrmNoc 的 [49:42] 位被直接赋值给 address 信号，用于选择 SPI 寄存器 (CR, SR, TDR, RDR)。赋值语句 (assign index 2) 根据地址选择将相应寄存器的值组合成 w_data2noc，最终输出到 o_data2Noc。写使能信号 w_en 和地址 8'h64 的组合用于生成 w_en_tmp，表明存在特定的写操作触发条件。",
       "signals": [
         "address",
-        "w_data2noc",
-        "startRead_fire",
-        "w_en_tmp",
-        "r_en",
         "i_dataFrmNoc",
-        "w_SR",
-        "r_CR",
-        "r_TDR",
-        "w_RDR"
+        "o_data2Noc",
+        "w_en",
+        "w_en_tmp"
       ],
       "instances": [
         "u_flash"
@@ -129,6 +124,9 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
@@ -140,28 +138,30 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "subject": "cFifo1 and cFifo2",
-      "summary": "Two-stage event pipeline with delay for NoC drive handshake synchronization.",
-      "explanation": "cFifo1 receives the incoming drive event (i_driveFrmMesh) and outputs w_driveNext. This passes through delay1 to create w_driveNext_delay, which feeds cFifo2. cFifo2 outputs o_driveNextToMesh. This pipeline likely ensures the flash operation completes before the response drive event is sent to the mesh. The free signals (o_freeToMesh from cFifo1, i_freeNextFrmMesh to cFifo2) provide backpressure.",
+      "subject": "cFifo1, cFifo2 (Fifo1 系列)",
+      "summary": "这两个 FIFO 实例构成一个两级流水线，用于缓冲和同步来自 NoC 的驱动事件，确保事件在通过延迟单元后能够有序传递。",
+      "explanation": "cFifo1 接收输入事件 i_driveFrmMesh，其输出 w_driveNext 连接到延迟单元 delay1。delay1 的输出 w_driveNext_delay 再驱动 cFifo2，cFifo2 最终产生输出事件 o_driveNextToMesh。这种级联结构表明事件流经过了至少一个时钟周期的延迟，可能用于满足 SPI Flash 操作的时序要求。",
       "signals": [
         "i_driveFrmMesh",
         "w_driveNext",
         "w_driveNext_delay",
-        "o_driveNextToMesh",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
+        "o_driveNextToMesh"
       ],
       "instances": [
         "cFifo1",
-        "cFifo2"
+        "cFifo2",
+        "delay1"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
@@ -175,28 +175,30 @@
         "module": "SPI02NoC"
       },
       "subject": "u_flash (flash_state)",
-      "summary": "SPI flash state machine that executes read/write transactions and provides status.",
-      "explanation": "u_flash receives startRead from fire2SyncPluse_u, drives SPI signals (sclk, mosi, cs_n), and returns dataReady, busy, and read data (w_RDR). It is the core execution unit for SPI operations triggered by NoC commands.",
+      "summary": "u_flash 是 SPI Flash 控制器状态机，负责执行实际的 SPI 总线协议，并返回数据就绪 (dataReady) 和忙 (busy) 状态。",
+      "explanation": "u_flash 接收来自 fire2SyncPluse_u 的 startRead 信号以启动读取操作，并输出 SPI 接口信号 (sclk, mosi, cs_n) 以及内部状态信号 (dataReady, busy)。其输出 dataReady 被用于生成读使能信号 r_en，表明模块在数据就绪后才会读取结果。",
       "signals": [
         "startRead",
-        "sclk",
-        "mosi",
-        "miso",
-        "cs_n",
         "dataReady",
         "busy",
-        "w_RDR"
+        "sclk",
+        "mosi",
+        "cs_n",
+        "miso"
       ],
       "instances": [
-        "u_flash"
+        "fire2SyncPluse_u"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
@@ -210,17 +212,14 @@
         "module": "SPI02NoC"
       },
       "subject": "address",
-      "summary": "Extracts the register address from the NoC payload for SPI register selection.",
-      "explanation": "address is assigned from i_dataFrmNoc[49:42], indicating the upper 8 bits of the 51-bit payload carry the register address. This address is used in subsequent assignments to select CR, SR, TDR, or RDR.",
+      "summary": "从输入数据包中提取地址字段，用于 SPI 寄存器寻址。",
+      "explanation": "赋值语句 (assign index 0) 将 i_dataFrmNoc[49:42] 直接连接到 address 信号。这表明 NoC 数据包的高 8 位被用作 SPI 内部寄存器的地址，用于区分对控制寄存器 (CR)、状态寄存器 (SR)、发送数据寄存器 (TDR) 和接收数据寄存器 (RDR) 的访问。",
       "signals": [
         "address",
         "i_dataFrmNoc"
       ],
       "related_assignments": [
-        "0",
-        "2",
-        "5",
-        "6"
+        "assign index 0"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
@@ -229,6 +228,9 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
@@ -242,8 +244,8 @@
         "module": "SPI02NoC"
       },
       "subject": "w_data2noc",
-      "summary": "Multiplexes SPI register values into the NoC response payload based on address.",
-      "explanation": "This assign selects one of four registers (CR, SR, TDR, RDR) to return to the NoC. The selection is based on address[3:0], implying a 16-register address space with at least these four implemented. The output is 32 bits, padded with 24'b0.",
+      "summary": "根据地址选择 SPI 寄存器值，组合成返回给 NoC 的数据负载。",
+      "explanation": "赋值语句 (assign index 2) 是一个多路选择器，根据 address[3:0] 的值，从 r_CR, w_SR, r_TDR, w_RDR 中选择一个 32 位值，并在高位补零后赋值给 w_data2noc。这表明模块支持对多个 SPI 寄存器的读回操作。",
       "signals": [
         "w_data2noc",
         "address",
@@ -253,164 +255,10 @@
         "w_RDR"
       ],
       "related_assignments": [
-        "2"
+        "assign index 2"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "subject": "w_SR",
-      "summary": "Assembles the SPI status register from internal flags.",
-      "explanation": "w_SR is a concatenation of dataReady, w_TXE, busy, w_finish, and 4'b0. This provides a status word that can be read by the NoC to monitor flash operation progress.",
-      "signals": [
-        "w_SR",
-        "dataReady",
-        "w_TXE",
-        "busy",
-        "w_finish"
-      ],
-      "related_assignments": [
-        "1"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "subject": "startRead_fire",
-      "summary": "Generates a trigger to start a flash read when a write to TDR occurs.",
-      "explanation": "This assign asserts when address[3:0] equals TDR and w_en is high, using w_fire_2[1] as a qualifier. This suggests writing to the TDR register initiates a flash read operation.",
-      "signals": [
-        "startRead_fire",
-        "address",
-        "w_en",
-        "w_fire_2"
-      ],
-      "related_assignments": [
-        "5"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "subject": "w_en_tmp",
-      "summary": "Qualifies write enable for a specific address (8'h64).",
-      "explanation": "w_en_tmp is asserted only when w_en is high and address equals 8'h64. This suggests address 8'h64 is a special control register that requires qualified write access.",
-      "signals": [
-        "w_en_tmp",
-        "w_en",
-        "address"
-      ],
-      "related_assignments": [
-        "6"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "subject": "r_en",
-      "summary": "Enables read operations when not writing and data is ready.",
-      "explanation": "r_en is asserted when w_en is low and dataReady is high, indicating a read is permitted only when no write is in progress and the flash has data available.",
-      "signals": [
-        "r_en",
-        "w_en",
-        "dataReady"
-      ],
-      "related_assignments": [
-        "3"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:006"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "summary": "The incoming drive event (i_driveFrmMesh) carries a 51-bit payload (i_dataFrmNoc) that encodes a command (address, data, write enable) for the SPI subsystem.",
-      "subject": "NoC drive event with payload",
-      "explanation": "The payload is parsed into address (bits 49:42) and other fields (implied by w_en, w_fire_2, etc.). The event triggers a flash operation, and the response is returned via o_data2Noc on the outgoing drive event (o_driveNextToMesh). The free handshake (o_freeToMesh, i_freeNextFrmMesh) provides flow control.",
-      "signals": [
-        "i_driveFrmMesh",
-        "i_dataFrmNoc",
-        "o_driveNextToMesh",
-        "o_data2Noc",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
-      ],
-      "related_payload": [
-        "i_dataFrmNoc",
-        "o_data2Noc"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -423,7 +271,41 @@
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
-      "id": "semantic:module:SPI02NoC:interface_intent:001"
+      "id": "semantic:module:SPI02NoC:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "SPI02NoC"
+      },
+      "subject": "startRead_fire",
+      "summary": "当对 TDR 寄存器进行写操作时，生成一个脉冲信号以触发 SPI Flash 读取。",
+      "explanation": "赋值语句 (assign index 5) 表明，当 address[3:0] 等于 TDR 且 w_en 有效时，startRead_fire 信号会跟随 w_fire_2[1] 的值。这暗示向 TDR 写入数据是启动 SPI Flash 读取操作的触发条件。",
+      "signals": [
+        "startRead_fire",
+        "address",
+        "w_en",
+        "w_fire_2"
+      ],
+      "related_assignments": [
+        "assign index 5"
+      ],
+      "related_flows": [
+        "flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
+        }
+      ],
+      "id": "semantic:module:SPI02NoC:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -431,58 +313,31 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "The module provides a standard SPI master interface (sclk, mosi, miso, cs_n) to an external flash device, controlled by the internal flash state machine.",
-      "subject": "SPI flash interface",
-      "explanation": "The SPI signals are driven by u_flash and connected to module ports. The interface includes a chip select (cs_n), clock (sclk), and data lines (mosi, miso). The busy signal indicates ongoing flash operations.",
+      "summary": "输入驱动事件 i_driveFrmMesh 与数据负载 i_dataFrmNoc 在时间上对齐，共同构成一个 NoC 数据包。",
+      "subject": "驱动事件与数据负载的绑定关系",
+      "explanation": "事件-负载合约 (event_payload_contracts) 将 i_driveFrmMesh 与 i_dataFrmNoc 关联，表明当驱动事件有效时，数据负载也同时有效。输出端 o_driveNextToMesh 与 o_data2Noc 也遵循类似的合约，但缺少明确的负载绑定，需要进一步确认。",
       "signals": [
-        "sclk",
-        "mosi",
-        "miso",
-        "cs_n",
-        "busy"
+        "i_driveFrmMesh",
+        "i_dataFrmNoc",
+        "o_driveNextToMesh",
+        "o_data2Noc"
+      ],
+      "related_payload": [
+        "i_dataFrmNoc",
+        "o_data2Noc"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:interface_intent:002"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "summary": "The manual should document the NoC payload format, register address map (CR, SR, TDR, RDR, and address 8'h64), and the sequence of operations for read/write.",
-      "subject": "NoC command protocol and register map",
-      "explanation": "The assign dependencies reveal a register-based interface where the NoC writes to TDR to trigger a flash read, reads RDR for data, and reads SR for status. The address 8'h64 appears to be a special control register. The payload format (address in bits 49:42) and write enable semantics need clear documentation.",
-      "signals": [
-        "i_dataFrmNoc",
-        "address",
-        "w_en",
-        "w_data2noc",
-        "startRead_fire",
-        "w_en_tmp"
-      ],
-      "instances": [
-        "u_flash"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
-      "id": "semantic:module:SPI02NoC:documentation_focus:001"
+      "id": "semantic:module:SPI02NoC:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -490,13 +345,11 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "The manual should explain the two-stage FIFO pipeline (cFifo1, delay1, cFifo2) and how it synchronizes the flash operation with the NoC drive handshake.",
-      "subject": "Event pipeline timing and flow control",
-      "explanation": "The pipeline introduces a delay between the incoming drive event and the outgoing response. This delay likely accounts for flash operation latency. The free signals provide backpressure to prevent data loss. The exact timing and conditions for free assertion need RTL review.",
+      "summary": "手册应重点描述从 NoC 驱动事件到 SPI Flash 操作完成，再到结果返回的完整流水线时序。",
+      "subject": "事件流水线与 SPI 操作时序",
+      "explanation": "内部事件流 (flow_000_SPI02NoC_i_driveFrmMesh) 和关键组件连接 (cFifo1 -> delay1 -> cFifo2) 揭示了事件经过两级 FIFO 和一级延迟单元。手册需要解释这种流水线设计如何满足 SPI Flash 的访问延迟，以及如何通过 free 信号 (o_freeToMesh, i_freeNextFrmMesh) 进行流控。",
       "signals": [
         "i_driveFrmMesh",
-        "w_driveNext",
-        "w_driveNext_delay",
         "o_driveNextToMesh",
         "o_freeToMesh",
         "i_freeNextFrmMesh"
@@ -504,20 +357,24 @@
       "instances": [
         "cFifo1",
         "cFifo2",
-        "delay1"
+        "delay1",
+        "u_flash"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
-      "id": "semantic:module:SPI02NoC:documentation_focus:002"
+      "id": "semantic:module:SPI02NoC:documentation_focus:001"
     },
     {
       "claim_type": "source_review_request",
@@ -525,27 +382,26 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "reason": "The compact context shows the pipeline structure but does not reveal the exact conditions for free signal assertion or the delay1 implementation. RTL source is needed to document the handshake protocol.",
-      "subject": "Event pipeline timing and free signal logic",
+      "reason": "事件-负载合约 (event_payload_contracts) 对输出事件 o_driveNextToMesh 的负载绑定置信度为低，且未列出具体负载信号。需要查看 RTL 源代码以确认 o_data2Noc 是否与 o_driveNextToMesh 同步输出。",
+      "subject": "输出事件与数据负载的精确绑定",
       "needed_source_slice": "always block, assign block",
       "signals": [
-        "o_freeToMesh",
-        "i_freeNextFrmMesh",
-        "w_driveNext",
-        "w_driveNext_delay"
+        "o_driveNextToMesh",
+        "o_data2Noc"
       ],
       "instances": [
-        "cFifo1",
-        "cFifo2",
-        "delay1"
+        "cFifo2"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
@@ -558,18 +414,12 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "reason": "The compact context shows u_flash as a black box with only dataReady and busy outputs. The internal states, timing, and command sequences need RTL review for accurate documentation.",
-      "subject": "Flash state machine (u_flash) internal operation",
-      "needed_source_slice": "module declaration, always block",
+      "reason": "赋值语句 (assign index 5) 使用了 w_fire_2[1]，但上下文中未提供 w_fire_2 的定义。需要查看 RTL 源代码以理解其生成逻辑，这对于理解 startRead_fire 的触发条件至关重要。",
+      "subject": "w_fire_2 信号的生成逻辑",
+      "needed_source_slice": "always block, assign block",
       "signals": [
-        "startRead",
-        "sclk",
-        "mosi",
-        "miso",
-        "cs_n",
-        "dataReady",
-        "busy",
-        "w_RDR"
+        "w_fire_2",
+        "startRead_fire"
       ],
       "instances": [
         "u_flash"
@@ -577,47 +427,18 @@
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "reason": "The compact context shows fire2SyncPluse_u generates startRead from startRead_fire, but the synchronization mechanism and pulse generation logic are not detailed.",
-      "subject": "fire2SyncPluse_u and startRead generation",
-      "needed_source_slice": "module declaration, always block",
-      "signals": [
-        "startRead_fire",
-        "startRead",
-        "clk",
-        "rst",
-        "rst_finish"
-      ],
-      "instances": [
-        "fire2SyncPluse_u"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:source_review_request:003"
     }
   ],
   "evidence_gaps": []

@@ -46,15 +46,15 @@
     }
   ],
   "claim_summary": {
-    "count": 18,
+    "count": 8,
     "by_type": {
-      "assignment_interpretation": 3,
-      "component_role": 3,
-      "documentation_focus": 2,
-      "interface_intent": 4,
+      "assignment_interpretation": 2,
+      "component_role": 1,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 3,
-      "structural_responsibility": 2
+      "source_review_request": 1,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -64,16 +64,14 @@
         "type": "module",
         "module": "socmem"
       },
-      "summary": "Central memory subsystem arbiter and pipeline controller for instruction and data access",
+      "summary": "片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并通过事件驱动流与IF和LSU单元交互。",
       "subject": "socmem",
-      "explanation": "socmem receives drive events from IF and LSU, routes them through delay and FIFO components, and produces output drive events. It also muxes data read outputs from DCache, ICache, ROM, and stack based on address range selection.",
+      "explanation": "模块通过事件输入i_driveFrmIf和i_driveFrmLsu接收来自IF和LSU的驱动请求，内部包含ICache、DCache、ROM和stack实例，并通过事件输出o_driveNextToIf和o_driveNextToLsu返回处理完成信号。事件流经过Fifo1族组件和延迟链，表明存在流水线或握手机制。",
       "signals": [
         "i_driveFrmIf",
         "i_driveFrmLsu",
         "o_driveNextToIf",
-        "o_driveNextToLsu",
-        "o_ddataR_64",
-        "o_idataR_65"
+        "o_driveNextToLsu"
       ],
       "instances": [
         "cFifo2_If",
@@ -106,28 +104,20 @@
         "type": "module",
         "module": "socmem"
       },
-      "summary": "Delays and sequences drive events from IF and LSU through configurable-depth FIFO and delay chains",
-      "subject": "event pipeline control",
-      "explanation": "i_driveFrmIf passes through delay_6UIcache then cFifo2_If, followed by three delay stages (delay_IF1-3) to produce o_driveNextToIf. i_driveFrmLsu passes through cFifo2_Lsu then two delay stages (delay_LSU1-2) to produce o_driveNextToLsu. Free signals are directly connected to corresponding FIFO free inputs.",
+      "summary": "根据输入事件源（IF或LSU），将数据写入或读取对应的存储组件（ICache、DCache、ROM、stack），并通过地址比较选择输出数据。",
+      "subject": "事件驱动数据访问仲裁与路由",
+      "explanation": "赋值依赖显示o_ddataR_64根据r_daddress_32地址范围选择来自DCache或stack的数据；o_idataR_65根据routeSelect选择来自ICache或ROM的数据。这表明模块负责将地址映射到不同存储区域。",
       "signals": [
-        "i_driveFrmIf",
-        "i_driveFrmLsu",
-        "o_driveNextToIf",
-        "o_driveNextToLsu",
-        "i_freeNextFrmIf",
-        "i_freeNextFrmLsu",
-        "o_freeToIf",
-        "o_freeToLsu"
+        "o_ddataR_64",
+        "o_idataR_65",
+        "r_daddress_32",
+        "routeSelect"
       ],
       "instances": [
-        "cFifo2_If",
-        "cFifo2_Lsu",
-        "delay_6UIcache",
-        "delay_IF1",
-        "delay_IF2",
-        "delay_IF3",
-        "delay_LSU1",
-        "delay_LSU2"
+        "DCache",
+        "ICache",
+        "ROM",
+        "stack"
       ],
       "related_flows": [
         "flow_000_socmem_i_driveFrmIf",
@@ -137,9 +127,6 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/socmem.json"
         }
@@ -147,57 +134,19 @@
       "id": "semantic:module:socmem:structural_responsibility:001"
     },
     {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "summary": "Selects data read output from DCache, stack, ICache, or ROM based on address range",
-      "subject": "data read path muxing",
-      "explanation": "o_ddataR_64 is muxed between DCache output (o_ddataR_t_64) and stack output (o_ddataR_tStack_64) based on r_daddress_32 < 32'h00041200. o_idataR_65 is muxed between ICache output (o_idataR_t_64) and ROM output (w_idataROM_64) based on routeSelect, with an additional carry bit r_iaddrcarry.",
-      "signals": [
-        "o_ddataR_64",
-        "o_idataR_65",
-        "r_daddress_32",
-        "routeSelect",
-        "r_iaddrcarry"
-      ],
-      "instances": [
-        "DCache",
-        "stack",
-        "ICache",
-        "ROM"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:structural_responsibility:002"
-    },
-    {
       "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "socmem"
       },
-      "subject": "cFifo2_If and cFifo2_Lsu",
-      "summary": "Two-instance FIFO family that buffers drive events and manages flow control with free handshake",
-      "explanation": "Both instances are of type cFifo2_socmem (family Fifo1). cFifo2_If receives delayed IF drive events and outputs to the IF delay chain. cFifo2_Lsu receives LSU drive events directly and outputs to the LSU delay chain. Each has free input (i_freeNext) from the corresponding external free signal.",
+      "subject": "cFifo2_If, cFifo2_Lsu",
+      "summary": "事件流中的Fifo1族组件，用于缓冲来自IF和LSU的驱动事件，并输出到后续延迟链。",
+      "explanation": "这两个实例分别接收i_driveFrmIf（经delay_6UIcache延迟后）和i_driveFrmLsu，输出w_driveNextToIf[0]和w_driveNextToLsu[0]。它们作为事件流的第一级缓冲，可能实现握手或流量控制。",
       "signals": [
         "w_driveFrmIfDelay_1",
-        "w_driveNextToIf[0]",
         "i_driveFrmLsu",
-        "w_driveNextToLsu[0]",
-        "i_freeNextFrmIf",
-        "i_freeNextFrmLsu"
+        "w_driveNextToIf[0]",
+        "w_driveNextToLsu[0]"
       ],
       "instances": [
         "cFifo2_If",
@@ -207,13 +156,10 @@
         "flow_000_socmem_i_driveFrmIf",
         "flow_001_socmem_i_driveFrmLsu"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/socmem.json"
         }
@@ -221,97 +167,28 @@
       "id": "semantic:module:socmem:component_role:001"
     },
     {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "subject": "DCache and stack",
-      "summary": "Data memory components that provide read data for data address ranges below and above 0x41200",
-      "explanation": "DCache (sram_128k) and stack (sram_8k) both receive i_ddataW_64 as write data. Their read outputs are muxed into o_ddataR_64 based on address comparison. This suggests a split memory map where lower addresses map to DCache and higher to stack.",
-      "signals": [
-        "i_ddataW_64",
-        "o_ddataR_t_64",
-        "o_ddataR_tStack_64",
-        "r_daddress_32"
-      ],
-      "instances": [
-        "DCache",
-        "stack"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:component_role:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "subject": "ICache and ROM",
-      "summary": "Instruction memory components that provide read data for instruction address ranges, selected by routeSelect",
-      "explanation": "ICache (sram_128k) receives i_idataW_64 and i_iwen_8. ROM provides w_idataROM_64. Their read outputs are muxed into o_idataR_65 based on routeSelect, with an additional carry bit r_iaddrcarry. This suggests a split instruction memory map.",
-      "signals": [
-        "i_idataW_64",
-        "i_iwen_8",
-        "o_idataR_t_64",
-        "w_idataROM_64",
-        "routeSelect",
-        "r_iaddrcarry"
-      ],
-      "instances": [
-        "ICache",
-        "ROM"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:component_role:003"
-    },
-    {
       "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "socmem"
       },
-      "subject": "o_freeToIf and o_freeToLsu",
-      "summary": "Free signals are directly wired to corresponding output drive events, indicating a simple pass-through handshake",
-      "explanation": "Assign index 2 sets o_freeToIf = o_driveNextToIf. Assign index 4 sets o_freeToLsu = o_driveNextToLsu. This suggests the free handshake is directly coupled to the drive event output, possibly indicating a simple credit-based or ready/valid protocol.",
+      "subject": "o_ddataR_64",
+      "summary": "根据数据地址r_daddress_32选择数据输出源，地址低于0x41200时来自DCache，否则来自stack。",
+      "explanation": "该赋值实现了地址空间分区，将低地址区域映射到DCache，高地址区域映射到stack，用于区分常规数据存储和栈存储。",
       "signals": [
-        "o_freeToIf",
-        "o_driveNextToIf",
-        "o_freeToLsu",
-        "o_driveNextToLsu"
+        "o_ddataR_64",
+        "r_daddress_32",
+        "o_ddataR_t_64",
+        "o_ddataR_tStack_64"
       ],
       "related_assignments": [
-        "2",
-        "4"
+        "5"
       ],
       "related_flows": [
         "flow_000_socmem_i_driveFrmIf",
         "flow_001_socmem_i_driveFrmLsu"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -328,25 +205,24 @@
         "module": "socmem"
       },
       "subject": "o_idataR_65",
-      "summary": "Instruction read data output is muxed between ICache and ROM based on routeSelect, with carry bit",
-      "explanation": "Assign index 3 selects between {o_idataR_t_64, r_iaddrcarry} and {w_idataROM_64, r_iaddrcarry} based on routeSelect. The 65-bit width includes a carry bit, suggesting instruction address arithmetic or error detection.",
+      "summary": "根据routeSelect选择指令数据输出源，routeSelect为1时来自ICache，否则来自ROM。",
+      "explanation": "该赋值实现了指令数据源的选择，可能用于区分缓存命中（ICache）和未命中回填（ROM）或启动代码区域。",
       "signals": [
         "o_idataR_65",
         "routeSelect",
         "o_idataR_t_64",
-        "r_iaddrcarry",
-        "w_idataROM_64"
+        "w_idataROM_64",
+        "r_iaddrcarry"
       ],
       "related_assignments": [
         "3"
       ],
       "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
+        "flow_000_socmem_i_driveFrmIf"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/socmem.json"
@@ -355,55 +231,29 @@
       "id": "semantic:module:socmem:assignment_interpretation:002"
     },
     {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "subject": "o_ddataR_64",
-      "summary": "Data read output is muxed between DCache and stack based on address range comparison",
-      "explanation": "Assign index 5 selects between o_ddataR_t_64 and o_ddataR_tStack_64 based on r_daddress_32 < 32'h00041200. This defines a memory map boundary at address 0x41200.",
-      "signals": [
-        "o_ddataR_64",
-        "r_daddress_32",
-        "o_ddataR_t_64",
-        "o_ddataR_tStack_64"
-      ],
-      "related_assignments": [
-        "5"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:assignment_interpretation:003"
-    },
-    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "socmem"
       },
-      "summary": "Drive event from IF is acknowledged by a free output, forming a request-grant protocol",
-      "subject": "IF drive/free handshake pair",
-      "explanation": "i_driveFrmIf is an input event, o_freeToIf is the corresponding free output. The free signal is directly wired to o_driveNextToIf, suggesting the free is asserted when the pipeline has processed the drive event.",
+      "summary": "每个事件输入对应一个释放输出，每个事件输出对应一个释放输入，形成双向握手协议。",
+      "subject": "事件-释放信号对",
+      "explanation": "事件输入i_driveFrmIf对应释放输出o_freeToIf，事件输出o_driveNextToIf对应释放输入i_freeNextFrmIf。类似地，LSU路径也有对应关系。赋值依赖显示o_freeToIf直接等于o_driveNextToIf，表明释放信号与事件输出同步。",
       "signals": [
         "i_driveFrmIf",
         "o_freeToIf",
-        "o_driveNextToIf"
+        "o_driveNextToIf",
+        "i_freeNextFrmIf",
+        "i_driveFrmLsu",
+        "o_freeToLsu",
+        "o_driveNextToLsu",
+        "i_freeNextFrmLsu"
       ],
       "related_payload": [
-        "i_daddress_32",
         "i_ddataW_64",
-        "i_dwen_8"
+        "i_idataW_64",
+        "o_ddataR_64",
+        "o_idataR_65"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -419,121 +269,25 @@
       "id": "semantic:module:socmem:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "summary": "Drive event from LSU is acknowledged by a free output, forming a request-grant protocol",
-      "subject": "LSU drive/free handshake pair",
-      "explanation": "i_driveFrmLsu is an input event, o_freeToLsu is the corresponding free output. The free signal is directly wired to o_driveNextToLsu, suggesting the free is asserted when the pipeline has processed the drive event.",
-      "signals": [
-        "i_driveFrmLsu",
-        "o_freeToLsu",
-        "o_driveNextToLsu"
-      ],
-      "related_payload": [
-        "i_daddress_32",
-        "i_ddataW_64",
-        "i_dwen_8"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "summary": "Output drive event to IF is accompanied by a free input for flow control",
-      "subject": "IF next/free handshake pair",
-      "explanation": "o_driveNextToIf is an output event, i_freeNextFrmIf is the corresponding free input. This allows the downstream IF module to throttle the pipeline.",
-      "signals": [
-        "o_driveNextToIf",
-        "i_freeNextFrmIf"
-      ],
-      "related_payload": [
-        "o_ddataR_64",
-        "o_idataR_65"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:interface_intent:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "summary": "Output drive event to LSU is accompanied by a free input for flow control",
-      "subject": "LSU next/free handshake pair",
-      "explanation": "o_driveNextToLsu is an output event, i_freeNextFrmLsu is the corresponding free input. This allows the downstream LSU module to throttle the pipeline.",
-      "signals": [
-        "o_driveNextToLsu",
-        "i_freeNextFrmLsu"
-      ],
-      "related_payload": [
-        "o_ddataR_64",
-        "o_idataR_65"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:interface_intent:004"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "socmem"
       },
-      "summary": "Document the delay chain depths for IF (6+1+3=10 stages) and LSU (1+2=3 stages) pipelines",
-      "subject": "event pipeline depth and timing",
-      "explanation": "The IF pipeline has delay_6UIcache (6 stages), cFifo2_If (1 stage), and delay_IF1-3 (3 stages). The LSU pipeline has cFifo2_Lsu (1 stage) and delay_LSU1-2 (2 stages). This asymmetry should be documented for timing analysis.",
+      "summary": "手册应重点说明地址范围如何决定数据输出源（DCache vs stack，ICache vs ROM），以及事件流如何与数据访问同步。",
+      "subject": "地址空间映射与数据路由",
+      "explanation": "赋值依赖明确显示了地址比较和路由选择逻辑，这是模块的核心功能。事件流提供了访问时序和握手机制，但数据路径的地址映射是理解模块行为的关键。",
       "signals": [
-        "i_driveFrmIf",
-        "i_driveFrmLsu",
-        "o_driveNextToIf",
-        "o_driveNextToLsu"
+        "r_daddress_32",
+        "routeSelect",
+        "o_ddataR_64",
+        "o_idataR_65"
       ],
       "instances": [
-        "delay_6UIcache",
-        "cFifo2_If",
-        "delay_IF1",
-        "delay_IF2",
-        "delay_IF3",
-        "cFifo2_Lsu",
-        "delay_LSU1",
-        "delay_LSU2"
+        "DCache",
+        "ICache",
+        "ROM",
+        "stack"
       ],
       "related_flows": [
         "flow_000_socmem_i_driveFrmIf",
@@ -544,48 +298,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
-        {
           "source": "parser_pipeline_rtl/modules/socmem.json"
         }
       ],
       "id": "semantic:module:socmem:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "summary": "Document the address ranges for DCache, stack, ICache, and ROM, and the routeSelect logic",
-      "subject": "memory map and address decoding",
-      "explanation": "Data read muxing uses address comparison at 0x41200. Instruction read muxing uses routeSelect. The exact address ranges and routeSelect generation logic should be documented.",
-      "signals": [
-        "r_daddress_32",
-        "routeSelect",
-        "o_ddataR_64",
-        "o_idataR_65"
-      ],
-      "instances": [
-        "DCache",
-        "stack",
-        "ICache",
-        "ROM"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:documentation_focus:002"
     },
     {
       "claim_type": "source_review_request",
@@ -593,15 +309,21 @@
         "type": "module",
         "module": "socmem"
       },
-      "reason": "The routeSelect signal is used in instruction read muxing but its generation logic is not provided in the compact context",
-      "subject": "routeSelect generation logic",
-      "needed_source_slice": "assign block or always block",
+      "reason": "紧凑上下文仅显示延迟链组件（delay_6UIcache, delay_IF1/2/3, delay_LSU1/2）的连接，但未提供延迟周期数或具体实现细节，无法推断流水线深度或握手协议。",
+      "subject": "事件流延迟链的详细时序",
+      "needed_source_slice": "always block, instance connections",
       "signals": [
-        "routeSelect"
+        "w_driveFrmIfDelay_1",
+        "w_driveNextToIf[0:2]",
+        "w_driveNextToLsu[0:1]"
       ],
       "instances": [
-        "ICache",
-        "ROM"
+        "delay_6UIcache",
+        "delay_IF1",
+        "delay_IF2",
+        "delay_IF3",
+        "delay_LSU1",
+        "delay_LSU2"
       ],
       "related_flows": [
         "flow_000_socmem_i_driveFrmIf",
@@ -616,68 +338,6 @@
         }
       ],
       "id": "semantic:module:socmem:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "reason": "The r_iaddrcarry signal is used in instruction read output but its generation logic is not provided",
-      "subject": "r_iaddrcarry generation logic",
-      "needed_source_slice": "assign block or always block",
-      "signals": [
-        "r_iaddrcarry"
-      ],
-      "instances": [
-        "ICache",
-        "ROM"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "reason": "The delay_6UIcache module is referenced in connections but its internal structure is not provided",
-      "subject": "delay_6UIcache module",
-      "needed_source_slice": "module declaration or instance connections",
-      "signals": [
-        "i_driveFrmIf",
-        "w_driveFrmIfDelay_1"
-      ],
-      "instances": [
-        "delay_6UIcache"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/socmem.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:source_review_request:003"
     }
   ],
   "evidence_gaps": []

@@ -90,10 +90,10 @@
         "w_driveTopsr"
       ],
       "role_in_flow": {
-        "value": "Arbitration merger that selects between two writeback drive sources (WB and EX) and forwards the winner to the FIFO.",
-        "explanation": "This MutexMerge instance receives two event drives: i_psrDriveFromWB_1 (writeback stage) and i_psrwDriveFromExp_1 (execute stage). It acts as a mutual-exclusion merger, meaning only one drive is allowed to pass at a time. The output w_driveTopsr carries the selected drive to the next stage. The merger introduces a blocking point where event propagation may be gated if both drives arrive simultaneously.",
+        "value": "作为互斥合并器，仲裁来自异常阶段和写回阶段的两个写端口驱动请求，选择其中一个传递到下游。",
+        "explanation": "该实例接收两个输入驱动信号 i_psrDriveFromWB_1 和 i_psrwDriveFromExp_1，根据互斥合并逻辑（可能基于优先级或握手协议）决定哪个请求通过，输出到 w_driveTopsr。它在此流中充当事件路径的合并与仲裁点，可能阻塞未选中的请求。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -117,11 +117,11 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "path": "modules/prf.json"
           },
           {
             "source": "component_connection",
-            "path": "knowledge_ir/modules/prf.json"
+            "path": "modules/prf.json"
           }
         ]
       },
@@ -142,15 +142,15 @@
       ],
       "output_drives": [],
       "role_in_flow": {
-        "value": "Final FIFO stage that buffers the merged writeback drive before internal consumption.",
-        "explanation": "This cLastFifo1 instance receives the merged drive w_driveTopsr from the MutexMerge. As a FIFO stage, it provides buffering and may introduce backpressure or gating. The flow ends here without a module output, suggesting the FIFO holds the event for later processing or handoff to another internal path not captured in this flow.",
+        "value": "作为单级FIFO，缓冲来自合并器的写驱动请求，实现流水线级之间的解耦。",
+        "explanation": "该实例接收 w_driveTopsr 作为输入，内部实现为 cLastFifo1 类型，提供一级存储。它在此流中充当事件传播的阻塞点，可能因FIFO满而反压上游合并器，但输出未在上下文中定义，表明其输出可能连接到模块内部其他逻辑或未解析的端点。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:prf:flow_004_prf_i_psrwDriveFromExp_1:component_role:002",
-        "doc_priority": "secondary",
+        "doc_priority": "primary",
         "signals": [
           "w_driveTopsr"
         ],
@@ -167,11 +167,11 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "path": "modules/prf.json"
           },
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "component_connection",
+            "path": "modules/prf.json"
           }
         ]
       },
@@ -226,20 +226,23 @@
     }
   ],
   "semantic_meaning": {
-    "value": "The drive event i_psrwDriveFromExp_1 carries a payload i_rdDataToPrf_32[31:0] from the execute stage, which is the read data to be written back to the PRF.",
-    "explanation": "The interface payload contract associates i_rdDataToPrf_32[31:0] with the i_psrwDriveFromExp_1 event. This payload represents the data that the execute stage intends to write into the PRF. The flow propagates this payload through the merger and FIFO, but the exact data path within those components is not visible from the supplied context. The payload is likely bundled with the drive signal or carried on a separate data bus that follows the same arbitration.",
+    "value": "存在一个空闲信号 o_psrFreeToExp_1 可能用于反压异常阶段的写请求，但其与流中组件的连接未定义。",
+    "explanation": "接口负载契约显示 i_psrwDriveFromExp_1 事件关联一个空闲信号 o_psrFreeToExp_1，表明该驱动流可能支持握手协议，其中空闲信号指示上游（异常阶段）是否可以发送新请求。然而，在提供的流步骤中，该空闲信号未连接到合并器或FIFO级，其生成逻辑（可能来自FIFO满状态或合并器仲裁结果）未知。此关系对于最终手册中的流控制描述至关重要，但当前证据不足。",
     "certainty": "ai_inferred",
-    "confidence": "medium",
+    "confidence": "low",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:prf:flow_004_prf_i_psrwDriveFromExp_1:data_control_effect:001",
+    "semantic_claim_id": "semantic:flow:prf:flow_004_prf_i_psrwDriveFromExp_1:completion_backpressure:001",
     "doc_priority": "primary",
     "signals": [
-      "i_psrwDriveFromExp_1",
-      "i_rdDataToPrf_32"
+      "o_psrFreeToExp_1",
+      "i_psrwDriveFromExp_1"
     ],
-    "instances": [],
+    "instances": [
+      "cMutexMerge2_8b",
+      "cLastFifo2_prf2"
+    ],
     "related_flows": [],
     "related_assignments": [],
     "requires_rtl_source_review": true,
@@ -251,17 +254,13 @@
     "semantic_evidence": [
       {
         "source": "interface.event_ports",
-        "path": "knowledge_ir/modules/prf.json"
-      },
-      {
-        "source": "interface.data_ports",
-        "path": "knowledge_ir/modules/prf.json"
+        "path": "modules/prf.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "The manual should emphasize the arbitration between WB and EX writeback drives, the internal FIFO buffering, and the missing module output endpoint.",
-        "explanation": "The flow is incomplete at the module boundary—it starts from an input but does not reach an output. This suggests the event is consumed internally or merged into a larger writeback path. The manual should clarify that this is an internal event flow with arbitration at the MutexMerge and buffering at the FIFO. The payload data path and free signal generation should be documented as requiring RTL source review.",
+        "value": "最终手册应强调该驱动流在模块内部终止，未到达任何输出端点，并解释其作为内部写请求仲裁路径的一部分。",
+        "explanation": "提供的上下文显示流从输入端口开始，经过合并器和FIFO级后未定义输出端点，表明该流可能用于内部写请求的仲裁和缓冲，最终结果通过其他路径（如写回数据路径）传递。手册应明确说明此流的内部性质，避免用户误认为其直接驱动模块输出。同时，应强调需要RTL源码确认FIFO输出连接。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -271,7 +270,6 @@
         "doc_priority": "primary",
         "signals": [
           "i_psrwDriveFromExp_1",
-          "i_psrDriveFromWB_1",
           "w_driveTopsr"
         ],
         "instances": [
@@ -288,18 +286,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "transparent_flows",
+            "path": "modules/prf.json"
           },
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "warnings",
+            "path": "modules/prf.json"
           }
         ]
       },
       {
-        "value": "This flow drives an exception-triggered writeback payload from the execute pipeline stage into a merged arbitration point before entering a final FIFO stage.",
-        "explanation": "The flow starts at the module input i_psrwDriveFromExp_1, which carries a writeback request from the execute stage. This drive enters the MutexMerge2_8b instance, where it competes with a writeback-from-WB drive (i_psrDriveFromWB_1). The merger selects one drive to propagate as w_driveTopsr into the cLastFifo2_prf2 FIFO. The flow terminates inside the FIFO without reaching a module output, indicating it is an internal event that may be consumed or held within the PRF.",
+        "value": "该驱动流将来自异常阶段的写端口请求（i_psrwDriveFromExp_1）通过互斥合并器送入写回仲裁路径，最终进入FIFO级，但未到达模块输出端点。",
+        "explanation": "流从模块输入端口 i_psrwDriveFromExp_1 开始，连接到 cMutexMerge2_8b 的 i_drive0 输入，与来自写回阶段的 i_psrDriveFromWB_1 在合并器内进行仲裁或合并，输出 w_driveTopsr 后进入 cLastFifo2_prf2 的 FIFO 级，但该 FIFO 的输出未在提供的上下文中定义，因此流在模块内部终止，未到达任何模块输出端点。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -326,32 +324,29 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "path": "modules/prf.json"
           },
           {
             "source": "transparent_flows",
-            "path": "knowledge_ir/modules/prf.json"
+            "path": "modules/prf.json"
           }
         ]
       },
       {
-        "value": "The free signal o_psrFreeToExp_1 indicates when the execute stage can issue a new drive, but its relationship to the flow's internal blocking points is unclear.",
-        "explanation": "The interface payload contract lists o_psrFreeToExp_1 as the free signal for i_psrwDriveFromExp_1. This suggests backpressure is communicated to the execute stage. However, the supplied flow does not show how the MutexMerge or FIFO generate this free signal. The free signal may be derived from internal FIFO status or merger availability, but this cannot be confirmed from the given context.",
+        "value": "驱动流携带写端口请求事件，同时关联一个32位写数据负载，但负载在流中的传播路径未在上下文中定义。",
+        "explanation": "接口负载契约显示 i_psrwDriveFromExp_1 事件关联一个32位数据信号 i_rdDataToPrf_32，表明该驱动流不仅传递控制信号，还携带写数据。然而，在提供的流步骤中，数据负载未显式连接到合并器或FIFO级，可能通过独立的并行数据路径传播，或由合并器内部处理。此关系需要RTL源码确认。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:prf:flow_004_prf_i_psrwDriveFromExp_1:completion_backpressure:001",
+        "semantic_claim_id": "semantic:flow:prf:flow_004_prf_i_psrwDriveFromExp_1:data_control_effect:001",
         "doc_priority": "secondary",
         "signals": [
-          "o_psrFreeToExp_1",
-          "i_psrwDriveFromExp_1"
+          "i_psrwDriveFromExp_1",
+          "i_rdDataToPrf_32"
         ],
-        "instances": [
-          "cMutexMerge2_8b",
-          "cLastFifo2_prf2"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -363,7 +358,11 @@
         "semantic_evidence": [
           {
             "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/prf.json"
+            "path": "modules/prf.json"
+          },
+          {
+            "source": "interface.data_ports",
+            "path": "modules/prf.json"
           }
         ]
       }

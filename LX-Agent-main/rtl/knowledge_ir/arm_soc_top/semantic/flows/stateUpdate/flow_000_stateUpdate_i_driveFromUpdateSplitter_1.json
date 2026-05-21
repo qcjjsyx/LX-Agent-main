@@ -47,11 +47,11 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 10,
     "by_type": {
       "assignment_interpretation": 1,
       "completion_backpressure": 1,
-      "component_role": 5,
+      "component_role": 4,
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
@@ -66,17 +66,17 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "summary": "This flow propagates a single update event from the module input through a FIFO, a load/store selector, two parallel FIFOs, and a mutex merger to the module output.",
+      "summary": "从更新拆分器接收的单个事件，经过FIFO缓冲、负载/存储选择器分流、两路FIFO分别缓存后，由互斥合并器仲裁输出到状态更新选择器。",
       "subject": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
-      "explanation": "The flow starts at the module input `i_driveFromUpdateSplitter_1`, passes through a single FIFO stage (`Fifo1`), then enters a selector (`loadAndStoreSelector`) that splits the event into two possible paths (load or store). Each path goes through its own FIFO (`loadFifo` or `storeFifo`), and the two paths are then merged by a mutex merger (`loadOrStoreMutexMerge`) into the single module output `o_driveToStateUpdateSelector_1`. The flow is a single drive-based internal event flow with a branch and a join.",
+      "explanation": "该驱动流描述了一个事件从输入端口进入模块后，依次经过一级FIFO、一个二选一选择器（将事件分流为负载或存储路径）、两路独立的FIFO，最后通过一个互斥合并器将两路事件合并为单一输出。选择器是分支点，互斥合并器是汇合点，FIFO均为阻塞点。",
       "signals": [
         "i_driveFromUpdateSplitter_1",
+        "o_driveToStateUpdateSelector_1",
         "w_driveToLoadAndStoreSelector_1",
         "w_loadAndStoreSelectorToLoadFifo_1",
         "w_loadAndStoreSelectorToStoreFifo_1",
         "w_loadFifoDrive_1",
-        "w_storeFifoDrive_1",
-        "o_driveToStateUpdateSelector_1"
+        "w_storeFifoDrive_1"
       ],
       "instances": [
         "Fifo1",
@@ -109,8 +109,8 @@
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
       "subject": "Fifo1",
-      "summary": "Buffers the incoming update event before the load/store split.",
-      "explanation": "`Fifo1` is a single-entry FIFO that receives the event from the module input `i_driveFromUpdateSplitter_1`. It acts as a gating stage, potentially blocking event propagation if it is full. Its output `w_driveToLoadAndStoreSelector_1` drives the load/store selector.",
+      "summary": "输入事件的一级缓冲，可能因满而阻塞事件传播。",
+      "explanation": "作为流的第一级FIFO，它接收来自模块输入端口的驱动事件，并输出到负载/存储选择器。其满状态会阻止上游事件进入。",
       "signals": [
         "i_driveFromUpdateSplitter_1",
         "w_driveToLoadAndStoreSelector_1"
@@ -124,9 +124,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:component_role:001"
@@ -139,8 +136,8 @@
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
       "subject": "loadAndStoreSelector",
-      "summary": "Splits the event stream into load and store paths based on an internal selection mechanism.",
-      "explanation": "The `loadAndStoreSelector` is a 2-way selector that receives the event from `Fifo1`. It has two outputs: `w_loadAndStoreSelectorToLoadFifo_1` and `w_loadAndStoreSelectorToStoreFifo_1`. The selection logic is not detailed in the provided context, but it determines which path the event takes. This is a branch point in the flow.",
+      "summary": "将事件分流为负载或存储路径的选择器。",
+      "explanation": "该选择器根据内部选择逻辑，将来自Fifo1的事件导向负载FIFO或存储FIFO。它是流中的分支点，决定了事件的后续路径。",
       "signals": [
         "w_driveToLoadAndStoreSelector_1",
         "w_loadAndStoreSelectorToLoadFifo_1",
@@ -158,9 +155,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:component_role:002"
@@ -172,15 +166,18 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "subject": "loadFifo",
-      "summary": "Buffers events on the load path before the final merge.",
-      "explanation": "`loadFifo` is a single-entry FIFO that receives events from the load output of the selector. It acts as a gating stage for the load path, potentially blocking events if full. Its output `w_loadFifoDrive_1` drives one input of the mutex merger.",
+      "subject": "loadFifo, storeFifo",
+      "summary": "负载和存储路径上的独立FIFO缓冲。",
+      "explanation": "这两个FIFO分别缓存来自选择器的负载和存储事件，可能因满而阻塞各自路径的事件传播。它们是流中的并行阻塞点。",
       "signals": [
         "w_loadAndStoreSelectorToLoadFifo_1",
-        "w_loadFifoDrive_1"
+        "w_loadAndStoreSelectorToStoreFifo_1",
+        "w_loadFifoDrive_1",
+        "w_storeFifoDrive_1"
       ],
       "instances": [
-        "loadFifo"
+        "loadFifo",
+        "storeFifo"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -188,9 +185,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:component_role:003"
@@ -202,39 +196,9 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "subject": "storeFifo",
-      "summary": "Buffers events on the store path before the final merge.",
-      "explanation": "`storeFifo` is a single-entry FIFO that receives events from the store output of the selector. It acts as a gating stage for the store path, potentially blocking events if full. Its output `w_storeFifoDrive_1` drives the other input of the mutex merger.",
-      "signals": [
-        "w_loadAndStoreSelectorToStoreFifo_1",
-        "w_storeFifoDrive_1"
-      ],
-      "instances": [
-        "storeFifo"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
-        }
-      ],
-      "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "stateUpdate",
-        "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
-      },
       "subject": "loadOrStoreMutexMerge",
-      "summary": "Merges the load and store event paths into a single output stream with mutual exclusion.",
-      "explanation": "The `loadOrStoreMutexMerge` is a 2-input mutex merger. It receives events from `loadFifo` and `storeFifo` and outputs a single event stream to `o_driveToStateUpdateSelector_1`. It ensures that only one event is propagated at a time, arbitrating between the two input paths. This is a join point in the flow.",
+      "summary": "互斥合并器，仲裁来自负载和存储FIFO的事件并输出。",
+      "explanation": "该合并器接收来自负载FIFO和存储FIFO的驱动事件，通过互斥仲裁机制选择一路输出到模块输出端口。它是流中的汇合点和阻塞点。",
       "signals": [
         "w_loadFifoDrive_1",
         "w_storeFifoDrive_1",
@@ -249,12 +213,9 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
-      "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:component_role:005"
+      "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:component_role:004"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -264,8 +225,8 @@
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
       "subject": "w_stateUpdateFire",
-      "summary": "This assignment indicates that a fire condition is derived from the load and store selector outputs.",
-      "explanation": "The assignment `w_stateUpdateFire = w_loadAndStoreSelectorToLoadFifo_1 | w_loadAndStoreSelectorToStoreFifo_1` shows that the `w_stateUpdateFire` signal is asserted when either the load or store path from the selector is active. This signal is likely used for control or status purposes within the module, but it is not directly part of the event propagation path.",
+      "summary": "指示负载或存储路径上有事件正在传播的中间控制信号。",
+      "explanation": "该赋值将选择器的两个输出信号进行或运算，生成一个指示事件是否在负载或存储路径上传播的标志。它不直接参与驱动流，而是提供流状态的摘要信息。",
       "signals": [
         "w_stateUpdateFire",
         "w_loadAndStoreSelectorToLoadFifo_1",
@@ -291,9 +252,9 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "summary": "The payload data `i_fromUpdateSplitterData_7` is associated with the input event and is passed through the flow.",
+      "summary": "输入事件携带的7位负载数据，与事件驱动信号同步传播。",
       "subject": "i_fromUpdateSplitterData_7",
-      "explanation": "The input event `i_driveFromUpdateSplitter_1` has a 7-bit payload `i_fromUpdateSplitterData_7`. This payload is connected to the data input of `Fifo1`. The flow propagates this payload through the FIFOs and the merger, but the exact data path through the selector and the merger is not detailed in the provided context. The output event `o_driveToStateUpdateSelector_1` has no listed payloads, which may be an evidence gap.",
+      "explanation": "该负载数据从模块输入端口连接到Fifo1的数据输入，表明事件驱动信号携带了相关的数据负载。数据路径与事件驱动路径并行，但具体的数据处理逻辑（如是否在FIFO或选择器中修改）未在上下文中体现。",
       "signals": [
         "i_fromUpdateSplitterData_7",
         "i_driveFromUpdateSplitter_1"
@@ -301,7 +262,7 @@
       "related_payload": [
         "i_fromUpdateSplitterData_7"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
@@ -318,18 +279,12 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "summary": "The flow includes backpressure mechanisms through FIFO full/empty signals and a mutex merger.",
-      "subject": "free/backpressure",
-      "explanation": "Each FIFO (`Fifo1`, `loadFifo`, `storeFifo`) can gate event propagation when full, providing backpressure. The mutex merger (`loadOrStoreMutexMerge`) can also gate propagation when it is busy arbitrating. The input event has a free signal `o_freeToUpdateSplitter_1`, and the output event has a free signal `i_freeFromStateUpdateSelector_1`, indicating a handshake-based flow control. The exact backpressure path is not fully detailed.",
+      "summary": "输入和输出端口存在反压信号，但反压机制的具体实现未在上下文中明确。",
+      "subject": "o_freeToUpdateSplitter_1, i_freeFromStateUpdateSelector_1",
+      "explanation": "输入事件端口关联了反压信号o_freeToUpdateSplitter_1，输出事件端口关联了反压信号i_freeFromStateUpdateSelector_1。这表明模块支持反压流控，但反压信号如何与内部FIFO和合并器交互（例如，是否直接连接到FIFO的满状态）未提供。",
       "signals": [
         "o_freeToUpdateSplitter_1",
         "i_freeFromStateUpdateSelector_1"
-      ],
-      "instances": [
-        "Fifo1",
-        "loadFifo",
-        "storeFifo",
-        "loadOrStoreMutexMerge"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -348,17 +303,19 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "summary": "The manual should emphasize the flow's branching and merging structure, the role of each FIFO as a gating stage, and the mutex merger as an arbitration point.",
+      "summary": "文档应重点描述事件从输入到输出的完整路径，包括分支、合并和阻塞点，并明确反压机制。",
       "subject": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
-      "explanation": "The flow is not a simple pipeline; it has a branch at the selector and a join at the mutex merger. The FIFOs are not just buffers but also blocking points. The mutex merger is a critical component for ensuring correct ordering and mutual exclusion between load and store events. The payload data path and backpressure signals need further clarification.",
+      "explanation": "该流具有清晰的分支（选择器）和合并（互斥合并器）结构，以及多个FIFO阻塞点。文档应解释事件如何被分流、缓存和仲裁，以及反压信号如何与这些组件交互以控制流。负载数据的传播路径也应说明。",
       "signals": [
         "i_driveFromUpdateSplitter_1",
         "o_driveToStateUpdateSelector_1",
-        "w_loadAndStoreSelectorToLoadFifo_1",
-        "w_loadAndStoreSelectorToStoreFifo_1"
+        "w_stateUpdateFire"
       ],
       "instances": [
+        "Fifo1",
         "loadAndStoreSelector",
+        "loadFifo",
+        "storeFifo",
         "loadOrStoreMutexMerge"
       ],
       "related_assignments": [
@@ -370,9 +327,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:documentation_focus:001"
@@ -384,26 +338,27 @@
         "module": "stateUpdate",
         "flow_id": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       },
-      "reason": "The payload `i_fromUpdateSplitterData_7` is connected to `Fifo1`, but the data path through the selector and the mutex merger is not shown. The output event has no listed payloads, which may be an omission.",
-      "subject": "payload data path through selector and merger",
-      "needed_source_slice": "assign block or instance connections for `loadAndStoreSelector` and `loadOrStoreMutexMerge` data ports",
+      "reason": "上下文仅提供了负载数据连接到Fifo1的输入，以及反压信号的存在，但未说明数据在后续组件（选择器、FIFO、合并器）中的处理方式，以及反压信号如何与内部组件连接。",
+      "subject": "负载数据路径和反压机制",
+      "needed_source_slice": "always block, instance connections, comments",
       "signals": [
         "i_fromUpdateSplitterData_7",
-        "o_driveToStateUpdateSelector_1"
+        "o_freeToUpdateSplitter_1",
+        "i_freeFromStateUpdateSelector_1"
       ],
       "instances": [
+        "Fifo1",
         "loadAndStoreSelector",
+        "loadFifo",
+        "storeFifo",
         "loadOrStoreMutexMerge"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/stateUpdate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/stateUpdate.json"
         }
       ],
       "id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:source_review_request:001"
@@ -411,12 +366,12 @@
   ],
   "evidence_gaps": [
     {
-      "field": "payload data path",
-      "reason": "The payload data path from input to output is not fully traced. The output event has no listed payloads, which may be an evidence gap or a design choice."
+      "field": "负载数据在流中的完整路径",
+      "reason": "上下文仅显示负载数据连接到Fifo1，但未提供其在选择器、后续FIFO和合并器中的连接或处理信息。"
     },
     {
-      "field": "backpressure signals",
-      "reason": "The exact backpressure path (free signals) through the FIFOs and the merger is not detailed. The input and output free signals are listed, but the internal connections are not shown."
+      "field": "反压信号与内部组件的连接",
+      "reason": "上下文仅列出反压信号的存在，但未提供其与内部FIFO满状态或合并器仲裁逻辑的连接关系。"
     }
   ]
 }

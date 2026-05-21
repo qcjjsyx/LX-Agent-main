@@ -65,9 +65,9 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "This flow propagates a single drive event from the mesh interface through a dedicated delay, then merges with a dcache-originated drive path via a mutex merger, and finally passes through two additional delays to reach the CPU output.",
+      "summary": "从Mesh侧输入事件驱动，经延迟与互斥合并后，最终输出至CPU侧的事件传播路径。",
       "subject": "flow_002_data_slot_i_driveFromMesh",
-      "explanation": "The flow is a linear event path from i_driveFromMesh to o_driveToCpu, with a single merge point at MutexMerge where it combines with w_delay_driveFromDcache. The flow does not branch; it is a dedicated drive path with arbitration at the merger.",
+      "explanation": "该流描述了从模块输入端口i_driveFromMesh接收的事件，经过一个透明延迟单元delay_driveFromMesh后，与来自Dcache的另一路延迟事件在MutexMerge中进行互斥合并，合并后的结果再经过两级延迟单元delay2CPU和delay2CPU2，最终从输出端口o_driveToCpu送出。整个流是单向的、基于事件驱动的，不涉及数据负载的变换。",
       "signals": [
         "i_driveFromMesh",
         "w_delay_driveFromMesh",
@@ -80,6 +80,9 @@
         "MutexMerge",
         "delay2CPU",
         "delay2CPU2"
+      ],
+      "related_assignments": [
+        "(无)"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -104,14 +107,17 @@
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
       "subject": "delay_driveFromMesh",
-      "summary": "Transparent delay buffer for the mesh drive event.",
-      "explanation": "This instance (delay8U) provides a fixed-latency buffering stage for the incoming i_driveFromMesh signal, producing w_delay_driveFromMesh without modifying the event semantics.",
+      "summary": "输入事件i_driveFromMesh的透明延迟缓冲单元。",
+      "explanation": "该实例为delay8U类型，其作用是对来自Mesh的输入事件信号i_driveFromMesh进行固定周期的延迟，输出信号w_delay_driveFromMesh。它不改变事件语义，仅用于时序对齐或流水线缓冲。",
       "signals": [
         "i_driveFromMesh",
         "w_delay_driveFromMesh"
       ],
       "instances": [
         "delay_driveFromMesh"
+      ],
+      "related_assignments": [
+        "(无)"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -132,18 +138,21 @@
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
       "subject": "MutexMerge",
-      "summary": "Arbitration merger for two drive event paths.",
-      "explanation": "This instance (cMutexMerge2_64b) merges the delayed mesh drive (w_delay_driveFromMesh) with the delayed dcache drive (w_delay_driveFromDcache). It acts as a blocking point where only one event path is selected for propagation to w_driveToCpu, implementing mutual exclusion.",
+      "summary": "两路事件流的互斥合并仲裁器。",
+      "explanation": "该实例为cMutexMerge2_64b类型，接收来自delay_driveFromDcache和delay_driveFromMesh的两路延迟事件信号。其核心作用是仲裁并合并这两路可能同时到达的事件，确保在任意时刻只有一路事件被传递到下一级，从而避免冲突。输出信号为w_driveToCpu。",
       "signals": [
-        "w_delay_driveFromMesh",
         "w_delay_driveFromDcache",
+        "w_delay_driveFromMesh",
         "w_driveToCpu"
       ],
       "instances": [
         "MutexMerge"
       ],
+      "related_assignments": [
+        "(无)"
+      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -161,8 +170,8 @@
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
       "subject": "delay2CPU, delay2CPU2",
-      "summary": "Cascaded transparent delay stages to the CPU output.",
-      "explanation": "These two instances (delay4U each) provide sequential buffering from w_driveToCpu through intermediate signal a to o_driveToCpu. They add pipeline latency without altering the event.",
+      "summary": "合并后事件到CPU输出的两级透明延迟链。",
+      "explanation": "delay2CPU和delay2CPU2均为delay4U类型，串联形成两级延迟。它们对MutexMerge输出的合并事件w_driveToCpu进行两次固定周期的延迟，最终产生输出信号o_driveToCpu。这种级联延迟可能用于满足CPU侧的时序要求或进行更深度的流水线缓冲。",
       "signals": [
         "w_driveToCpu",
         "a",
@@ -172,7 +181,10 @@
         "delay2CPU",
         "delay2CPU2"
       ],
-      "doc_priority": "primary",
+      "related_assignments": [
+        "(无)"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
@@ -190,16 +202,22 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "This flow propagates a control event without explicit payload data.",
-      "subject": "i_driveFromMesh to o_driveToCpu",
-      "explanation": "The interface payload contracts list no payload signals for i_driveFromMesh or o_driveToCpu, indicating this is a pure control/event drive flow. The flow semantics are about event propagation timing and arbitration, not data movement.",
+      "summary": "该流为纯事件驱动流，不涉及数据负载的传递或变换。",
+      "subject": "事件驱动与数据负载分离",
+      "explanation": "根据接口负载契约，i_driveFromMesh和o_driveToCpu均无关联的数据负载信号。流中的所有信号（如w_delay_driveFromMesh, w_driveToCpu）均为事件信号，其值仅表示事件的有效性，不携带额外数据。因此，该流的核心语义是事件传播，而非数据处理。",
       "signals": [
         "i_driveFromMesh",
         "o_driveToCpu"
       ],
+      "related_payload": [
+        "(无)"
+      ],
+      "related_assignments": [
+        "(无)"
+      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "interface.event_ports",
@@ -219,12 +237,15 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "Free/backpressure signals are identified but not connected to this flow.",
-      "subject": "free signals for drive events",
-      "explanation": "The interface contracts mention o_freeToMesh (for i_driveFromMesh) and i_freeFromCpu (for o_driveToCpu), but no connections to these signals appear in the flow steps or related connections. The flow semantics do not include backpressure or completion handshaking.",
+      "summary": "该流存在关联的反压信号，但其具体交互逻辑未在提供的上下文中明确。",
+      "subject": "流控与反压信号",
+      "explanation": "接口负载契约中提到了与i_driveFromMesh关联的o_freeToMesh信号，以及与o_driveToCpu关联的i_freeFromCpu信号。这些信号通常用于实现握手或反压机制。然而，当前上下文未提供这些反压信号如何与流中的延迟单元或合并器交互的详细信息，因此无法断言其具体作用。",
       "signals": [
         "o_freeToMesh",
         "i_freeFromCpu"
+      ],
+      "instances": [
+        "(无)"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -244,14 +265,13 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "Emphasize the single-drive event path with arbitration at MutexMerge and cascaded delays.",
-      "subject": "flow_002_data_slot_i_driveFromMesh",
-      "explanation": "The manual should focus on the linear propagation from mesh input to CPU output, the role of MutexMerge as an arbitration point between mesh and dcache drives, and the transparent delay stages. De-emphasize payload data and backpressure as they are absent from this flow.",
+      "summary": "手册应重点描述从Mesh输入到CPU输出的事件传播路径，以及MutexMerge的仲裁行为。",
+      "subject": "事件传播路径与仲裁逻辑",
+      "explanation": "该流的核心是事件信号的传递和仲裁。手册需要清晰说明事件如何从i_driveFromMesh经过延迟、合并、再延迟后到达o_driveToCpu。特别地，MutexMerge作为唯一的合并点，其仲裁策略（如优先级或互斥条件）是理解流行为的关键，但当前上下文未提供，需要从RTL源码中补充。",
       "signals": [
         "i_driveFromMesh",
         "w_delay_driveFromMesh",
         "w_driveToCpu",
-        "a",
         "o_driveToCpu"
       ],
       "instances": [
@@ -260,8 +280,11 @@
         "delay2CPU",
         "delay2CPU2"
       ],
+      "related_assignments": [
+        "(无)"
+      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
@@ -278,16 +301,19 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "reason": "The flow context does not specify the arbitration policy (e.g., fixed priority, round-robin) or whether the merger can block indefinitely. RTL source review is needed to determine the exact gating/selection logic.",
-      "subject": "MutexMerge arbitration behavior",
-      "needed_source_slice": "always block or assign for MutexMerge instance",
+      "reason": "当前上下文仅指出MutexMerge是合并点，但未提供其仲裁条件或优先级逻辑，这是理解流行为的关键。",
+      "subject": "MutexMerge仲裁逻辑",
+      "needed_source_slice": "always block or assign block defining MutexMerge output selection",
       "signals": [
-        "w_delay_driveFromMesh",
         "w_delay_driveFromDcache",
+        "w_delay_driveFromMesh",
         "w_driveToCpu"
       ],
       "instances": [
         "MutexMerge"
+      ],
+      "related_assignments": [
+        "(无)"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -307,23 +333,25 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "reason": "The interface payload contracts list no payloads, but this may be due to incomplete parsing. RTL source review should confirm whether i_driveFromMesh or o_driveToCpu carry any data signals.",
-      "subject": "Payload data for drive events",
-      "needed_source_slice": "module port declarations for i_driveFromMesh and o_driveToCpu",
+      "reason": "接口负载契约中提到了反压信号o_freeToMesh和i_freeFromCpu，但未说明它们如何与流中的延迟单元或合并器交互，需要RTL源码确认。",
+      "subject": "反压信号交互逻辑",
+      "needed_source_slice": "always block or assign block connecting o_freeToMesh and i_freeFromCpu to internal signals",
       "signals": [
-        "i_driveFromMesh",
-        "o_driveToCpu"
+        "o_freeToMesh",
+        "i_freeFromCpu"
       ],
-      "doc_priority": "primary",
+      "instances": [
+        "(无)"
+      ],
+      "related_assignments": [
+        "(无)"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
           "source": "interface.event_ports",
-          "path": "modules/data_slot.json"
-        },
-        {
-          "source": "interface.data_ports",
           "path": "modules/data_slot.json"
         }
       ],
@@ -332,8 +360,12 @@
   ],
   "evidence_gaps": [
     {
-      "field": "related_assign_dependencies",
-      "reason": "No assignment dependencies are supplied for this flow, limiting understanding of signal generation and gating conditions."
+      "field": "MutexMerge仲裁条件",
+      "reason": "缺少关于MutexMerge如何选择两路输入事件的逻辑描述。"
+    },
+    {
+      "field": "反压信号与流内组件的连接",
+      "reason": "未提供反压信号o_freeToMesh和i_freeFromCpu与延迟单元或合并器的连接关系。"
     }
   ]
 }

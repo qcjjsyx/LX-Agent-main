@@ -51,7 +51,7 @@
       "assignment_interpretation": 4,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -61,32 +61,64 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "SPI master core that manages serial data transfer, CRC generation, and busy/done handshaking for a single SPI channel.",
+      "summary": "SPI主设备控制器，负责管理SPI总线的发送、接收和CRC校验时序",
       "subject": "spi_m",
-      "explanation": "The module has payload data inputs (data_in, TXCRC) and a payload data output (data_out), plus internal assign dependencies for busy, rx_done, tx_done, and crc_done that depend on mode signals (CPHA, DFF, rxonly) and counters. No event inputs or outputs are declared, suggesting it is a data-driven SPI master without external event handshake ports.",
+      "explanation": "模块通过内部计数器（tx_cnt、rx_cnt、crc_cnt）和状态信号（busy、tx_done、rx_done、crc_done）控制SPI数据传输的完整流程，支持可配置的时钟相位（CPHA）和数据帧格式（DFF）",
       "signals": [
-        "data_in",
-        "data_out",
-        "TXCRC",
         "busy",
-        "rx_done",
         "tx_done",
-        "crc_done"
+        "rx_done",
+        "crc_done",
+        "enable",
+        "TXE",
+        "crc_en",
+        "CPHA",
+        "DFF"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/spi_m.json"
+          "source": "knowledge_ir/modules/spi_m.json"
         },
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/spi_m.json"
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:module_role:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "spi_m"
+      },
+      "summary": "根据CPHA和DFF配置，动态计算发送、接收和CRC校验的完成条件",
+      "subject": "SPI传输完成检测",
+      "explanation": "assign依赖显示tx_done、rx_done和crc_done的判定逻辑均依赖于CPHA和DFF的组合选择，通过不同位宽的计数器（tx_cnt[4:2]、rx_cnt[4:2]、crc_cnt[4:2]）与cnt_buf_*信号比较，实现不同帧格式下的传输完成标志",
+      "signals": [
+        "tx_done",
+        "rx_done",
+        "crc_done",
+        "CPHA",
+        "DFF",
+        "tx_cnt",
+        "rx_cnt",
+        "crc_cnt",
+        "cnt_buf_tx",
+        "cnt_buf_rx",
+        "cnt_buf_crc"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
+        }
+      ],
+      "id": "semantic:module:spi_m:structural_responsibility:001"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -95,25 +127,23 @@
         "module": "spi_m"
       },
       "subject": "busy",
-      "summary": "Busy flag asserted when the SPI master is enabled, TX buffer empty, or CRC engine enabled.",
-      "explanation": "The assign busy = enable | !TXE | crc_en indicates the module is busy if enabled, if the transmit buffer is not empty (TXE low), or if CRC is active. This is a control path signal for external handshake.",
+      "summary": "模块忙状态由使能信号、发送FIFO空标志和CRC使能共同决定",
+      "explanation": "busy = enable | !TXE | crc_en，表明模块在以下任一条件下保持忙状态：使能有效、发送FIFO非空（TXE为低）、或CRC校验使能。该信号用于外部同步或状态指示",
       "signals": [
         "busy",
         "enable",
         "TXE",
         "crc_en"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "related_assignments": [
+        "0"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/spi_m.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/spi_m.json"
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:assignment_interpretation:001"
@@ -125,8 +155,8 @@
         "module": "spi_m"
       },
       "subject": "rx_done",
-      "summary": "Receive completion detection that depends on DFF mode and rxonly flag to select counter threshold.",
-      "explanation": "The assign rx_done uses rxonly and DFF to select between different rx_cnt bit thresholds (bit 2, 3, or 4) combined with cnt_buf_rx. This suggests the SPI master supports variable frame sizes (8-bit, 16-bit, or 32-bit) and half-duplex receive-only mode.",
+      "summary": "接收完成条件根据rxonly模式和DFF配置动态选择不同位宽的计数器比较",
+      "explanation": "当rxonly与DFF异或为真时，根据DFF选择rx_cnt[4]或rx_cnt[2]的比较；否则使用rx_cnt[3]的比较。表明模块支持多种数据宽度和接收模式的完成检测",
       "signals": [
         "rx_done",
         "rxonly",
@@ -134,17 +164,15 @@
         "rx_cnt",
         "cnt_buf_rx"
       ],
-      "doc_priority": "primary",
+      "related_assignments": [
+        "1"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/spi_m.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/spi_m.json"
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:assignment_interpretation:002"
@@ -156,8 +184,8 @@
         "module": "spi_m"
       },
       "subject": "tx_done",
-      "summary": "Transmit completion detection that depends on CPHA phase and DFF mode to select counter threshold.",
-      "explanation": "The assign tx_done uses CPHA and DFF to select between different tx_cnt bit thresholds (bit 2, 3, or 4) combined with cnt_buf_tx. This indicates the SPI master supports variable frame sizes and clock phase configuration.",
+      "summary": "发送完成条件由CPHA和DFF共同决定计数器位宽选择",
+      "explanation": "当CPHA与DFF异或为真时使用tx_cnt[3]比较；否则根据DFF选择tx_cnt[4]或tx_cnt[2]。表明发送时序与时钟相位和数据帧格式紧密相关",
       "signals": [
         "tx_done",
         "CPHA",
@@ -165,17 +193,15 @@
         "tx_cnt",
         "cnt_buf_tx"
       ],
-      "doc_priority": "primary",
+      "related_assignments": [
+        "2"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/spi_m.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/spi_m.json"
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:assignment_interpretation:003"
@@ -187,8 +213,8 @@
         "module": "spi_m"
       },
       "subject": "crc_done",
-      "summary": "CRC completion detection that depends on CPHA phase and DFF mode to select counter threshold.",
-      "explanation": "The assign crc_done uses CPHA and DFF to select between different crc_cnt bit thresholds (bit 2, 3, or 4) combined with cnt_buf_crc. This mirrors tx_done structure, suggesting CRC is computed in parallel with transmit.",
+      "summary": "CRC校验完成条件与发送完成逻辑结构相同，使用独立的CRC计数器",
+      "explanation": "crc_done的判定逻辑与tx_done完全一致，但使用crc_cnt和cnt_buf_crc信号，表明CRC校验与发送操作共享相同的时序控制结构，但使用独立的计数资源",
       "signals": [
         "crc_done",
         "CPHA",
@@ -196,17 +222,15 @@
         "crc_cnt",
         "cnt_buf_crc"
       ],
-      "doc_priority": "primary",
+      "related_assignments": [
+        "3"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/spi_m.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/spi_m.json"
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:assignment_interpretation:004"
@@ -217,14 +241,17 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "Payload data interface for 16-bit parallel data transfer to/from the SPI master.",
-      "subject": "data_in and data_out",
-      "explanation": "data_in and data_out are both 16-bit payload signals with no event handshake ports. This suggests the module expects data to be written/read via register access or a simple strobe, not a pipelined handshake.",
+      "summary": "16位并行数据接口用于SPI帧数据的输入输出，支持TXCRC作为独立数据源",
+      "subject": "数据接口组",
+      "explanation": "data_in和data_out构成主数据通道，TXCRC作为额外的16位数据输入，可能用于CRC校验值的注入或验证。无事件接口表明模块采用轮询或状态驱动方式工作",
       "signals": [
         "data_in",
-        "data_out"
+        "data_out",
+        "TXCRC"
       ],
       "related_payload": [
+        "data_in",
+        "data_out",
         "TXCRC"
       ],
       "doc_priority": "primary",
@@ -232,54 +259,24 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/spi_m.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/spi_m.json"
+          "source": "knowledge_ir/modules/spi_m.json"
         }
       ],
       "id": "semantic:module:spi_m:interface_intent:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "spi_m"
-      },
-      "reason": "Compact context lacks event flows, component connections, and instance hierarchy. Need RTL source to infer state machine, shift register, counter implementation, and CRC engine.",
-      "subject": "spi_m internal structure",
-      "needed_source_slice": "always block, instance connections, comments",
-      "signals": [
-        "data_in",
-        "data_out",
-        "TXCRC",
-        "busy",
-        "rx_done",
-        "tx_done",
-        "crc_done"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl_source",
-          "path": "rtl/rtl/IONet/SPI/SPI1/spi_m.v"
-        }
-      ],
-      "id": "semantic:module:spi_m:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "internal_event_flow",
-      "reason": "No internal event flow refs or key component connections provided. Cannot infer state machine, shift register, or counter implementation details."
+      "field": "内部状态机与计数器实现",
+      "reason": "缺少always块和状态机描述，无法确定tx_cnt、rx_cnt、crc_cnt的计数逻辑和复位行为"
     },
     {
-      "field": "key_instances",
-      "reason": "No instances or component families provided. Cannot infer sub-block decomposition or hierarchical structure."
+      "field": "组件实例化",
+      "reason": "未提供任何实例化信息，无法分析模块内部子模块划分和层次结构"
+    },
+    {
+      "field": "事件流",
+      "reason": "无事件输入输出和内部事件流引用，无法推断模块与外部的中断或握手交互机制"
     }
   ]
 }

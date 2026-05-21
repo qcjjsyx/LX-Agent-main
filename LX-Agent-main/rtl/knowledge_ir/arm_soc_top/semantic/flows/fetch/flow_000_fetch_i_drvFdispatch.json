@@ -47,15 +47,15 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 14,
     "by_type": {
       "assignment_interpretation": 1,
       "completion_backpressure": 1,
-      "component_role": 3,
+      "component_role": 7,
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 3
+      "source_review_request": 2
     }
   },
   "claims": [
@@ -66,16 +66,45 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "summary": "This flow distributes a single dispatch event from the fetch unit to five downstream consumers (decode, exception, ICache, interrupt) through a network of fifos, splitters, selectors, mergers, and delays.",
+      "summary": "从外部输入事件 i_drvFdispatch 出发，经过多级 FIFO 缓冲、分支选择、合并仲裁和延迟，最终分发到五个内部目标模块（中断、异常、译码、二级异常、指令缓存）的驱动事件流。",
       "subject": "flow_000_fetch_i_drvFdispatch",
-      "explanation": "The flow starts at i_drvFdispatch and fans out through multiple branch and join points, with fifo stages providing buffering and potential backpressure. The presence of multiple mergers (mergeInt, mergeErr, merge0, merge1, merge2) indicates that this dispatch event can be combined with other event streams from within the fetch unit before reaching the final outputs.",
+      "explanation": "该流是一个单驱动源、多目标的分发网络。事件从 i_drvFdispatch 进入后，依次经过 pmtLock 和 cfifo6 两级 FIFO 缓冲，然后通过 spliter2 分支为两条路径：一条经 select0 再次分支后，一路进入 mergeErr 合并为异常输出，另一路进入 cfifo0 和后续的延迟/选择/合并网络，最终到达译码、二级异常和指令缓存输出；另一条经 mergeInt 合并为中断输出。整个流展示了从单一输入到多个功能模块的驱动分发结构。",
       "signals": [
         "i_drvFdispatch",
-        "o_drv2Dec",
+        "w_drvFdispatch",
+        "w_drv2selc0",
+        "w_drvSpliter22Select0",
+        "w_spliter2Drv2MergeInt",
+        "w_drvDisp2Err",
+        "w_drvDisp2cfifo0",
+        "w_drv2Save",
+        "w_drv2select1",
+        "w_drv2select1_dalay1",
+        "w_drv2select1_dalay2",
+        "w_drv2fifo11",
+        "w_drv2split0",
+        "w_drv2merge0",
+        "w_drv2merge2",
+        "w_drv2select2",
+        "w_drv2Spliter4",
+        "w_drvselect22cfifo2",
+        "w_drvMerge02Merge1",
+        "w_drvMerge22Merge3",
+        "w_drvMerge12cfifo8",
+        "w_drvMerge12cfifo8_delay",
+        "w_drvMerge12cfifo8_delay_2",
+        "w_drvFifo8save",
+        "w_drvCfifo82Select5",
+        "w_drv2ICache",
+        "w_drvSelect52Merge3",
+        "w_drv2Dec",
+        "w_drvSpliter42Excp",
+        "w_over",
+        "o_drv2Int",
         "o_drv2Excp",
+        "o_drv2Dec",
         "o_drv2Excp_2",
-        "o_drv2ICache",
-        "o_drv2Int"
+        "o_drv2ICache"
       ],
       "instances": [
         "pmtLock",
@@ -115,10 +144,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/fetch.json"
+          "source": "knowledge_ir/modules/fetch.json",
+          "path": "interface,internal_event_flow"
         },
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances,connection_graph,flow_graph.assignment_dependencies"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:flow_intent:001"
@@ -131,8 +162,8 @@
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
       "subject": "pmtLock",
-      "summary": "Acts as the initial fifo stage that buffers the incoming dispatch event before it enters the main distribution network.",
-      "explanation": "As a cPmtFifo1 instance, it provides a single-entry buffer that can gate the event propagation based on its internal state (e.g., full/empty). This is the first potential blocking point in the flow.",
+      "summary": "事件流的入口 FIFO 缓冲级，用于锁定或节流输入事件。",
+      "explanation": "作为 cPmtFifo1 类型的 FIFO 级，pmtLock 接收外部输入 i_drvFdispatch，并输出 w_drvFdispatch。其角色是提供初始的缓冲和可能的背压控制，确保事件在进入后续分发网络前被稳定捕获。",
       "signals": [
         "i_drvFdispatch",
         "w_drvFdispatch"
@@ -141,11 +172,16 @@
         "pmtLock"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "knowledge_ir/modules/fetch.json",
+          "path": "internal_event_flow"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:001"
@@ -157,35 +193,27 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "subject": "spliter2, select0, select1, spliter0, select2, spliter4, spliter_err_2, select5",
-      "summary": "These components act as branch points that split the event stream into multiple paths based on some selection or split condition.",
-      "explanation": "Each of these instances (cSplitter2_1b_fetch, cSelector2_33b_fetch, etc.) takes a single input and produces two outputs, indicating that the event can be directed to one of two downstream paths. The exact selection/split logic is not provided in the context.",
+      "subject": "spliter2",
+      "summary": "事件流的第一个分支点，将事件分为中断路径和主分发路径。",
+      "explanation": "作为 cSplitter2_1b_fetch 类型的分支器，spliter2 接收来自 cfifo6 的 w_drv2selc0，并输出 w_drvSpliter22Select0（进入主分发路径）和 w_spliter2Drv2MergeInt（进入中断合并路径）。这是事件流中关键的决策点，决定了事件是直接发往中断模块还是继续向下分发。",
       "signals": [
         "w_drv2selc0",
         "w_drvSpliter22Select0",
-        "w_drv2select1_dalay2",
-        "w_drv2split0",
-        "w_drv2select2",
-        "w_drv2Spliter4",
-        "w_drv2Dec",
-        "w_drvCfifo82Select5"
+        "w_spliter2Drv2MergeInt"
       ],
       "instances": [
-        "spliter2",
-        "select0",
-        "select1",
-        "spliter0",
-        "select2",
-        "spliter4",
-        "spliter_err_2",
-        "select5"
+        "spliter2"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:002"
@@ -197,29 +225,16 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "subject": "mergeInt, mergeErr, merge0, merge1, merge2",
-      "summary": "These components act as join points that combine multiple event streams into a single output, potentially with arbitration.",
-      "explanation": "Each merger (cArbMerge2_105b_cpu, cMutexMerge3_32b_fetch, etc.) takes two or three inputs and produces one output. This indicates that the dispatch event can be merged with other event streams from within the fetch unit (e.g., from spliter5, cfifo9, cfifo5) before being sent to the final outputs.",
+      "subject": "mergeInt",
+      "summary": "中断路径的合并器，将来自 spliter2 和 spliter5 的事件合并为中断输出。",
+      "explanation": "作为 cArbMerge2_105b_cpu 类型的仲裁合并器，mergeInt 接收 w_drv2MergeInt（来自 spliter5）和 w_spliter2Drv2MergeInt（来自 spliter2），并输出 o_drv2Int。它负责仲裁来自不同源的中断事件，确保只有一个事件被传递到中断模块。",
       "signals": [
         "w_drv2MergeInt",
         "w_spliter2Drv2MergeInt",
-        "w_drvDisp2Err",
-        "w_drvSpliter42Excp",
-        "w_split1drv2Excp",
-        "w_drv2merge0",
-        "w_drvSplit02Merge0",
-        "w_drv2merge2",
-        "w_drvcfifo52merge2",
-        "w_drvCfifo92merge1",
-        "w_drvMerge02Merge1",
-        "w_drvfifo32merge1"
+        "o_drv2Int"
       ],
       "instances": [
-        "mergeInt",
-        "mergeErr",
-        "merge0",
-        "merge1",
-        "merge2"
+        "mergeInt"
       ],
       "related_assignments": [
         "3"
@@ -229,10 +244,143 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:003"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "fetch",
+        "flow_id": "flow_000_fetch_i_drvFdispatch"
+      },
+      "subject": "mergeErr",
+      "summary": "异常路径的合并器，将来自 select0、spliter4 和 spliter1 的事件合并为异常输出。",
+      "explanation": "作为 cMutexMerge3_32b_fetch 类型的互斥合并器，mergeErr 接收 w_drvDisp2Err（来自 select0）、w_drvSpliter42Excp（来自 spliter4）和 w_split1drv2Excp（来自 spliter1），并输出 o_drv2Excp。它负责合并多个异常源，确保异常事件被正确传递。",
+      "signals": [
+        "w_drvDisp2Err",
+        "w_drvSpliter42Excp",
+        "w_split1drv2Excp",
+        "o_drv2Excp"
+      ],
+      "instances": [
+        "mergeErr"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
+        }
+      ],
+      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "fetch",
+        "flow_id": "flow_000_fetch_i_drvFdispatch"
+      },
+      "subject": "select1",
+      "summary": "主分发路径中的分支选择器，将事件分为译码路径和回环路径。",
+      "explanation": "作为 cSelector2_66b_fetch 类型的选择器，select1 接收经过两级延迟的 w_drv2select1_dalay2，并输出 w_drv2fifo11（进入译码路径）和 w_drv2split0（进入回环路径）。它根据事件属性决定事件是直接发往译码模块还是进入后续的合并/选择网络。",
+      "signals": [
+        "w_drv2select1_dalay2",
+        "w_drv2fifo11",
+        "w_drv2split0"
+      ],
+      "instances": [
+        "select1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
+        }
+      ],
+      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:005"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "fetch",
+        "flow_id": "flow_000_fetch_i_drvFdispatch"
+      },
+      "subject": "spliter_err_2",
+      "summary": "译码路径的最终分支点，将事件分为译码输出和二级异常输出。",
+      "explanation": "作为 cSplitter2_1b_fetch 类型的分支器，spliter_err_2 接收来自 merge2ToSpliterErr2Fifo 的 w_drv2Dec，并输出 o_drv2Dec（直接发往译码模块）和 o_drv2Excp_2（发往二级异常模块）。这是事件流在到达译码模块前的最后一个分支点。",
+      "signals": [
+        "w_drv2Dec",
+        "o_drv2Dec",
+        "o_drv2Excp_2"
+      ],
+      "instances": [
+        "spliter_err_2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
+        }
+      ],
+      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:006"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "fetch",
+        "flow_id": "flow_000_fetch_i_drvFdispatch"
+      },
+      "subject": "select5",
+      "summary": "指令缓存路径的最终分支点，将事件分为指令缓存输出和回环路径。",
+      "explanation": "作为 cSelector2_1b 类型的选择器，select5 接收来自 cfifo8 的 w_drvCfifo82Select5，并输出 w_drv2ICache（经 cfifo_lock 后发往指令缓存）和 w_drvSelect52Merge3（进入回环路径）。它决定事件是发往指令缓存还是进入其他合并网络。",
+      "signals": [
+        "w_drvCfifo82Select5",
+        "w_drv2ICache",
+        "w_drvSelect52Merge3"
+      ],
+      "instances": [
+        "select5"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
+        }
+      ],
+      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:component_role:007"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -242,8 +390,8 @@
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
       "subject": "w_intFire_1",
-      "summary": "This assignment combines two event streams (w_drv2MergeInt and w_spliter2Drv2MergeInt) into a single signal, likely for interrupt-related logic.",
-      "explanation": "The OR operation suggests that either event stream can trigger the interrupt fire signal. This is a control signal that may be used to generate the final interrupt output.",
+      "summary": "中断触发信号的组合逻辑，由两个中断路径的事件驱动信号合并而成。",
+      "explanation": "赋值 w_intFire_1 = w_drv2MergeInt | w_spliter2Drv2MergeInt 表明，中断触发信号 w_intFire_1 由来自 spliter5 的中断事件和来自 spliter2 的中断事件通过逻辑或组合而成。这支持了 mergeInt 作为仲裁合并器的角色，但该赋值可能是在 mergeInt 外部进行的额外组合逻辑。",
       "signals": [
         "w_intFire_1",
         "w_drv2MergeInt",
@@ -257,7 +405,8 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:assignment_interpretation:001"
@@ -269,21 +418,26 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "summary": "The dispatch event carries a 32-bit PC payload that is routed through the flow, likely to merge0.",
+      "summary": "输入事件 i_drvFdispatch 的伴随载荷，是 32 位 PC 值，直接连接到 merge0 的数据输入。",
       "subject": "i_pcFdispatch_32",
-      "explanation": "The payload is connected to merge0.i_data1_32, indicating that the PC value is part of the data path that goes through the merge0 component. This suggests that the dispatch event includes a program counter value that needs to be preserved and forwarded.",
+      "explanation": "接口载荷合约显示，i_drvFdispatch 事件携带一个 32 位 PC 值 i_pcFdispatch_32。该信号直接连接到 merge0 的数据输入端口 i_data1_32，表明该 PC 值在事件流中作为数据载荷被传递，并可能参与后续的合并或选择逻辑。",
       "signals": [
         "i_pcFdispatch_32"
       ],
       "related_payload": [
         "i_pcFdispatch_32"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "knowledge_ir/modules/fetch.json",
+          "path": "interface_data_contract"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:data_control_effect:001"
@@ -295,26 +449,9 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "summary": "The flow contains multiple fifo stages that can potentially block event propagation when full, but the exact backpressure mechanism is not detailed.",
-      "subject": "fifo_stage backpressure",
-      "explanation": "Instances like pmtLock, cfifo6, cfifo0, cfifo0_save, cfifo11, cfifo2, merge2ToSpliterErr2Fifo, cfifo8_saveMerge1Data, cfifo8, and cfifo_lock are all fifo stages that can gate event propagation. However, the context does not provide information about free/valid signals or backpressure handshaking.",
-      "signals": [
-        "i_drvFdispatch",
-        "w_drvFdispatch",
-        "w_drv2selc0",
-        "w_drv2Save",
-        "w_drv2select1",
-        "w_drv2fifo11",
-        "w_drv2split0",
-        "w_drv2select2",
-        "w_drv2Spliter4",
-        "w_drv2Dec",
-        "w_drvMerge22Merge3",
-        "w_drvMerge12cfifo8_delay_2",
-        "w_drvFifo8save",
-        "w_drvCfifo82Select5",
-        "w_drv2ICache"
-      ],
+      "summary": "事件流中存在多个 FIFO 级（pmtLock, cfifo6, cfifo0, cfifo0_save, cfifo11, cfifo2, merge2ToSpliterErr2Fifo, cfifo8_saveMerge1Data, cfifo8, cfifo_lock），它们可能通过满信号产生背压，但当前上下文未提供具体的 free/backpressure 信号。",
+      "subject": "FIFO 级背压",
+      "explanation": "所有 FIFO 级都被标记为潜在的阻塞点，表明它们可能通过满信号（full/almost_full）来阻止上游事件传播。然而，当前 AI 上下文中未提供任何 free 或 backpressure 信号的具体信息，因此无法确认背压机制的具体实现。在最终手册中，应强调这些 FIFO 级是潜在的背压源，但需要 RTL 源码审查来确认。",
       "instances": [
         "pmtLock",
         "cfifo6",
@@ -332,7 +469,8 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "knowledge_ir/modules/fetch.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:completion_backpressure:001"
@@ -344,16 +482,16 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "summary": "The final manual should emphasize the fan-out structure of the dispatch event, the role of each branch/join point, and the potential for backpressure at fifo stages.",
-      "subject": "flow_000_fetch_i_drvFdispatch",
-      "explanation": "The flow is complex with multiple branch and join points. The manual should clearly describe how the dispatch event is distributed to the five outputs, and where it can be combined with other event streams. The fifo stages should be highlighted as potential blocking points.",
+      "summary": "最终手册应重点描述从单一输入到五个目标模块的分发路径、分支/合并点的选择逻辑以及 FIFO 缓冲级的作用。",
+      "subject": "事件分发网络",
+      "explanation": "该流的核心是一个复杂的分发网络，包含多个分支点（spliter2, select0, select1, spliter0, select2, spliter4, spliter_err_2, select5）和合并点（mergeInt, mergeErr, merge0, merge2, merge1）。手册应清晰说明每个分支/合并点的决策依据（尽管当前上下文未提供选择信号），以及每个 FIFO 级在缓冲和背压中的作用。同时，应强调中断路径和异常路径的独立性。",
       "signals": [
         "i_drvFdispatch",
-        "o_drv2Dec",
+        "o_drv2Int",
         "o_drv2Excp",
+        "o_drv2Dec",
         "o_drv2Excp_2",
-        "o_drv2ICache",
-        "o_drv2Int"
+        "o_drv2ICache"
       ],
       "instances": [
         "spliter2",
@@ -367,31 +505,20 @@
         "mergeInt",
         "mergeErr",
         "merge0",
-        "merge1",
         "merge2",
-        "pmtLock",
-        "cfifo6",
-        "cfifo0",
-        "cfifo0_save",
-        "cfifo11",
-        "cfifo2",
-        "merge2ToSpliterErr2Fifo",
-        "cfifo8_saveMerge1Data",
-        "cfifo8",
-        "cfifo_lock"
-      ],
-      "related_assignments": [
-        "3"
+        "merge1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/fetch.json"
+          "source": "knowledge_ir/modules/fetch.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances,connection_graph"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:documentation_focus:001"
@@ -403,18 +530,22 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "reason": "The exact selection/split conditions for spliter2, select0, select1, spliter0, select2, spliter4, spliter_err_2, and select5 are not provided. RTL source review is needed to understand the control signals that determine which path the event takes.",
-      "subject": "Branch/Select logic",
-      "needed_source_slice": "always block or assign block for the selection/split logic",
+      "reason": "当前上下文未提供任何分支器或选择器的选择信号（如 sel 或 cond），无法确定事件在分支点的路由逻辑。",
+      "subject": "分支/选择器的选择信号",
+      "needed_source_slice": "always block 或 assign 块中驱动选择器 sel 端口的逻辑",
       "signals": [
-        "w_drv2selc0",
         "w_drvSpliter22Select0",
-        "w_drv2select1_dalay2",
+        "w_spliter2Drv2MergeInt",
+        "w_drvDisp2Err",
+        "w_drvDisp2cfifo0",
+        "w_drv2fifo11",
         "w_drv2split0",
-        "w_drv2select2",
         "w_drv2Spliter4",
-        "w_drv2Dec",
-        "w_drvCfifo82Select5"
+        "w_drvselect22cfifo2",
+        "w_drv2ICache",
+        "w_drvSelect52Merge3",
+        "o_drv2Dec",
+        "o_drv2Excp_2"
       ],
       "instances": [
         "spliter2",
@@ -431,7 +562,11 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "parser_pipeline_rtl/modules/fetch.json",
+          "path": "instances"
+        },
+        {
+          "source": "connection_graph"
         }
       ],
       "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:source_review_request:001"
@@ -443,67 +578,9 @@
         "module": "fetch",
         "flow_id": "flow_000_fetch_i_drvFdispatch"
       },
-      "reason": "The arbitration logic for mergeInt, mergeErr, merge0, merge1, and merge2 is not provided. RTL source review is needed to understand how multiple input events are prioritized or combined.",
-      "subject": "Merger arbitration logic",
-      "needed_source_slice": "always block or assign block for the merger arbitration logic",
-      "signals": [
-        "w_drv2MergeInt",
-        "w_spliter2Drv2MergeInt",
-        "w_drvDisp2Err",
-        "w_drvSpliter42Excp",
-        "w_split1drv2Excp",
-        "w_drv2merge0",
-        "w_drvSplit02Merge0",
-        "w_drv2merge2",
-        "w_drvcfifo52merge2",
-        "w_drvCfifo92merge1",
-        "w_drvMerge02Merge1",
-        "w_drvfifo32merge1"
-      ],
-      "instances": [
-        "mergeInt",
-        "mergeErr",
-        "merge0",
-        "merge1",
-        "merge2"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
-        }
-      ],
-      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "fetch",
-        "flow_id": "flow_000_fetch_i_drvFdispatch"
-      },
-      "reason": "The free/valid signals for fifo stages are not provided. RTL source review is needed to understand the backpressure mechanism and how it affects event propagation.",
-      "subject": "Backpressure handshaking",
-      "needed_source_slice": "fifo instance connections and control logic",
-      "signals": [
-        "i_drvFdispatch",
-        "w_drvFdispatch",
-        "w_drv2selc0",
-        "w_drv2Save",
-        "w_drv2select1",
-        "w_drv2fifo11",
-        "w_drv2split0",
-        "w_drv2select2",
-        "w_drv2Spliter4",
-        "w_drv2Dec",
-        "w_drvMerge22Merge3",
-        "w_drvMerge12cfifo8_delay_2",
-        "w_drvFifo8save",
-        "w_drvCfifo82Select5",
-        "w_drv2ICache"
-      ],
+      "reason": "当前上下文未提供任何 FIFO 级的满（full）或空（empty）信号，无法确认背压机制的具体实现。",
+      "subject": "FIFO 级的满/空信号",
+      "needed_source_slice": "FIFO 实例的端口连接，特别是 full, almost_full, empty 等状态信号",
       "instances": [
         "pmtLock",
         "cfifo6",
@@ -521,20 +598,25 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
+          "source": "knowledge_ir/modules/fetch.json",
+          "path": "internal_event_flow"
         }
       ],
-      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:source_review_request:003"
+      "id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "payload widths for output events",
-      "reason": "The context does not provide payload widths for o_drv2Dec, o_drv2Excp, o_drv2Excp_2, o_drv2ICache, and o_drv2Int. This information is needed for a complete manual."
+      "field": "分支/选择器的选择信号",
+      "reason": "当前 AI 上下文中未提供任何分支器或选择器的选择信号，无法确定事件在分支点的路由逻辑。"
     },
     {
-      "field": "delay values",
-      "reason": "The exact delay values for delay_select1_1 (delay6U), delay_select1_2 (delay4U), delayfifo8 (delay4U), delayfifo8_2 (delay6U), and delayDrv2Dec (delay6U) are not provided. This information is needed to understand timing relationships."
+      "field": "FIFO 级的满/空信号",
+      "reason": "当前 AI 上下文中未提供任何 FIFO 级的满或空信号，无法确认背压机制的具体实现。"
+    },
+    {
+      "field": "合并器的仲裁/互斥逻辑",
+      "reason": "当前 AI 上下文中未提供合并器（如 mergeInt, mergeErr, merge0, merge2, merge1）的仲裁或互斥逻辑的具体实现，无法确定多个输入事件如何被处理。"
     }
   ]
 }

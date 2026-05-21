@@ -12,9 +12,10 @@ Use this skill to generate a structured Markdown manual for RTL or source-code p
 1. Do not inspect parser or knowledge implementation files unless the user explicitly asks to analyze or modify those tools.
 2. Treat `scripts/run_parser_tool.py` and `scripts/run_knowledge_tool.py` as skill-owned implementation scripts.
 3. Use the exposed tools `run_parser_tool` and `run_knowledge_tool`; `run_knowledge_tool` is now a compatibility wrapper around `python -m knowledge.pipeline`.
-4. Base final manuals on `manual_context/<top_module>` evidence, especially `project_context.json`, module `module_context.json`, `interfaces.json`, `flows/*.json`, and `evidence_index.json`.
+4. Base final manuals on `manual_context/<top_module>` evidence, especially `project_context.json`, module `module_context.json`, `module_doc_card.json`, `interfaces.json`, `flows/*.json`, and `evidence_index.json`.
 5. Treat legacy `manual_ir/<top_module>` and ContextPack artifacts as legacy only. Do not use them as the main structure for new manuals.
 6. Clearly mark evidence gaps as insufficient evidence instead of guessing.
+7. Controlled RTL source review is allowed only through Manual Context `source_review_context` and only for port grouping, one-line module purpose hints, or reviewing evidence gaps. It must not introduce new connections, flows, FSM behavior, always-block behavior, register updates, timing guarantees, or deterministic design intent.
 
 ## Workflow
 
@@ -28,14 +29,15 @@ Use this skill to generate a structured Markdown manual for RTL or source-code p
    `parser_pipeline_rtl -> knowledge_ir -> ai_context -> semantic_layer -> manual_context`.
 8. Semantic Layer is the default AI claim stage. Disable it only when the user asks for a deterministic-only or fast structural run.
 9. Build the main evidence index from `manual_context/<top_module>`.
-10. For a complete project manual, use:
-    `project_context.json`, `system_topology.json`, `interface_index.json`, `flow_index.json`, `evidence_index.json`, `validation_report.json`, and selected `modules/<module>/...` files.
-11. Do not make the final manual LLM read parser JSON, Knowledge IR JSON, AI Context JSON, or Semantic Layer JSON broadly. Those layers are only evidence-reference backtrace targets.
-12. Plan the manual outline before writing the full manual.
-13. Describe what each chapter will contain and which Manual Context evidence supports it.
-14. Generate the final Markdown manual with the Manual Context evidence-bound renderer. Do not use a free-form LLM draft as the authoritative manual body.
-15. Review the generated manual with the Manual Context checker before relying on any model-assisted review.
-16. If the user asks to save it, write it to `docs/manuals/<top_module>_generated.md`.
+10. Run the controlled Source Review stage for priority `requires_rtl_source_review`, `review_status=needs_review`, `source_review_request`, and `evidence_gap` items, then write `source_review_claims` and `source_review_report` back to Manual Context.
+11. For a complete project manual, use:
+    `project_context.json`, `system_topology.json`, `interface_index.json`, `flow_index.json`, `evidence_index.json`, `validation_report.json`, and all reachable `modules/<module>/...` files.
+12. Do not make the final manual LLM read parser JSON, Knowledge IR JSON, AI Context JSON, or Semantic Layer JSON broadly. Those layers are only evidence-reference backtrace targets.
+13. Plan the manual outline before writing the full manual.
+14. Describe what each chapter will contain and which Manual Context evidence supports it.
+15. Generate the final Markdown manual with the Manual Context evidence-bound renderer. Do not use a free-form LLM draft as the authoritative manual body.
+16. Review the generated manual with the Manual Context checker before relying on any model-assisted review.
+17. If the user asks to save it, write the main manual to `docs/manuals/<top_module>_generated.md` and module pages to `docs/manuals/<top_module>_generated_modules/<module>.md`.
 
 ## Bundled Resources
 
@@ -48,9 +50,29 @@ Use this skill to generate a structured Markdown manual for RTL or source-code p
 
 The scripts set `PYTHONPATH` to `packages/` before invoking module commands, so use the exposed tools instead of importing these packages from application code.
 
+## CLI Debug Entry
+
+For app-free local debugging, run the same backend workflow through:
+
+```bash
+python -m backend.manual_cli \
+  --project-root . \
+  --rtl-inputs rtl \
+  --top-module arm_soc_top
+```
+
+Useful options:
+
+- `--force`: regenerate instead of reusing existing parser / manual context / manual artifacts.
+- `--output docs/manuals/debug.md`: write the public manual to a custom path.
+- `--no-llm`: skip source-review model calls and keep flagged claims as evidence gaps.
+- `--require-llm`: fail if no OpenAI-compatible API key is configured.
+- `--knowledge-timeout 3600`: allow long full Semantic Layer regeneration runs.
+- `--state-out /tmp/manual_state.json`: save final workflow state for debugging.
+
 ## Evidence Boundary
 
-Manual Context is the main input to final manual generation. It preserves field-level `certainty`, `source_layers`, `evidence_refs`, `doc_priority`, `manual_importance`, and `review_status`. The final manual should be rendered from these fields first; AI wording may only appear as labeled claims already present in Manual Context.
+Manual Context is the main input to final manual generation. It preserves field-level `certainty`, `source_layers`, `evidence_refs`, `doc_priority`, `manual_importance`, and `review_status`. The public final manual must not print evidence refs or metadata fields; those belong in the review report. AI wording may only appear as labeled claims already present in Manual Context.
 
 Writing rules:
 
@@ -60,7 +82,7 @@ Writing rules:
 - `human_asserted`: must be marked as a human assertion when present.
 - `evidence_gap`: must be written as insufficient evidence or an explicit review item.
 
-Never add connections, interfaces, flows, timing guarantees, FSM behavior, always-block behavior, or register update conditions that are not present in Manual Context.
+Never add connections, interfaces, flows, timing guarantees, FSM behavior, always-block behavior, or register update conditions that are not present in Manual Context. If a controlled RTL source review slice is used, keep the resulting text labeled as `ai_inferred` or `evidence_gap` unless the same fact is already present as parser/Knowledge IR evidence.
 
 The project’s main event/control pattern is drive-centered. Free signals may be recorded, but final manuals should emphasize them only when they affect drive availability or backpressure.
 
@@ -71,23 +93,24 @@ After drafting a manual, review it for:
 - conversational preambles or execution promises in the Markdown body;
 - nonexistent modules, signals, interfaces, or flows;
 - AI inferences promoted to deterministic facts;
-- missing evidence gaps, review questions, or validation issues;
+- missing evidence gaps or review questions;
+- missing module-page coverage for any reachable module;
+- sample-only hierarchy or sample-only responsibility tables replacing full hierarchy/module index coverage;
 - invented timing, FSM, always-block, or register behavior;
 - over-explained free signals that do not affect drive availability or backpressure;
 - direct dependence on legacy Manual IR / ContextPack as the main manual structure.
+- public manual leakage of `evidence_refs`, `confidence`, `review_status`, `requires_rtl_source_review`, or raw Evidence columns.
+- review report coverage of evidence gaps, review questions, and source-review results.
 
-## Suggested Chapters
+## Required Manual Shape
 
-Adapt the structure to the evidence instead of forcing every chapter:
+Use a main manual plus module pages:
 
-- Project overview
-- Top module
-- Module hierarchy
-- Key module responsibilities
-- Interfaces and event/data contracts
-- Drive-centered flows
-- Internal components and assignment impacts
-- Backpressure notes where free affects drive availability
-- Evidence gaps and review questions
-- Maintenance notes
-- Evidence boundary
+- Project overview: one sentence of project purpose, the RTL directory, and the top-level source file only.
+- Top module: direct child modules and natural-language external port group summaries, not a raw dump of every port.
+- Complete module hierarchy: all hierarchy edges, not a sample.
+- Subsystem and module index: every reachable module links to a module page; do not show detail level.
+- Do not include a top-level Drive-centered flow index in the main manual; detailed flow text belongs in module pages.
+- Do not include evidence gaps, review questions, or evidence-boundary writing rules in the public manual; place them in the review report.
+
+Each module page must include responsibility, hierarchy position, input/output summary, drive/data/free contract, key flows, and internal components/assignment impact. Detailed modules are expanded; helper or leaf modules may use compact cards. Evidence gaps and source-review audit details go to the review report.

@@ -46,14 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 10,
     "by_type": {
-      "assignment_interpretation": 2,
+      "assignment_interpretation": 3,
       "component_role": 3,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,45 +63,39 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "Instruction decode and dispatch unit that selects between 16-bit and 32-bit instruction decoders based on instruction type.",
+      "summary": "指令解码与分发核心模块，负责将取指阶段传入的PC和指令数据解码为控制信号，并分发至发射和异常处理阶段。",
       "subject": "decoder",
-      "explanation": "The module receives a combined PC+instruction payload from the IF stage, uses decoderSele to route the instruction to either decoder16 or decoder32 based on i_is16_1, then merges decoded results via decoMerge into a unified decoder data bus. The splitter decSpli distributes the incoming drive event to either the exception or launch pipeline.",
+      "explanation": "模块接收来自IF阶段的驱动事件和PC+指令数据，通过内部选择器（decoderSele）根据指令宽度（16位或32位）分流至对应的解码子模块（decoder16/decoder32），解码结果经互斥合并（decoMerge）后输出解码数据、写使能、条件标志等控制信号，同时通过事件分发器（decSpli）将驱动事件分别导向发射（Launch）和异常（Exc）阶段。",
       "signals": [
         "i_driveFromIF",
         "i_pcAndIns_64",
-        "o_driveToExc_1",
         "o_driveToLaunch_1",
+        "o_driveToExc_1",
         "o_decoderData_187",
-        "o_decPCAndNum_36",
-        "o_blImm9_9",
         "o_wen_2",
-        "o_nzcvWen_4"
+        "o_nzcvWen_4",
+        "o_blImm9_9",
+        "o_decPCAndNum_36"
       ],
       "instances": [
         "decoderSele",
         "decoder16",
         "decoder32",
-        "decoMerge",
-        "decSpli"
+        "decoSpli",
+        "decoMerge"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/decoder.json"
         },
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "connection_graph"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:module_role:001"
@@ -113,35 +106,36 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "Decodes a 64-bit PC+instruction payload into a 187-bit decoded data bus, a 36-bit PC+exception number field, a 9-bit branch link immediate, and write-enable/condition signals for the launch and exception pipelines.",
-      "subject": "instruction decode and dispatch",
-      "explanation": "The module takes a single drive event with a 64-bit payload, selects between 16-bit and 32-bit decoders, merges their outputs, and produces multiple output data buses and control signals. The decoded data bus (o_decoderData_187) is the primary output, with o_decPCAndNum_36 providing PC and exception number, o_blImm9_9 providing branch immediate, and o_wen_2/o_nzcvWen_4 providing write-enable/condition signals.",
+      "summary": "将输入的PC和指令数据解码为内部控制信号，并将驱动事件分流至发射和异常处理路径。",
+      "subject": "指令解码与事件分发",
+      "explanation": "模块内部通过decoderSele根据指令宽度选择解码路径，decoder16和decoder32分别处理16位和32位指令，解码结果经decoMerge合并后输出。同时，decSpli将驱动事件拆分为两路，分别驱动发射和异常处理阶段。自由信号（free）用于反馈流控，确保上下游模块的握手同步。",
       "signals": [
-        "o_decoderData_187",
-        "o_decPCAndNum_36",
-        "o_blImm9_9",
-        "o_wen_2",
-        "o_nzcvWen_4"
+        "i_driveFromIF",
+        "o_driveToLaunch_1",
+        "o_driveToExc_1",
+        "o_freeToIF",
+        "i_freeFromLaunch_1",
+        "i_freeFromExc_1"
       ],
       "instances": [
+        "decoderSele",
         "decoder16",
         "decoder32",
+        "decoSpli",
         "decoMerge"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/decoder.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "assignments"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:structural_responsibility:001"
@@ -152,35 +146,28 @@
         "type": "module",
         "module": "decoder"
       },
-      "subject": "decoderSele",
-      "summary": "Instruction type selector that routes the incoming PC+instruction payload and drive event to either the 16-bit or 32-bit decoder based on the i_is16_1 signal.",
-      "explanation": "This SelSplit component receives the i_driveFromIF event and i_pcAndIns_64 data, and uses i_is16_1 to determine which decoder path to activate. It also generates the o_freeToIF signal to acknowledge completion.",
+      "subject": "decoderSele (cSelector2_65b_dec)",
+      "summary": "指令宽度选择器，根据输入信号i_is16_1判断当前指令为16位或32位，并将驱动事件和数据路由至对应的解码子模块。",
+      "explanation": "decoderSele接收来自IF阶段的驱动事件和PC+指令数据，同时接收i_is16_1信号指示指令宽度。根据宽度选择，将驱动事件分别发送至decoder16或decoder32，并将PC+指令数据同时发送至两个解码子模块，但只有被选中的子模块会实际处理数据。",
       "signals": [
         "i_driveFromIF",
         "i_pcAndIns_64",
         "i_is16_1",
-        "o_freeToIF",
-        "w_DecSeleDriToDec16_1",
-        "w_DecSeleDriToDec32_1"
+        "o_driveNext0 (to decoder16)",
+        "o_driveNext1 (to decoder32)"
       ],
       "instances": [
-        "decoder16",
-        "decoder32"
+        "decoderSele"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "connection_graph"
-        },
-        {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:component_role:001"
@@ -191,29 +178,27 @@
         "type": "module",
         "module": "decoder"
       },
-      "subject": "decSpli",
-      "summary": "Drive event splitter that distributes the decoded drive event to either the exception or launch pipeline output.",
-      "explanation": "This SelSplit component takes the decoded drive event from the merge path and splits it into two output events: o_driveToExc_1 for exception handling and o_driveToLaunch_1 for instruction launch. It receives free signals from both downstream modules.",
+      "subject": "decSpli (cSplitter2_1b)",
+      "summary": "事件分发器，将解码完成后的驱动事件拆分为两路，分别导向发射阶段和异常处理阶段。",
+      "explanation": "decSpli接收来自decoMerge的解码完成事件，将其拆分为两路驱动信号：o_driveToLaunch_1（发射阶段）和o_driveToExc_1（异常处理阶段）。同时，它接收来自发射和异常阶段的自由信号（i_freeFromLaunch_1, i_freeFromExc_1），用于流控反馈，确保下游模块准备好接收新事件。",
       "signals": [
-        "o_driveToExc_1",
         "o_driveToLaunch_1",
-        "i_freeFromExc_1",
-        "i_freeFromLaunch_1"
+        "o_driveToExc_1",
+        "i_freeFromLaunch_1",
+        "i_freeFromExc_1"
+      ],
+      "instances": [
+        "decSpli"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "connection_graph"
-        },
-        {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:component_role:002"
@@ -224,9 +209,9 @@
         "type": "module",
         "module": "decoder"
       },
-      "subject": "decoMerge",
-      "summary": "Mutex merge component that combines decoded data from the 16-bit and 32-bit decoders into a unified 191-bit decoder data bus.",
-      "explanation": "This MutexMerge component takes the decoded data from decoder16 and decoder32 along with their exception numbers, and produces a single merged w_decoderData_191 bus. The merge is mutually exclusive since only one decoder is active per cycle.",
+      "subject": "decoMerge (cMutexMerge2_191b_dec)",
+      "summary": "互斥合并器，将16位和32位解码结果合并为统一的解码数据总线。",
+      "explanation": "decoMerge接收来自decoder16和decoder32的解码数据（w_decode16Data_187, w_decode32Data_187）以及异常编号（w_excNum16_4, w_excNum32_4），在互斥保证下合并为统一的解码数据总线w_decoderData_191，供后续输出和寄存器存储。",
       "signals": [
         "w_decode16Data_187",
         "w_decode32Data_187",
@@ -235,23 +220,17 @@
         "w_decoderData_191"
       ],
       "instances": [
-        "decoder16",
-        "decoder32"
+        "decoMerge"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "connection_graph"
-        },
-        {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:component_role:003"
@@ -263,27 +242,25 @@
         "module": "decoder"
       },
       "subject": "o_decoderData_187",
-      "summary": "Primary decoded data output formed by concatenating the merged decoder data bus with the 16-bit instruction flag.",
-      "explanation": "This assignment takes the 191-bit merged decoder data (w_decoderData1_191), strips the bottom 2 bits, and appends the w_is16_1 flag to create a 187-bit output. The bottom 2 bits of the merged data are routed to o_wen_2 as write-enable signals.",
+      "summary": "解码数据输出，由合并后的解码数据w_decoderData1_191和指令宽度标志w_is16_1拼接而成。",
+      "explanation": "该赋值将内部解码数据总线的部分字段（[186:2]）与指令宽度标志（w_is16_1）组合，形成187位输出。其中w_is16_1用于指示当前解码指令是否为16位，便于下游模块识别指令格式。",
       "signals": [
         "o_decoderData_187",
         "w_decoderData1_191",
         "w_is16_1"
       ],
       "related_assignments": [
-        "assign 2",
-        "assign 3"
+        "2"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "assignments"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:assignment_interpretation:001"
@@ -294,61 +271,57 @@
         "type": "module",
         "module": "decoder"
       },
-      "subject": "o_decPCAndNum_36",
-      "summary": "PC and exception number output extracted from the merged decoder data bus.",
-      "explanation": "This assignment extracts a 32-bit PC field (bits 136:105) and a 4-bit exception number (bits 190:187) from the merged decoder data bus to form a 36-bit output.",
+      "subject": "o_wen_2",
+      "summary": "写使能输出，直接从解码数据总线的低2位提取。",
+      "explanation": "该赋值将w_decoderData1_191[1:0]直接映射到o_wen_2，用于控制后续流水线阶段的寄存器写使能。低2位可能编码了写使能类型或条件。",
       "signals": [
-        "o_decPCAndNum_36",
+        "o_wen_2",
         "w_decoderData1_191"
       ],
       "related_assignments": [
-        "assign 6"
+        "3"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "assignments"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:assignment_interpretation:002"
     },
     {
-      "claim_type": "interface_intent",
+      "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "decoder"
       },
-      "summary": "The incoming drive event from the IF stage carries a 64-bit PC+instruction payload and expects a free acknowledgment signal.",
-      "subject": "i_driveFromIF event contract",
-      "explanation": "The event_payload_contract shows i_driveFromIF is paired with payload i_pcAndIns_64 and free signal o_freeToIF. This indicates a request-acknowledge handshake where the decoder processes the instruction and signals completion back to the IF stage.",
+      "subject": "o_decPCAndNum_36",
+      "summary": "解码PC和异常编号输出，从解码数据总线中提取PC字段和异常编号字段拼接而成。",
+      "explanation": "该赋值从w_decoderData1_191中提取PC字段（[136:105]）和异常编号字段（[190:187]），拼接为36位输出。该信号可能用于异常处理或调试跟踪。",
       "signals": [
-        "i_driveFromIF",
-        "i_pcAndIns_64",
-        "o_freeToIF"
+        "o_decPCAndNum_36",
+        "w_decoderData1_191"
       ],
-      "related_payload": [
-        "i_pcAndIns_64"
+      "related_assignments": [
+        "6"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "related_flows": [
+        "flow_000_decoder_i_driveFromIF"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "event_payload_contracts"
-        },
-        {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "interface"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
-      "id": "semantic:module:decoder:interface_intent:001"
+      "id": "semantic:module:decoder:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -356,29 +329,37 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "Output drive events to the exception and launch pipelines, each with their own free acknowledgment signals.",
-      "subject": "o_driveToExc_1 and o_driveToLaunch_1 event contracts",
-      "explanation": "The event_payload_contracts show o_driveToExc_1 is paired with i_freeFromExc_1 and o_driveToLaunch_1 is paired with i_freeFromLaunch_1. These are separate handshake interfaces for the two downstream pipelines, with no payload data carried on the events themselves.",
+      "summary": "模块通过驱动事件（drive）和自由信号（free）实现与上下游模块的流控握手，确保数据在流水线中正确传递。",
+      "subject": "驱动-自由信号握手协议",
+      "explanation": "输入驱动事件i_driveFromIF触发解码流程，输出驱动事件o_driveToLaunch_1和o_driveToExc_1分别驱动发射和异常阶段。自由信号o_freeToIF用于通知IF阶段解码器已空闲，可接收新指令；i_freeFromLaunch_1和i_freeFromExc_1则用于接收下游模块的空闲反馈，控制事件分发。",
       "signals": [
-        "o_driveToExc_1",
-        "i_freeFromExc_1",
+        "i_driveFromIF",
         "o_driveToLaunch_1",
-        "i_freeFromLaunch_1"
+        "o_driveToExc_1",
+        "o_freeToIF",
+        "i_freeFromLaunch_1",
+        "i_freeFromExc_1"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "related_payload": [
+        "i_pcAndIns_64",
+        "o_decoderData_187",
+        "o_wen_2",
+        "o_nzcvWen_4",
+        "o_blImm9_9",
+        "o_decPCAndNum_36"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "event_payload_contracts"
+          "source": "knowledge_ir/modules/decoder.json"
         },
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "interface"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
-      "id": "semantic:module:decoder:interface_intent:002"
+      "id": "semantic:module:decoder:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -386,18 +367,17 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "The manual should emphasize the instruction type selection mechanism (16-bit vs 32-bit) and the data flow through the decode pipeline.",
-      "subject": "decoder instruction selection and decode path",
-      "explanation": "The module's primary function is to select between two decoder paths based on instruction width, decode the instruction, and produce a unified output. The decoderSele component and the two decoder instances are the core of this functionality. The splitter and merge components are supporting infrastructure.",
+      "summary": "手册应重点说明解码数据总线o_decoderData_187的字段布局和含义，包括指令宽度标志、PC、异常编号、写使能等字段的位域定义。",
+      "subject": "解码数据总线格式与字段定义",
+      "explanation": "解码数据总线是模块的核心输出，其字段定义直接影响下游发射和异常处理模块的行为。当前上下文仅显示部分字段的提取方式（如o_wen_2、o_decPCAndNum_36），但完整字段布局需参考RTL源码或解码子模块文档。",
       "signals": [
-        "i_is16_1",
-        "i_pcAndIns_64",
         "o_decoderData_187",
-        "o_decPCAndNum_36",
-        "o_blImm9_9"
+        "o_wen_2",
+        "o_nzcvWen_4",
+        "o_blImm9_9",
+        "o_decPCAndNum_36"
       ],
       "instances": [
-        "decoderSele",
         "decoder16",
         "decoder32",
         "decoMerge"
@@ -410,69 +390,20 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/decoder.json",
-          "path": "connection_graph"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "reason": "The compact context shows no module event output reached from i_driveFromIF, but the connection graph shows decoderSele routing to decoder16/decoder32. The actual internal flow through the decode pipeline needs RTL source review.",
-      "subject": "internal event flow from i_driveFromIF",
-      "needed_source_slice": "always block, assign block, instance connections",
-      "signals": [
-        "i_driveFromIF",
-        "w_DecSeleDriToDec16_1",
-        "w_DecSeleDriToDec32_1",
-        "w_dec16DriToMer_1",
-        "w_dec32DriToMer_1"
-      ],
-      "instances": [
-        "decoderSele",
-        "decoder16",
-        "decoder32",
-        "decoMerge"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "internal_event_flow_refs"
-        },
-        {
-          "source": "knowledge_ir/modules/decoder.json",
-          "path": "evidence_gaps"
-        }
-      ],
-      "id": "semantic:module:decoder:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "internal_event_flow.i_driveFromIF",
-      "reason": "no module event output reached from i_driveFromIF"
+      "field": "解码数据总线完整字段布局",
+      "reason": "当前上下文仅显示部分字段的提取方式，但o_decoderData_187的完整位域定义（如各字段的起始位和结束位）未提供，需参考decoder16和decoder32子模块的输出定义。"
     },
     {
-      "field": "decoder16 and decoder32 internal decode logic",
-      "reason": "compact context provides no details on how these modules decode instructions into the 187-bit data bus"
-    },
-    {
-      "field": "o_blImm9_9 and o_nzcvWen_4 generation",
-      "reason": "assignments show these come from registers r_blImm9_9 and r_nzcvWen_4, but no context on how these registers are loaded"
+      "field": "内部事件流i_driveFromIF的完整路径",
+      "reason": "当前上下文仅包含一个内部事件流引用，且未显示从i_driveFromIF到最终输出事件的完整路径，需参考flow_000_decoder_i_driveFromIF.json文件。"
     }
   ]
 }

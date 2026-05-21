@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 10,
     "by_type": {
       "assignment_interpretation": 3,
       "component_role": 2,
       "documentation_focus": 1,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,18 +64,18 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "UART-driven memory initialization controller that generates bus write transactions for both instruction and data memory spaces.",
+      "summary": "数据初始化模块，通过UART接口接收配置数据并驱动指令总线(ibus)和数据总线(dbus)的初始化写入。",
       "subject": "data_init",
-      "explanation": "The module has no event inputs or data inputs, only data outputs (dbus_addr_o, dbus_data_o, ibus_addr_o, ibus_data_o) and connects to uart_rx and uart_tx instances. Assign dependencies show bus write enables (ibus_we, dbus_we) and data outputs derived from internal registers, plus a finish signal (d_finish) based on state machine conditions (c_state, WAITSEND, tx_data_ready, first, size, number). This indicates a controller that receives UART commands, generates bus write transactions, and signals completion.",
+      "explanation": "模块没有事件输入，但通过uart_rx_inst接收串行数据，并通过uart_tx_inst发送状态信号。输出端口包括ibus和dbus的地址和数据，表明其负责将UART接收的初始化数据转换为总线写操作。assign依赖显示ibus_we、dbus_we等写使能信号由内部寄存器驱动，且数据输出存在字节交换（{r_ibus_data_o[31:0], r_ibus_data_o[63:32]}），暗示了端序处理。",
       "signals": [
-        "dbus_addr_o",
-        "dbus_data_o",
         "ibus_addr_o",
         "ibus_data_o",
+        "dbus_addr_o",
+        "dbus_data_o",
         "ibus_we",
         "dbus_we",
-        "d_finish",
-        "init_sig"
+        "uart_rx",
+        "uart_tx"
       ],
       "instances": [
         "uart_rx_inst",
@@ -90,6 +90,10 @@
           "path": "interface"
         },
         {
+          "source": "parser_pipeline_rtl/modules/data_init.json",
+          "path": "assignments"
+        },
+        {
           "source": "rtl/rtl/memory/data_init.v",
           "path": "module_source"
         }
@@ -102,16 +106,16 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "Generates write transactions on instruction and data bus interfaces based on internal state and UART-received data.",
-      "subject": "bus_write_generation",
-      "explanation": "Assign dependencies show ibus_we and dbus_we driven from internal registers (r_ibus_we, r_dbus_we), and data outputs (ibus_data_o, dbus_data_o) are byte-swapped versions of internal registers. The d_finish signal depends on state machine variables (c_state, WAITSEND, first, size, number, tx_data_ready), indicating a controlled write sequence.",
+      "summary": "通过UART接收初始化数据，解析后生成指令总线和数据总线的写地址、写数据和写使能信号。",
+      "subject": "总线初始化驱动",
+      "explanation": "模块输出ibus_addr_o、ibus_data_o、dbus_addr_o、dbus_data_o以及对应的写使能信号（ibus_we、dbus_we）。assign依赖显示这些输出由内部寄存器r_ibus_*和r_dbus_*驱动，且数据存在字节交换。d_finish信号的计算涉及first、size、number、c_state和tx_data_ready，表明存在一个有限状态机控制初始化流程的完成。",
       "signals": [
-        "ibus_we",
-        "dbus_we",
         "ibus_addr_o",
         "ibus_data_o",
         "dbus_addr_o",
         "dbus_data_o",
+        "ibus_we",
+        "dbus_we",
         "d_finish"
       ],
       "doc_priority": "primary",
@@ -119,12 +123,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
+          "source": "parser_pipeline_rtl/modules/data_init.json",
           "path": "assignments"
         },
         {
-          "source": "knowledge_ir/modules/data_init.json",
-          "path": "assignment_facts"
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:structural_responsibility:001"
@@ -136,11 +140,10 @@
         "module": "data_init"
       },
       "subject": "uart_rx_inst",
-      "summary": "Receives serial data from external UART input and provides received data to the data_init controller.",
-      "explanation": "The instance uart_rx_inst is connected to self.uart_rx (input) and has output data rx_data. This provides the external command/data stream that drives the initialization process.",
+      "summary": "UART接收器，将外部串行输入(uart_rx)转换为并行数据，供模块内部解析为初始化配置。",
+      "explanation": "实例连接显示uart_rx_inst的rx_pin连接到顶层端口uart_rx，其输出数据(rx_data)未在上下文中明确列出，但根据模块功能推断，该数据被用于生成总线地址和数据。",
       "signals": [
-        "uart_rx",
-        "rx_data"
+        "uart_rx"
       ],
       "instances": [
         "uart_rx_inst"
@@ -150,12 +153,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/data_init.json",
+          "path": "connection_graph"
         },
         {
-          "source": "knowledge_ir/modules/data_init.json",
-          "path": "key_instances"
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:component_role:001"
@@ -167,11 +170,10 @@
         "module": "data_init"
       },
       "subject": "uart_tx_inst",
-      "summary": "Transmits status or handshake data back to the external UART interface, including a tx_data_ready signal for flow control.",
-      "explanation": "The instance uart_tx_inst receives tx_data from the controller and outputs tx_data_ready, which is used in the d_finish condition. This suggests a handshake mechanism for completion signaling.",
+      "summary": "UART发送器，将模块内部状态（如tx_data_ready）通过串行输出(uart_tx)反馈给外部。",
+      "explanation": "实例连接显示uart_tx_inst的tx_pin连接到顶层端口uart_tx，其输入数据(tx_data)未在上下文中明确列出，但d_finish信号依赖tx_data_ready，表明该实例用于发送初始化完成或状态信息。",
       "signals": [
         "uart_tx",
-        "tx_data",
         "tx_data_ready"
       ],
       "instances": [
@@ -182,12 +184,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/data_init.json",
+          "path": "connection_graph"
         },
         {
-          "source": "knowledge_ir/modules/data_init.json",
-          "path": "key_instances"
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:component_role:002"
@@ -199,8 +201,8 @@
         "module": "data_init"
       },
       "subject": "ibus_data_o",
-      "summary": "Outputs instruction bus data with a byte-swap of the internal register r_ibus_data_o.",
-      "explanation": "The assign {r_ibus_data_o[31:0], r_ibus_data_o[63:32]} indicates a 64-bit data path with swapped upper and lower 32-bit halves, likely for endianness correction or memory mapping.",
+      "summary": "指令总线数据输出，内部寄存器r_ibus_data_o的高低32位交换后赋值。",
+      "explanation": "assign 2显示ibus_data_o = {r_ibus_data_o[31:0], r_ibus_data_o[63:32]}，表明存在字节序转换，可能用于匹配总线或外部存储器的端序要求。",
       "signals": [
         "ibus_data_o",
         "r_ibus_data_o"
@@ -210,10 +212,10 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
+          "source": "parser_pipeline_rtl/modules/data_init.json",
           "path": "assignments"
         }
       ],
@@ -226,8 +228,8 @@
         "module": "data_init"
       },
       "subject": "dbus_data_o",
-      "summary": "Outputs data bus data with a byte-swap of the internal register r_dbus_data_o.",
-      "explanation": "Similar to ibus_data_o, the assign {r_dbus_data_o[31:0], r_dbus_data_o[63:32]} indicates a 64-bit data path with swapped halves, consistent with the instruction bus pattern.",
+      "summary": "数据总线数据输出，内部寄存器r_dbus_data_o的高低32位交换后赋值。",
+      "explanation": "assign 5显示dbus_data_o = {r_dbus_data_o[31:0], r_dbus_data_o[63:32]}，与ibus_data_o类似，表明统一的端序处理策略。",
       "signals": [
         "dbus_data_o",
         "r_dbus_data_o"
@@ -237,10 +239,10 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
+          "source": "parser_pipeline_rtl/modules/data_init.json",
           "path": "assignments"
         }
       ],
@@ -253,14 +255,15 @@
         "module": "data_init"
       },
       "subject": "d_finish",
-      "summary": "Completion flag asserted when the state machine reaches WAITSEND state, the current address (first) equals size-1, the command number is 0x01, and tx_data_ready is high.",
-      "explanation": "The condition (first[9:0] == (size-1)) & (number == 6'h01) & c_state == WAITSEND & tx_data_ready indicates a specific completion condition for a write burst of size length, command type 0x01, with UART ready to transmit status.",
+      "summary": "初始化完成标志，基于状态机、计数器、数据包编号和发送就绪信号计算。",
+      "explanation": "assign 8显示d_finish = (first[9:0] == (size-1)) & (number == 6'h01) & c_state == WAITSEND & tx_data_ready。这表明模块内部存在一个状态机（c_state），通过first计数器、size参数、number包编号和tx_data_ready信号共同判定初始化流程结束。",
       "signals": [
         "d_finish",
         "first",
         "size",
         "number",
         "c_state",
+        "WAITSEND",
         "tx_data_ready"
       ],
       "related_assignments": [
@@ -271,8 +274,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
+          "source": "parser_pipeline_rtl/modules/data_init.json",
           "path": "assignments"
+        },
+        {
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:assignment_interpretation:003"
@@ -283,9 +290,9 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "The ibus and dbus interfaces are write-only memory-mapped buses for initializing instruction and data memory respectively.",
-      "subject": "bus_write_interfaces",
-      "explanation": "The presence of address, data, and write enable outputs (ibus_addr_o, ibus_data_o, ibus_we, dbus_addr_o, dbus_data_o, dbus_we) with no read signals indicates write-only interfaces. The 32-bit address and 64-bit data widths suggest a memory-mapped bus protocol.",
+      "summary": "指令总线和数据总线的写操作接口，包含地址、数据和写使能，用于初始化存储器。",
+      "subject": "总线写接口组",
+      "explanation": "输出端口ibus_addr_o、ibus_data_o、ibus_we和dbus_addr_o、dbus_data_o、dbus_we构成两组总线写接口。没有对应的读接口或事件接口，表明模块功能仅限于写入初始化数据。",
       "signals": [
         "ibus_addr_o",
         "ibus_data_o",
@@ -299,13 +306,9 @@
         "dbus_data_o"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
-        {
-          "source": "rtl/rtl/memory/data_init.v",
-          "path": "interface"
-        },
         {
           "source": "knowledge_ir/modules/data_init.json",
           "path": "interface"
@@ -319,9 +322,9 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "The manual should focus on the UART command protocol, state machine transitions, and bus write sequence, as these are the core design-intent elements.",
-      "subject": "state_machine_and_protocol",
-      "explanation": "The module has no event inputs or data inputs, only UART connections and bus write outputs. The d_finish signal reveals a state machine with WAITSEND state and parameters (first, size, number). The byte-swap on data outputs suggests a specific memory mapping. These are the key design aspects that need documentation.",
+      "summary": "文档应重点描述UART数据解析、总线写入状态机以及初始化完成条件。",
+      "subject": "初始化流程与状态机",
+      "explanation": "模块的核心功能是通过UART接收数据并驱动总线写入。d_finish信号的计算涉及状态机（c_state）、计数器（first）和包编号（number），这些是理解初始化流程的关键。数据输出的字节交换也需说明。",
       "signals": [
         "d_finish",
         "c_state",
@@ -341,12 +344,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/memory/data_init.v",
+          "source": "parser_pipeline_rtl/modules/data_init.json",
           "path": "assignments"
         },
         {
           "source": "rtl/rtl/memory/data_init.v",
-          "path": "instances"
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:documentation_focus:001"
@@ -357,16 +360,24 @@
         "type": "module",
         "module": "data_init"
       },
-      "reason": "The compact context reveals a state machine (c_state, WAITSEND) but does not define states, transitions, or the UART command format. RTL source is needed to document the protocol.",
-      "subject": "state_machine_definition",
-      "needed_source_slice": "always block",
+      "reason": "紧凑上下文未提供状态机定义（c_state、WAITSEND等状态）、计数器（first、size、number）的更新逻辑，以及UART接收数据如何映射到总线地址和数据。",
+      "subject": "内部状态机与数据解析逻辑",
+      "needed_source_slice": "always block, module declaration",
       "signals": [
         "c_state",
         "first",
         "size",
         "number",
-        "d_finish",
+        "r_ibus_addr_o",
+        "r_ibus_data_o",
+        "r_dbus_addr_o",
+        "r_dbus_data_o",
+        "r_init_1",
         "init_sig"
+      ],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -378,50 +389,7 @@
         }
       ],
       "id": "semantic:module:data_init:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "data_init"
-      },
-      "reason": "The module receives UART data (rx_data) and uses parameters (number, size, first) but the command format and encoding are not documented in the compact context.",
-      "subject": "uart_command_protocol",
-      "needed_source_slice": "always block",
-      "signals": [
-        "rx_data",
-        "number",
-        "size",
-        "first",
-        "init_sig"
-      ],
-      "instances": [
-        "uart_rx_inst"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/memory/data_init.v",
-          "path": "module_source"
-        }
-      ],
-      "id": "semantic:module:data_init:source_review_request:002"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "state_machine_states",
-      "reason": "The compact context only mentions WAITSEND state; full state machine definition is missing."
-    },
-    {
-      "field": "uart_command_format",
-      "reason": "The mapping from UART received data to internal parameters (number, size, first) is not documented."
-    },
-    {
-      "field": "bus_protocol_timing",
-      "reason": "The bus write interface protocol (handshake, timing) is not described in the compact context."
-    }
-  ]
+  "evidence_gaps": []
 }

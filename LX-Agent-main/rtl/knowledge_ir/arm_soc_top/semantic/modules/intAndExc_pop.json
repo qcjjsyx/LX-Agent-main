@@ -48,10 +48,10 @@
   "claim_summary": {
     "count": 17,
     "by_type": {
-      "assignment_interpretation": 3,
+      "assignment_interpretation": 4,
       "component_role": 4,
-      "documentation_focus": 1,
-      "interface_intent": 4,
+      "documentation_focus": 2,
+      "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 3,
       "structural_responsibility": 1
@@ -64,9 +64,9 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "Central pop sequencer that decodes a single DR-originated exception/interrupt request into four prioritized target drive events and merges a Top-originated request into the DR path.",
+      "summary": "中断与异常出栈调度器，负责将来自DR（数据读取器）和Top（顶层）的出栈请求分发到SP（栈指针）、WGRF（通用寄存器文件写入）和WPSR（程序状态字写入）等目标单元。",
       "subject": "intAndExc_pop",
-      "explanation": "The module receives two event inputs: i_driveFromDR (split into two paths via u0_cSplitter2_NoData) and i_driveFromTop (merged with a feedback path via u0_cMutexMerge2_NoData). The DR path drives SP, WGRF, and WPSR outputs after delay; the Top path drives only DR output. Free signals from each target return to the module and propagate back to DR or Top.",
+      "explanation": "模块接收两个驱动事件输入（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将请求路由到四个输出驱动事件，并携带相应的数据负载（地址、SP值、寄存器数据、PSR数据）。自由信号（free）用于握手确认。",
       "signals": [
         "i_driveFromDR",
         "i_driveFromTop",
@@ -104,9 +104,9 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "Arbitrates between DR and Top pop requests, dispatches DR pop to SP/WGRF/WPSR with address calculation, and dispatches Top pop to DR.",
-      "subject": "Exception/interrupt pop arbitration and dispatch",
-      "explanation": "The DR pop flow (flow_000) splits into two paths: one drives SP directly via u0_cSelector2_1b, the other drives WGRF and WPSR after two delay stages. The Top pop flow (flow_001) merges with the SP-to-DR feedback path via u0_cMutexMerge2_NoData to drive DR. Address calculation uses i_SP_32 with offsets 0,8,16,24 selected by r_outNum_2.",
+      "summary": "模块将单个入栈请求（来自DR或Top）分解为最多四个并行的出栈操作，每个操作针对不同的目标单元，并生成相应的地址或数据负载。",
+      "subject": "出栈请求分发与数据路径选择",
+      "explanation": "来自DR的请求通过Splitter分为两路：一路经两级延迟后驱动到WGRF和WPSR（携带72位和32位数据），另一路驱动到SP（携带更新后的SP值）。来自Top的请求与SP路径的返回事件通过MutexMerge合并后驱动到DR（携带基于SP计算的地址）。数据路径通过assign语句实现SP偏移计算和多路选择。",
       "signals": [
         "i_driveFromDR",
         "i_driveFromTop",
@@ -115,7 +115,9 @@
         "o_driveToWGRF",
         "o_driveToWPSR",
         "o_addrToDR_32",
-        "o_SP_32"
+        "o_SP_32",
+        "o_dataToWGRF_72",
+        "o_dataToWPSR_32"
       ],
       "instances": [
         "u0_cSplitter2_NoData_intAndExc_pop",
@@ -147,13 +149,12 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cSplitter2_NoData_intAndExc_pop",
-      "summary": "Fan-out splitter that replicates the DR pop event into two parallel paths: one for SP dispatch and one for WGRF/WPSR dispatch.",
-      "explanation": "Receives i_driveFromDR and produces w_drive0 (to delay chain for WGRF/WPSR) and w_drive1 (to u0_cSelector2_1b for SP). Its o_free output propagates back to DR as o_freeToDR.",
+      "summary": "将来自DR的单个出栈请求事件拆分为两个并行事件流，分别导向SP更新路径和WGRF/WPSR数据路径。",
+      "explanation": "该组件是SelSplit家族的无数据拆分器，接收i_driveFromDR事件，输出w_drive0（经延迟后驱动WGRF和WPSR）和w_drive1（直接驱动SP选择器）。",
       "signals": [
         "i_driveFromDR",
         "w_drive0",
-        "w_drive1",
-        "o_freeToDR"
+        "w_drive1"
       ],
       "instances": [
         "u0_cSplitter2_NoData_intAndExc_pop"
@@ -161,7 +162,7 @@
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -178,8 +179,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cSelector2_1b_intAndExc_pop",
-      "summary": "SP dispatch selector that forwards the DR pop event to SP and generates a feedback event to the DR merge path.",
-      "explanation": "Receives w_drive1 from the splitter, outputs o_driveToSP as the primary dispatch, and outputs w_drive2 as a feedback event that merges with i_driveFromTop via u0_cMutexMerge2_NoData to drive DR.",
+      "summary": "在SP更新路径上，将来自Splitter的请求事件路由到SP输出，并将返回事件反馈给MutexMerge。",
+      "explanation": "该组件是SelSplit家族的1位选择器，接收w_drive1事件，输出o_driveToSP（驱动SP更新）和w_drive2（返回事件，与Top请求合并后驱动DR）。",
       "signals": [
         "w_drive1",
         "o_driveToSP",
@@ -191,7 +192,7 @@
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -208,8 +209,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cSelector2_73b_intAndExc_pop",
-      "summary": "WGRF/WPSR dispatch selector that forwards the delayed DR pop event to both WGRF and WPSR with associated data payloads.",
-      "explanation": "Receives w_drive0Delay1 after two delay stages, outputs o_driveToWGRF with o_dataToWGRF_72 and o_driveToWPSR with o_dataToWPSR_32. Free signals from WGRF and WPSR return to this component.",
+      "summary": "在WGRF/WPSR数据路径上，将延迟后的请求事件路由到WGRF和WPSR，并携带相应的数据负载。",
+      "explanation": "该组件是SelSplit家族的73位选择器，接收延迟后的w_drive0Delay1事件，输出o_driveToWGRF（携带72位数据o_dataToWGRF_72）和o_driveToWPSR（携带32位数据o_dataToWPSR_32）。",
       "signals": [
         "w_drive0Delay1",
         "o_driveToWGRF",
@@ -223,7 +224,7 @@
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -240,21 +241,21 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cMutexMerge2_NoData_intAndExc_pop",
-      "summary": "Mutex merge that arbitrates between Top pop requests and SP feedback events to drive DR.",
-      "explanation": "Receives i_driveFromTop and w_drive2 (feedback from SP dispatch), outputs o_driveToDR. Its o_free0 output propagates to Top as o_freeToTop. This ensures mutual exclusion between external Top requests and internal SP feedback.",
+      "summary": "互斥合并来自Top的直接请求和SP路径的返回事件，确保两者不会同时驱动DR，并将合并后的请求输出到DR。",
+      "explanation": "该组件是MutexMerge家族的无数据合并器，接收i_driveFromTop和w_drive2事件，输出o_driveToDR。它确保两个输入事件互斥，避免冲突。",
       "signals": [
         "i_driveFromTop",
         "w_drive2",
-        "o_driveToDR",
-        "o_freeToTop"
+        "o_driveToDR"
       ],
       "instances": [
         "u0_cMutexMerge2_NoData_intAndExc_pop"
       ],
       "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR",
         "flow_001_intAndExc_pop_i_driveFromTop"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -271,22 +272,23 @@
         "module": "intAndExc_pop"
       },
       "subject": "w_fire0",
-      "summary": "Combined fire signal that ORs Top pop request with SP feedback event to drive the DR merge path.",
-      "explanation": "Assign index 0 combines i_driveFromTop and w_drive2 into w_fire0, which likely feeds into u0_cMutexMerge2_NoData to trigger DR dispatch.",
+      "summary": "生成驱动DR的触发信号，由Top直接请求或SP路径返回事件触发。",
+      "explanation": "assign w_fire0 = i_driveFromTop | w_drive2; 该信号是MutexMerge的输入事件之一，控制DR地址的输出时机。",
       "signals": [
+        "w_fire0",
         "i_driveFromTop",
-        "w_drive2",
-        "w_fire0"
+        "w_drive2"
       ],
       "related_assignments": [
-        "assign 0"
+        "0"
       ],
       "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR",
         "flow_001_intAndExc_pop_i_driveFromTop"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
@@ -300,31 +302,28 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "subject": "o_addrToDR_32",
-      "summary": "Address calculation for DR access, selecting from four SP-relative offsets based on r_outNum_2 state.",
-      "explanation": "Assign index 5 computes DR address as i_SP_32 + {0,8,16,24} selected by r_outNum_2. This suggests a state machine that tracks which of four exception/interrupt slots is being popped.",
+      "subject": "w_addrToDR0_32, w_addrToDR1_32, w_addrToDR2_32, w_addrToDR3_32",
+      "summary": "基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。",
+      "explanation": "这些assign语句将输入i_SP_32加上固定偏移量，生成四个候选地址，用于后续多路选择。",
       "signals": [
-        "i_SP_32",
-        "r_outNum_2",
-        "o_addrToDR_32",
         "w_addrToDR0_32",
         "w_addrToDR1_32",
         "w_addrToDR2_32",
-        "w_addrToDR3_32"
+        "w_addrToDR3_32",
+        "i_SP_32"
       ],
       "related_assignments": [
-        "assign 1",
-        "assign 2",
-        "assign 3",
-        "assign 4",
-        "assign 5"
+        "1",
+        "2",
+        "3",
+        "4"
       ],
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
@@ -338,20 +337,24 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "subject": "o_SP_32",
-      "summary": "Stack pointer update that increments by 32 for each pop operation.",
-      "explanation": "Assign index 9 computes o_SP_32 = i_SP_32 + 32, indicating that each pop consumes 32 bytes of stack space (four 8-byte slots).",
+      "subject": "o_addrToDR_32",
+      "summary": "根据内部状态r_outNum_2从四个候选地址中选择一个输出到DR，实现出栈地址的多路选择。",
+      "explanation": "assign o_addrToDR_32 = (r_outNum_2 == 2'b00)? w_addrToDR0_32: (r_outNum_2 == 2'b01)? w_addrToDR1_32: (r_outNum_2 == 2'b10)? w_addrToDR2_32: w_addrToDR3_32; 该选择器基于出栈序号决定读取哪个地址。",
       "signals": [
-        "i_SP_32",
-        "o_SP_32"
+        "o_addrToDR_32",
+        "r_outNum_2",
+        "w_addrToDR0_32",
+        "w_addrToDR1_32",
+        "w_addrToDR2_32",
+        "w_addrToDR3_32"
       ],
       "related_assignments": [
-        "assign 9"
+        "5"
       ],
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -362,21 +365,58 @@
       "id": "semantic:module:intAndExc_pop:assignment_interpretation:003"
     },
     {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc_pop"
+      },
+      "subject": "o_SP_32",
+      "summary": "更新后的栈指针值，为当前SP值加32，表示出栈操作后栈顶指针的上移。",
+      "explanation": "assign o_SP_32 = i_SP_32 + 32; 该输出驱动到SP单元，用于更新栈指针。",
+      "signals": [
+        "o_SP_32",
+        "i_SP_32"
+      ],
+      "related_assignments": [
+        "9"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+        }
+      ],
+      "id": "semantic:module:intAndExc_pop:assignment_interpretation:004"
+    },
+    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "DR pop request (i_driveFromDR) triggers address output (o_addrToDR_32) and returns free (o_freeToDR) after completion.",
-      "subject": "DR pop event-payload-free contract",
-      "explanation": "The contract pairs i_driveFromDR with o_freeToDR and o_addrToDR_32 as payload. The address is derived from SP with slot selection, indicating DR reads exception data from stack.",
+      "summary": "每个输出驱动事件（o_driveTo*）都配有一个对应的输入自由信号（i_freeFrom*），构成请求-确认握手，确保目标单元完成操作后释放资源。",
+      "subject": "驱动-自由握手协议",
+      "explanation": "事件输出与自由输入成对出现：o_driveToDR/i_freeFromDR, o_driveToSP/i_freeFromSP, o_driveToWGRF/i_freeFromWGRF, o_driveToWPSR/i_freeFromWPSR。自由信号用于流控，防止请求溢出。",
       "signals": [
-        "i_driveFromDR",
-        "o_freeToDR",
-        "o_addrToDR_32"
+        "o_driveToDR",
+        "i_freeFromDR",
+        "o_driveToSP",
+        "i_freeFromSP",
+        "o_driveToWGRF",
+        "i_freeFromWGRF",
+        "o_driveToWPSR",
+        "i_freeFromWPSR"
       ],
       "related_payload": [
-        "o_addrToDR_32"
+        "o_addrToDR_32",
+        "o_SP_32",
+        "o_dataToWGRF_72",
+        "o_dataToWPSR_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -384,9 +424,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc_pop.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
         }
       ],
       "id": "semantic:module:intAndExc_pop:interface_intent:001"
@@ -397,16 +434,16 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "SP dispatch event (o_driveToSP) carries updated SP value (o_SP_32) and returns free (i_freeFromSP).",
-      "subject": "SP pop event-payload-free contract",
-      "explanation": "The contract pairs o_driveToSP with i_freeFromSP and o_SP_32 as payload. The SP update (i_SP_32 + 32) indicates stack growth for exception frame storage.",
+      "summary": "模块的两个输入驱动事件分别来自DR（数据读取器）和Top（顶层），代表两种不同的出栈触发源。",
+      "subject": "输入驱动事件源",
+      "explanation": "i_driveFromDR来自DR单元，可能表示数据读取完成后的出栈请求；i_driveFromTop来自顶层，可能表示外部中断或异常处理触发的出栈。两者通过MutexMerge互斥合并。",
       "signals": [
-        "o_driveToSP",
-        "i_freeFromSP",
-        "o_SP_32"
+        "i_driveFromDR",
+        "i_driveFromTop"
       ],
       "related_payload": [
-        "o_SP_32"
+        "i_DRdata_64",
+        "i_SP_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -414,72 +451,9 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/intAndExc_pop.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
         }
       ],
       "id": "semantic:module:intAndExc_pop:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc_pop"
-      },
-      "summary": "WGRF and WPSR dispatch events carry data payloads and return free signals after write completion.",
-      "subject": "WGRF/WPSR pop event-payload-free contracts",
-      "explanation": "o_driveToWGRF carries o_dataToWGRF_72 (72-bit data) and returns i_freeFromWGRF. o_driveToWPSR carries o_dataToWPSR_32 (32-bit data) and returns i_freeFromWPSR. These likely write exception context to register files.",
-      "signals": [
-        "o_driveToWGRF",
-        "o_driveToWPSR",
-        "i_freeFromWGRF",
-        "i_freeFromWPSR",
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32"
-      ],
-      "related_payload": [
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc_pop.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc_pop:interface_intent:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc_pop"
-      },
-      "summary": "Top pop request (i_driveFromTop) triggers DR dispatch and returns free (o_freeToTop) after completion.",
-      "subject": "Top pop event-free contract",
-      "explanation": "The contract pairs i_driveFromTop with o_freeToTop. No payload is associated, suggesting Top pop is a control-only request that triggers DR to read exception data.",
-      "signals": [
-        "i_driveFromTop",
-        "o_freeToTop"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc_pop.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc_pop:interface_intent:004"
     },
     {
       "claim_type": "documentation_focus",
@@ -487,16 +461,15 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "Manual should emphasize the four-slot pop mechanism, address calculation, and the two-phase DR pop flow (SP dispatch then WGRF/WPSR dispatch after delay).",
-      "subject": "Pop sequencing and slot management",
-      "explanation": "The DR pop flow splits into SP dispatch (immediate) and WGRF/WPSR dispatch (after two delay stages). The r_outNum_2 state selects which of four slots is being popped. The SP feedback path (w_drive2) ensures DR is driven after SP dispatch completes.",
+      "summary": "文档应重点描述出栈请求如何从输入事件分发到四个目标单元，以及地址和数据的生成逻辑。",
+      "subject": "出栈数据流与地址计算",
+      "explanation": "核心逻辑包括：SP偏移地址计算（+0/+8/+16/+24）、基于r_outNum_2的多路选择、SP值更新（+32）、以及WGRF/WPSR的数据路径。这些是理解模块功能的关键。",
       "signals": [
-        "i_driveFromDR",
-        "o_driveToSP",
-        "o_driveToWGRF",
-        "o_driveToWPSR",
         "o_addrToDR_32",
         "o_SP_32",
+        "o_dataToWGRF_72",
+        "o_dataToWPSR_32",
+        "i_SP_32",
         "r_outNum_2"
       ],
       "instances": [
@@ -509,9 +482,12 @@
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
         }
@@ -519,39 +495,14 @@
       "id": "semantic:module:intAndExc_pop:documentation_focus:001"
     },
     {
-      "claim_type": "source_review_request",
+      "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "reason": "The r_outNum_2 signal is referenced in address selection but its source (register/state machine) is not visible in the compact context. RTL source review needed to understand how this state is updated and reset.",
-      "subject": "r_outNum_2 state machine",
-      "needed_source_slice": "always block, register declarations",
-      "signals": [
-        "r_outNum_2"
-      ],
-      "related_flows": [
-        "flow_000_intAndExc_pop_i_driveFromDR"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc_pop:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc_pop"
-      },
-      "reason": "The delay chain (Delay0, Delay1) between splitter and WGRF/WPSR selector is referenced but its implementation (pipeline stages, reset behavior) is not detailed in the compact context.",
-      "subject": "Delay0 and Delay1 implementation",
-      "needed_source_slice": "instance connections, module declarations",
+      "summary": "文档应说明WGRF/WPSR路径上的两级延迟（Delay0和Delay1）的作用，可能用于等待数据就绪或对齐时序。",
+      "subject": "延迟链与数据路径同步",
+      "explanation": "来自Splitter的w_drive0经过Delay0和Delay1后生成w_drive0Delay1，才驱动到Selector2_73b。这种延迟可能用于等待DR数据（i_DRdata_64）到达或满足时序约束。",
       "signals": [
         "w_drive0",
         "w_drive0Delay",
@@ -566,7 +517,64 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+        }
+      ],
+      "id": "semantic:module:intAndExc_pop:documentation_focus:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc_pop"
+      },
+      "reason": "紧凑上下文未提供延迟链的详细实现（如延迟周期数、触发条件），无法确定其确切目的（数据同步、流水线平衡或时序调整）。",
+      "subject": "延迟链Delay0和Delay1",
+      "needed_source_slice": "always block, assign block",
+      "signals": [
+        "w_drive0",
+        "w_drive0Delay",
+        "w_drive0Delay1"
+      ],
+      "instances": [
+        "Delay0",
+        "Delay1"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+        }
+      ],
+      "id": "semantic:module:intAndExc_pop:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc_pop"
+      },
+      "reason": "紧凑上下文未提供r_outNum_2的赋值逻辑和更新条件，无法确定出栈序号的选择机制（如循环计数、基于数据内容或外部控制）。",
+      "subject": "r_outNum_2状态寄存器",
+      "needed_source_slice": "always block, assign block",
+      "signals": [
+        "r_outNum_2",
+        "o_addrToDR_32"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
@@ -580,22 +588,20 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "reason": "The data outputs o_dataToWGRF_72 and o_dataToWPSR_32 are connected from u0_cSelector2_73b but their source (internal registers, input data) is not visible in the compact context.",
-      "subject": "Data payload sources for WGRF and WPSR",
-      "needed_source_slice": "assign blocks, instance connections, data path",
+      "reason": "紧凑上下文未显示i_DRdata_64如何连接到内部组件或数据路径，无法确定其如何影响WGRF/WPSR的数据输出。",
+      "subject": "i_DRdata_64数据输入",
+      "needed_source_slice": "instance connections, assign block",
       "signals": [
+        "i_DRdata_64",
         "o_dataToWGRF_72",
         "o_dataToWPSR_32"
-      ],
-      "instances": [
-        "u0_cSelector2_73b_intAndExc_pop"
       ],
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "low",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"

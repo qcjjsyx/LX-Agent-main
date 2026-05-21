@@ -1,4 +1,5 @@
 # tools.py
+import os
 import subprocess
 import ast
 import sys
@@ -283,6 +284,17 @@ def run_skill_script(script_name, args, timeout=220):
     return output or "工具脚本执行完成。"
 
 
+def env_int(name, default):
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 # ====================== 工具 6：Parser Tool ======================
 def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl"):
     """
@@ -311,6 +323,7 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl"):
             "--rtl-inputs",
             rtl_inputs,
         ],
+        timeout=env_int("RTL_MANUAL_PARSER_TIMEOUT", 220),
     )
 
 
@@ -354,7 +367,9 @@ def run_knowledge_tool(
         if enrich_modules:
             args.extend(["--enrich-modules", enrich_modules])
 
-    return run_skill_script("run_knowledge_tool.py", args, timeout=700)
+    knowledge_timeout = env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 600)
+    wrapper_timeout = env_int("RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT", knowledge_timeout + 120)
+    return run_skill_script("run_knowledge_tool.py", args, timeout=wrapper_timeout)
 
 
 # ====================== 工具调度表 ======================

@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 17,
+    "count": 13,
     "by_type": {
       "assignment_interpretation": 2,
-      "component_role": 6,
+      "component_role": 3,
       "documentation_focus": 2,
-      "interface_intent": 3,
+      "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 2,
       "structural_responsibility": 1
@@ -64,9 +64,9 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "Central pipeline orchestration module that sequences instruction fetch, decode, execute, LSU, and writeback through a drive-event-based control network.",
+      "summary": "顶层CPU流水线集成模块，负责指令获取、译码、执行、访存、写回及异常/中断处理的完整流水线控制与数据通路整合。",
       "subject": "cpu_top_all",
-      "explanation": "The module integrates fetch, decoder, execute, LSU, launch, GRF, PRF, intAndExc, and wb instances, all connected via drive events and free signals. The three external drive inputs (i_dataRoutDriveToLsu_1, i_driveFromStart_1, i_drvFICache) initiate flows that propagate through SelSplit, MutexMerge, WaitMerge, and Fifo components to produce the two external drive outputs (o_drv2ICache, o_lsuDriveToDataRout_1). The module's role is to manage the pipeline's control flow, not to compute data.",
+      "explanation": "该模块集成了fetch、decoder、execute、lsu、launch、wb、grf、prf、intAndExc等核心流水线阶段实例，并通过大量SelSplit、MutexMerge、Fifo1、PmtFifo1等控制组件实现事件驱动的流水线级间同步与仲裁，是CPU核心流水线的顶层封装。",
       "signals": [
         "i_dataRoutDriveToLsu_1",
         "i_driveFromStart_1",
@@ -80,10 +80,10 @@
         "execute_inst",
         "lsu_inst",
         "launch_inst",
+        "wb_inst",
         "grf_inst",
         "prf_inst",
-        "intAndExc_inst",
-        "wb_inst"
+        "intAndExc_inst"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -95,16 +95,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "internal_event_flow"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:module_role:001"
@@ -115,27 +109,21 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "Manages the sequencing and arbitration of instruction processing stages using a drive-event handshake protocol, with free signals for resource release.",
-      "subject": "Pipeline Control Flow Management",
-      "explanation": "The module uses a network of SelSplit, MutexMerge, WaitMerge, and Fifo components to route drive events between pipeline stages. Drive events (e.g., w_decoderDrive_1, w_exeDrive_1, w_lsuDriveToLaunch_1) propagate through these components, which implement arbitration (MutexMerge), selection (SelSplit), and synchronization (WaitMerge). Free signals (e.g., o_freeToStart_1, o_lsuFreeToDataRout_1) indicate when a resource is available for reuse. This structure suggests a decoupled, event-driven pipeline control.",
+      "summary": "通过SelSplit、MutexMerge、Fifo1、PmtFifo1等组件族，实现流水线各阶段之间的事件驱动同步、路径选择、互斥合并和延迟缓冲，控制指令在流水线中的推进与释放。",
+      "subject": "流水线级间事件驱动同步与仲裁",
+      "explanation": "上下文显示大量SelSplit（17个实例）用于事件分发和路径选择，MutexMerge（7个实例）用于多源事件互斥合并，Fifo1（8个实例）和PmtFifo1（5个实例）用于事件缓冲和延迟，共同构成流水线级间的事件驱动控制网络。",
       "signals": [
-        "w_decoderDrive_1",
-        "w_exeDrive_1",
-        "w_lsuDriveToLaunch_1",
-        "o_freeToStart_1",
-        "o_lsuFreeToDataRout_1"
+        "w_driveToDec",
+        "w_driveToExeMer",
+        "w_driveToLaunchSele",
+        "w_drvFTop",
+        "w_exeDrive_1"
       ],
       "instances": [
-        "BranchMerge",
-        "launchMerge",
-        "exeMutexMerge",
-        "lsuMutexMerge",
-        "DRMutexMerge",
-        "fetchSele0",
-        "fetchSele1",
         "decoSplitter",
         "launchSele",
-        "exeSplitter",
+        "exeMutexMerge",
+        "BranchMerge",
         "exeWaitMerge"
       ],
       "related_flows": [
@@ -148,16 +136,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "component_families"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_component_connections"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:structural_responsibility:001"
@@ -168,44 +150,35 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "SelSplit Family (17 instances)",
-      "summary": "Routes a single input drive event to one of multiple output paths, implementing pipeline stage selection and branching.",
-      "explanation": "Instances like fetchSele0, decoSplitter, launchSele, exeSplitter, and lsuSplitter take a single drive event and direct it to one of two or three output paths. This enables conditional routing of control flow, e.g., directing a decoded instruction to the execute or LSU path. The family includes cSelector2_1b, cSelector3_2b, and cSplitter2_1b variants.",
+      "subject": "SelSplit组件族",
+      "summary": "流水线事件分发与路径选择器，将单个输入事件路由到一个或多个输出路径，实现指令在不同流水线阶段间的定向分发。",
+      "explanation": "17个SelSplit实例（如decoSplitter、launchSele、exeMutexSele）将上游事件分发到不同的下游处理路径，例如decoSplitter将译码事件分发到发射路径，exeMutexSele将执行完成事件分发到访存或互斥合并路径。",
       "signals": [
         "w_decoderDrive_1",
-        "w_exeDrive2_1",
-        "w_lsuDriveToLaunch1_1"
+        "w_driveToExeSele1_1",
+        "w_driveToLaunchSele1"
       ],
       "instances": [
-        "fetchSele0",
-        "fetchSele1",
-        "outStackSele",
         "decoSplitter",
         "launchSele",
-        "exeSplitter",
-        "launchWaySele",
         "exeMutexSele",
-        "lsuMutexSele",
-        "lsuSplitter",
-        "u1_cSelector2_1b_xyp",
-        "u2_cSelector2_1b_xyp"
+        "fetchSele0",
+        "fetchSele1"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
         "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "component_families"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:component_role:001"
@@ -216,20 +189,16 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "MutexMerge Family (7 instances)",
-      "summary": "Arbitrates between multiple input drive events, ensuring only one proceeds at a time to a shared resource.",
-      "explanation": "Instances like BranchMerge, launchMerge, exeMutexMerge, and lsuMutexMerge merge multiple drive event streams into a single output. This is used to serialize access to shared pipeline stages, such as the fetch stage (BranchMerge) or the execute stage (exeMutexMerge). The family includes cMutexMerge4_32b and cMutexMerge2_1b variants.",
+      "subject": "MutexMerge组件族",
+      "summary": "多源事件互斥合并器，确保来自不同路径的事件在合并时不会冲突，用于异常/中断路径合并、数据返回路径合并等关键同步点。",
+      "explanation": "7个MutexMerge实例（如BranchMerge、DRMutexMerge、u1_cMutexMerge2_36b_xyp）将多个可能同时到达的事件源互斥合并为单一事件流，例如BranchMerge合并来自写回、异常和启动的取指请求，DRMutexMerge合并中断和访存的数据返回。",
       "signals": [
         "w_drvFTop",
-        "w_driveToLaunchSele",
-        "w_driveToExeSele_1",
-        "w_lsuDriveToSele"
+        "w_lsuDriveToDR_1",
+        "w_exeDriveToExcp_1"
       ],
       "instances": [
         "BranchMerge",
-        "launchMerge",
-        "exeMutexMerge",
-        "lsuMutexMerge",
         "DRMutexMerge",
         "u1_cMutexMerge2_36b_xyp",
         "u2_cMutexMerge2_36b_xyp"
@@ -239,17 +208,15 @@
         "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "component_families"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:component_role:002"
@@ -260,21 +227,19 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "Fifo1 Family (8 instances)",
-      "summary": "Provides pipeline buffering and delay for drive events, enabling decoupling between stages.",
-      "explanation": "Instances like excfifo, launchDelayFifo1, and lsuDriveToLaunchDelayFifo1 buffer drive events to handle timing mismatches between pipeline stages. They are used to delay events (e.g., w_exeByPathDriveToLaunch_1) or to synchronize exception handling (e.g., ifHelpDecExcDelayFifo).",
+      "subject": "Fifo1/PmtFifo1组件族",
+      "summary": "事件缓冲与延迟单元，用于流水线级间的事件暂存、延迟和重排序，处理流水线背压和时序对齐。",
+      "explanation": "8个Fifo1和5个PmtFifo1实例用于缓冲事件流，例如ifHelpDecExcDelayFifo缓冲取指到译码的异常事件，exeByPathPmtfifo缓冲执行结果到发射的路径事件，lsuDriveToLaunchDelayFifo1缓冲访存到发射的完成事件。",
       "signals": [
-        "w_exeByPathDriveToLaunch1_1",
-        "w_lsuDriveToLaunchDelay_1",
-        "w_drv2Excp_2"
+        "w_drv2Excp_2Tmp",
+        "w_ExeDriveToLunch_1",
+        "w_lsuDriveToLaunch_1"
       ],
       "instances": [
-        "excfifo",
-        "exeWaitMergeDelayFifo1",
         "ifHelpDecExcDelayFifo",
-        "launchDelayFifo1",
-        "lsuDelayFifo",
-        "lsuDriveToLaunchDelayFifo1"
+        "exeByPathPmtfifo",
+        "lsuDriveToLaunchDelayFifo1",
+        "excfifo"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -286,145 +251,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "component_families"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "subject": "execute_inst",
-      "summary": "Core execution unit that processes instructions from the launch stage and drives results to LSU, GRF, and exception handling.",
-      "explanation": "The execute_inst receives drive events from the launch stage (w_launchDriveToExe) and LSU (w_LsuDriveToExe_1). It produces multiple output drive events: w_exeByPathDriveToLaunch_1 (to launch), w_exeDriveToExcMutexMerge_1 (to exception), w_exeDriveToRGrf_1 (to GRF read), and w_executeDriveToLsu_1 (to LSU). It also outputs data payloads (w_exeToExcpData_36, w_exeToLaunchData_96, w_executeDataToLsu_163).",
-      "signals": [
-        "w_launchDriveToExe",
-        "w_LsuDriveToExe_1",
-        "w_exeByPathDriveToLaunch_1",
-        "w_exeDriveToExcMutexMerge_1",
-        "w_exeDriveToRGrf_1",
-        "w_executeDriveToLsu_1"
-      ],
-      "instances": [
-        "exeWaitMerge",
-        "exeSplitter",
-        "exeByPathPmtfifo",
-        "exeMutexSele",
-        "exeMutexMerge"
-      ],
-      "related_flows": [
-        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
-        "flow_001_cpu_top_all_i_drvFICache",
-        "flow_002_cpu_top_all_i_driveFromStart_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "subject": "lsu_inst",
-      "summary": "Load/store unit that manages data memory access, coordinating with the data routing interface and the execute stage.",
-      "explanation": "The lsu_inst receives drive events from the execute stage (w_driveToLsu), the data routing interface (w_dataRoutDriveToLsu_1), the GRF (w_grfDriveToLsu_1), and the icache (w_icacheDriveToLsu_1). It produces output drive events to the data routing interface (w_lsuDriveToDataRout_1), the launch stage (w_lsuDriveToLaunch_1), the GRF (w_lsuDriveToRGrf_1, w_lsuDriveToWGrf_1), the writeback stage (w_lsuDriveToWriteBack_1), and the exception handler (w_lsuDriveToExcMutexMerge_1). It also outputs data payloads (w_lsuToDataRoutData_104, w_lsuToLaunchData_64, etc.).",
-      "signals": [
-        "w_driveToLsu",
-        "w_dataRoutDriveToLsu_1",
-        "w_lsuDriveToDataRout_1",
-        "w_lsuDriveToLaunch_1",
-        "w_lsuDriveToWriteBack_1"
-      ],
-      "instances": [
-        "lsuSplitter",
-        "lsuByPathPmtfifo",
-        "lsuByWaySele0",
-        "lsuMutexSele",
-        "lsuMutexMerge",
-        "lsuDelayFifo"
-      ],
-      "related_flows": [
-        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
-        "flow_001_cpu_top_all_i_drvFICache",
-        "flow_002_cpu_top_all_i_driveFromStart_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:component_role:005"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "subject": "intAndExc_inst",
-      "summary": "Central exception and interrupt handler that aggregates exception events from decode, execute, LSU, and data routing, and drives GRF/PSR updates.",
-      "explanation": "The intAndExc_inst receives exception drive events from the decode stage (w_drv2Excp_2), execute stage (w_exeDriveToExcp_1), LSU stage (w_lsuDriveToExcp_1), and data routing (w_intDriveFromDR). It produces drive events to update the GRF (w_driveToRGRF_1, w_driveToWGRF_1) and PSR (w_driveToRPSR_1, w_driveToWPSR_1). It also outputs data to the data routing interface (w_intData_104).",
-      "signals": [
-        "w_drv2Excp_2",
-        "w_exeDriveToExcp_1",
-        "w_lsuDriveToExcp_1",
-        "w_intDriveFromDR",
-        "w_driveToRGRF_1",
-        "w_driveToWGRF_1"
-      ],
-      "instances": [
-        "ifHelpDecExcDelayFifo",
-        "u1_cMutexMerge2_36b_xyp",
-        "u2_cMutexMerge2_36b_xyp"
-      ],
-      "related_flows": [
-        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
-        "flow_001_cpu_top_all_i_drvFICache",
-        "flow_002_cpu_top_all_i_driveFromStart_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:component_role:006"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -432,17 +265,16 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "w_lsuPyPathPmtFire_1 (assign index 39)",
-      "summary": "Combines multiple drive events to trigger LSU path permit logic, indicating a dependency on execute, LSU, and exception paths.",
-      "explanation": "This assignment ORs w_lsuDriveToLaunchDelay2_1, w_ExeDriveToLunchDelay_1, and w_branchDri3. This suggests that the LSU path permit is asserted when any of these three events occur, potentially to synchronize or gate LSU operations.",
+      "subject": "w_exeTrueNum_4",
+      "summary": "执行异常有效指令数选择，根据异常标志决定实际有效的执行指令数量。",
+      "explanation": "该赋值根据w_exeExcRstFlag_1标志选择w_exeToExcpData_36的低4位或默认值4'b1111，用于指示在异常发生时实际完成的有效指令数，影响异常处理流程。",
       "signals": [
-        "w_lsuPyPathPmtFire_1",
-        "w_lsuDriveToLaunchDelay2_1",
-        "w_ExeDriveToLunchDelay_1",
-        "w_branchDri3"
+        "w_exeTrueNum_4",
+        "w_exeExcRstFlag_1",
+        "w_exeToExcpData_36"
       ],
       "related_assignments": [
-        "assign index 39"
+        "assign 20"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -450,12 +282,14 @@
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "assign_dependencies"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:assignment_interpretation:001"
@@ -466,16 +300,17 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "w_exeTrueNum_4 (assign index 20)",
-      "summary": "Selects the true execution number based on an exception reset flag, indicating conditional data path selection.",
-      "explanation": "This assignment uses a ternary operator to select between w_exeToExcpData_36[3:0] and 4'b1111 based on w_exeExcRstFlag_1. This suggests that the execution number is overridden during exception handling.",
+      "subject": "w_lsuPyPathPmtFire_1",
+      "summary": "访存路径发射触发信号，组合多个来源的发射请求以触发访存路径的发射。",
+      "explanation": "该赋值将访存路径发射延迟信号、执行路径发射延迟信号和分支异常信号进行逻辑或，生成访存路径的发射触发信号，用于协调不同来源的访存发射请求。",
       "signals": [
-        "w_exeTrueNum_4",
-        "w_exeExcRstFlag_1",
-        "w_exeToExcpData_36"
+        "w_lsuPyPathPmtFire_1",
+        "w_lsuDriveToLaunchDelay2_1",
+        "w_ExeDriveToLunchDelay_1",
+        "w_branchDri3"
       ],
       "related_assignments": [
-        "assign index 20"
+        "assign 39"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -483,12 +318,14 @@
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "assign_dependencies"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:assignment_interpretation:002"
@@ -499,28 +336,29 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "Start-of-pipeline handshake: i_driveFromStart_1 initiates a new instruction flow, and o_freeToStart_1 signals completion or resource availability.",
-      "subject": "i_driveFromStart_1 / o_freeToStart_1",
-      "explanation": "The event-payload contract associates i_driveFromStart_1 with payload i_startPc_32 and free signal o_freeToStart_1. This suggests a request-acknowledge protocol where the external start controller sends a start PC and the module returns a free signal when the pipeline is ready for the next instruction.",
+      "summary": "模块通过事件驱动接口接收外部启动、数据路由和缓存驱动请求，并输出缓存驱动和访存数据路由请求，实现与外部缓存和内存子系统的异步事件交互。",
+      "subject": "外部事件驱动接口",
+      "explanation": "事件输入（i_dataRoutDriveToLsu_1, i_driveFromStart_1, i_drvFICache）分别对应数据路由到访存、启动、缓存驱动，事件输出（o_drv2ICache, o_lsuDriveToDataRout_1）对应缓存驱动和访存数据路由，配合free信号形成握手协议。",
       "signals": [
+        "i_dataRoutDriveToLsu_1",
         "i_driveFromStart_1",
-        "i_startPc_32",
-        "o_freeToStart_1"
+        "i_drvFICache",
+        "o_drv2ICache",
+        "o_lsuDriveToDataRout_1"
       ],
       "related_payload": [
-        "i_startPc_32"
+        "i_startPc_32",
+        "o_lsuToDataRoutData_105"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "event_payload_contracts"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "interface"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:interface_intent:001"
@@ -531,15 +369,19 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "LSU-to-data-routing handshake: o_lsuDriveToDataRout_1 sends LSU results to the data routing interface, and i_lsuFreeFromDataRout_1 indicates the data routing interface is ready for the next transfer.",
-      "subject": "o_lsuDriveToDataRout_1 / i_lsuFreeFromDataRout_1",
-      "explanation": "The event-payload contract associates o_lsuDriveToDataRout_1 with payload o_lsuToDataRoutData_105 and free signal i_lsuFreeFromDataRout_1. This suggests a request-acknowledge protocol for data memory access.",
+      "summary": "事件驱动接口伴随释放信号形成请求-完成握手，用于外部模块与CPU流水线之间的同步控制。",
+      "subject": "事件-释放握手协议",
+      "explanation": "事件输入i_dataRoutDriveToLsu_1对应释放输出o_lsuFreeToDataRout_1，事件输入i_driveFromStart_1对应释放输出o_freeToStart_1，事件输出o_lsuDriveToDataRout_1对应释放输入i_lsuFreeFromDataRout_1，形成完整的请求-释放握手。",
       "signals": [
+        "i_dataRoutDriveToLsu_1",
+        "o_lsuFreeToDataRout_1",
+        "i_driveFromStart_1",
+        "o_freeToStart_1",
         "o_lsuDriveToDataRout_1",
-        "o_lsuToDataRoutData_105",
         "i_lsuFreeFromDataRout_1"
       ],
       "related_payload": [
+        "i_startPc_32",
         "o_lsuToDataRoutData_105"
       ],
       "doc_priority": "primary",
@@ -547,43 +389,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "event_payload_contracts"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "interface"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "summary": "Data-routing-to-LSU handshake: i_dataRoutDriveToLsu_1 signals incoming data from the data routing interface, and o_lsuFreeToDataRout_1 indicates the LSU is ready for the next transfer.",
-      "subject": "i_dataRoutDriveToLsu_1 / o_lsuFreeToDataRout_1",
-      "explanation": "The event-payload contract associates i_dataRoutDriveToLsu_1 with no payload and free signal o_lsuFreeToDataRout_1. This suggests a simple flow control handshake for data memory read responses.",
-      "signals": [
-        "i_dataRoutDriveToLsu_1",
-        "o_lsuFreeToDataRout_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "event_payload_contracts"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "interface"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:interface_intent:003"
     },
     {
       "claim_type": "documentation_focus",
@@ -591,28 +403,23 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "The manual should emphasize the event-driven pipeline control architecture, explaining how drive events, free signals, and component families (SelSplit, MutexMerge, WaitMerge, Fifo) orchestrate instruction processing.",
-      "subject": "Pipeline Control Flow Architecture",
-      "explanation": "The module's primary role is control flow management, not data computation. The documentation should focus on the handshake protocols, arbitration mechanisms, and pipeline stage sequencing. The data paths (payloads) are secondary and should be documented as attributes of the control flows.",
+      "summary": "文档应重点描述SelSplit、MutexMerge、Fifo1、PmtFifo1等组件族构成的流水线级间事件驱动同步与仲裁网络，而非重复端口列表。",
+      "subject": "流水线级间事件驱动控制网络",
+      "explanation": "上下文显示该模块的核心复杂性在于大量控制组件构成的流水线控制网络，理解这些组件的连接和交互是理解模块行为的关键，端口列表相对简单。",
       "signals": [
-        "i_dataRoutDriveToLsu_1",
-        "i_driveFromStart_1",
-        "i_drvFICache",
-        "o_drv2ICache",
-        "o_lsuDriveToDataRout_1",
-        "o_freeToStart_1",
-        "o_lsuFreeToDataRout_1"
+        "w_driveToDec",
+        "w_driveToExeMer",
+        "w_driveToLaunchSele",
+        "w_drvFTop",
+        "w_exeDrive_1"
       ],
       "instances": [
-        "BranchMerge",
-        "launchMerge",
-        "exeMutexMerge",
-        "lsuMutexMerge",
-        "fetchSele0",
         "decoSplitter",
         "launchSele",
-        "exeSplitter",
-        "exeWaitMerge"
+        "exeMutexMerge",
+        "BranchMerge",
+        "exeWaitMerge",
+        "icachecArbMerge"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -624,16 +431,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "component_families"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_component_connections"
-        },
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "event_payload_contracts"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:documentation_focus:001"
@@ -644,20 +445,21 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "The manual should detail how exception events from decode, execute, and LSU stages are merged and routed to the intAndExc_inst, and how this affects pipeline state.",
-      "subject": "Exception and Interrupt Handling Path",
-      "explanation": "The module has a dedicated exception handling path using u1_cMutexMerge2_36b_xyp and u2_cMutexMerge2_36b_xyp to merge exception events from execute and LSU, respectively. The intAndExc_inst then drives GRF and PSR updates. This path is critical for correct pipeline behavior.",
+      "summary": "文档应强调异常和中断事件在流水线中的传播路径，包括从取指、译码、执行、访存到异常处理模块的完整流程。",
+      "subject": "异常与中断处理路径",
+      "explanation": "上下文显示异常事件通过excfifo、ifHelpDecExcDelayFifo、u1_cMutexMerge2_36b_xyp、u2_cMutexMerge2_36b_xyp等组件从不同流水线阶段汇聚到intAndExc_inst，形成完整的异常处理路径。",
       "signals": [
+        "w_drv2Excp_2Tmp",
         "w_drv2Excp_2",
         "w_exeDriveToExcp_1",
-        "w_lsuDriveToExcp_1",
-        "w_intDriveFromDR"
+        "w_lsuDriveToExcp_1"
       ],
       "instances": [
-        "intAndExc_inst",
+        "excfifo",
         "ifHelpDecExcDelayFifo",
         "u1_cMutexMerge2_36b_xyp",
-        "u2_cMutexMerge2_36b_xyp"
+        "u2_cMutexMerge2_36b_xyp",
+        "intAndExc_inst"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -669,12 +471,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_instances"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
         },
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "key_component_connections"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:documentation_focus:002"
@@ -685,16 +485,16 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "reason": "The compact context does not provide the full RTL source for assignments. The ternary operator in assign index 20 (w_exeTrueNum_4) suggests conditional data path selection, but the exact condition and data path semantics are unclear without the RTL source.",
-      "subject": "Assignments with conditional logic (assign index 20)",
-      "needed_source_slice": "assign block",
+      "reason": "上下文仅提供了事件和释放信号的对应关系，但未提供握手协议的具体时序和条件，需要查看RTL源文件中的always块或assign块以确认握手逻辑。",
+      "subject": "事件-释放握手协议的具体实现",
+      "needed_source_slice": "always block, assign block",
       "signals": [
-        "w_exeTrueNum_4",
-        "w_exeExcRstFlag_1",
-        "w_exeToExcpData_36"
-      ],
-      "instances": [
-        "execute_inst"
+        "i_dataRoutDriveToLsu_1",
+        "o_lsuFreeToDataRout_1",
+        "i_driveFromStart_1",
+        "o_freeToStart_1",
+        "o_lsuDriveToDataRout_1",
+        "i_lsuFreeFromDataRout_1"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -706,8 +506,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "assign_dependencies"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:source_review_request:001"
@@ -718,24 +520,37 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "reason": "The event-payload contracts for these inputs have low confidence and no associated payloads. The RTL source is needed to determine if these events carry implicit data or are purely control signals.",
-      "subject": "Event-payload contracts for i_dataRoutDriveToLsu_1 and i_drvFICache",
-      "needed_source_slice": "module declaration, always block",
+      "reason": "上下文中的内部事件流被截断（step_count=48, truncated=true），无法获取完整的事件传播路径和条件，需要查看RTL源文件中的always块或assign块以确认事件流的具体实现。",
+      "subject": "内部事件流的具体时序和条件",
+      "needed_source_slice": "always block, assign block",
       "signals": [
-        "i_dataRoutDriveToLsu_1",
-        "i_drvFICache"
+        "w_driveToDec",
+        "w_driveToExeMer",
+        "w_driveToLaunchSele",
+        "w_drvFTop",
+        "w_exeDrive_1"
+      ],
+      "instances": [
+        "decoSplitter",
+        "launchSele",
+        "exeMutexMerge",
+        "BranchMerge",
+        "exeWaitMerge"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
-        "flow_001_cpu_top_all_i_drvFICache"
+        "flow_001_cpu_top_all_i_drvFICache",
+        "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json",
-          "path": "event_payload_contracts"
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:module:cpu_top_all:source_review_request:002"

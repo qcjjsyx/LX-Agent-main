@@ -47,7 +47,7 @@
     }
   ],
   "claim_summary": {
-    "count": 8,
+    "count": 7,
     "by_type": {
       "assignment_interpretation": 1,
       "completion_backpressure": 1,
@@ -55,7 +55,7 @@
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 2
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -66,9 +66,9 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "Single-stage writeback drive event from Wishbone interface through a dedicated FIFO stage to the writeback output.",
+      "summary": "写回阶段事件驱动流，通过单个Fifo1实例将外部写请求事件从模块输入转发到模块输出",
       "subject": "flow_003_grf_i_driveFromWb_1",
-      "explanation": "This flow represents a direct, unbranched event path where an incoming Wishbone drive event is buffered by a single FIFO stage (cFifo1_4) before being emitted as the writeback drive output. The flow has no branch or join points, indicating a simple pipeline stage for the writeback event.",
+      "explanation": "该流仅包含一个Fifo1实例cFifo1_4，输入i_driveFromWb_1直接驱动该实例，输出o_grfDriveToWb_1由该实例驱动，无分支或合并点，表明这是一个简单的直通事件管道",
       "signals": [
         "i_driveFromWb_1",
         "o_grfDriveToWb_1"
@@ -84,10 +84,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "instances.connections",
+          "path": "modules/grf.json"
         },
         {
-          "source": "transparent_flows"
+          "source": "transparent_flows",
+          "path": "modules/grf.json"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:flow_intent:001"
@@ -100,8 +102,8 @@
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
       "subject": "cFifo1_4",
-      "summary": "Single-entry FIFO stage that buffers and potentially gates the writeback drive event propagation.",
-      "explanation": "cFifo1_4 acts as a pipeline register or synchronization stage between the incoming Wishbone drive event and the output writeback drive. As a fifo_stage, it may introduce backpressure or gating based on its internal state (full/empty), but the exact gating conditions are not specified in the supplied context.",
+      "summary": "事件缓冲与转发级，可能实现背压或同步",
+      "explanation": "作为Fifo1系列实例，cFifo1_4接收输入事件i_driveFromWb_1并产生输出事件o_grfDriveToWb_1，其内部可能包含存储或握手逻辑，但当前上下文未提供详细实现",
       "signals": [
         "i_driveFromWb_1",
         "o_grfDriveToWb_1"
@@ -109,15 +111,16 @@
       "instances": [
         "cFifo1_4"
       ],
+      "related_assignments": [
+        "11"
+      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
+          "source": "instances.connections",
+          "path": "modules/grf.json"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:component_role:001"
@@ -130,8 +133,8 @@
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
       "subject": "o_grfDataToWb_64",
-      "summary": "Output payload data assignment derived from internal register r_rsValue_32, not directly from the FIFO stage.",
-      "explanation": "Assignment 11 shows that the output data payload (o_grfDataToWb_64) is constructed from bits of r_rsValue_32, not from the FIFO output. This indicates that the data path is decoupled from the event drive path; the FIFO stage handles only the event control, while the data payload is sourced from a separate register.",
+      "summary": "输出数据由内部寄存器r_rsValue_32的部分位拼接而成",
+      "explanation": "赋值11将r_rsValue_32[7]和[6]拼接为o_grfDataToWb_64，表明输出数据并非直接来自输入payload，而是经过内部处理后的结果，与事件流并行",
       "signals": [
         "o_grfDataToWb_64",
         "r_rsValue_32"
@@ -140,14 +143,12 @@
         "11"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_module.assignments"
-        },
-        {
-          "source": "parser_module.flow_graph.assignment_dependencies"
+          "source": "assignment_facts",
+          "path": "modules/grf.json"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:assignment_interpretation:001"
@@ -159,14 +160,13 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "Event drive and data payload are loosely coupled; data is sourced from a register, not directly from the FIFO.",
-      "subject": "i_driveFromWb_1 to o_grfDataToWb_64",
-      "explanation": "The event drive flow (i_driveFromWb_1 -> cFifo1_4 -> o_grfDriveToWb_1) is separate from the data payload path. The output data (o_grfDataToWb_64) is derived from r_rsValue_32, which is likely updated by a different flow or register write. This suggests the FIFO stage synchronizes the event timing, while the data is prepared independently.",
+      "summary": "输入payload与事件流关联，但输出数据独立于输入payload",
+      "subject": "i_wbAddr_8与i_wbDataToGrf_64",
+      "explanation": "输入事件i_driveFromWb_1携带地址i_wbAddr_8和数据i_wbDataToGrf_64，但输出数据o_grfDataToWb_64来自内部寄存器r_rsValue_32，表明该流可能用于触发内部状态更新而非直接转发数据",
       "signals": [
-        "i_driveFromWb_1",
-        "o_grfDriveToWb_1",
-        "o_grfDataToWb_64",
-        "r_rsValue_32"
+        "i_wbAddr_8",
+        "i_wbDataToGrf_64",
+        "o_grfDataToWb_64"
       ],
       "related_payload": [
         "i_wbAddr_8",
@@ -176,18 +176,17 @@
       "related_assignments": [
         "11"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "interface.event_ports",
+          "path": "modules/grf.json"
         },
         {
-          "source": "interface.data_ports"
-        },
-        {
-          "source": "parser_module.assignments"
+          "source": "interface.data_ports",
+          "path": "modules/grf.json"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:data_control_effect:001"
@@ -199,9 +198,9 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "Free/backpressure signals exist for both ends of the flow but their relationship to the FIFO stage is not specified.",
-      "subject": "o_grfFreeToWb_1 and i_grfFreeFromWb_1",
-      "explanation": "The interface payload contracts define free signals (o_grfFreeToWb_1 for input, i_grfFreeFromWb_1 for output), but the supplied context does not show how these connect to cFifo1_4 or whether the FIFO stage uses them for backpressure. The FIFO may generate or consume these signals, but this cannot be confirmed from the given evidence.",
+      "summary": "存在自由信号但未在流步骤中体现，可能用于背压控制",
+      "subject": "o_grfFreeToWb_1与i_grfFreeFromWb_1",
+      "explanation": "输入事件有自由信号o_grfFreeToWb_1，输出事件有自由信号i_grfFreeFromWb_1，但当前流上下文未包含这些信号与cFifo1_4的连接，无法确认背压机制",
       "signals": [
         "o_grfFreeToWb_1",
         "i_grfFreeFromWb_1"
@@ -214,10 +213,8 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports"
-        },
-        {
-          "source": "interface.data_ports"
+          "source": "interface.event_ports",
+          "path": "modules/grf.json"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:completion_backpressure:001"
@@ -229,9 +226,9 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "Emphasize the single-stage FIFO buffering of the writeback drive event and the decoupled data payload path.",
-      "subject": "flow_003_grf_i_driveFromWb_1 manual",
-      "explanation": "The manual should clearly describe that this flow is a simple event pipeline with no branching, where the FIFO stage (cFifo1_4) provides event synchronization. It should also note that the output data payload (o_grfDataToWb_64) is not directly driven by this flow but comes from a separate register (r_rsValue_32), indicating a split between control and data paths.",
+      "summary": "最终手册应强调事件驱动流与数据路径的分离，以及Fifo1实例的缓冲角色",
+      "subject": "事件流与数据流的解耦",
+      "explanation": "该流中事件通过cFifo1_4直通，而输出数据来自内部寄存器，表明写回操作可能涉及内部状态更新，而非简单数据转发",
       "signals": [
         "i_driveFromWb_1",
         "o_grfDriveToWb_1",
@@ -248,13 +245,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "transparent_flows",
+          "path": "modules/grf.json"
         },
         {
-          "source": "transparent_flows"
-        },
-        {
-          "source": "parser_module.assignments"
+          "source": "assignment_facts",
+          "path": "modules/grf.json"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:documentation_focus:001"
@@ -266,65 +262,37 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "reason": "The FIFO stage may gate event propagation, but the exact conditions (full/empty, free signal connections) are not provided in the compact context.",
-      "subject": "cFifo1_4 backpressure and gating behavior",
-      "needed_source_slice": "always block or assign statements for cFifo1_4 instance connections, especially free/backpressure signals",
+      "reason": "当前上下文未提供Fifo1实例的内部逻辑，无法确认缓冲深度、握手协议或背压机制",
+      "subject": "cFifo1_4内部实现",
+      "needed_source_slice": "always block或assign block描述cFifo1_4的输入输出关系",
       "signals": [
+        "i_driveFromWb_1",
+        "o_grfDriveToWb_1",
         "o_grfFreeToWb_1",
         "i_grfFreeFromWb_1"
       ],
       "instances": [
         "cFifo1_4"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        },
-        {
-          "source": "interface.event_ports"
-        }
-      ],
-      "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "grf",
-        "flow_id": "flow_003_grf_i_driveFromWb_1"
-      },
-      "reason": "The output data payload depends on r_rsValue_32, but the context does not show how this register is written or updated relative to the drive event.",
-      "subject": "r_rsValue_32 update mechanism",
-      "needed_source_slice": "always blocks or assignments that write to r_rsValue_32",
-      "signals": [
-        "r_rsValue_32",
-        "o_grfDataToWb_64"
-      ],
       "related_assignments": [
         "11"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_module.assignments"
+          "source": "instances.connections",
+          "path": "modules/grf.json"
         }
       ],
-      "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:source_review_request:002"
+      "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "FIFO stage internal behavior",
-      "reason": "No evidence of cFifo1_4 internal state machine, full/empty flags, or backpressure signal connections."
-    },
-    {
-      "field": "r_rsValue_32 source",
-      "reason": "No evidence of how r_rsValue_32 is updated or its relationship to the input payloads (i_wbAddr_8, i_wbDataToGrf_64)."
+      "field": "背压信号连接",
+      "reason": "自由信号o_grfFreeToWb_1和i_grfFreeFromWb_1未出现在流步骤或组件连接中，无法确定其与cFifo1_4的关系"
     }
   ]
 }

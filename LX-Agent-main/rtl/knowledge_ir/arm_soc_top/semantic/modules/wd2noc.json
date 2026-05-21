@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 12,
+    "count": 13,
     "by_type": {
       "assignment_interpretation": 3,
       "component_role": 2,
       "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 2,
+      "source_review_request": 3,
       "structural_responsibility": 1
     }
   },
@@ -64,16 +64,18 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "Watchdog-to-NoC bridge that serializes watchdog events through a 7-stage FIFO pipeline for NoC transport.",
+      "summary": "看门狗事件到NoC的同步与转发模块，将看门狗中断/复位事件通过7级Fifo1链传递到NoC域",
       "subject": "wd2noc",
-      "explanation": "The module connects a watchdog timer (utt_wd) to a Network-on-Chip interface via a chain of 7 cFifo1_pwm instances (fifo0-fifo6). The i_drive event with i_msg payload enters the pipeline, propagates through fifo0-fifo6, and exits as o_drive with o_msg payload. The i_free/o_free signals provide backpressure or flow control at the pipeline boundaries.",
+      "explanation": "模块接收i_drive事件及其关联的i_msg载荷，通过fifo0~fifo6组成的链式Fifo1结构逐级传递，最终输出o_drive和o_msg。i_free和o_free构成独立的释放信号路径，表明模块支持事件驱动的流控机制。utt_wd实例(cmsdk_apb_watchdog)提供看门狗核心功能，其输出wdogint和wdogres通过assign连接到o_INT和o_RES。",
       "signals": [
         "i_drive",
         "i_msg",
         "o_drive",
         "o_msg",
         "i_free",
-        "o_free"
+        "o_free",
+        "o_INT",
+        "o_RES"
       ],
       "instances": [
         "fifo0",
@@ -93,13 +95,25 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "interface.event_outputs"
         },
         {
-          "source": "rtl/rtl/IONet/Watchdog/wd2noc.v"
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "interface.data_outputs"
+        },
+        {
+          "source": "key_component_connections"
+        },
+        {
+          "source": "key_instances"
+        },
+        {
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:wd2noc:module_role:001"
@@ -110,27 +124,22 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "Converts a single watchdog event into a multi-stage pipeline for NoC timing and buffering.",
-      "subject": "Watchdog event serialization and pipeline",
-      "explanation": "The 7 FIFO instances form a daisy-chain where each fifo's o_driveNext drives the next fifo's i_drive. This pipeline likely handles clock domain crossing or rate adaptation between the watchdog clock (wd_clk) and the NoC clock domain. The i_free input to fifo6 and o_free output from fifo0 suggest backpressure flows from the NoC side.",
+      "summary": "通过7个Fifo1实例(fifo0~fifo6)构成串联链，将输入事件i_drive逐级传递到输出o_drive",
+      "subject": "事件链式转发",
+      "explanation": "每个Fifo1实例的o_driveNext连接到下一个Fifo1的i_drive，形成从fifo0到fifo6的流水线。fifo6的o_driveNext直接驱动模块输出o_drive。这种链式结构可能用于跨时钟域同步或事件延迟/展宽。",
       "signals": [
-        "o_driveNext[0]",
-        "o_driveNext[1]",
-        "o_driveNext[2]",
-        "o_driveNext[3]",
-        "o_driveNext[4]",
-        "o_driveNext[5]",
-        "i_free",
-        "o_free"
+        "i_drive",
+        "o_drive",
+        "o_driveNext[0:5]"
       ],
       "instances": [
-        "fif0",
-        "fif1",
-        "fif2",
-        "fif3",
-        "fif4",
-        "fif5",
-        "fif6"
+        "fifo0",
+        "fifo1",
+        "fifo2",
+        "fifo3",
+        "fifo4",
+        "fifo5",
+        "fifo6"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -140,10 +149,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:wd2noc:structural_responsibility:001"
@@ -154,21 +163,17 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "subject": "cFifo1_pwm instances (fifo0-fifo6)",
-      "summary": "1-deep pulse-width-modulated FIFOs forming a 7-stage event pipeline.",
-      "explanation": "Each cFifo1_pwm instance acts as a single-stage buffer that passes the drive event and its associated payload. The chain structure suggests these are not standard FIFOs but specialized cells for event propagation with possible width modulation or timing adjustment. The \"pwm\" suffix may indicate pulse-width modulation for NoC timing requirements.",
+      "subject": "utt_wd (cmsdk_apb_watchdog)",
+      "summary": "看门狗核心定时器，产生中断(wdogint)和复位(wdogres)信号",
+      "explanation": "utt_wd是ARM标准看门狗IP，接收rst_finish作为复位输入，wd_clk作为时钟。其输出wdogint和wdogres分别连接到模块的o_INT和o_RES输出，表明模块将看门狗事件转换为NoC域的中断和复位信号。",
       "signals": [
-        "o_driveNext[0:5]",
-        "i_drive (per instance)"
+        "rst_finish",
+        "wd_clk",
+        "wdogint",
+        "wdogres"
       ],
       "instances": [
-        "fif0",
-        "fif1",
-        "fif2",
-        "fif3",
-        "fif4",
-        "fif5",
-        "fif6"
+        "utt_wd"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -178,10 +183,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "key_instances"
+        },
+        {
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:wd2noc:component_role:001"
@@ -192,18 +200,25 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "subject": "utt_wd (cmsdk_apb_watchdog)",
-      "summary": "ARM CoreSight watchdog timer providing the watchdog event source.",
-      "explanation": "This is the actual watchdog timer module that generates the watchdog interrupt (wdogint) and reset signals. It connects to wd_clk and rst_finish, indicating it operates in the watchdog clock domain. The wdogint signal is assigned to o_INT, suggesting the module exports the raw watchdog interrupt.",
+      "subject": "Fifo1实例链 (fifo0~fifo6)",
+      "summary": "7级事件传递流水线，将输入事件i_drive逐级传递到输出o_drive",
+      "explanation": "每个Fifo1实例(cFifo1_pwm)通过o_driveNext驱动下一级i_drive，形成链式结构。所有实例共享Noc_RES复位信号。fifo0接收i_free作为释放信号，fifo6输出o_free，表明释放信号路径与事件路径方向相反。",
       "signals": [
-        "wdogint",
-        "wd_clk",
-        "rst_finish",
-        "PRESETn",
-        "WDOGCLK"
+        "i_drive",
+        "o_drive",
+        "o_driveNext[0:5]",
+        "i_free",
+        "o_free",
+        "Noc_RES"
       ],
       "instances": [
-        "utt_wd"
+        "fifo0",
+        "fifo1",
+        "fifo2",
+        "fifo3",
+        "fifo4",
+        "fifo5",
+        "fifo6"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -213,10 +228,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "key_instances"
+        },
+        {
+          "source": "component_families"
         }
       ],
       "id": "semantic:module:wd2noc:component_role:002"
@@ -228,24 +246,24 @@
         "module": "wd2noc"
       },
       "subject": "o_msg",
-      "summary": "Output message payload driven from registered internal signal.",
-      "explanation": "Assignment index 2 shows o_msg is directly assigned from o_msg_reg. This suggests the payload is registered before output, likely for timing closure or to match the pipeline delay.",
+      "summary": "将内部寄存器o_msg_reg直接赋值给输出o_msg",
+      "explanation": "assign o_msg = o_msg_reg表明o_msg是内部寄存器的直接输出，可能由看门狗事件处理逻辑更新。",
       "signals": [
         "o_msg",
         "o_msg_reg"
       ],
       "related_assignments": [
-        "assign 2"
+        "index 2"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:wd2noc:assignment_interpretation:001"
@@ -257,24 +275,27 @@
         "module": "wd2noc"
       },
       "subject": "o_INT",
-      "summary": "Watchdog interrupt output driven directly from wdogint.",
-      "explanation": "Assignment index 3 shows o_INT is a direct pass-through of the watchdog timer's interrupt signal. This provides a raw interrupt output separate from the NoC message path.",
+      "summary": "将看门狗中断信号wdogint直接赋值给输出o_INT",
+      "explanation": "assign o_INT = wdogint表明utt_wd产生的中断信号直接映射到模块输出，用于NoC域的中断处理。",
       "signals": [
         "o_INT",
         "wdogint"
       ],
       "related_assignments": [
-        "assign 3"
+        "index 3"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "assign_dependencies"
+        },
+        {
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:wd2noc:assignment_interpretation:002"
@@ -286,24 +307,24 @@
         "module": "wd2noc"
       },
       "subject": "o_RES",
-      "summary": "Watchdog reset output with active-low inversion.",
-      "explanation": "Assignment index 4 shows o_RES is the inverted version of o_res_sync2. This suggests a synchronized reset signal that is inverted to match the NoC reset polarity (likely active-low).",
+      "summary": "将同步后的复位信号取反后输出",
+      "explanation": "assign o_RES = ~o_res_sync2表明模块对看门狗复位信号进行两级同步后取反输出，可能用于NoC域的复位控制。",
       "signals": [
         "o_RES",
         "o_res_sync2"
       ],
       "related_assignments": [
-        "assign 4"
+        "index 4"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:wd2noc:assignment_interpretation:003"
@@ -314,9 +335,9 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "The i_drive/o_drive events carry a 51-bit message payload (i_msg/o_msg) through the pipeline.",
-      "subject": "Drive event with payload contract",
-      "explanation": "The event-payload contract pairs each drive event with a corresponding message signal. The 51-bit width suggests this carries watchdog status information (e.g., timeout count, interrupt flags, or system state) to the NoC.",
+      "summary": "i_drive事件与i_msg载荷绑定，o_drive事件与o_msg载荷绑定，构成事件驱动数据通道",
+      "subject": "事件-载荷绑定",
+      "explanation": "接口定义显示i_drive和i_msg同时输入，o_drive和o_msg同时输出，表明事件信号携带关联的载荷数据。这种设计支持看门狗事件(如超时计数)与状态信息一起传递到NoC。",
       "signals": [
         "i_drive",
         "i_msg",
@@ -328,14 +349,17 @@
         "o_msg"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "event_payload_contracts"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "interface.event_inputs"
+        },
+        {
+          "source": "interface.data_inputs"
         }
       ],
       "id": "semantic:module:wd2noc:interface_intent:001"
@@ -346,26 +370,29 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "i_free and o_free provide backpressure or flow control at the pipeline boundaries.",
-      "subject": "Free flow control signals",
-      "explanation": "i_free connects to fifo6.i_freeNext, suggesting it controls when the pipeline can accept new events from the NoC side. o_free comes from fifo0, indicating it signals when the pipeline has space for new watchdog events.",
+      "summary": "i_free和o_free构成与事件路径方向相反的释放信号通道",
+      "subject": "释放信号路径",
+      "explanation": "i_free从模块输入连接到fifo6的i_freeNext，o_free从fifo0输出到模块输出，表明释放信号从输出端向输入端传播，可能用于背压或流控机制。",
       "signals": [
         "i_free",
         "o_free"
       ],
       "related_payload": [
-        "i_drive",
-        "o_drive"
+        "i_free",
+        "o_free"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "interface.free_inputs"
+        },
+        {
+          "source": "interface.free_outputs"
         }
       ],
       "id": "semantic:module:wd2noc:interface_intent:002"
@@ -376,15 +403,24 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "The manual should explain why 7 FIFO stages are needed and how they handle clock domain crossing.",
-      "subject": "Pipeline depth and timing",
-      "explanation": "The 7-stage pipeline is a significant structural feature. The documentation should clarify whether this is for timing closure, clock domain synchronization (wd_clk vs NoC clock), or rate adaptation. The \"pwm\" suffix in cFifo1_pwm needs explanation.",
+      "summary": "文档应重点描述7级Fifo1链的事件传递路径、同步机制和流控行为",
+      "subject": "事件链式传递机制",
+      "explanation": "链式结构是模块的核心数据路径，但当前上下文缺乏内部事件流细节(flow_000_wd2noc_i_drive步数为0)，需要RTL源码补充。释放信号路径(i_free/o_free)与事件路径方向相反，需明确其交互关系。",
       "signals": [
+        "i_drive",
+        "o_drive",
         "o_driveNext[0:5]",
-        "wd_clk"
+        "i_free",
+        "o_free"
       ],
       "instances": [
-        "fif0-fifo6"
+        "fifo0",
+        "fifo1",
+        "fifo2",
+        "fifo3",
+        "fifo4",
+        "fifo5",
+        "fifo6"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -394,10 +430,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "key_instances"
+        },
+        {
+          "source": "evidence_gaps"
         }
       ],
       "id": "semantic:module:wd2noc:documentation_focus:001"
@@ -408,24 +447,22 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "reason": "The internal event flow for i_drive has no endpoints and step_count=0, indicating the parser could not trace the event through the pipeline. RTL source review is needed to understand how i_drive propagates through fifo0-fifo6 and how payload data flows.",
-      "subject": "Pipeline event flow details",
-      "needed_source_slice": "always block, assign block, instance connections",
+      "reason": "当前flow_000_wd2noc_i_drive步数为0，无法确定i_drive事件在Fifo1链中的具体传播行为",
+      "subject": "内部事件流细节",
+      "needed_source_slice": "always block; assign block; instance connections",
       "signals": [
         "i_drive",
-        "i_msg",
         "o_driveNext[0:5]",
-        "o_drive",
-        "o_msg"
+        "o_drive"
       ],
       "instances": [
-        "fif0",
-        "fif1",
-        "fif2",
-        "fif3",
-        "fif4",
-        "fif5",
-        "fif6"
+        "fifo0",
+        "fifo1",
+        "fifo2",
+        "fifo3",
+        "fifo4",
+        "fifo5",
+        "fifo6"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -435,10 +472,10 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "internal_event_flow_refs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "evidence_gaps"
         }
       ],
       "id": "semantic:module:wd2noc:source_review_request:001"
@@ -449,43 +486,80 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "reason": "The \"pwm\" suffix and 1-deep FIFO behavior are not documented. RTL source for cFifo1_pwm is needed to understand its exact function, especially regarding pulse-width modulation and event propagation.",
-      "subject": "cFifo1_pwm module behavior",
-      "needed_source_slice": "module declaration, always block, assign block",
+      "reason": "当前上下文未提供o_msg_reg的赋值来源，无法确定载荷数据的生成机制",
+      "subject": "o_msg_reg更新逻辑",
+      "needed_source_slice": "always block; assign block",
       "signals": [
-        "i_drive",
-        "o_driveNext",
-        "i_freeNext",
-        "o_free"
+        "o_msg_reg",
+        "i_msg",
+        "wdogint",
+        "wdogres"
       ],
       "instances": [
-        "fif0-fifo6"
+        "utt_wd"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/wd2noc.json"
+          "source": "assign_dependencies"
         },
         {
-          "source": "parser_pipeline_rtl/modules/wd2noc.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:wd2noc:source_review_request:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "wd2noc"
+      },
+      "reason": "o_res_sync2的来源和同步级数未明确，需要确认复位同步的具体实现",
+      "subject": "复位同步逻辑",
+      "needed_source_slice": "always block; assign block",
+      "signals": [
+        "o_res_sync2",
+        "wdogres",
+        "Noc_RES"
+      ],
+      "instances": [
+        "utt_wd"
+      ],
+      "related_flows": [
+        "flow_000_wd2noc_i_drive"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "assign_dependencies"
+        },
+        {
+          "source": "key_component_connections"
+        }
+      ],
+      "id": "semantic:module:wd2noc:source_review_request:003"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_drive",
-      "reason": "no module event output reached from i_drive"
+      "reason": "无模块事件输出从i_drive到达"
     },
     {
-      "field": "cFifo1_pwm behavior",
-      "reason": "module type cFifo1_pwm not documented in context"
+      "field": "o_msg_reg赋值来源",
+      "reason": "当前上下文未提供o_msg_reg的更新逻辑"
+    },
+    {
+      "field": "o_res_sync2同步链",
+      "reason": "复位同步的具体实现细节缺失"
     }
   ]
 }

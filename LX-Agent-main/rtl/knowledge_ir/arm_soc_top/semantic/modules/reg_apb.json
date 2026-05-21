@@ -46,12 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 8,
+    "count": 9,
     "by_type": {
-      "assignment_interpretation": 2,
+      "assignment_interpretation": 3,
       "documentation_focus": 1,
-      "interface_intent": 3,
+      "interface_intent": 1,
       "module_role": 1,
+      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -62,34 +63,37 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "APB register file for SPI configuration and data transfer",
+      "summary": "reg_apb 是 SPI 模块的 APB 从设备寄存器接口，负责将 APB 总线协议转换为 SPI 内部寄存器读写控制信号。",
       "subject": "reg_apb",
-      "explanation": "The module decodes APB read/write transactions to access SPI control and data registers, mapping PADDR to register selects (SPI_SR, SPI_DR, SPI_CR1) and generating read strobes (SR_r, DR_r, CR1_r) and write strobes (DR_w, CR1_w). It outputs PRDATA from internal rdata during reads and drives PREADY and PSLVERR as constant 1 and 0 respectively, indicating zero-wait-state, always-okay APB responses.",
+      "explanation": "模块通过 APB 接口信号（PADDR、PWDATA、PSEL、PENABLE、PWRITE）生成内部读写选通信号（read、write），并基于地址译码产生各寄存器（SPI_SR、SPI_DR、SPI_CR1）的独立读写使能（SR_r、DR_r、CR1_r、DR_w、CR1_w）。输出 PRDATA 在读取时驱动 rdata，否则高阻。PSLVERR 和 PREADY 被固定为 0 和 1，表明模块始终就绪且无错误。",
       "signals": [
         "PADDR",
         "PWDATA",
+        "PSEL",
+        "PENABLE",
+        "PWRITE",
         "PRDATA",
         "PREADY",
         "PSLVERR",
         "read",
         "write",
+        "addr",
         "SR_r",
         "DR_r",
         "CR1_r",
         "DR_w",
-        "CR1_w"
+        "CR1_w",
+        "rdata"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/reg_apb.json"
+          "source": "knowledge_ir/modules/reg_apb.json"
         },
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/reg_apb.json"
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
         }
       ],
       "id": "semantic:module:reg_apb:module_role:001"
@@ -100,10 +104,11 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "Decodes PADDR to generate per-register read and write strobes for SPI_SR, SPI_DR, and SPI_CR1",
-      "subject": "APB address decoding and register access control",
-      "explanation": "Assignments 5-9 show that read and write qualifiers are ANDed with address comparisons to produce register-specific strobes. The read signal is derived from PSEL and !PWRITE, and write from PENABLE & PSEL & PWRITE, forming a standard APB read/write decode.",
+      "summary": "模块根据 APB 地址 PADDR 译码，生成 SPI 内部状态/数据/控制寄存器的独立读写选通信号。",
+      "subject": "APB 地址译码与寄存器选通",
+      "explanation": "通过 assign 语句将 PADDR 赋值给 addr，然后使用 addr 与 SPI_SR、SPI_DR、SPI_CR1 等地址常量比较，结合 read/write 信号生成 SR_r、DR_r、CR1_r、DR_w、CR1_w。这些选通信号用于后续 SPI 核心逻辑的寄存器访问控制。",
       "signals": [
+        "addr",
         "PADDR",
         "read",
         "write",
@@ -118,16 +123,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies[2]",
-          "path": "knowledge_ir/modules/reg_apb.json"
+          "source": "knowledge_ir/modules/reg_apb.json"
         },
         {
-          "source": "assign_dependencies[3]",
-          "path": "knowledge_ir/modules/reg_apb.json"
-        },
-        {
-          "source": "assign_dependencies[5-9]",
-          "path": "knowledge_ir/modules/reg_apb.json"
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
         }
       ],
       "id": "semantic:module:reg_apb:structural_responsibility:001"
@@ -138,9 +137,64 @@
         "type": "module",
         "module": "reg_apb"
       },
+      "subject": "read",
+      "summary": "生成 APB 读选通信号，当 PSEL 有效且 PWRITE 为低时有效。",
+      "explanation": "该信号是 APB 读事务的指示，用于后续地址译码和 PRDATA 驱动。它直接由 PSEL 和 PWRITE 组合而成，不依赖时钟。",
+      "signals": [
+        "read",
+        "PSEL",
+        "PWRITE"
+      ],
+      "related_assignments": [
+        "2"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/reg_apb.json"
+        }
+      ],
+      "id": "semantic:module:reg_apb:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "reg_apb"
+      },
+      "subject": "write",
+      "summary": "生成 APB 写选通信号，当 PENABLE、PSEL 和 PWRITE 同时有效时有效。",
+      "explanation": "该信号是 APB 写事务的指示，用于后续地址译码。它需要 PENABLE 有效，符合 APB 协议写数据阶段要求。",
+      "signals": [
+        "write",
+        "PENABLE",
+        "PSEL",
+        "PWRITE"
+      ],
+      "related_assignments": [
+        "3"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/reg_apb.json"
+        }
+      ],
+      "id": "semantic:module:reg_apb:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "reg_apb"
+      },
       "subject": "PRDATA",
-      "summary": "Drives PRDATA from internal rdata during read cycles, otherwise high-impedance",
-      "explanation": "Assignment 10 conditionally assigns PRDATA to rdata when read is active, and to 32'bz otherwise. This indicates a shared bus or tri-state output behavior, typical for APB read data muxing.",
+      "summary": "在读取时驱动内部 rdata 到 PRDATA，否则输出高阻。",
+      "explanation": "该 assign 表明 PRDATA 在读取事务期间由内部 rdata 驱动，非读取时处于高阻态，符合 APB 从设备多路复用数据总线的典型实现。",
       "signals": [
         "PRDATA",
         "read",
@@ -154,43 +208,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies[10]",
-          "path": "knowledge_ir/modules/reg_apb.json"
+          "source": "knowledge_ir/modules/reg_apb.json"
         }
       ],
-      "id": "semantic:module:reg_apb:assignment_interpretation:001"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
-      "subject": "PREADY and PSLVERR",
-      "summary": "Constant drive indicating zero-wait-state, always-okay APB slave response",
-      "explanation": "Assignments 1 and 4 tie PSLVERR to 1'b0 and PREADY to 1'b1, meaning the register file never inserts wait states and never signals an error. This simplifies the APB interface but may mask invalid address accesses.",
-      "signals": [
-        "PREADY",
-        "PSLVERR"
-      ],
-      "related_assignments": [
-        "1",
-        "4"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "assign_dependencies[1]",
-          "path": "knowledge_ir/modules/reg_apb.json"
-        },
-        {
-          "source": "assign_dependencies[4]",
-          "path": "knowledge_ir/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:assignment_interpretation:002"
+      "id": "semantic:module:reg_apb:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -198,95 +219,27 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "Standard APB slave with zero-wait-state, always-okay response, supporting read and write transactions",
-      "subject": "APB slave interface",
-      "explanation": "The module uses PADDR, PWDATA, PSEL, PENABLE, PWRITE as inputs, and drives PRDATA, PREADY, PSLVERR as outputs. PREADY is constant high and PSLVERR constant low, indicating no error or wait insertion. The read/write decode is standard APB.",
+      "summary": "模块实现零等待状态 APB 从设备接口，PREADY 恒为 1，PSLVERR 恒为 0。",
+      "subject": "APB 从设备接口",
+      "explanation": "PREADY 固定为高电平表明模块始终准备好立即响应 APB 事务，无需插入等待周期。PSLVERR 固定为低电平表明模块不会产生 APB 错误响应。这简化了 APB 总线时序，适用于简单寄存器映射。",
       "signals": [
-        "PADDR",
-        "PWDATA",
-        "PSEL",
-        "PENABLE",
-        "PWRITE",
-        "PRDATA",
         "PREADY",
         "PSLVERR"
       ],
       "related_payload": [
-        "PADDR",
+        "PRDATA",
         "PWDATA",
-        "PRDATA"
+        "PADDR"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface",
-          "path": "knowledge_ir/modules/reg_apb.json"
-        },
-        {
-          "source": "assign_dependencies[0-4]",
-          "path": "knowledge_ir/modules/reg_apb.json"
+          "source": "knowledge_ir/modules/reg_apb.json"
         }
       ],
       "id": "semantic:module:reg_apb:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
-      "summary": "Provides SPI status and data payloads (RDR, RXCRC, TXCRC) for register readback",
-      "subject": "SPI register data inputs",
-      "explanation": "The module receives RDR, RXCRC, TXCRC as data inputs, which are likely read back via the APB interface when the corresponding register address is accessed. These are not decoded in the provided assignments but are present as payload inputs.",
-      "signals": [
-        "RDR",
-        "RXCRC",
-        "TXCRC"
-      ],
-      "related_payload": [
-        "PRDATA"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "interface",
-          "path": "knowledge_ir/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "reg_apb"
-      },
-      "summary": "Provides SPI configuration outputs (BR, CRCPOLY, TDR, BIDIMODE) from APB writes",
-      "subject": "SPI control outputs",
-      "explanation": "The module outputs BR, CRCPOLY, TDR, and BIDIMODE, which are likely driven from APB write data (PWDATA) when the corresponding control registers are written. The exact mapping is not shown in the provided assignments.",
-      "signals": [
-        "BR",
-        "CRCPOLY",
-        "TDR",
-        "BIDIMODE"
-      ],
-      "related_payload": [
-        "PWDATA"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "interface",
-          "path": "knowledge_ir/modules/reg_apb.json"
-        }
-      ],
-      "id": "semantic:module:reg_apb:interface_intent:003"
     },
     {
       "claim_type": "documentation_focus",
@@ -294,41 +247,94 @@
         "type": "module",
         "module": "reg_apb"
       },
-      "summary": "The manual should document the register address map (SPI_SR, SPI_DR, SPI_CR1) and the decode logic for read/write strobes",
-      "subject": "Register map and address decoding",
-      "explanation": "The assignments show address comparisons to SPI_SR, SPI_DR, and SPI_CR1, but the actual address values are not provided. The manual should list these addresses and explain how each register is accessed.",
+      "summary": "手册应重点说明 SPI 寄存器（SPI_SR、SPI_DR、SPI_CR1）的 APB 地址映射关系，以及各读写选通信号（SR_r、DR_r、CR1_r、DR_w、CR1_w）的生成条件。",
+      "subject": "寄存器地址映射与选通逻辑",
+      "explanation": "模块的核心功能是 APB 地址译码，生成 SPI 核心所需的寄存器访问控制信号。这些选通信号是 SPI 状态机与数据路径的接口，其正确性直接影响 SPI 功能。地址常量（SPI_SR、SPI_DR、SPI_CR1）的具体值需从 RTL 源文件确认。",
       "signals": [
-        "PADDR",
+        "addr",
         "SR_r",
         "DR_r",
         "CR1_r",
         "DR_w",
-        "CR1_w"
+        "CR1_w",
+        "PADDR"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies[5-9]",
-          "path": "knowledge_ir/modules/reg_apb.json"
+          "source": "knowledge_ir/modules/reg_apb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
         }
       ],
       "id": "semantic:module:reg_apb:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "reg_apb"
+      },
+      "reason": "紧凑上下文中未提供 SPI_SR、SPI_DR、SPI_CR1 的具体数值，无法确定寄存器地址映射。",
+      "subject": "寄存器地址常量",
+      "needed_source_slice": "模块声明或参数定义",
+      "signals": [
+        "SPI_SR",
+        "SPI_DR",
+        "SPI_CR1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/reg_apb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/reg_apb.json"
+        }
+      ],
+      "id": "semantic:module:reg_apb:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "reg_apb"
+      },
+      "reason": "紧凑上下文中未提供 rdata 的来源，无法确定 PRDATA 在读取时驱动的数据内容。",
+      "subject": "内部 rdata 生成逻辑",
+      "needed_source_slice": "assign 块或 always 块",
+      "signals": [
+        "rdata",
+        "PRDATA"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/reg_apb.json"
+        }
+      ],
+      "id": "semantic:module:reg_apb:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "Register address values (SPI_SR, SPI_DR, SPI_CR1)",
-      "reason": "The compact context shows address comparisons but does not provide the actual address constants. RTL source review is needed to extract these values."
+      "field": "寄存器地址常量值",
+      "reason": "紧凑上下文中未提供 SPI_SR、SPI_DR、SPI_CR1 的具体数值。"
     },
     {
-      "field": "Internal rdata generation",
-      "reason": "The PRDATA assignment references an internal rdata signal, but the source of rdata (how it is assembled from register values) is not shown in the provided assignments."
+      "field": "内部 rdata 生成逻辑",
+      "reason": "紧凑上下文中未提供 rdata 的来源和生成方式。"
     },
     {
-      "field": "Write data mapping to outputs",
-      "reason": "The mapping from PWDATA to outputs BR, CRCPOLY, TDR, and BIDIMODE is not shown in the provided assignments. RTL source review is needed to understand the write data path."
+      "field": "输出信号 BR、CRCPOLY、TDR、BIDIMODE 的驱动逻辑",
+      "reason": "紧凑上下文中未提供这些输出信号的赋值来源，无法确定其与 APB 寄存器映射的关系。"
     }
   ]
 }

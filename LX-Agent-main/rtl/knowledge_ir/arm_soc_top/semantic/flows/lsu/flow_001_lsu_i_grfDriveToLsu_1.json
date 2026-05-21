@@ -47,7 +47,7 @@
     }
   ],
   "claim_summary": {
-    "count": 12,
+    "count": 11,
     "by_type": {
       "assignment_interpretation": 1,
       "completion_backpressure": 1,
@@ -55,7 +55,7 @@
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 2
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -66,9 +66,9 @@
         "module": "lsu",
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
-      "summary": "This flow propagates a single GRF drive event through arbitration and selection logic to produce two output events, one to DataRout and one to Icache.",
+      "summary": "来自通用寄存器文件的驱动事件，经选择、合并、延迟后，最终分发给数据路由或指令缓存。",
       "subject": "flow_001_lsu_i_grfDriveToLsu_1",
-      "explanation": "The flow starts at i_grfDriveToLsu_1, which is split by grfSelector into two paths. One path goes through LASMutexMerge (arbitrating with a read GRF path) then to dataRoutMutexMerge, while the other goes directly to dataRoutMutexMerge. After merging, the combined data passes through a delay and is finally split by IcacheSelector to produce the two output events.",
+      "explanation": "该流从输入端口 i_grfDriveToLsu_1 开始，经过 grfSelector 分叉，一路经 LASMutexMerge 合并后进入 dataRoutMutexMerge，另一路直接进入 dataRoutMutexMerge。合并后的数据经过一个透明延迟单元 outdelay9，最后由 IcacheSelector 分发给两个输出端点 o_lsuDriveToDataRout_1 和 o_lsuDriveToIcache_1。该流描述了 LSU 模块内一个核心的驱动分发路径。",
       "signals": [
         "i_grfDriveToLsu_1",
         "o_lsuDriveToDataRout_1",
@@ -89,12 +89,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "internal_event_flow"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "flow_graph.assignment_dependencies"
+          "source": "transparent_flows"
+        },
+        {
+          "source": "interface.event_ports"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:flow_intent:001"
@@ -107,8 +108,8 @@
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
       "subject": "grfSelector",
-      "summary": "Splits the incoming GRF drive event into two paths: one for load-address-store (LAS) arbitration and one for multi-store data update to DataRout.",
-      "explanation": "As a cSelector2_65b_lsu splitter, grfSelector takes the single i_grfDriveToLsu_1 event and distributes it to two downstream components. The first output (w_grfSelectorToLASMutexMerge_1) feeds the LAS mutex merge, while the second (w_grfSelectorToMultiStoreDataUpdateDataRout_1) goes directly to the dataRoutMutexMerge.",
+      "summary": "作为事件流的第一个分叉点，将输入的 GRF 驱动事件分发给两条不同的处理路径。",
+      "explanation": "grfSelector 是一个 2 选 1 的分发器（cSelector2_65b_lsu），它将输入事件 i_grfDriveToLsu_1 分发给 LASMutexMerge 和 dataRoutMutexMerge。这暗示了该事件可能携带两种不同类型的操作（例如，加载和存储），需要不同的后续处理。",
       "signals": [
         "i_grfDriveToLsu_1",
         "w_grfSelectorToLASMutexMerge_1",
@@ -125,12 +126,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:component_role:001"
@@ -143,8 +142,8 @@
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
       "subject": "LASMutexMerge",
-      "summary": "Arbitrates between the GRF drive event path and a read GRF selector path, merging them into a single stream for the LSU mutex merge.",
-      "explanation": "As a cMutexMerge2_64b_lsu, this component merges two input streams (w_grfSelectorToLASMutexMerge_1 and w_readGrfSelectorToLASMutexMerge_1) into one output (w_LASMutexMergeToLsuMutexMerge_1). It acts as a blocking point where event propagation may be gated if both inputs arrive simultaneously.",
+      "summary": "作为加载-存储地址（LSA）路径上的互斥合并点，仲裁来自 GRF 和读 GRF 的事件。",
+      "explanation": "LASMutexMerge 是一个 2 输入互斥合并器（cMutexMerge2_64b_lsu），它合并来自 grfSelector 和 readGrfSelector 的事件。这表明该路径用于处理需要地址计算或地址相关操作的事件，并且这两个来源的事件是互斥的，不能同时通过。",
       "signals": [
         "w_grfSelectorToLASMutexMerge_1",
         "w_readGrfSelectorToLASMutexMerge_1",
@@ -153,17 +152,18 @@
       "instances": [
         "LASMutexMerge"
       ],
+      "related_assignments": [
+        "8"
+      ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:component_role:002"
@@ -176,8 +176,8 @@
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
       "subject": "dataRoutMutexMerge",
-      "summary": "Merges three data paths (data update, GRF multi-store, and multi-load selector) into a single stream for the Icache selector.",
-      "explanation": "As a cMutexMerge3_104b_lsu, this component arbitrates among three input streams: w_dataUpdateToDataRout_1, w_grfSelectorToMultiStoreDataUpdateDataRout_1, and w_multiLoadSelectorToDataRout_1. Its output (w_dataRoutMutexMergeDriveToIcacheSelector_1) feeds the delay and then the Icache selector.",
+      "summary": "作为数据路由路径上的最终互斥合并点，仲裁来自数据更新、GRF 和多加载选择器的事件。",
+      "explanation": "dataRoutMutexMerge 是一个 3 输入互斥合并器（cMutexMerge3_104b_lsu），它合并来自 dataUpdate、grfSelector 和 multiLoadSelector 的事件。这表明该路径是数据输出到数据路由或指令缓存的最终汇聚点，所有需要输出数据的事件都必须在此仲裁。",
       "signals": [
         "w_dataUpdateToDataRout_1",
         "w_grfSelectorToMultiStoreDataUpdateDataRout_1",
@@ -187,17 +187,18 @@
       "instances": [
         "dataRoutMutexMerge"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "related_assignments": [
+        "8"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:component_role:003"
@@ -210,8 +211,8 @@
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
       "subject": "outdelay9",
-      "summary": "Provides a transparent delay for the merged data stream before it reaches the Icache selector.",
-      "explanation": "As a delay8U module, outdelay9 introduces a fixed delay (likely 8 cycles) to the data path. It takes w_dataRoutMutexMergeDriveToIcacheSelector_1 as input and outputs w_dataRoutMutexMergeDriveToIcacheSelector1_1, which is then fed to the IcacheSelector.",
+      "summary": "作为一个透明的延迟单元，为数据路径提供固定的流水线延迟。",
+      "explanation": "outdelay9 是一个 8 级延迟单元（delay8U），它接收 dataRoutMutexMerge 的输出，并在固定周期后输出。其作用是平衡数据路径与其它控制或地址路径的时序，确保数据在正确的时钟周期到达 IcacheSelector。",
       "signals": [
         "w_dataRoutMutexMergeDriveToIcacheSelector_1",
         "w_dataRoutMutexMergeDriveToIcacheSelector1_1"
@@ -219,17 +220,18 @@
       "instances": [
         "outdelay9"
       ],
-      "doc_priority": "reference",
-      "requires_rtl_source_review": true,
+      "related_assignments": [
+        "8"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:component_role:004"
@@ -242,29 +244,28 @@
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
       "subject": "IcacheSelector",
-      "summary": "Splits the delayed merged data stream into two output events, one for DataRout and one for Icache.",
-      "explanation": "As a cSelector2_105b_lsu splitter, IcacheSelector takes the delayed data stream and distributes it to two outputs: o_lsuDriveToDataRout_1 and o_lsuDriveToIcache_1. Each output carries a 104-bit payload (o_lsuToDataRoutData_104 and o_lsuToIcacheData_104 respectively).",
+      "summary": "作为事件流的最终分叉点，将延迟后的数据分发给数据路由或指令缓存。",
+      "explanation": "IcacheSelector 是一个 2 选 1 的分发器（cSelector2_105b_lsu），它根据某种选择信号，将经过延迟的数据事件分发给 o_lsuDriveToDataRout_1 或 o_lsuDriveToIcache_1。这决定了最终数据是去往数据路由（如写回）还是指令缓存（如预取）。",
       "signals": [
         "w_dataRoutMutexMergeDriveToIcacheSelector1_1",
         "o_lsuDriveToDataRout_1",
-        "o_lsuDriveToIcache_1",
-        "o_lsuToDataRoutData_104",
-        "o_lsuToIcacheData_104"
+        "o_lsuDriveToIcache_1"
       ],
       "instances": [
         "IcacheSelector"
+      ],
+      "related_assignments": [
+        "8"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:component_role:005"
@@ -276,25 +277,30 @@
         "module": "lsu",
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
-      "subject": "w_grfToLsuData_64",
-      "summary": "Conditionally swaps the upper and lower 32-bit halves of the GRF data based on multi-LS or write enable signals.",
-      "explanation": "Assignment 8 reshapes the 64-bit input data (i_grfToLsuData_64) into w_grfToLsuData_64. When w_isMultiLS_1 is high or i_wen_2 equals 2'b11, the data passes through unchanged; otherwise, the upper and lower 32-bit halves are swapped. This suggests a byte/word ordering adjustment for non-multi-LS operations.",
+      "subject": "w_grfToLsuData_64 (assign 8)",
+      "summary": "对输入的 GRF 数据进行字节交换，以适应多加载/存储操作。",
+      "explanation": "该赋值根据 w_isMultiLS_1 和 i_wen_2 信号，决定是否对 64 位输入数据 i_grfToLsuData_64 进行高低 32 位交换。这通常用于处理大小端或不对齐的多加载/存储操作，确保数据在 LSU 内部以正确的字节序处理。",
       "signals": [
         "w_grfToLsuData_64",
-        "i_grfToLsuData_64",
         "w_isMultiLS_1",
-        "i_wen_2"
+        "i_wen_2",
+        "i_grfToLsuData_64"
       ],
       "related_assignments": [
         "8"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "assignments"
+          "source": "parser_module.assignments"
+        },
+        {
+          "source": "connection_related"
+        },
+        {
+          "source": "payload_or_data"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:assignment_interpretation:001"
@@ -306,14 +312,11 @@
         "module": "lsu",
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
-      "summary": "The GRF data payload is conditionally byte-swapped based on multi-LS and write enable control signals before being used in the flow.",
-      "subject": "i_grfToLsuData_64 to w_grfToLsuData_64",
-      "explanation": "The 64-bit input payload (i_grfToLsuData_64) is transformed by assignment 8 into w_grfToLsuData_64. The control signals w_isMultiLS_1 and i_wen_2 determine whether the data is swapped or not. This transformed data is then carried through the flow to the output payloads (o_lsuToDataRoutData_104 and o_lsuToIcacheData_104), which are 104 bits wide, indicating additional metadata or formatting.",
+      "summary": "输入的 64 位 GRF 数据经过字节交换和路径选择后，被扩展或打包成 104 位数据输出。",
+      "subject": "i_grfToLsuData_64 -> o_lsuToDataRoutData_104 / o_lsuToIcacheData_104",
+      "explanation": "输入数据 i_grfToLsuData_64 经过 assign 8 的字节交换后，成为 w_grfToLsuData_64。该数据随后通过 grfSelector 进入流，并在 dataRoutMutexMerge 处与其他数据源合并。最终，IcacheSelector 根据选择信号，将合并后的 104 位数据输出到 o_lsuToDataRoutData_104 或 o_lsuToIcacheData_104。这表明 LSU 内部将 64 位数据扩展为 104 位，可能包含了地址、控制或元数据信息。",
       "signals": [
         "i_grfToLsuData_64",
-        "w_grfToLsuData_64",
-        "w_isMultiLS_1",
-        "i_wen_2",
         "o_lsuToDataRoutData_104",
         "o_lsuToIcacheData_104"
       ],
@@ -325,17 +328,18 @@
       "related_assignments": [
         "8"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "assignments"
+          "source": "interface.event_ports"
         },
         {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "interface_data_contract"
+          "source": "interface.data_ports"
+        },
+        {
+          "source": "parser_module.assignments"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:data_control_effect:001"
@@ -347,21 +351,29 @@
         "module": "lsu",
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
-      "summary": "The flow has associated free signals (o_grfFreeFromLsu_1, i_lsuFreeFromDataRout_1, i_lsuFreeFromIcache_1) but their role in this specific flow is not detailed in the supplied context.",
-      "subject": "free/backpressure signals",
-      "explanation": "The interface payload contracts list free signals for the input and output events, but the supplied flow steps and connections do not show how these free signals are generated or consumed within the flow. The flow focuses on event propagation and data transformation, not on backpressure or completion signaling.",
+      "summary": "流中存在明确的握手信号，表明该驱动流是受控的，但具体反压机制未在上下文中体现。",
+      "subject": "o_grfFreeFromLsu_1, i_lsuFreeFromDataRout_1, i_lsuFreeFromIcache_1",
+      "explanation": "接口契约中定义了输入事件的释放信号 o_grfFreeFromLsu_1 和输出事件的空闲信号 i_lsuFreeFromDataRout_1、i_lsuFreeFromIcache_1。这表明 LSU 与外部模块之间存在标准的就绪/有效握手。然而，流内部步骤（如合并器）的反压或阻塞机制未在提供的上下文中详细说明，需要 RTL 源码确认。",
       "signals": [
         "o_grfFreeFromLsu_1",
         "i_lsuFreeFromDataRout_1",
         "i_lsuFreeFromIcache_1"
       ],
-      "doc_priority": "reference",
+      "instances": [
+        "grfSelector",
+        "LASMutexMerge",
+        "dataRoutMutexMerge",
+        "IcacheSelector"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "interface_data_contract"
+          "source": "interface.event_ports"
+        },
+        {
+          "source": "interface.data_ports"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:completion_backpressure:001"
@@ -373,14 +385,13 @@
         "module": "lsu",
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
-      "summary": "The manual should emphasize the split-merge-split topology, the arbitration points, and the data transformation, while de-emphasizing backpressure details.",
+      "summary": "文档应重点描述 GRF 驱动事件如何通过选择、合并和延迟，最终分发给数据路由或指令缓存。",
       "subject": "flow_001_lsu_i_grfDriveToLsu_1",
-      "explanation": "The flow is characterized by a clear structural pattern: a single input is split, one path goes through arbitration, both paths merge, then the combined data is delayed and split again. The key manual focus should be on the grfSelector split, the LASMutexMerge and dataRoutMutexMerge arbitration points, the outdelay9 delay, and the IcacheSelector final split. The data transformation (assignment 8) is also important. Backpressure is not well-supported by the supplied context.",
+      "explanation": "该流是 LSU 模块的核心数据分发路径。文档应清晰说明 grfSelector 和 IcacheSelector 的分发逻辑，以及 dataRoutMutexMerge 的仲裁机制。同时，应解释 outdelay9 的延迟作用，以及 assign 8 的字节交换如何影响数据。反压和握手信号也应作为关键接口行为进行描述。",
       "signals": [
         "i_grfDriveToLsu_1",
         "o_lsuDriveToDataRout_1",
-        "o_lsuDriveToIcache_1",
-        "w_grfToLsuData_64"
+        "o_lsuDriveToIcache_1"
       ],
       "instances": [
         "grfSelector",
@@ -397,12 +408,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "flow_graph.assignment_dependencies"
+          "source": "flow.steps"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "instances.connections"
+        },
+        {
+          "source": "interface.event_ports"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:documentation_focus:001"
@@ -414,70 +426,41 @@
         "module": "lsu",
         "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
       },
-      "reason": "The supplied context does not specify the arbitration policy (e.g., priority, round-robin) or the handshake protocol for these mutex merge components.",
-      "subject": "LASMutexMerge and dataRoutMutexMerge arbitration behavior",
-      "needed_source_slice": "always block or combinational logic for LASMutexMerge and dataRoutMutexMerge instances",
+      "reason": "上下文仅表明这些是互斥合并点，但未提供仲裁算法（如固定优先级、轮询）和反压信号（如 ready/valid）的具体实现。这些细节对于理解事件流的行为至关重要。",
+      "subject": "LASMutexMerge 和 dataRoutMutexMerge 的仲裁与反压机制",
+      "needed_source_slice": "always block or assign block for LASMutexMerge and dataRoutMutexMerge instances",
       "signals": [
         "w_grfSelectorToLASMutexMerge_1",
         "w_readGrfSelectorToLASMutexMerge_1",
-        "w_LASMutexMergeToLsuMutexMerge_1",
         "w_dataUpdateToDataRout_1",
         "w_grfSelectorToMultiStoreDataUpdateDataRout_1",
-        "w_multiLoadSelectorToDataRout_1",
-        "w_dataRoutMutexMergeDriveToIcacheSelector_1"
+        "w_multiLoadSelectorToDataRout_1"
       ],
       "instances": [
         "LASMutexMerge",
         "dataRoutMutexMerge"
       ],
-      "doc_priority": "secondary",
+      "related_assignments": [
+        "8"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_001_lsu_i_grfDriveToLsu_1"
-      },
-      "reason": "The supplied context only identifies outdelay9 as a delay8U module but does not specify the exact delay value or whether it is configurable.",
-      "subject": "outdelay9 delay value and behavior",
-      "needed_source_slice": "module definition or parameterization for outdelay9",
-      "signals": [
-        "w_dataRoutMutexMergeDriveToIcacheSelector_1",
-        "w_dataRoutMutexMergeDriveToIcacheSelector1_1"
-      ],
-      "instances": [
-        "outdelay9"
-      ],
-      "doc_priority": "reference",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "backpressure/completion signaling",
-      "reason": "The free signals are listed in the interface contracts but their connection to the flow steps is not shown in the supplied context."
+      "field": "IcacheSelector 的选择信号",
+      "reason": "上下文未提供 IcacheSelector 的选择信号来源和逻辑。该信号决定了数据是去往数据路由还是指令缓存，是理解流最终分发的关键。"
     }
   ]
 }

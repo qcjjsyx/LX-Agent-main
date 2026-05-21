@@ -47,15 +47,15 @@
     }
   ],
   "claim_summary": {
-    "count": 13,
+    "count": 11,
     "by_type": {
-      "assignment_interpretation": 3,
+      "assignment_interpretation": 2,
       "completion_backpressure": 1,
       "component_role": 4,
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 2
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -66,9 +66,9 @@
         "module": "intAndExc",
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
-      "summary": "This flow propagates an interrupt drive event from the IF stage through arbitration, selection, and splitting to produce three output drives: to DataRoute, WGRF, and WPSR.",
+      "summary": "该驱动流将取指阶段的中断请求（i_intDriveFromIF）经过合并、选择、延迟和拆分后，最终分发至数据路由、写通用寄存器文件和写处理器状态寄存器三个输出端点。",
       "subject": "flow_007_intAndExc_i_intDriveFromIF",
-      "explanation": "The flow starts at i_intDriveFromIF, which enters cmpMerge (a WaitMerge5) alongside exception drives. After merging, the event passes through a delay (Delay3) to intAndExeSele, which splits the event into a feedback path (w_intAndExeSeleDriveToMe) and a forward path (w_intSeleDrive_1). The forward path is delayed twice (Delay1, preDelay0) then split by preStackSpli into two branches: one goes to WbMerge (for write-back) and the other to WbtopcMerge (for PC data routing). WbMerge combines with i_driveFromWB and vectorSpli output, feeding inOutSele, which splits into u_inStack and u_outStack. u_outStack produces o_driveToWGRF_1 and o_driveToWPSR_1. The WbtopcMerge branch feeds dataRoteMerge, which outputs o_driveToDataRoute_1. The flow also includes a feedback loop via SRMerge and SRDriveDelay that influences intAndExeSele selection.",
+      "explanation": "流从输入端口 i_intDriveFromIF 进入，首先在 cmpMerge 中与其他异常/中断驱动合并，然后经过 Delay3 延迟，在 intAndExeSele 中根据 SR 状态选择是否进入中断处理路径，再经 preStackSpli 拆分为写回合并和 PC 数据路由两条子路径，最终通过 dataRoteMerge 和 u_outStack 分别输出到 o_driveToDataRoute_1、o_driveToWGRF_1 和 o_driveToWPSR_1。",
       "signals": [
         "i_intDriveFromIF",
         "o_driveToDataRoute_1",
@@ -79,16 +79,13 @@
         "cmpMerge",
         "Delay3",
         "intAndExeSele",
-        "Delay1",
-        "preDelay0",
         "preStackSpli",
         "WbMerge",
         "WbtopcMerge",
         "inOutSele",
         "dataRoteMerge",
         "u_outStack",
-        "SRMerge",
-        "SRDriveDelay"
+        "SRMerge"
       ],
       "related_assignments": [
         "2",
@@ -102,12 +99,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         },
         {
-          "source": "transparent_flows",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:flow_intent:001"
@@ -120,15 +115,14 @@
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
       "subject": "cmpMerge",
-      "summary": "Primary event merger for all interrupt and exception drive inputs.",
-      "explanation": "cmpMerge (cWaitMerge5_180b_int) arbitrates among five input drives: i_intDriveFromIF, i_excDriveFromDec, i_excDriveFromExe, i_excDriveFromIF, i_excDriveFromLsu, and a feedback path w_intAndExeSeleDriveToMe. It outputs a single merged event w_cmpMerDrive_1, acting as the first arbitration point in the flow.",
+      "summary": "作为中断/异常驱动的第一级合并器，将来自不同阶段（IF、Dec、Exe、Lsu）的异常驱动和中断驱动合并为单一事件流。",
+      "explanation": "cmpMerge 是一个 cWaitMerge5_180b_int 类型的合并器，接收五个输入驱动（包括 i_intDriveFromIF），输出 w_cmpMerDrive_1。它负责仲裁和合并多个并发的事件请求，是中断/异常处理路径的入口。",
       "signals": [
         "i_intDriveFromIF",
         "i_excDriveFromDec",
         "i_excDriveFromExe",
         "i_excDriveFromIF",
         "i_excDriveFromLsu",
-        "w_intAndExeSeleDriveToMe",
         "w_cmpMerDrive_1"
       ],
       "instances": [
@@ -139,8 +133,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:component_role:001"
@@ -153,13 +146,13 @@
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
       "subject": "intAndExeSele",
-      "summary": "Event splitter that selects between merged interrupt/exception events and a stack pointer feedback path.",
-      "explanation": "intAndExeSele (cSelector2_181b_int) takes two inputs: w_SRDrive_1 (from SRMerge, representing stack pointer feedback) and w_cmpMerDrive1_1 (delayed merged event). It outputs two drives: w_intAndExeSeleDriveToMe (feedback to cmpMerge) and w_intSeleDrive_1 (forward to interrupt processing). This component determines whether the event is processed as a new interrupt/exception or is gated by stack pointer availability.",
+      "summary": "作为中断/异常选择器，根据 SR 状态决定事件流是进入中断处理路径还是异常处理路径。",
+      "explanation": "intAndExeSele 是一个 cSelector2_181b_int 类型的选择器，输入来自 SRMerge 的 SR 状态（w_SRDrive_1）和合并后的驱动（w_cmpMerDrive1_1）。输出 w_intSeleDrive_1 进入中断处理路径，w_intAndExeSeleDriveToMe 反馈回异常处理路径。该组件是中断与异常路径的分叉点。",
       "signals": [
         "w_SRDrive_1",
         "w_cmpMerDrive1_1",
-        "w_intAndExeSeleDriveToMe",
-        "w_intSeleDrive_1"
+        "w_intSeleDrive_1",
+        "w_intAndExeSeleDriveToMe"
       ],
       "instances": [
         "intAndExeSele"
@@ -169,8 +162,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:component_role:002"
@@ -183,8 +175,8 @@
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
       "subject": "preStackSpli",
-      "summary": "Event splitter that divides the interrupt event into write-back and data routing paths.",
-      "explanation": "preStackSpli (cSplitter2_1b) takes w_intSeleDrive1_1 and splits it into w_preSSpliDriToWbMer_1 (to WbMerge for write-back processing) and w_vecDriveToDataRoute_1 (to WbtopcMerge for PC data routing). This split enables parallel processing of the interrupt event for different output destinations.",
+      "summary": "作为中断处理路径的拆分器，将中断事件流拆分为写回合并路径和 PC 数据路由路径。",
+      "explanation": "preStackSpli 是一个 cSplitter2_1b 类型的拆分器，输入来自 preDelay0 延迟后的中断选择驱动（w_intSeleDrive1_1）。输出 w_preSSpliDriToWbMer_1 进入 WbMerge 用于写回操作，w_vecDriveToDataRoute_1 进入 WbtopcMerge 用于 PC 数据路由。",
       "signals": [
         "w_intSeleDrive1_1",
         "w_preSSpliDriToWbMer_1",
@@ -198,8 +190,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:component_role:003"
@@ -212,14 +203,13 @@
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
       "subject": "u_outStack",
-      "summary": "Output stack module that generates the final WGRF and WPSR drive outputs.",
-      "explanation": "u_outStack (intAndExc_pop) takes inputs w_DRSeleDriToWbSpli_1 and w_inOutDriToOutMer_1, and produces o_driveToWGRF_1 and o_driveToWPSR_1, along with feedback signals w_driveFromoutStackSP and w_outMerDriToDR_1. It acts as the final processing stage for write-back register file and processor status register updates.",
+      "summary": "作为出栈模块，处理中断返回时的出栈操作，生成写通用寄存器文件和写处理器状态寄存器的驱动。",
+      "explanation": "u_outStack 是一个 intAndExc_pop 类型的模块实例，输入来自 inOutSele 的选择驱动（w_inOutDriToOutMer_1）和 DRSelector 的驱动（w_DRSeleDriToWbSpli_1）。输出 o_driveToWGRF_1 和 o_driveToWPSR_1 分别用于写回通用寄存器和处理器状态寄存器，同时输出 w_outMerDriToDR_1 到 dataRoteMerge 用于数据路由。",
       "signals": [
-        "w_DRSeleDriToWbSpli_1",
         "w_inOutDriToOutMer_1",
+        "w_DRSeleDriToWbSpli_1",
         "o_driveToWGRF_1",
         "o_driveToWPSR_1",
-        "w_driveFromoutStackSP",
         "w_outMerDriToDR_1"
       ],
       "instances": [
@@ -230,8 +220,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:component_role:004"
@@ -244,24 +233,22 @@
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
       "subject": "assign 2",
-      "summary": "Extracts interrupt PC and type from the input payload.",
-      "explanation": "This assignment splits i_intPCAndIntNum_38 into w_intPC_32 (32-bit PC) and w_intType_6 (6-bit interrupt type). This payload data is used downstream for vector address calculation and event routing.",
+      "summary": "将输入的中断 PC 和中断类型信号拆分为内部使用的 w_intPC_32 和 w_intType_6。",
+      "explanation": "该赋值从 i_intPCAndIntNum_38 中提取中断 PC（高32位）和中断类型（低6位），为后续中断处理提供数据基础。",
       "signals": [
         "i_intPCAndIntNum_38",
         "w_intPC_32",
         "w_intType_6"
       ],
       "related_assignments": [
-        "3",
-        "13"
+        "2"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "assignment_facts",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "parser_module.assignments"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:assignment_interpretation:001"
@@ -273,56 +260,26 @@
         "module": "intAndExc",
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
-      "subject": "assign 13",
-      "summary": "Calculates vector address based on exception number and stack pointer.",
-      "explanation": "This assignment computes w_vecAddr_32 as either w_SP_32 + 24 (for exception type 4'b0010) or w_exeAddr_32. This vector address is used for interrupt/exception vector table lookups.",
+      "subject": "assign 15",
+      "summary": "生成数据路由有效信号 w_en_DRValid，由向量拆分驱动和 SR 延迟驱动共同触发。",
+      "explanation": "该赋值将 w_vecSpliDriToWbMer_1 和 w_SRDriveDelay_1 进行或运算，产生 w_en_DRValid。这表明数据路由的有效性由中断/异常处理路径和 SR 状态更新路径共同控制。",
       "signals": [
-        "w_vecAddr_32",
-        "w_excNum_4",
-        "w_SP_32",
-        "w_exeAddr_32"
+        "w_vecSpliDriToWbMer_1",
+        "w_SRDriveDelay_1",
+        "w_en_DRValid"
       ],
       "related_assignments": [
-        "2",
-        "3",
-        "17"
+        "15"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "assignment_facts",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "parser_module.assignments"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "flow",
-        "module": "intAndExc",
-        "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
-      },
-      "subject": "assign 15",
-      "summary": "Enables DRValid signal based on vector split and SR drive delay events.",
-      "explanation": "This assignment ORs w_vecSpliDriToWbMer_1 and w_SRDriveDelay_1 to produce w_en_DRValid. This enables the data route valid signal, gating the data routing path.",
-      "signals": [
-        "w_en_DRValid",
-        "w_vecSpliDriToWbMer_1",
-        "w_SRDriveDelay_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "assignment_facts",
-          "path": "knowledge_ir/modules/intAndExc.json"
-        }
-      ],
-      "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:assignment_interpretation:003"
     },
     {
       "claim_type": "data_control_effect",
@@ -331,10 +288,12 @@
         "module": "intAndExc",
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
-      "summary": "The interrupt drive event carries payload data (PC and type) that is transformed and routed to three output destinations.",
-      "subject": "i_intDriveFromIF payload to output payloads",
-      "explanation": "The input payload i_intPCAndIntNum_38 is split into PC and type (assign 2). The PC is used in vector address calculation (assign 13). The event propagates through the flow, and at the outputs, payload data is carried by o_dataRouteData_104, o_dataToWGRF_72, and o_dataToWPSR_32. The exact mapping from input to output payloads is not fully specified in the provided context.",
+      "summary": "中断驱动 i_intDriveFromIF 携带两个 payload 信号：i_ifPCAndNum_36（取指 PC 和异常号）和 i_intPCAndIntNum_38（中断 PC 和中断类型）。",
+      "subject": "i_intDriveFromIF 与 payload 的关系",
+      "explanation": "根据接口 payload 契约，中断驱动输入时同时传入取指阶段的相关数据（PC 和异常号）以及中断相关的数据（PC 和类型）。这些数据在流经各组件时被处理，最终通过 o_dataRouteData_104、o_dataToWGRF_72 和 o_dataToWPSR_32 输出。",
       "signals": [
+        "i_intDriveFromIF",
+        "i_ifPCAndNum_36",
         "i_intPCAndIntNum_38",
         "o_dataRouteData_104",
         "o_dataToWGRF_72",
@@ -342,26 +301,24 @@
       ],
       "related_payload": [
         "i_ifPCAndNum_36",
+        "i_intPCAndIntNum_38",
         "o_dataRouteData_104",
         "o_dataToWGRF_72",
         "o_dataToWPSR_32"
       ],
       "related_assignments": [
         "2",
-        "3",
-        "13"
+        "3"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "interface.event_ports"
         },
         {
-          "source": "interface.data_ports",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "interface.data_ports"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:data_control_effect:001"
@@ -373,9 +330,9 @@
         "module": "intAndExc",
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
-      "summary": "The flow uses free signals for backpressure at the module boundary, but internal backpressure mechanisms are not detailed.",
-      "subject": "Free/backpressure signals for interrupt drive flow",
-      "explanation": "The interface contracts specify free signals (o_intFreeToIF, i_freeFromDataRoute_1, i_freeFromWGRF_1, i_freeFromWPSR_1) for backpressure at the module boundary. Internal components like WaitMerge and MutexMerge likely implement their own backpressure, but the specific mechanisms are not described in the provided context.",
+      "summary": "中断驱动 i_intDriveFromIF 的反压信号为 o_intFreeToIF，输出端点的反压信号分别为 i_freeFromDataRoute_1、i_freeFromWGRF_1 和 i_freeFromWPSR_1。",
+      "subject": "中断驱动的反压/完成信号",
+      "explanation": "接口契约中明确列出了这些 free 信号，表明该流使用握手协议进行流控。反压信号的存在说明各合并器（如 cmpMerge、dataRoteMerge）可能因下游未就绪而阻塞事件传播。",
       "signals": [
         "o_intFreeToIF",
         "i_freeFromDataRoute_1",
@@ -384,18 +341,15 @@
       ],
       "instances": [
         "cmpMerge",
-        "WbMerge",
-        "WbtopcMerge",
         "dataRoteMerge",
-        "SRMerge"
+        "u_outStack"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "interface.event_ports"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:completion_backpressure:001"
@@ -407,68 +361,18 @@
         "module": "intAndExc",
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
-      "summary": "The manual should emphasize the arbitration, selection, and splitting of the interrupt event, and the parallel paths to different output destinations.",
-      "subject": "Interrupt drive flow semantics",
-      "explanation": "The flow involves multiple arbitration points (cmpMerge, WbMerge, WbtopcMerge, dataRoteMerge, SRMerge) and selection/splitting points (intAndExeSele, preStackSpli, inOutSele). The event is split into write-back and data routing paths, with a feedback loop via SRMerge. The manual should clarify the conditions under which the event takes each path and the role of the stack pointer feedback.",
+      "summary": "手册应重点描述中断驱动从输入到三个输出端点的完整路径，包括各组件的作用、分支点和合并点。",
+      "subject": "中断处理路径的完整数据流",
+      "explanation": "该流涉及多个合并器、选择器、延迟和拆分器，结构复杂。手册需要清晰展示中断事件如何被合并、选择、延迟、拆分，最终分发到数据路由、写回和出栈模块。",
       "signals": [
         "i_intDriveFromIF",
-        "w_cmpMerDrive_1",
-        "w_intSeleDrive_1",
-        "w_preSSpliDriToWbMer_1",
-        "w_vecDriveToDataRoute_1",
         "o_driveToDataRoute_1",
         "o_driveToWGRF_1",
         "o_driveToWPSR_1"
       ],
       "instances": [
         "cmpMerge",
-        "intAndExeSele",
-        "preStackSpli",
-        "WbMerge",
-        "WbtopcMerge",
-        "inOutSele",
-        "dataRoteMerge",
-        "u_outStack",
-        "SRMerge"
-      ],
-      "related_assignments": [
-        "2",
-        "13",
-        "15"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "instances.connections",
-          "path": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "transparent_flows",
-          "path": "knowledge_ir/modules/intAndExc.json"
-        }
-      ],
-      "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "intAndExc",
-        "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
-      },
-      "reason": "The exact transformation of payload data from i_intPCAndIntNum_38 to o_dataRouteData_104, o_dataToWGRF_72, and o_dataToWPSR_32 is not specified. RTL source review is needed to understand the data path and any modifications.",
-      "subject": "Payload data mapping from input to outputs",
-      "needed_source_slice": "always blocks or assign statements that connect input payloads to output payloads through the flow",
-      "signals": [
-        "i_intPCAndIntNum_38",
-        "o_dataRouteData_104",
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32"
-      ],
-      "instances": [
-        "cmpMerge",
+        "Delay3",
         "intAndExeSele",
         "preStackSpli",
         "WbMerge",
@@ -480,22 +384,22 @@
       "related_assignments": [
         "2",
         "3",
-        "13"
+        "13",
+        "15",
+        "17"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         },
         {
-          "source": "interface.data_ports",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "transparent_flows"
         }
       ],
-      "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:source_review_request:001"
+      "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:documentation_focus:001"
     },
     {
       "claim_type": "source_review_request",
@@ -504,45 +408,35 @@
         "module": "intAndExc",
         "flow_id": "flow_007_intAndExc_i_intDriveFromIF"
       },
-      "reason": "The provided context does not describe how internal components (WaitMerge, MutexMerge, SelSplit) implement backpressure or gating. RTL source review is needed to understand the handshake and flow control.",
-      "subject": "Internal backpressure and gating mechanisms",
-      "needed_source_slice": "always blocks or assign statements for free/ready signals within the flow",
+      "reason": "当前上下文仅说明 cmpMerge 是合并器，但未提供其内部仲裁策略（如优先级、轮询等），需要 RTL 源码确认。",
+      "subject": "中断驱动在 cmpMerge 中的仲裁逻辑",
+      "needed_source_slice": "cmpMerge 模块的 always 块或 assign 块",
       "signals": [
-        "o_intFreeToIF",
-        "i_freeFromDataRoute_1",
-        "i_freeFromWGRF_1",
-        "i_freeFromWPSR_1"
+        "i_intDriveFromIF",
+        "i_excDriveFromDec",
+        "i_excDriveFromExe",
+        "i_excDriveFromIF",
+        "i_excDriveFromLsu",
+        "w_cmpMerDrive_1"
       ],
       "instances": [
-        "cmpMerge",
-        "WbMerge",
-        "WbtopcMerge",
-        "dataRoteMerge",
-        "SRMerge",
-        "intAndExeSele",
-        "preStackSpli",
-        "inOutSele"
+        "cmpMerge"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "knowledge_ir/modules/intAndExc.json"
+          "source": "instances.connections"
         }
       ],
-      "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:source_review_request:002"
+      "id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "Payload data transformation",
-      "reason": "The mapping from input payload (i_intPCAndIntNum_38) to output payloads (o_dataRouteData_104, o_dataToWGRF_72, o_dataToWPSR_32) is not specified in the provided context."
-    },
-    {
-      "field": "Internal backpressure mechanisms",
-      "reason": "The handshake and flow control within internal components (WaitMerge, MutexMerge, SelSplit) are not described."
+      "field": "中断驱动在 intAndExeSele 中的选择条件",
+      "reason": "上下文仅说明 intAndExeSele 根据 SR 状态选择，但未提供具体的条件逻辑（如 SR 的哪个位控制选择），需要 RTL 源码确认。"
     }
   ]
 }

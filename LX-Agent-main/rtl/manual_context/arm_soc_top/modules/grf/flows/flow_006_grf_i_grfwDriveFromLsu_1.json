@@ -92,8 +92,8 @@
         "w_driveToWrite"
       ],
       "role_in_flow": {
-        "value": "Arbitration merger for three write-event sources",
-        "explanation": "This MutexMerge instance selects among three drive inputs (from LSU, execution, and writeback) and outputs a single drive signal. It gates event propagation based on arbitration logic, acting as a blocking point where only one source proceeds at a time.",
+        "value": "三输入互斥合并器，对LSU、执行单元、写回单元三个写事件源进行仲裁合并",
+        "explanation": "该实例接收三个独立的事件驱动输入（i_grfwDriveFromExp_1、i_grfwDriveFromLsu_1、i_grfwDriveFromWB_1），通过互斥机制选择其中一个事件传递到输出w_driveToWrite，同时携带对应的数据载荷（LSU数据通过i_data0_74输入）",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -105,6 +105,7 @@
           "i_grfwDriveFromLsu_1",
           "i_grfwDriveFromExp_1",
           "i_grfwDriveFromWB_1",
+          "i_lsuDataToGrf_64",
           "w_driveToWrite"
         ],
         "instances": [
@@ -119,7 +120,11 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
+            "source": "component_connection",
+            "path": "modules/grf.json"
+          },
+          {
+            "source": "event_flow",
             "path": "modules/grf.json"
           }
         ]
@@ -141,8 +146,8 @@
       ],
       "output_drives": [],
       "role_in_flow": {
-        "value": "Single-entry write buffer after arbitration",
-        "explanation": "This FIFO stage receives the arbitrated write drive and buffers it. It may gate event propagation when full, acting as a blocking point. No output endpoint is documented from this instance in the supplied context.",
+        "value": "写FIFO缓冲级，接收合并后的写事件并缓冲",
+        "explanation": "该实例作为写路径的最终缓冲阶段，接收来自cMutexMerge3_end_74b的w_driveToWrite事件，提供写请求的暂存和流控能力",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -165,7 +170,11 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
+            "source": "component_connection",
+            "path": "modules/grf.json"
+          },
+          {
+            "source": "event_flow",
             "path": "modules/grf.json"
           }
         ]
@@ -221,8 +230,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "LSU write data accompanies the drive event into the merger",
-    "explanation": "The 64-bit LSU data signal connects to the merger's data0 input, indicating that payload data is coupled with the drive event. The data path merges or selects alongside the drive arbitration.",
+    "value": "LSU写数据作为事件驱动载荷，与写事件信号同步进入合并器",
+    "explanation": "i_lsuDataToGrf_64是64位写数据总线，通过i_data0_74连接到cMutexMerge3_end_74b的数据输入，与事件信号i_grfwDriveFromLsu_1构成事件-载荷对，在合并器内部进行同步选择和传递",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -231,8 +240,8 @@
     "semantic_claim_id": "semantic:flow:grf:flow_006_grf_i_grfwDriveFromLsu_1:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
-      "i_grfwDriveFromLsu_1",
-      "i_lsuDataToGrf_64"
+      "i_lsuDataToGrf_64",
+      "i_grfwDriveFromLsu_1"
     ],
     "instances": [],
     "related_flows": [],
@@ -255,8 +264,8 @@
     ],
     "supporting_claims": [
       {
-        "value": "Emphasize arbitration and buffering stages, de-emphasize completion/backpressure",
-        "explanation": "The flow clearly shows LSU drive entering a three-way merger then a FIFO, but lacks endpoint visibility and free-signal connectivity. Documentation should focus on the arbitration mechanism and data coupling, while noting that backpressure and final write completion require RTL source review.",
+        "value": "手册应重点描述三个写源事件的互斥仲裁策略及数据载荷的同步传递",
+        "explanation": "当前流的核心语义在于LSU写事件通过互斥合并器与其他写源竞争写通道，需要明确仲裁优先级、数据同步方式以及合并器内部的反压/流控机制",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -266,6 +275,8 @@
         "doc_priority": "primary",
         "signals": [
           "i_grfwDriveFromLsu_1",
+          "i_grfwDriveFromExp_1",
+          "i_grfwDriveFromWB_1",
           "i_lsuDataToGrf_64",
           "w_driveToWrite"
         ],
@@ -293,8 +304,8 @@
         ]
       },
       {
-        "value": "LSU write-data drive enters GRF write pipeline via MutexMerge arbitration and FIFO buffering",
-        "explanation": "The LSU drive signal enters the GRF write pipeline as one of three competing event sources, arbitrated by a MutexMerge before entering a single-entry FIFO stage. No module-level output endpoint is reached from this drive within the supplied context.",
+        "value": "LSU写回数据驱动事件通过互斥合并器进入写FIFO的路径",
+        "explanation": "该流描述LSU模块发起的写请求事件从grf模块输入端口i_grfwDriveFromLsu_1进入，经过cMutexMerge3_end_74b互斥合并器与其他两个写源（执行单元、写回单元）仲裁后，通过w_driveToWrite送入cLastFifo1_grf写FIFO的完整驱动路径",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -330,8 +341,8 @@
         ]
       },
       {
-        "value": "Free signal exists but its relationship to the flow path is not documented",
-        "explanation": "The interface contract indicates a free signal for the LSU drive, but the supplied context does not show how this free signal connects to the MutexMerge or FIFO stages. Backpressure propagation through the pipeline cannot be determined from available evidence.",
+        "value": "存在LSU空闲信号但无法确定与当前流的直接反压关系",
+        "explanation": "接口契约显示o_grfFreeToLsu_1是i_grfwDriveFromLsu_1对应的空闲信号，但当前上下文未提供该信号与cMutexMerge3_end_74b或cLastFifo1_grf之间的连接关系，无法确认反压路径",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -340,13 +351,9 @@
         "semantic_claim_id": "semantic:flow:grf:flow_006_grf_i_grfwDriveFromLsu_1:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
-          "o_grfFreeToLsu_1",
-          "i_grfwDriveFromLsu_1"
+          "o_grfFreeToLsu_1"
         ],
-        "instances": [
-          "cMutexMerge3_end_74b",
-          "cLastFifo1_grf"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,

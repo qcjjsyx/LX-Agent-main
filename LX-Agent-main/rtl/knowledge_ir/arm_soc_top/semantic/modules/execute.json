@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 21,
+    "count": 14,
     "by_type": {
-      "assignment_interpretation": 4,
+      "assignment_interpretation": 3,
       "component_role": 3,
-      "documentation_focus": 3,
-      "interface_intent": 6,
+      "documentation_focus": 2,
+      "interface_intent": 4,
       "module_role": 1,
-      "structural_responsibility": 4
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -63,15 +63,17 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "Central execution unit that decodes launch instructions, dispatches to ALU/div/mul/shift/bitwise datapaths, and routes results to LSU, GRF, exception, and launch feedback.",
+      "summary": "执行模块是处理器流水线的执行阶段，负责接收来自发射阶段（Launch）的指令，从通用寄存器组（GRF）和加载存储单元（LSU）获取操作数，执行算术逻辑运算，并将结果写回或发送给后续阶段。",
       "subject": "execute",
-      "explanation": "The module receives a 207-bit launch payload decoded into op1/op2/op3, path codes, and control fields. It fans out to multiple execution datapaths (adder, muller, shifter, reverse, satQ, bitwise) via selectors and merges, then collects results into a final result bus for output to LSU (163-bit), GRF (8-bit), exception (36-bit), and launch (96-bit). The four input event drives (LSU, GRF, launch, launch_by_path) and four free handshake outputs confirm a fully decoupled, event-driven pipeline stage.",
+      "explanation": "模块通过事件驱动接口接收来自发射、GRF和LSU的驱动信号，并输出驱动信号到发射、异常处理、GRF和LSU。数据输入包括来自GRF的64位数据、来自发射的207位指令数据和来自LSU的64位数据。内部包含大量用于操作数选择、运算执行和结果合并的组件，如exeSelector、adder、muller等。",
       "signals": [
-        "i_launchDataToExe_207",
-        "o_executeDataToLsu_163",
-        "o_exeToLaunchData_96",
-        "o_exeToExcpData_36",
-        "o_executeToGrfData_8"
+        "i_launchDriveToExecute_1",
+        "i_grfDriveToExecute_1",
+        "i_LsuDriveToExe_1",
+        "o_exeByPathDriveToLaunch_1",
+        "o_exeDriveToExcp_1",
+        "o_executeDriveToGrf_1",
+        "o_executeDriveToLsu_1"
       ],
       "instances": [
         "exeFifo2",
@@ -79,29 +81,23 @@
         "exeSelector",
         "adder",
         "muller",
-        "shifter",
         "resMutexMerge",
-        "finalWaitMerge",
-        "ExcSplitter",
-        "grfSplitter"
+        "finalWaitMerge"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1",
         "flow_001_execute_i_grfDriveToExecute_1",
-        "flow_002_execute_i_LsuDriveToExe_1",
-        "flow_003_execute_i_launchDrive_1"
+        "flow_002_execute_i_LsuDriveToExe_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface,interface_data_contract,key_instances"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "interface,instances,connection_graph,assignments"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:module_role:001"
@@ -112,160 +108,25 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "Decodes the 207-bit launch packet into op1, op2, op3, path codes, and control flags, then dispatches operands to the appropriate execution datapath via exeSelector and op3Selector.",
-      "subject": "instruction decode and operand dispatch",
-      "explanation": "Assign index 1 decomposes i_launchDataToExe_207 into 35+ decoded fields including op1_32, op2_32, op3_32, pathCode_8, load/store flags, shift type, mul/div flags, and register list. The executeSplitter fans out to exeSelector (for ALU/div/mul/shift/rev) and op3Selector (for GRF writeback and op3-normal paths). This is the primary decode and dispatch point.",
+      "summary": "模块接收发射的指令，解析操作数，通过多个运算单元（加法器、乘法器、移位器等）执行，并将结果合并后分发到GRF、LSU、异常处理单元和发射阶段。",
+      "subject": "指令执行与结果分发",
+      "explanation": "从i_launchDataToExe_207解析出操作码、操作数和路径码，通过exeSelector分发到不同的运算单元（如adder、muller、shifter等）。运算结果通过Fifo和MutexMerge组件汇聚到resMutexMerge，再通过finalWaitMerge和ExcSplitter等组件分发到输出。",
       "signals": [
         "i_launchDataToExe_207",
-        "w_op1_32",
-        "w_op2_32",
-        "w_op3_32",
-        "w_pathCode_8",
-        "w_executeDataToExeSelctor_68"
-      ],
-      "instances": [
-        "executeSplitter",
-        "exeSelector",
-        "op3Selector",
-        "op3NormalSelector",
-        "secondExeSelector"
-      ],
-      "related_flows": [
-        "flow_000_execute_i_launchDriveToExecute_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "assignments[1],connection_graph"
-        },
-        {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
-        }
-      ],
-      "id": "semantic:module:execute:structural_responsibility:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "summary": "Selects rs1 and rs2 data from either GRF or LSU forwarded results, using rele selectors and merges, before combining into a 64-bit operand pair.",
-      "subject": "register source selection (rs1/rs2)",
-      "explanation": "Four rele selectors (rele0-3) each pick between LSU data (via lsuMerge) and GRF data (via grfResSplitter). rs1Merge and rs2Merge combine the two rele outputs per register, then regMerge waits for both rs1 and rs2 to produce w_Rs1AndRs2Data_64. This implements register renaming or forwarding for the two source operands.",
-      "signals": [
-        "i_grfToExecuteData_64",
-        "i_lsuToExeData_64",
-        "w_grfRs1Data_32",
-        "w_lsuRs1Data_32",
-        "w_lastRs1Data_32",
-        "w_Rs1AndRs2Data_64"
-      ],
-      "instances": [
-        "rele0Selector",
-        "rele1Selector",
-        "rele2Selector",
-        "rele3Selector",
-        "rs1Merge",
-        "rs2Merge",
-        "regMerge",
-        "lsuMerge",
-        "grfResSplitter",
-        "rele4Splitter"
-      ],
-      "related_flows": [
-        "flow_001_execute_i_grfDriveToExecute_1",
-        "flow_002_execute_i_LsuDriveToExe_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph"
-        },
-        {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
-        }
-      ],
-      "id": "semantic:module:execute:structural_responsibility:002"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "summary": "Dispatches operand pairs to adder, muller, shifter, reverse, satQ, and bitwise (and/or/eor) units, then collects results via fifos and mutex merges into a single 64-bit result bus.",
-      "subject": "execution datapath fan-out and result collection",
-      "explanation": "exeSelector fans out to 11 datapaths including adder (via addMutexMerge), muller (via mulWaitMerge), shifter (via shiftFifo/secondExeSelector), reverse, satQ, and bitwise. Each datapath produces a result that flows through a fifo (e.g., addFifo, mulFifo, shiftFifo) then into resMutexMerge (10-input mutex merge). The final result r_resMutexMergeToFinalWaitMergeData_64 is used for launch feedback and LSU output.",
-      "signals": [
-        "w_exeSelectorToAddData_64",
-        "w_exeSelectorToMulData_64",
-        "w_exeSelectorToShiftData_64",
-        "w_resMutexMergeToFinalWaitMergeData_64"
+        "o_exeToLaunchData_96",
+        "o_executeDataToLsu_163",
+        "o_executeToGrfData_8",
+        "o_exeToExcpData_36"
       ],
       "instances": [
         "exeSelector",
         "adder",
         "muller",
         "shifter",
-        "reverse",
-        "satQ",
-        "addFifo",
-        "mulFifo",
-        "shiftFifo",
         "resMutexMerge",
-        "addMutexMerge",
-        "mulWaitMerge"
-      ],
-      "related_flows": [
-        "flow_000_execute_i_launchDriveToExecute_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph,assignments"
-        },
-        {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
-        }
-      ],
-      "id": "semantic:module:execute:structural_responsibility:003"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "summary": "Routes the final execution result and metadata to four output interfaces: LSU (163-bit data+control), GRF (8-bit writeback), exception (36-bit PC+exception number), and launch (96-bit result+NZCV).",
-      "subject": "result routing to LSU, GRF, exception, and launch",
-      "explanation": "finalWaitMerge combines w_exeToLsuData_68 and w_exeToLsuData_95 into o_executeDataToLsu_163. ExcSplitter splits w_executeDriveToLsu_1 into o_exeDriveToExcp_1 and o_executeDriveToLsu_1. grfSplitter routes writeback data to o_executeToGrfData_8. rescSplitter sends the result to exeToLaunchDataDelay1/2 for o_exeToLaunchData_96. Assign 53 packs NZCV and result into o_exeToLaunchData_96.",
-      "signals": [
-        "o_executeDataToLsu_163",
-        "o_exeToExcpData_36",
-        "o_executeToGrfData_8",
-        "o_exeToLaunchData_96",
-        "w_nzcv_4"
-      ],
-      "instances": [
         "finalWaitMerge",
         "ExcSplitter",
-        "grfSplitter",
-        "rescSplitter",
-        "exeToLaunchDataDelay1",
-        "exeToLaunchDataDelay2"
+        "grfSplitter"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
@@ -275,15 +136,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph,assignments[53,58]"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
-      "id": "semantic:module:execute:structural_responsibility:004"
+      "id": "semantic:module:execute:structural_responsibility:001"
     },
     {
       "claim_type": "component_role",
@@ -291,30 +150,30 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "exeFifo2",
-      "summary": "Input fifo that buffers the launch drive event and decouples the execute stage from the launch stage.",
-      "explanation": "exeFifo2 receives i_launchDriveToExecute_1 and outputs w_launchDriveToExecute_1 to executeSplitter. It is a cFifo1 (single-entry fifo) that provides backpressure via free handshake. This allows the launch stage to proceed even if execute is stalled.",
+      "subject": "exeSelector",
+      "summary": "指令操作数选择与分发器，根据路径码将操作数对分发到不同的运算单元。",
+      "explanation": "接收来自executeSplitter的68位数据（包含两个32位操作数和4位路径码），根据路径码将操作数对分发到加法、对齐、与、或、异或、移位、乘法、反转等运算单元。",
       "signals": [
-        "i_launchDriveToExecute_1",
-        "w_launchDriveToExecute_1"
+        "w_executeDataToExeSelctor_68",
+        "w_exeSelectorToAddData_64",
+        "w_exeSelectorToMulData_64",
+        "w_exeSelectorToShiftData_64"
       ],
       "instances": [
-        "exeFifo2"
+        "exeSelector"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:component_role:001"
@@ -326,8 +185,8 @@
         "module": "execute"
       },
       "subject": "resMutexMerge",
-      "summary": "10-input mutex merge that collects results from all execution datapaths into a single 64-bit result bus.",
-      "explanation": "resMutexMerge (cMutexMerge10_64b_exe) takes inputs from addFifo, andFifo, divFifo, eorFifo, exeSelector, mulSelector, orFifo, revFifo, rn_32, satQFifo, and secondExeSelector. It selects one winner per cycle based on mutex arbitration, producing w_resMutexMergeToFinalWaitMergeData_64. This is the central result collection point.",
+      "summary": "多路运算结果互斥合并器，将来自不同运算单元的结果合并为最终结果。",
+      "explanation": "接收来自加法、与、或、异或、除法、乘法、反转、饱和等运算单元的结果，以及来自exeSelector和secondExeSelector的直通数据，通过互斥机制选择一路作为最终结果。",
       "signals": [
         "w_resMutexMergeToFinalWaitMergeData_64"
       ],
@@ -337,17 +196,15 @@
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:component_role:002"
@@ -358,29 +215,42 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "executeTap",
-      "summary": "Activity monitor that asserts o_executeInUseFlag_1 when the execute stage is active.",
-      "explanation": "executeTap (contTap) monitors w_launchDriveToExecute_1 and i_executeFreeFromExcp_1 to produce o_executeInUseFlag_1. This flag indicates the module is processing an instruction and can be used for power management or debug.",
+      "subject": "操作数释放与选择网络 (rele*)",
+      "summary": "从GRF和LSU获取操作数的释放与选择网络，确保操作数在正确的时间被使用。",
+      "explanation": "由rele0Merge到rele3Merge、rele0Selector到rele3Selector、rs1Merge和rs2Merge等组件组成。GRF和LSU的数据通过grfResSplitter和lsuDelay0等组件进入该网络，经过选择和合并后提供给后续的运算单元。",
       "signals": [
-        "o_executeInUseFlag_1"
+        "i_grfToExecuteData_64",
+        "i_lsuToExeData_64",
+        "w_lastRs1Data_32",
+        "w_lastRs2Data_32"
       ],
       "instances": [
-        "executeTap"
+        "grfResSplitter",
+        "lsuDelay0",
+        "rele0Merge",
+        "rele1Merge",
+        "rele2Merge",
+        "rele3Merge",
+        "rele0Selector",
+        "rele1Selector",
+        "rele2Selector",
+        "rele3Selector",
+        "rs1Merge",
+        "rs2Merge"
       ],
       "related_flows": [
-        "flow_000_execute_i_launchDriveToExecute_1"
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1"
       ],
-      "doc_priority": "reference",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:component_role:003"
@@ -391,30 +261,19 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "assign index 1",
-      "summary": "Decodes the 207-bit launch packet into all internal control and data fields.",
-      "explanation": "This assign splits i_launchDataToExe_207 into 35+ named wires including op1_32, op2_32, op3_32, pathCode_8, load/store flags, shift type, mul/div flags, register list, and PC. This is the primary instruction decode point.",
+      "subject": "assign 1",
+      "summary": "将207位发射数据解析为多个控制信号和操作数。",
+      "explanation": "将i_launchDataToExe_207按位域分解为操作码、操作数、路径码等内部信号，是指令解码的关键步骤。",
       "signals": [
         "i_launchDataToExe_207",
         "w_op1_32",
         "w_op2_32",
         "w_op3_32",
-        "w_pathCode_8",
-        "w_pc_32",
-        "w_load_1",
-        "w_isLS_1",
-        "w_mulDivS_1",
-        "w_shift_3"
+        "w_insPath_8",
+        "w_pc_32"
       ],
       "related_assignments": [
-        "assign 0",
-        "assign 2",
-        "assign 3",
-        "assign 4",
-        "assign 5",
-        "assign 6",
-        "assign 7",
-        "assign 8"
+        "1"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
@@ -424,8 +283,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "assignments[1]"
+          "source": "knowledge_ir/modules/execute.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:assignment_interpretation:001"
@@ -436,20 +297,16 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "assign index 53",
-      "summary": "Packs the final execution result and NZCV flags into the 96-bit launch feedback data.",
-      "explanation": "o_exeToLaunchData_96 is formed as {w_nzcv_4, 28'b0, r_resMutexMergeToFinalWaitMergeData_64}. This provides the result and condition flags back to the launch stage for next-PC calculation and writeback.",
+      "subject": "assign 53",
+      "summary": "构造发送到发射阶段的结果数据，包含NZCV标志和64位运算结果。",
+      "explanation": "将4位NZCV标志和64位运算结果拼接为96位数据，通过o_exeToLaunchData_96发送回发射阶段，用于条件码更新和结果反馈。",
       "signals": [
         "o_exeToLaunchData_96",
         "w_nzcv_4",
         "r_resMutexMergeToFinalWaitMergeData_64"
       ],
       "related_assignments": [
-        "assign 48",
-        "assign 49",
-        "assign 50",
-        "assign 51",
-        "assign 52"
+        "53"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
@@ -459,8 +316,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "assignments[53]"
+          "source": "knowledge_ir/modules/execute.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:assignment_interpretation:002"
@@ -471,16 +330,16 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "assign index 58",
-      "summary": "Packs PC and exception number into the 36-bit exception output.",
-      "explanation": "o_exeToExcpData_36 is formed as {w_pc_32, w_excNum_4}. This provides the faulting PC and exception type to the exception handler.",
+      "subject": "assign 58",
+      "summary": "构造发送到异常处理单元的数据，包含PC和异常编号。",
+      "explanation": "将32位PC和4位异常编号拼接为36位数据，通过o_exeToExcpData_36发送到异常处理单元。",
       "signals": [
         "o_exeToExcpData_36",
         "w_pc_32",
         "w_excNum_4"
       ],
       "related_assignments": [
-        "assign 1"
+        "58"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
@@ -490,48 +349,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "assignments[58]"
+          "source": "knowledge_ir/modules/execute.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "subject": "assign index 38 and 39",
-      "summary": "Selects the correct half of LSU data for rs1 and rs2 based on register address comparison.",
-      "explanation": "w_lsuR1Data_32 and w_lsuR2Data_32 are selected from i_lsuToExeData_64[63:32] or [31:0] based on whether the register address matches w_preRdHiAddr_4. This handles doubleword LSU results where the two halves correspond to different registers.",
-      "signals": [
-        "i_lsuToExeData_64",
-        "w_lsuR1Data_32",
-        "w_lsuR2Data_32",
-        "w_rs1Addr_4",
-        "w_rs2Addr_4",
-        "w_preRdHiAddr_4"
-      ],
-      "related_assignments": [
-        "assign 1"
-      ],
-      "related_flows": [
-        "flow_002_execute_i_LsuDriveToExe_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "assignments[38"
-        },
-        {
-          "source": "39]"
-        }
-      ],
-      "id": "semantic:module:execute:assignment_interpretation:004"
     },
     {
       "claim_type": "interface_intent",
@@ -539,28 +363,31 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "Primary instruction input interface that carries a fully decoded instruction packet with event handshake.",
-      "subject": "launch drive interface",
-      "explanation": "i_launchDriveToExecute_1 (event) carries i_launchDataToExe_207 (payload) and is acknowledged by o_executeFreeToLaunch_1 (free). The 207-bit payload contains all decoded fields needed for execution. A second event i_launchDrive_1 also carries the same payload, suggesting a secondary or speculative launch path.",
+      "summary": "执行模块与发射阶段之间的双向事件驱动接口，用于指令下发和结果回传。",
+      "subject": "发射阶段接口 (Launch Interface)",
+      "explanation": "发射阶段通过i_launchDriveToExecute_1和i_launchDrive_1事件驱动指令下发，携带207位指令数据。执行模块通过o_exeByPathDriveToLaunch_1事件回传96位结果数据，并通过o_executeFreeToLaunch_1释放信号完成握手。",
       "signals": [
         "i_launchDriveToExecute_1",
         "i_launchDrive_1",
         "i_launchDataToExe_207",
-        "o_executeFreeToLaunch_1"
+        "o_exeByPathDriveToLaunch_1",
+        "o_exeToLaunchData_96",
+        "o_executeFreeToLaunch_1",
+        "i_executeFreeFromLaunchByPath_1"
       ],
       "related_payload": [
-        "i_launchDataToExe_207"
+        "i_launchDataToExe_207",
+        "o_exeToLaunchData_96"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "interface_data_contract"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:interface_intent:001"
@@ -571,27 +398,30 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "Provides forwarded LSU result data for register renaming, with event handshake and free back to LSU.",
-      "subject": "LSU data forward interface",
-      "explanation": "i_LsuDriveToExe_1 (event) carries i_lsuToExeData_64 (payload) and is acknowledged by o_lsuFreeFromExecute_1 (free). The 64-bit data is used for rs1/rs2 selection via rele selectors. This implements LSU-to-execute forwarding.",
+      "summary": "执行模块与加载存储单元之间的双向事件驱动接口，用于数据加载和存储请求。",
+      "subject": "LSU接口 (LSU Interface)",
+      "explanation": "LSU通过i_LsuDriveToExe_1事件驱动加载数据，携带64位数据。执行模块通过o_executeDriveToLsu_1事件驱动存储请求，携带163位数据（包含地址、数据和控制信息）。通过o_lsuFreeFromExecute_1和i_executeFreeFromLsu_1完成握手。",
       "signals": [
         "i_LsuDriveToExe_1",
         "i_lsuToExeData_64",
-        "o_lsuFreeFromExecute_1"
+        "o_executeDriveToLsu_1",
+        "o_executeDataToLsu_163",
+        "o_lsuFreeFromExecute_1",
+        "i_executeFreeFromLsu_1"
       ],
       "related_payload": [
-        "i_lsuToExeData_64"
+        "i_lsuToExeData_64",
+        "o_executeDataToLsu_163"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "interface_data_contract"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:interface_intent:002"
@@ -602,27 +432,30 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "Provides register file read data for execution, with event handshake and free back to GRF.",
-      "subject": "GRF read data interface",
-      "explanation": "i_grfDriveToExecute_1 (event) carries i_grfToExecuteData_64 (payload) and is acknowledged by o_executeFreeToGrf_1 (free). The 64-bit data is split by grfResSplitter for rs1/rs2 selection.",
+      "summary": "执行模块与通用寄存器组之间的双向事件驱动接口，用于读取和写回寄存器数据。",
+      "subject": "GRF接口 (GRF Interface)",
+      "explanation": "GRF通过i_grfDriveToExecute_1事件驱动寄存器读取数据，携带64位数据（可能包含两个32位寄存器值）。执行模块通过o_executeDriveToGrf_1事件驱动写回，携带8位数据（可能是寄存器地址或写回数据）。通过o_executeFreeToGrf_1和i_executeFreeFromGrf_1完成握手。",
       "signals": [
         "i_grfDriveToExecute_1",
         "i_grfToExecuteData_64",
-        "o_executeFreeToGrf_1"
+        "o_executeDriveToGrf_1",
+        "o_executeToGrfData_8",
+        "o_executeFreeToGrf_1",
+        "i_executeFreeFromGrf_1"
       ],
       "related_payload": [
-        "i_grfToExecuteData_64"
+        "i_grfToExecuteData_64",
+        "o_executeToGrfData_8"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "interface_data_contract"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:interface_intent:003"
@@ -633,9 +466,9 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "Reports exception events with PC and exception number to the exception handler.",
-      "subject": "exception output interface",
-      "explanation": "o_exeDriveToExcp_1 (event) carries o_exeToExcpData_36 (payload) and is acknowledged by i_executeFreeFromExcp_1 (free). The 36-bit payload contains PC[31:0] and exception number[3:0].",
+      "summary": "执行模块与异常处理单元之间的双向事件驱动接口，用于异常上报。",
+      "subject": "异常接口 (Exception Interface)",
+      "explanation": "执行模块通过o_exeDriveToExcp_1事件驱动异常上报，携带36位数据（包含PC和异常编号）。异常处理单元通过i_executeFreeFromExcp_1释放信号完成握手。",
       "signals": [
         "o_exeDriveToExcp_1",
         "o_exeToExcpData_36",
@@ -649,76 +482,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "interface_data_contract"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:interface_intent:004"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "summary": "Sends execution results (address, data, control) to the LSU for memory operations.",
-      "subject": "LSU result output interface",
-      "explanation": "o_executeDriveToLsu_1 (event) carries o_executeDataToLsu_163 (payload) and is acknowledged by i_executeFreeFromLsu_1 (free). The 163-bit payload includes address, store data, and control fields for load/store instructions.",
-      "signals": [
-        "o_executeDriveToLsu_1",
-        "o_executeDataToLsu_163",
-        "i_executeFreeFromLsu_1"
-      ],
-      "related_payload": [
-        "o_executeDataToLsu_163"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
-        },
-        {
-          "source": "interface_data_contract"
-        }
-      ],
-      "id": "semantic:module:execute:interface_intent:005"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "summary": "Returns execution results and condition flags to the launch stage for next-PC calculation and writeback.",
-      "subject": "launch feedback interface",
-      "explanation": "o_exeByPathDriveToLaunch_1 (event) carries o_exeToLaunchData_96 (payload) and is acknowledged by i_executeFreeFromLaunchByPath_1 (free). The 96-bit payload contains NZCV flags and the 64-bit result.",
-      "signals": [
-        "o_exeByPathDriveToLaunch_1",
-        "o_exeToLaunchData_96",
-        "i_executeFreeFromLaunchByPath_1"
-      ],
-      "related_payload": [
-        "o_exeToLaunchData_96"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
-        },
-        {
-          "source": "interface_data_contract"
-        }
-      ],
-      "id": "semantic:module:execute:interface_intent:006"
     },
     {
       "claim_type": "documentation_focus",
@@ -726,19 +496,25 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "The manual should emphasize the fan-out from decode to multiple execution units and the result collection via mutex merges.",
-      "subject": "execution datapath architecture",
-      "explanation": "The module has a clear splitter-selector-execute-merge pattern. The 207-bit decode, 11-way exeSelector, 10-input resMutexMerge, and 4 output interfaces are the key architectural features. The fifo-based decoupling between datapaths and the mutex arbitration for result collection should be highlighted.",
+      "summary": "文档应重点描述指令从发射到执行再到结果分发的完整流水线过程。",
+      "subject": "指令执行流水线",
+      "explanation": "模块的核心功能是执行指令，文档应详细说明指令如何通过事件驱动进入模块，经过操作数获取、运算执行、结果合并和分发等阶段。",
       "signals": [
+        "i_launchDriveToExecute_1",
         "i_launchDataToExe_207",
-        "w_executeDataToExeSelctor_68",
-        "w_resMutexMergeToFinalWaitMergeData_64"
+        "o_exeToLaunchData_96",
+        "o_executeDataToLsu_163",
+        "o_executeToGrfData_8",
+        "o_exeToExcpData_36"
       ],
       "instances": [
+        "exeFifo2",
         "executeSplitter",
         "exeSelector",
         "resMutexMerge",
-        "finalWaitMerge"
+        "finalWaitMerge",
+        "ExcSplitter",
+        "grfSplitter"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1"
@@ -748,12 +524,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances,component_families"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph,assignments"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
       "id": "semantic:module:execute:documentation_focus:001"
@@ -764,103 +538,63 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "The manual should explain the rele selector/merge network that selects rs1/rs2 from GRF or LSU forwarded data.",
-      "subject": "register renaming and forwarding",
-      "explanation": "The four rele selectors (rele0-3) and two rs merges (rs1Merge, rs2Merge) implement a forwarding network that picks register values from either the GRF read data or the LSU forwarded data. This is critical for understanding data hazards and pipeline bypass.",
+      "summary": "文档应解释从GRF和LSU获取操作数的复杂网络结构。",
+      "subject": "操作数获取网络",
+      "explanation": "模块包含一个复杂的操作数释放与选择网络（rele*组件），用于从GRF和LSU获取操作数。文档应说明该网络的工作原理，包括数据如何从GRF和LSU进入，如何通过选择器和合并器最终提供给运算单元。",
       "signals": [
         "i_grfToExecuteData_64",
         "i_lsuToExeData_64",
-        "w_grfRs1Data_32",
-        "w_lsuRs1Data_32",
-        "w_lastRs1Data_32"
+        "w_lastRs1Data_32",
+        "w_lastRs2Data_32"
       ],
       "instances": [
+        "grfResSplitter",
+        "lsuDelay0",
+        "rele0Merge",
+        "rele1Merge",
+        "rele2Merge",
+        "rele3Merge",
         "rele0Selector",
         "rele1Selector",
         "rele2Selector",
         "rele3Selector",
         "rs1Merge",
-        "rs2Merge",
-        "regMerge",
-        "lsuMerge",
-        "grfResSplitter"
+        "rs2Merge"
       ],
       "related_flows": [
-        "flow_001_execute_i_grfDriveToExecute_1",
-        "flow_002_execute_i_LsuDriveToExe_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/execute.json",
-          "path": "connection_graph"
-        }
-      ],
-      "id": "semantic:module:execute:documentation_focus:002"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "execute"
-      },
-      "summary": "The manual should document the event/free handshake on all interfaces and the internal fifo-based decoupling.",
-      "subject": "event-driven handshake protocol",
-      "explanation": "All interfaces use event_drive (request) and event_free (acknowledge) handshakes. Internal fifos (exeFifo2, addFifo, mulFifo, etc.) provide decoupling between pipeline stages. The executeTap monitors activity. This is a fully decoupled, latency-insensitive design.",
-      "signals": [
-        "i_launchDriveToExecute_1",
-        "o_executeFreeToLaunch_1",
-        "o_executeInUseFlag_1"
-      ],
-      "instances": [
-        "exeFifo2",
-        "executeTap"
-      ],
-      "related_flows": [
-        "flow_000_execute_i_launchDriveToExecute_1",
         "flow_001_execute_i_grfDriveToExecute_1",
         "flow_002_execute_i_LsuDriveToExe_1"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/execute.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "interface_data_contract"
-        },
-        {
-          "source": "key_instances"
+          "source": "parser_pipeline_rtl/modules/execute.json"
         }
       ],
-      "id": "semantic:module:execute:documentation_focus:003"
+      "id": "semantic:module:execute:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_LsuDriveToExe_1",
-      "reason": "no module event output reached from i_LsuDriveToExe_1"
+      "reason": "从i_LsuDriveToExe_1出发的事件流未到达任何模块事件输出，无法确定LSU数据在模块内的完整处理路径。"
     },
     {
       "field": "internal_event_flow.i_grfDriveToExecute_1",
-      "reason": "no module event output reached from i_grfDriveToExecute_1"
+      "reason": "从i_grfDriveToExecute_1出发的事件流未到达任何模块事件输出，无法确定GRF数据在模块内的完整处理路径。"
     },
     {
       "field": "internal_event_flow.i_launchDriveToExecute_1",
-      "reason": "no module event output reached from i_launchDriveToExecute_1"
+      "reason": "从i_launchDriveToExecute_1出发的事件流未到达任何模块事件输出，无法确定发射指令在模块内的完整处理路径。"
     },
     {
       "field": "internal_event_flow.i_launchDrive_1",
-      "reason": "no module event output reached from i_launchDrive_1"
+      "reason": "从i_launchDrive_1出发的事件流步数为0，无法确定该事件的作用。"
     }
   ]
 }

@@ -112,8 +112,8 @@
         "o_drive_in"
       ],
       "role_in_flow": {
-        "value": "Acts as the first FIFO stage in the drive pipeline, receiving the input event and forwarding it.",
-        "explanation": "This instance is the first processing element in the flow. It receives the i_drive signal and outputs o_drive_in. Its role is to buffer or gate the event before passing it to the next stage.",
+        "value": "作为第一级 FIFO 缓冲器，接收输入事件 i_drive 并输出中间事件 o_drive_in。",
+        "explanation": "该实例属于 cFifo1_pwm 类型，在流中充当事件缓冲节点，可能根据内部满/空状态决定是否立即传递事件。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -139,10 +139,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "flow.steps"
-          },
-          {
-            "source": "related_component_connections"
+            "source": "instances.connections",
+            "path": "modules/pwm1_top.json"
           }
         ]
       },
@@ -165,8 +163,8 @@
         "o_drive"
       ],
       "role_in_flow": {
-        "value": "Acts as the second FIFO stage in the drive pipeline, receiving the intermediate event and producing the final output.",
-        "explanation": "This instance is the final processing element in the flow. It receives the o_drive_in signal from pwm_fifo1 and outputs o_drive. Its role is to buffer or gate the event before it leaves the module.",
+        "value": "作为第二级 FIFO 缓冲器，接收中间事件 o_drive_in 并输出最终事件 o_drive。",
+        "explanation": "该实例与 pwm_fifo1 串联，进一步缓冲事件，确保输出事件 o_drive 的时序稳定性。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -192,10 +190,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "flow.steps"
-          },
-          {
-            "source": "related_component_connections"
+            "source": "instances.connections",
+            "path": "modules/pwm1_top.json"
           }
         ]
       },
@@ -269,8 +265,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "The manual should emphasize the linear, two-stage FIFO pipeline nature of this drive flow and note the lack of branching.",
-    "explanation": "The flow is simple and deterministic. The primary focus should be on the event path through the two FIFO instances. The payload path and any flow control mechanisms are secondary and require further RTL review.",
+    "value": "手册应重点描述两级 FIFO 流水线的事件传递路径，包括可能的阻塞条件和数据路径的独立性。",
+    "explanation": "流的核心是串联 FIFO 缓冲，但有效载荷（i_msg/o_msg）与事件流分离，手册需明确区分事件控制流与数据路径。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -299,16 +295,18 @@
     ],
     "semantic_evidence": [
       {
-        "source": "flow.steps"
+        "source": "instances.connections",
+        "path": "modules/pwm1_top.json"
       },
       {
-        "source": "related_component_connections"
+        "source": "transparent_flows",
+        "path": "modules/pwm1_top.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "This drive flow propagates an event from the top-level input i_drive through two cascaded FIFO stages to the top-level output o_drive.",
-        "explanation": "The flow is a simple, unbranched, two-stage pipeline. It starts at the module boundary (i_drive), passes through pwm_fifo1, then pwm_fifo2, and exits at the module boundary (o_drive). The absence of branch or join points indicates a linear data path.",
+        "value": "该驱动流将输入事件 i_drive 通过两级 FIFO 流水线传递至输出事件 o_drive，实现事件缓冲与同步。",
+        "explanation": "流经两个串联的 cFifo1_pwm 实例（pwm_fifo1 和 pwm_fifo2），每个 FIFO 都可能因内部状态而阻塞事件传播，形成流水线式的事件传递路径。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -337,16 +335,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "flow.steps"
+            "source": "instances.connections",
+            "path": "modules/pwm1_top.json"
           },
           {
-            "source": "related_component_connections"
+            "source": "transparent_flows",
+            "path": "modules/pwm1_top.json"
           }
         ]
       },
       {
-        "value": "No free or backpressure signals are identified in the provided context for this flow.",
-        "explanation": "The interface payload contracts show empty free_signal fields. The flow steps list blocking points (FIFO stages) but do not specify the control signals used for gating. The final manual should note the absence of explicit flow control signals in the current analysis.",
+        "value": "流中无显式的完成或反压信号，FIFO 实例可能隐式提供反压机制。",
+        "explanation": "每个 FIFO 节点（pwm_fifo1 和 pwm_fifo2）被标记为可能阻塞事件传播，暗示内部状态（如满标志）可产生反压，但具体信号未在上下文中提供。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -355,7 +355,9 @@
         "semantic_claim_id": "semantic:flow:pwm1_top:flow_000_pwm1_top_i_drive:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
-          "(none)"
+          "i_drive",
+          "o_drive_in",
+          "o_drive"
         ],
         "instances": [
           "pwm_fifo1",
@@ -371,16 +373,14 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface_payload_contracts"
-          },
-          {
-            "source": "flow.blocking_points"
+            "source": "transparent_flows",
+            "path": "modules/pwm1_top.json"
           }
         ]
       },
       {
-        "value": "The payload data (i_msg) is expected to flow through the FIFO stages alongside the drive event, but the exact mechanism is not detailed.",
-        "explanation": "The interface contracts define i_msg as the payload for i_drive and o_msg as the payload for o_drive. The flow steps show the event path, but the payload path is not explicitly traced. The assignment from o_msg_reg to o_msg suggests the payload is stored in a register before output. The FIFO stages likely handle both the event and its associated data.",
+        "value": "输入事件 i_drive 携带有效载荷 i_msg，输出事件 o_drive 携带有效载荷 o_msg，但两者之间的数据传递路径未在流中明确。",
+        "explanation": "接口契约显示 i_msg 和 o_msg 均为 51 位宽，但流步骤和连接中未包含这些有效载荷信号，表明数据可能通过独立路径（如寄存器或组合逻辑）传递，而非随事件流同步。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -390,8 +390,7 @@
         "doc_priority": "secondary",
         "signals": [
           "i_msg",
-          "o_msg",
-          "o_msg_reg"
+          "o_msg"
         ],
         "instances": [],
         "related_flows": [],
@@ -406,10 +405,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface_payload_contracts"
+            "source": "interface.event_ports",
+            "path": "modules/pwm1_top.json"
           },
           {
-            "source": "related_assign_dependencies"
+            "source": "interface.data_ports",
+            "path": "modules/pwm1_top.json"
           }
         ]
       }

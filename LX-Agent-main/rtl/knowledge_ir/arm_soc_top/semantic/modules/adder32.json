@@ -46,11 +46,11 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 9,
     "by_type": {
       "assignment_interpretation": 5,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
       "structural_responsibility": 1
     }
@@ -62,17 +62,17 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "Dual-mode 32-bit adder supporting both unsigned and signed addition with overflow and carry detection.",
+      "summary": "32位加法器模块，支持有符号和无符号加法运算，并生成进位和溢出标志。",
       "subject": "adder32",
-      "explanation": "The module computes both unsigned and signed sums of two 32-bit operands plus a carry_in, then selects one based on a symbol signal. It also generates carry_out and overflow flags.",
+      "explanation": "模块通过assign语句实现两种加法路径（无符号和有符号），并通过symbol信号选择输出结果、进位和溢出标志。无事件输入或控制输入，是一个纯组合逻辑数据通路模块。",
       "signals": [
         "oprand1",
         "oprand2",
-        "carry_in",
-        "symbol",
         "result",
+        "carry_in",
         "carry_out",
-        "overflow"
+        "overflow",
+        "symbol"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -96,15 +96,16 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "Performs 33-bit unsigned and signed addition, selects output based on mode, and computes carry and overflow flags.",
-      "subject": "arithmetic addition and flag generation",
-      "explanation": "Two parallel adders compute unsignedSum and signedSum. A mux selects result from either sum based on symbol. carry_out is derived from unsignedSum[32] when symbol is set, else zero. overflow is computed for signed mode only.",
+      "summary": "根据symbol信号选择执行无符号加法或带符号扩展的有符号加法，并输出对应的进位和溢出标志。",
+      "subject": "双模式加法运算",
+      "explanation": "模块内部计算unsignedSum（无符号33位和）和signedSum（有符号33位和）。result输出根据symbol选择unsignedSum或signedSum的低32位。carry_out仅在无符号模式下有效，overflow仅在符号模式下有效。",
       "signals": [
         "unsignedSum",
         "signedSum",
         "result",
         "carry_out",
-        "overflow"
+        "overflow",
+        "symbol"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -129,8 +130,8 @@
         "module": "adder32"
       },
       "subject": "unsignedSum",
-      "summary": "33-bit unsigned sum of operands and carry_in.",
-      "explanation": "Computed as {1'b0, oprand1} + {1'b0, oprand2} + carry_in. The extra bit enables carry_out detection.",
+      "summary": "计算无符号32位加法结果，扩展至33位以捕获进位。",
+      "explanation": "将两个32位操作数扩展为33位（高位补0）后相加，并加上carry_in。结果的高位（bit 32）即为进位输出。",
       "signals": [
         "unsignedSum",
         "oprand1",
@@ -140,7 +141,7 @@
       "related_assignments": [
         "0"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -149,6 +150,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/adder32.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/adder32.v"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:001"
@@ -160,8 +164,8 @@
         "module": "adder32"
       },
       "subject": "signedSum",
-      "summary": "33-bit signed sum of operands and carry_in.",
-      "explanation": "Uses $signed() to sign-extend operands to 33 bits before addition. Enables signed overflow detection.",
+      "summary": "计算有符号32位加法结果，通过符号扩展防止溢出。",
+      "explanation": "将两个32位操作数符号扩展为33位后相加，并加上carry_in。此方法确保中间结果不会溢出，便于后续溢出检测。",
       "signals": [
         "signedSum",
         "oprand1",
@@ -171,7 +175,7 @@
       "related_assignments": [
         "1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -180,6 +184,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/adder32.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/adder32.v"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:002"
@@ -191,8 +198,8 @@
         "module": "adder32"
       },
       "subject": "result",
-      "summary": "Selected 32-bit sum output based on symbol mode.",
-      "explanation": "When symbol is true (unsigned mode), result takes unsignedSum[31:0]; when false (signed mode), result takes signedSum[31:0].",
+      "summary": "根据symbol信号选择最终加法结果。",
+      "explanation": "当symbol为真时，选择无符号加法结果的低32位；否则选择有符号加法结果的低32位。",
       "signals": [
         "result",
         "symbol",
@@ -211,6 +218,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/adder32.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/adder32.v"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:003"
@@ -222,8 +232,8 @@
         "module": "adder32"
       },
       "subject": "carry_out",
-      "summary": "Carry output valid only in unsigned mode.",
-      "explanation": "In unsigned mode (symbol true), carry_out is the 33rd bit of unsignedSum. In signed mode, carry_out is forced to 0.",
+      "summary": "无符号模式下的进位输出。",
+      "explanation": "仅在symbol为真时有效，输出无符号加法结果的第33位（进位位）。符号模式下进位输出恒为0。",
       "signals": [
         "carry_out",
         "symbol",
@@ -241,6 +251,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/adder32.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/adder32.v"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:004"
@@ -252,8 +265,8 @@
         "module": "adder32"
       },
       "subject": "overflow",
-      "summary": "Signed overflow flag, valid only in signed mode.",
-      "explanation": "In signed mode (symbol false), overflow is set when both operands have the same sign and the result sign differs. In unsigned mode, overflow is forced to 0.",
+      "summary": "有符号模式下的溢出标志。",
+      "explanation": "仅在symbol为假时有效。当两个操作数符号相同，但结果符号与之相反时，判定为溢出。",
       "signals": [
         "overflow",
         "symbol",
@@ -273,6 +286,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/adder32.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/adder32.v"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:005"
@@ -283,14 +299,21 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "Two 32-bit data inputs carry the operands for addition.",
-      "subject": "data input payloads",
-      "explanation": "oprand1 and oprand2 are the primary data payloads. No event or control handshake is present; the module is purely combinational.",
+      "summary": "纯数据接口，无事件或控制信号，通过symbol信号选择运算模式。",
+      "subject": "数据输入输出接口",
+      "explanation": "所有输入输出均为32位数据总线。carry_in为进位输入，carry_out为进位输出，overflow为溢出标志，symbol为模式选择。无时钟或复位，为纯组合逻辑。",
       "signals": [
         "oprand1",
-        "oprand2"
+        "oprand2",
+        "result",
+        "carry_in",
+        "carry_out",
+        "overflow",
+        "symbol"
       ],
       "related_payload": [
+        "oprand1",
+        "oprand2",
         "result"
       ],
       "doc_priority": "primary",
@@ -302,39 +325,12 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/adder32.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/adder32.v"
         }
       ],
       "id": "semantic:module:adder32:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "adder32"
-      },
-      "summary": "symbol selects unsigned vs signed mode; carry_out and overflow provide status flags.",
-      "subject": "mode selection and flag outputs",
-      "explanation": "symbol acts as a mode control. carry_out is meaningful only in unsigned mode; overflow only in signed mode. result is always valid.",
-      "signals": [
-        "symbol",
-        "carry_out",
-        "overflow"
-      ],
-      "related_payload": [
-        "result"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
-        }
-      ],
-      "id": "semantic:module:adder32:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -342,9 +338,9 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "Emphasize the dual unsigned/signed operation, the role of symbol, and the conditional validity of carry_out and overflow.",
-      "subject": "dual-mode addition and flag semantics",
-      "explanation": "The module's key feature is supporting both arithmetic modes with separate flag outputs. Documentation should clarify that carry_out is only valid in unsigned mode and overflow only in signed mode.",
+      "summary": "文档应重点说明symbol信号如何控制无符号/有符号模式，以及carry_out和overflow标志的生成逻辑。",
+      "subject": "加法器模式选择与标志生成",
+      "explanation": "模块核心功能由symbol信号驱动，不同模式下进位和溢出标志的含义不同。需要明确解释两种模式下的运算规则和标志有效性。",
       "signals": [
         "symbol",
         "carry_out",
@@ -368,30 +364,5 @@
       "id": "semantic:module:adder32:documentation_focus:001"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "carry_in width and source",
-      "reason": "carry_in is used in assignments but not listed in interface inputs. Its width and origin are unknown.",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
-        }
-      ]
-    },
-    {
-      "field": "symbol width and source",
-      "reason": "symbol is used in assignments but not listed in interface inputs. Its width and origin are unknown.",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
-        }
-      ]
-    }
-  ]
+  "evidence_gaps": []
 }

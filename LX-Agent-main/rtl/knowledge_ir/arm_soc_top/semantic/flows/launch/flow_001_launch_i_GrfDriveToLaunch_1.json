@@ -47,13 +47,13 @@
     }
   ],
   "claim_summary": {
-    "count": 14,
+    "count": 16,
     "by_type": {
       "assignment_interpretation": 1,
-      "completion_backpressure": 1,
+      "completion_backpressure": 2,
       "component_role": 5,
       "data_control_effect": 3,
-      "documentation_focus": 1,
+      "documentation_focus": 2,
       "flow_intent": 1,
       "source_review_request": 2
     }
@@ -66,9 +66,9 @@
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "summary": "This flow propagates a single GRF-originated drive event through a multi-stage pipeline of merges, splits, delays, and selectors to produce three output drive events to GRF, SRF, and EXE.",
+      "summary": "来自GRF的驱动事件通过launch模块内部的多级合并、拆分、选择与延迟路径，最终分发至GRF、SRF和EXE三个下游模块。",
       "subject": "flow_001_launch_i_GrfDriveToLaunch_1",
-      "explanation": "The flow starts at the module input i_GrfDriveToLaunch_1 and is first merged with an SRF drive in grfSrfMerge. The merged event is then split by grfSplitter into two parallel paths that feed into the release (rele) network. After passing through release selectors and merges, the event is combined with register data and decoder information in the launchSplitter and regMerge stages. The final outputs are produced by grfSrfSele (to GRF and SRF) and exeMerge2 (to EXE).",
+      "explanation": "该流从输入端口i_GrfDriveToLaunch_1进入，首先与SRF驱动在grfSrfMerge中仲裁合并，随后经过grfSplitter拆分，分别进入rele2Merge和rele3Merge等待合并，再经rele2Selector和rele3Selector选择后，通过rs1Merge和rs2Merge合并至regMerge，最终由launchSplitter和后续组件分发至三个输出端点。整个路径体现了事件从单一输入到多输出端点的扇出过程。",
       "signals": [
         "i_GrfDriveToLaunch_1",
         "o_launchDriveToGrf_1",
@@ -86,10 +86,7 @@
         "rs2Merge",
         "regMerge",
         "launchSplitter",
-        "regSelector",
-        "regSplitter",
         "grfSrfSele",
-        "releSplitter",
         "exeMerge2"
       ],
       "related_assignments": [
@@ -116,8 +113,8 @@
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
       "subject": "grfSrfMerge",
-      "summary": "MutexMerge that arbitrates between GRF and SRF drive events, allowing only one to pass at a time.",
-      "explanation": "As a cMutexMerge2_64b_launch, this component ensures mutual exclusion between the i_GrfDriveToLaunch_1 and i_SrfDriveToLaunch_1 inputs. Only one event is forwarded to the grfSplitter at any time, preventing contention in the downstream pipeline.",
+      "summary": "作为事件流的入口仲裁合并器，将GRF和SRF两个来源的驱动事件合并为单一事件流。",
+      "explanation": "grfSrfMerge是一个MutexMerge类型的合并器，它接收i_GrfDriveToLaunch_1和i_SrfDriveToLaunch_1两个输入，通过互斥仲裁机制选择其中一个事件通过，输出至grfSplitter。这确保了来自不同源的驱动事件不会同时占用后续路径。",
       "signals": [
         "i_GrfDriveToLaunch_1",
         "i_SrfDriveToLaunch_1",
@@ -147,8 +144,8 @@
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
       "subject": "grfSplitter",
-      "summary": "SelSplit that distributes the merged GRF/SRF event to two parallel release paths (rele2 and rele3).",
-      "explanation": "As a cSplitter2_64b_launch, this component takes the single event from grfSrfMerge and routes it to either rele2Merge or rele3Merge based on internal selection logic. This creates two independent processing branches for the event.",
+      "summary": "将合并后的GRF/SRF事件流拆分为两条并行路径，分别导向rele2Merge和rele3Merge。",
+      "explanation": "grfSplitter是一个SelSplit类型的分发器，根据事件中的选择字段将输入事件分发到两个输出端口之一。这实现了事件流基于某种条件的分支，可能对应不同的指令类型或执行单元。",
       "signals": [
         "w_grfSrfMerDriToGrfSpli_1",
         "w_grfSplitterDriveToRele2Merge_1",
@@ -177,20 +174,24 @@
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "subject": "rele2Selector and rele3Selector",
-      "summary": "SelSplit components that route release events either to the register source merge (rs1Merge/rs2Merge) or back through a delay loop for internal processing.",
-      "explanation": "These cSelector2_33b_launch components receive merged events from rele2Merge/rele3Merge and a delayed feedback signal. They can either forward the event to the register source merge (output 0) or recirculate it through a delay (output 1) for later processing, enabling pipeline stalling or reordering.",
+      "subject": "rele2Selector, rele3Selector",
+      "summary": "作为选择器，在等待合并后的事件流与自身延迟反馈之间进行选择，决定事件是继续向前传递还是进入延迟环路。",
+      "explanation": "这两个Selector实例接收来自对应Merge的输出和来自outdelay的延迟反馈，通过选择逻辑决定事件流向。当事件被选择进入延迟环路时，它会在outdelay中停留若干周期后重新进入Selector，形成一种事件重试或等待机制。这通常用于处理资源冲突或数据依赖。",
       "signals": [
         "w_rele2MergeDriveToRele2Selector_1",
         "w_rele2SelectorDriveToMeDelay_1",
+        "w_rele2SelectorDriveToMe_1",
         "w_rele2SelectorDriveToRs1Merge_1",
         "w_rele3MergeDriveToRele3Selector_1",
         "w_rele3SelectorDriveToMeDelay_1",
+        "w_rele3SelectorDriveToMe_1",
         "w_rele3SelectorDriveToRs2Merge_1"
       ],
       "instances": [
         "rele2Selector",
-        "rele3Selector"
+        "rele3Selector",
+        "outdelay2",
+        "outdelay3"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -213,8 +214,8 @@
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
       "subject": "launchSplitter",
-      "summary": "SelSplit that merges the register data event with decoder information and splits into three paths for execution, immediate, and register processing.",
-      "explanation": "As a cSplitter3_185_16_26_143b_launch, this component takes two inputs: the decoder drive (i_decoderDriveToLaunch_1) and the merged register event (w_regMergeDriveToRegSelector_1). It produces three outputs: one for the execution merge path, one for immediate selection, and one for register splitting. This is a key branching point that combines control and data paths.",
+      "summary": "作为核心分发节点，将合并后的寄存器数据流与解码器驱动事件结合，拆分为执行、立即数和寄存器三个子流。",
+      "explanation": "launchSplitter接收来自regMerge的寄存器数据流和来自解码器的驱动事件，根据指令类型将事件拆分为三个输出：一个导向执行路径（经延迟和FIFO后至exeMerge2），一个导向立即数选择路径，一个导向寄存器拆分路径。这实现了指令解码后的数据分发。",
       "signals": [
         "i_decoderDriveToLaunch_1",
         "w_regMergeDriveToRegSelector_1",
@@ -246,8 +247,8 @@
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
       "subject": "exeMerge2",
-      "summary": "WaitMerge that combines the launch event with branch and register select data to produce the final execution output.",
-      "explanation": "As a cWaitMerge3_104_99_4_207b_launch, this component waits for three inputs: the delayed launch fork event, a branch event, and a register select event. It merges these into a single output drive to the execution unit (o_launchDriveToExe_1), representing the final pipeline stage for the execution path.",
+      "summary": "作为执行路径的最终合并点，将分支、延迟后的执行FIFO和寄存器选择三个事件流合并为单一输出。",
+      "explanation": "exeMerge2是一个WaitMerge类型的合并器，它等待来自分支路径、延迟后的执行FIFO路径和寄存器选择路径的三个事件全部到达后，才输出至o_launchDriveToExe_1。这确保了执行单元在接收到所有必要信息后才开始执行。",
       "signals": [
         "w_branchDriToExeMerge1_1",
         "w_launchForkDrive1ToExeMergeDelay1_1",
@@ -278,8 +279,8 @@
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
       "subject": "w_regMergeDriveToRegSelector1_1",
-      "summary": "This assignment ORs the register merge event with a fetch exception signal, potentially overriding the normal event flow.",
-      "explanation": "The assignment w_regMergeDriveToRegSelector1_1 = w_driveFExcToIf_1 | w_regMergeDriveToRegSelector_1 indicates that the register selector input can be driven by either the normal register merge event or a fetch exception signal. This suggests an exception handling mechanism that can preempt the normal flow.",
+      "summary": "该赋值将寄存器合并输出与异常驱动信号进行逻辑或，形成最终的寄存器选择器输入。",
+      "explanation": "赋值32将w_regMergeDriveToRegSelector_1与w_driveFExcToIf_1进行或操作，结果赋值给w_regMergeDriveToRegSelector1_1。这表明异常事件可以覆盖或合并到正常的寄存器数据流中，使得异常处理能够插入到launch流水线中。",
       "signals": [
         "w_regMergeDriveToRegSelector1_1",
         "w_driveFExcToIf_1",
@@ -305,9 +306,9 @@
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "summary": "The GRF drive event is propagated through the pipeline and eventually routed back to GRF via grfSrfSele, with register data attached.",
+      "summary": "GRF驱动事件经过launch模块处理后，最终通过grfSrfSele输出回GRF，形成反馈路径。",
       "subject": "i_GrfDriveToLaunch_1 to o_launchDriveToGrf_1",
-      "explanation": "The event from i_GrfDriveToLaunch_1 passes through the merge/split network and register processing stages. At grfSrfSele, it is split to produce o_launchDriveToGrf_1, which carries the event back to the GRF unit. The payload contract shows o_launchDataToExe_207 is associated with this output, indicating register data is attached.",
+      "explanation": "该流从GRF输入，经过合并、拆分、选择、寄存器合并等处理后，最终通过regSplitter和grfSrfSele将部分事件输出回GRF。这表明launch模块不仅将事件转发到执行单元，还会将某些信息（如寄存器写回地址）反馈给GRF。",
       "signals": [
         "i_GrfDriveToLaunch_1",
         "o_launchDriveToGrf_1"
@@ -317,7 +318,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/launch.json"
@@ -335,9 +336,9 @@
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "summary": "The GRF drive event is also routed to SRF via grfSrfSele, sharing the same register data payload.",
+      "summary": "GRF驱动事件经过launch模块处理后，通过grfSrfSele输出到SRF，实现GRF到SRF的数据传递。",
       "subject": "i_GrfDriveToLaunch_1 to o_launchDriveToSrf_1",
-      "explanation": "Similar to the GRF output, the event is split at grfSrfSele to produce o_launchDriveToSrf_1. The payload contract indicates the same o_launchDataToExe_207 is used, suggesting the GRF and SRF outputs carry identical register data but are directed to different destinations.",
+      "explanation": "与GRF反馈路径类似，grfSrfSele的另一个输出端口将事件导向SRF。这表明launch模块支持GRF和SRF之间的数据交换，可能用于系统寄存器访问或状态同步。",
       "signals": [
         "i_GrfDriveToLaunch_1",
         "o_launchDriveToSrf_1"
@@ -347,7 +348,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/launch.json"
@@ -365,9 +366,9 @@
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "summary": "The GRF drive event is combined with decoder and register data to produce the execution output.",
+      "summary": "GRF驱动事件经过launch模块处理后，通过exeMerge2输出到执行单元，携带完整的执行所需数据。",
       "subject": "i_GrfDriveToLaunch_1 to o_launchDriveToExe_1",
-      "explanation": "After passing through the release network and register processing, the event is merged with decoder and branch information at exeMerge2. The output o_launchDriveToExe_1 carries the combined event to the execution unit, with the payload o_launchDataToExe_207 containing the full instruction data.",
+      "explanation": "该路径是GRF驱动事件的主要执行路径，经过多级合并、拆分、延迟和FIFO后，最终在exeMerge2中与分支和寄存器选择事件合并，输出到执行单元。输出信号o_launchDataToExe_207携带207位宽的载荷数据，包含指令执行所需的所有信息。",
       "signals": [
         "i_GrfDriveToLaunch_1",
         "o_launchDriveToExe_1"
@@ -377,7 +378,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/launch.json"
@@ -395,16 +396,11 @@
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "summary": "The flow includes free signals for backpressure, but their exact role in this specific drive flow is not fully determined from the context.",
-      "subject": "free/backpressure signals",
-      "explanation": "The interface payload contracts show free signals (e.g., o_launchFreeToGrf_1, i_ExeFreeToLaunch_1) associated with the event ports. However, the flow steps do not explicitly show how these free signals interact with the drive propagation. The grfSrfMerge and other WaitMerge components likely use these for flow control, but the exact mechanism requires RTL review.",
+      "summary": "该流存在从GRF输入到GRF输出的反馈路径，但free/backpressure信号的具体关系未在上下文中明确。",
+      "subject": "o_launchFreeToGrf_1",
+      "explanation": "接口契约显示i_GrfDriveToLaunch_1的free信号为o_launchFreeToGrf_1，表明launch模块通过该信号向GRF反馈是否可接收新事件。然而，上下文中未提供该free信号在内部流中的传播路径或与各合并器/选择器的交互关系，因此无法确定背压机制的具体实现。",
       "signals": [
-        "o_launchFreeToGrf_1",
-        "i_ExeFreeToLaunch_1"
-      ],
-      "instances": [
-        "grfSrfMerge",
-        "exeMerge2"
+        "o_launchFreeToGrf_1"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -417,15 +413,38 @@
       "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:completion_backpressure:001"
     },
     {
+      "claim_type": "completion_backpressure",
+      "scope": {
+        "type": "flow",
+        "module": "launch",
+        "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
+      },
+      "summary": "执行单元通过该free信号向launch模块反馈是否可接收新事件，但内部传播路径未明确。",
+      "subject": "i_ExeFreeToLaunch_1",
+      "explanation": "接口契约显示o_launchDriveToExe_1的free信号为i_ExeFreeToLaunch_1，表明执行单元通过该信号控制launch模块的输出。然而，上下文中未提供该free信号如何影响内部流（如exeMerge2或FIFO）的细节。",
+      "signals": [
+        "i_ExeFreeToLaunch_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json"
+        }
+      ],
+      "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:completion_backpressure:002"
+    },
+    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "flow",
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "summary": "The manual should emphasize the multi-stage pipeline structure, the branching at grfSplitter and launchSplitter, and the three output destinations.",
-      "subject": "flow_001_launch_i_GrfDriveToLaunch_1 manual",
-      "explanation": "This flow demonstrates a complex pipeline where a single input event is split, merged, delayed, and recombined to produce three outputs. Key documentation points include the mutual exclusion at grfSrfMerge, the parallel release paths, the register data attachment, and the final output routing. The exception override at assignment 32 should also be noted.",
+      "summary": "最终手册应重点描述GRF驱动事件如何通过多级合并、拆分和选择器实现条件分发和延迟重试。",
+      "subject": "事件流的分发与选择机制",
+      "explanation": "该流的核心特征是事件从单一输入到三个输出端点的扇出过程，其中grfSplitter、rele2Selector/rele3Selector和launchSplitter等选择器实现了基于条件的分发。特别是rele2Selector和rele3Selector的延迟反馈机制，可能用于处理资源冲突或数据依赖，需要详细说明。",
       "signals": [
         "i_GrfDriveToLaunch_1",
         "o_launchDriveToGrf_1",
@@ -433,14 +452,11 @@
         "o_launchDriveToExe_1"
       ],
       "instances": [
-        "grfSrfMerge",
         "grfSplitter",
+        "rele2Selector",
+        "rele3Selector",
         "launchSplitter",
-        "exeMerge2",
         "grfSrfSele"
-      ],
-      "related_assignments": [
-        "32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -456,43 +472,15 @@
       "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:documentation_focus:001"
     },
     {
-      "claim_type": "source_review_request",
+      "claim_type": "documentation_focus",
       "scope": {
         "type": "flow",
         "module": "launch",
         "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
       },
-      "reason": "The flow steps do not show how free signals interact with drive propagation, but the interface contracts indicate their presence.",
-      "subject": "free/backpressure mechanism",
-      "needed_source_slice": "always blocks or assign statements involving free signals and drive propagation",
-      "signals": [
-        "o_launchFreeToGrf_1",
-        "i_ExeFreeToLaunch_1"
-      ],
-      "instances": [
-        "grfSrfMerge",
-        "exeMerge2"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
-      },
-      "reason": "The assignment w_regMergeDriveToRegSelector1_1 = w_driveFExcToIf_1 | w_regMergeDriveToRegSelector_1 suggests an exception mechanism, but the context does not show how this affects the flow.",
-      "subject": "exception override at assignment 32",
-      "needed_source_slice": "assign block for w_regMergeDriveToRegSelector1_1 and related control logic",
+      "summary": "手册应说明异常事件如何通过赋值32与正常寄存器数据流合并，以及这对launch流水线的影响。",
+      "subject": "异常事件与正常事件流的合并",
+      "explanation": "赋值32显示异常驱动信号w_driveFExcToIf_1与正常寄存器数据流进行或操作，表明异常处理可以插入到launch流水线中。这需要RTL源码确认具体实现细节，但手册应提及这种异常合并机制。",
       "signals": [
         "w_regMergeDriveToRegSelector1_1",
         "w_driveFExcToIf_1",
@@ -509,13 +497,80 @@
           "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
+      "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:documentation_focus:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "flow",
+        "module": "launch",
+        "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
+      },
+      "reason": "上下文仅提供赋值表达式，未说明w_driveFExcToIf_1的来源和触发条件，需要RTL源码确认异常事件如何产生和合并。",
+      "subject": "赋值32的异常合并机制",
+      "needed_source_slice": "assign block for index 32, and the generation of w_driveFExcToIf_1",
+      "signals": [
+        "w_regMergeDriveToRegSelector1_1",
+        "w_driveFExcToIf_1",
+        "w_regMergeDriveToRegSelector_1"
+      ],
+      "related_assignments": [
+        "32"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/launch.json"
+        }
+      ],
+      "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "flow",
+        "module": "launch",
+        "flow_id": "flow_001_launch_i_GrfDriveToLaunch_1"
+      },
+      "reason": "上下文仅提供接口级别的free信号，未说明这些信号如何在内部流中传播并与各合并器/选择器交互，需要RTL源码确认背压机制。",
+      "subject": "free/backpressure信号的内部传播路径",
+      "needed_source_slice": "always blocks or assign blocks related to o_launchFreeToGrf_1 and i_ExeFreeToLaunch_1, and their connections to internal instances",
+      "signals": [
+        "o_launchFreeToGrf_1",
+        "i_ExeFreeToLaunch_1"
+      ],
+      "instances": [
+        "grfSrfMerge",
+        "exeMerge2",
+        "opDataFifo",
+        "launchDelayFifo1",
+        "writeSFifo"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json"
+        }
+      ],
       "id": "semantic:flow:launch:flow_001_launch_i_GrfDriveToLaunch_1:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "free/backpressure interaction",
-      "reason": "The flow steps do not show how free signals control drive propagation through the pipeline stages."
+      "field": "free/backpressure信号的内部传播路径",
+      "reason": "上下文仅提供接口级别的free信号，未说明这些信号如何在内部流中传播并与各合并器/选择器交互。"
+    },
+    {
+      "field": "选择器的选择条件",
+      "reason": "上下文未提供grfSplitter、rele2Selector、rele3Selector、launchSplitter等选择器的选择条件信号或逻辑，无法确定事件分发的具体依据。"
+    },
+    {
+      "field": "延迟环路的触发条件",
+      "reason": "上下文未说明rele2Selector和rele3Selector的延迟反馈环路在何种条件下触发，以及延迟周期数如何确定。"
     }
   ]
 }

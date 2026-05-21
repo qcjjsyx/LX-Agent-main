@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 17,
+    "count": 11,
     "by_type": {
-      "assignment_interpretation": 7,
+      "assignment_interpretation": 3,
       "component_role": 3,
-      "documentation_focus": 2,
+      "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
-      "structural_responsibility": 2
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -63,12 +63,10 @@
         "type": "module",
         "module": "adder"
       },
-      "summary": "Multi-width arithmetic adder with mode selection and carry/overflow reporting",
+      "summary": "多宽度算术加法器，根据操作类型选择32位、5位或64位加法结果",
       "subject": "adder",
-      "explanation": "Module selects between 32-bit, 5-bit, and 64-bit addition based on i_adderType_2 control input, with configurable carry-in type and signed/unsigned operation via i_addSymbolFlag_1",
+      "explanation": "模块通过i_adderType_2选择不同位宽的加法器子模块（adder32、adder5、adder64）的输出，并统一输出64位结果和进位/溢出标志。i_addSymbolFlag_1和i_carryInType_1控制所有子模块的符号模式和进位输入。",
       "signals": [
-        "i_oprand1_64",
-        "i_oprand2_64",
         "i_adderType_2",
         "i_addSymbolFlag_1",
         "i_carryInType_1",
@@ -86,10 +84,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/adder.json"
+          "source": "knowledge_ir/modules/adder.json",
+          "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:module:adder:module_role:001"
@@ -100,12 +100,14 @@
         "type": "module",
         "module": "adder"
       },
-      "summary": "Routes 64-bit input operands to appropriate sub-adder based on i_adderType_2 and selects result",
-      "subject": "multi-width addition selection",
-      "explanation": "Assign index 4 shows o_adderResult_64 is muxed from w_adder32Result_32, w_adder5Result_5, or w_adder64Result_64 based on i_adderType_2 encoding (00=32-bit, 01=5-bit, 10=64-bit, default=0)",
+      "summary": "根据i_adderType_2的值，从三个子加法器（32位、5位、64位）的结果中选择一个作为最终输出",
+      "subject": "多宽度加法结果选择与输出",
+      "explanation": "assign_dependencies索引4、5、6显示o_adderResult_64、o_adderCarryOut_1、o_adderOverFlow_1均通过i_adderType_2的三态选择器从子模块结果中选取。i_adderType_2编码为2'b00选择32位，2'b01选择5位，2'b10选择64位，默认输出0。",
       "signals": [
-        "i_adderType_2",
         "o_adderResult_64",
+        "o_adderCarryOut_1",
+        "o_adderOverFlow_1",
+        "i_adderType_2",
         "w_adder32Result_32",
         "w_adder5Result_5",
         "w_adder64Result_64"
@@ -120,51 +122,11 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/adder.v"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:module:adder:structural_responsibility:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "adder"
-      },
-      "summary": "Generates carry-out and overflow flags from selected sub-adder output",
-      "subject": "carry and overflow propagation",
-      "explanation": "Assign indices 5 and 6 show o_adderCarryOut_1 and o_adderOverFlow_1 are muxed from sub-adder outputs using same i_adderType_2 selection logic",
-      "signals": [
-        "i_adderType_2",
-        "o_adderCarryOut_1",
-        "o_adderOverFlow_1",
-        "w_adder32CarryOut_1",
-        "w_adder5CarryOut_1",
-        "w_adder64CarryOut_1",
-        "w_adder32OverFlow_1",
-        "w_adder5OverFlow_1",
-        "w_adder64OverFlow_1"
-      ],
-      "instances": [
-        "adder32",
-        "adder5",
-        "adder64"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/adder.v"
-        }
-      ],
-      "id": "semantic:module:adder:structural_responsibility:002"
     },
     {
       "claim_type": "component_role",
@@ -173,13 +135,16 @@
         "module": "adder"
       },
       "subject": "adder64",
-      "summary": "Primary 64-bit adder for full-width operations",
-      "explanation": "Receives full 64-bit operands directly from i_oprand1_64 and i_oprand2_64, with symbol and carry-in control from top-level inputs",
+      "summary": "64位主加法器，处理完整64位操作数",
+      "explanation": "接收完整的64位操作数i_oprand1_64和i_oprand2_64，以及符号标志和进位类型控制信号。其输出w_adder64Result_64、w_adder64CarryOut_1、w_adder64OverFlow_1在i_adderType_2为2'b10时被选为最终输出。",
       "signals": [
         "i_oprand1_64",
         "i_oprand2_64",
         "i_addSymbolFlag_1",
-        "i_carryInType_1"
+        "i_carryInType_1",
+        "w_adder64Result_64",
+        "w_adder64CarryOut_1",
+        "w_adder64OverFlow_1"
       ],
       "instances": [
         "adder64"
@@ -189,10 +154,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/adder.v"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:adder:component_role:001"
@@ -204,13 +167,16 @@
         "module": "adder"
       },
       "subject": "adder32",
-      "summary": "32-bit adder using lower half of input operands",
-      "explanation": "Receives w_oprand1_32 and w_oprand2_32 (lower 32 bits of i_oprand1_64 and i_oprand2_64 via assign indices 0 and 1), with symbol and carry-in control",
+      "summary": "32位子加法器，处理操作数的低32位",
+      "explanation": "通过assign_dependencies索引0和1，从64位操作数中提取低32位（w_oprand1_32和w_oprand2_32）作为输入。其输出在i_adderType_2为2'b00时被选为最终结果。",
       "signals": [
         "w_oprand1_32",
         "w_oprand2_32",
         "i_addSymbolFlag_1",
-        "i_carryInType_1"
+        "i_carryInType_1",
+        "w_adder32Result_32",
+        "w_adder32CarryOut_1",
+        "w_adder32OverFlow_1"
       ],
       "instances": [
         "adder32"
@@ -220,10 +186,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         },
         {
-          "source": "rtl/rtl/Execute/adder.v"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:adder:component_role:002"
@@ -235,13 +203,16 @@
         "module": "adder"
       },
       "subject": "adder5",
-      "summary": "5-bit adder using lower 5 bits of input operands",
-      "explanation": "Receives w_oprand1_5 and w_oprand2_5 (lower 5 bits of i_oprand1_64 via assign index 2 and i_oprand2_64 via assign index 3), with symbol and carry-in control",
+      "summary": "5位子加法器，处理操作数的低5位",
+      "explanation": "通过assign_dependencies索引2和3，从64位操作数中提取低5位（w_oprand1_5和w_oprand2_5）作为输入。其输出在i_adderType_2为2'b01时被选为最终结果。",
       "signals": [
         "w_oprand1_5",
         "w_oprand2_5",
         "i_addSymbolFlag_1",
-        "i_carryInType_1"
+        "i_carryInType_1",
+        "w_adder5Result_5",
+        "w_adder5CarryOut_1",
+        "w_adder5OverFlow_1"
       ],
       "instances": [
         "adder5"
@@ -251,10 +222,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         },
         {
-          "source": "rtl/rtl/Execute/adder.v"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:adder:component_role:003"
@@ -265,22 +238,26 @@
         "type": "module",
         "module": "adder"
       },
-      "subject": "w_oprand1_32",
-      "summary": "Extracts lower 32 bits of first operand for 32-bit adder path",
-      "explanation": "Assign index 0 slices i_oprand1_64[31:0] to create w_oprand1_32, feeding adder32.oprand1",
+      "subject": "w_oprand1_32, w_oprand2_32",
+      "summary": "从64位操作数提取低32位，供adder32使用",
+      "explanation": "assign_dependencies索引0和1将i_oprand1_64[31:0]和i_oprand2_64[31:0]分别赋值给w_oprand1_32和w_oprand2_32，这是数据路径的位宽截取操作，用于驱动32位加法器。",
       "signals": [
         "i_oprand1_64",
-        "w_oprand1_32"
+        "i_oprand2_64",
+        "w_oprand1_32",
+        "w_oprand2_32"
       ],
       "related_assignments": [
-        "assign 0"
+        "0",
+        "1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "reference",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:module:adder:assignment_interpretation:001"
@@ -291,22 +268,26 @@
         "type": "module",
         "module": "adder"
       },
-      "subject": "w_oprand2_32",
-      "summary": "Extracts lower 32 bits of second operand for 32-bit adder path",
-      "explanation": "Assign index 1 slices i_oprand2_64[31:0] to create w_oprand2_32, feeding adder32.oprand2",
+      "subject": "w_oprand1_5, w_oprand2_5",
+      "summary": "从64位操作数提取低5位，供adder5使用",
+      "explanation": "assign_dependencies索引2和3将i_oprand1_64[31:0]和i_oprand2_64[31:0]分别赋值给w_oprand1_5和w_oprand2_5，这是数据路径的位宽截取操作，用于驱动5位加法器。",
       "signals": [
+        "i_oprand1_64",
         "i_oprand2_64",
-        "w_oprand2_32"
+        "w_oprand1_5",
+        "w_oprand2_5"
       ],
       "related_assignments": [
-        "assign 1"
+        "2",
+        "3"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "reference",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:module:adder:assignment_interpretation:002"
@@ -317,147 +298,33 @@
         "type": "module",
         "module": "adder"
       },
-      "subject": "w_oprand1_5",
-      "summary": "Extracts lower 5 bits of first operand for 5-bit adder path",
-      "explanation": "Assign index 2 slices i_oprand1_64[31:0] to create w_oprand1_5, feeding adder5.oprand1",
+      "subject": "o_adderResult_64, o_adderCarryOut_1, o_adderOverFlow_1",
+      "summary": "根据i_adderType_2选择子模块结果作为最终输出",
+      "explanation": "assign_dependencies索引4、5、6实现三态选择器，将子模块的结果、进位和溢出信号映射到模块输出。这是控制路径主导的数据选择操作。",
       "signals": [
-        "i_oprand1_64",
-        "w_oprand1_5"
-      ],
-      "related_assignments": [
-        "assign 2"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        }
-      ],
-      "id": "semantic:module:adder:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "adder"
-      },
-      "subject": "w_oprand2_5",
-      "summary": "Extracts lower 5 bits of second operand for 5-bit adder path",
-      "explanation": "Assign index 3 slices i_oprand2_64[31:0] to create w_oprand2_5, feeding adder5.oprand2",
-      "signals": [
-        "i_oprand2_64",
-        "w_oprand2_5"
-      ],
-      "related_assignments": [
-        "assign 3"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        }
-      ],
-      "id": "semantic:module:adder:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "adder"
-      },
-      "subject": "o_adderResult_64",
-      "summary": "Muxed result selection from sub-adders based on operation type",
-      "explanation": "Assign index 4 implements 3-way mux selecting between 32-bit, 5-bit, or 64-bit adder result, with default zero for undefined i_adderType_2 values",
-      "signals": [
-        "i_adderType_2",
         "o_adderResult_64",
+        "o_adderCarryOut_1",
+        "o_adderOverFlow_1",
+        "i_adderType_2",
         "w_adder32Result_32",
         "w_adder5Result_5",
         "w_adder64Result_64"
       ],
       "related_assignments": [
-        "assign 4"
+        "4",
+        "5",
+        "6"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/adder.v"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         }
       ],
-      "id": "semantic:module:adder:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "adder"
-      },
-      "subject": "o_adderCarryOut_1",
-      "summary": "Muxed carry-out selection from sub-adders based on operation type",
-      "explanation": "Assign index 5 implements 3-way mux selecting carry-out from 32-bit, 5-bit, or 64-bit adder, with default zero",
-      "signals": [
-        "i_adderType_2",
-        "o_adderCarryOut_1",
-        "w_adder32CarryOut_1",
-        "w_adder5CarryOut_1",
-        "w_adder64CarryOut_1"
-      ],
-      "related_assignments": [
-        "assign 5"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/adder.v"
-        }
-      ],
-      "id": "semantic:module:adder:assignment_interpretation:006"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "adder"
-      },
-      "subject": "o_adderOverFlow_1",
-      "summary": "Muxed overflow flag selection from sub-adders based on operation type",
-      "explanation": "Assign index 6 implements 3-way mux selecting overflow from 32-bit, 5-bit, or 64-bit adder, with default zero",
-      "signals": [
-        "i_adderType_2",
-        "o_adderOverFlow_1",
-        "w_adder32OverFlow_1",
-        "w_adder5OverFlow_1",
-        "w_adder64OverFlow_1"
-      ],
-      "related_assignments": [
-        "assign 6"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/adder.v"
-        }
-      ],
-      "id": "semantic:module:adder:assignment_interpretation:007"
+      "id": "semantic:module:adder:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -465,18 +332,30 @@
         "type": "module",
         "module": "adder"
       },
-      "summary": "Signed/unsigned operation mode selector distributed to all sub-adders",
-      "subject": "i_addSymbolFlag_1",
-      "explanation": "Single-bit control signal routed to adder32.symbol, adder5.symbol, and adder64.symbol, indicating all sub-adders support signed arithmetic mode",
+      "summary": "两个64位操作数输入，通过位宽截取同时驱动不同位宽的子加法器",
+      "subject": "操作数输入接口",
+      "explanation": "i_oprand1_64和i_oprand2_64作为数据负载输入，其低32位和低5位分别被提取用于32位和5位加法器，完整64位直接用于64位加法器。这种设计支持同一操作数在不同位宽模式下复用。",
       "signals": [
-        "i_addSymbolFlag_1"
+        "i_oprand1_64",
+        "i_oprand2_64"
+      ],
+      "related_payload": [
+        "w_oprand1_32",
+        "w_oprand2_32",
+        "w_oprand1_5",
+        "w_oprand2_5"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "knowledge_ir/modules/adder.json",
+          "path": "interface"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:module:adder:interface_intent:001"
@@ -487,18 +366,21 @@
         "type": "module",
         "module": "adder"
       },
-      "summary": "Carry-in configuration mode distributed to all sub-adders",
-      "subject": "i_carryInType_1",
-      "explanation": "Single-bit control signal routed to adder32.carry_in, adder5.carry_in, and adder64.carry_in, indicating configurable carry-in behavior across all widths",
+      "summary": "三个控制信号统一控制所有子加法器的行为模式",
+      "subject": "控制输入接口",
+      "explanation": "i_addSymbolFlag_1（符号模式）、i_adderType_2（位宽选择）、i_carryInType_1（进位类型）同时连接到所有三个子加法器，表明这些控制信号是全局性的，影响所有位宽模式下的加法行为。",
       "signals": [
+        "i_addSymbolFlag_1",
+        "i_adderType_2",
         "i_carryInType_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:adder:interface_intent:002"
@@ -509,70 +391,48 @@
         "type": "module",
         "module": "adder"
       },
-      "summary": "Document i_adderType_2 encoding (00=32-bit, 01=5-bit, 10=64-bit, others=zero) as primary control interface",
-      "subject": "operation type encoding",
-      "explanation": "All output muxing (result, carry, overflow) depends on this encoding; it is the central mode selection mechanism",
+      "summary": "文档应重点描述三种位宽模式的选择机制和子模块的协同工作方式",
+      "subject": "多宽度加法器架构",
+      "explanation": "模块核心设计是使用三个独立子加法器覆盖不同位宽需求，通过i_adderType_2选择输出。文档应解释每种模式的应用场景（如32位用于标准操作，5位用于特殊指令，64位用于完整精度），以及控制信号如何统一影响所有子模块。",
       "signals": [
         "i_adderType_2",
         "o_adderResult_64",
         "o_adderCarryOut_1",
         "o_adderOverFlow_1"
       ],
+      "instances": [
+        "adder32",
+        "adder5",
+        "adder64"
+      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/adder.json"
+          "source": "knowledge_ir/modules/adder.json",
+          "path": "interface"
         },
         {
-          "source": "rtl/rtl/Execute/adder.v"
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "assignments"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/adder.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:adder:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "adder"
-      },
-      "summary": "Explain why 5-bit and 32-bit sub-adders exist alongside 64-bit, possibly for flag/condition generation or special operations",
-      "subject": "sub-adder width rationale",
-      "explanation": "Context shows no event flow or pipeline stage info; 5-bit and 32-bit paths may serve flag computation or specific instruction types",
-      "signals": [
-        "w_oprand1_5",
-        "w_oprand2_5",
-        "w_oprand1_32",
-        "w_oprand2_32"
-      ],
-      "instances": [
-        "adder5",
-        "adder32"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/adder.json"
-        }
-      ],
-      "id": "semantic:module:adder:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "sub-adder internal implementation",
-      "reason": "No instance details or internal logic for adder32, adder5, adder64 components; cannot describe their internal addition algorithms or pipeline stages"
+      "field": "子模块内部实现细节",
+      "reason": "上下文未提供adder32、adder5、adder64的内部逻辑，无法推断其具体加法算法（如进位链结构、符号处理逻辑等）"
     },
     {
-      "field": "event flow and pipeline context",
-      "reason": "No event inputs/outputs or internal event flow references; cannot determine if adder is combinational or pipelined, or its position in execution pipeline"
-    },
-    {
-      "field": "i_addSymbolFlag_1 and i_carryInType_1 encoding",
-      "reason": "No documentation of what values mean (e.g., 0=unsigned/1=signed, or carry-in types); requires RTL source review of sub-adder implementations"
+      "field": "事件流和握手协议",
+      "reason": "上下文显示无事件输入/输出和事件-负载契约，无法推断模块是否支持流水线握手或就绪/有效信号"
     }
   ]
 }

@@ -47,15 +47,14 @@
     }
   ],
   "claim_summary": {
-    "count": 18,
+    "count": 11,
     "by_type": {
-      "assignment_interpretation": 2,
       "completion_backpressure": 1,
-      "component_role": 10,
-      "data_control_effect": 1,
+      "component_role": 5,
+      "data_control_effect": 2,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 2
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -66,9 +65,9 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "summary": "This drive flow propagates an LSU-originated event through a multi-stage pipeline to produce three output events: o_launchDriveToGrf_1, o_launchDriveToSrf_1, and o_launchDriveToExe_1.",
+      "summary": "该驱动流将LSU发出的启动事件（i_LsuDriveToLunch_1）经过延迟、合并、选择、拆分和FIFO缓冲后，分发至三个输出端点：o_launchDriveToGrf_1、o_launchDriveToSrf_1和o_launchDriveToExe_1。",
       "subject": "flow_004_launch_i_LsuDriveToLunch_1",
-      "explanation": "The flow starts at i_LsuDriveToLunch_1, passes through a delay (lsuDelay0), merges with another LSU path (lsuMerge), then splits into two parallel WaitMerge paths (rele0Merge and rele4Merge). Each WaitMerge path feeds a SelSplit selector (rele0Selector, rele4Selector) that routes to either a delay loop or to rs1Merge/rs2Merge. The merged rs1/rs2 paths combine at regMerge, then split at launchSplitter into three branches: one to exeMerge2 (via delays and fifos), one to regSplitter (which further splits to grfSrfSele and releSplitter), and one to regSelector. The final outputs are o_launchDriveToGrf_1, o_launchDriveToSrf_1 (from grfSrfSele), and o_launchDriveToExe_1 (from exeMerge2).",
+      "explanation": "流从LSU输入开始，通过lsuDelay0延迟，经lsuMerge与另一路w_driveToLsuMer合并，再通过rele0Merge和rele4Merge分别与rele6Splitter的反馈路径合并，随后经过rele0Selector和rele4Selector的选择拆分，进入rs1Merge和rs2Merge，最终通过regMerge、launchSplitter、regSplitter、grfSrfSele等组件，将事件分发至GRF、SRF和EXE。流中还包含多个FIFO（opDataFifo、launchDelayFifo1、writeSFifo）用于缓冲和背压。",
       "signals": [
         "i_LsuDriveToLunch_1",
         "o_launchDriveToGrf_1",
@@ -88,9 +87,13 @@
         "launchSplitter",
         "regSplitter",
         "grfSrfSele",
-        "exeMerge2"
+        "opDataFifo",
+        "launchDelayFifo1",
+        "exeMerge2",
+        "writeSFifo"
       ],
       "related_assignments": [
+        "17",
         "32"
       ],
       "doc_priority": "primary",
@@ -98,12 +101,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "internal_event_flow"
+          "source": "knowledge_ir/modules/launch.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "flow_graph"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:flow_intent:001"
@@ -115,23 +116,23 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "subject": "lsuDelay0",
-      "summary": "Transparent delay for the incoming LSU event.",
-      "explanation": "lsuDelay0 (delay4U) provides a fixed 4-cycle delay to the i_LsuDriveToLunch_1 event before it reaches lsuMerge. This aligns timing with other LSU paths.",
+      "subject": "lsuMerge",
+      "summary": "作为MutexMerge，将LSU延迟后的输入与另一路LSU选择器输出进行互斥合并。",
+      "explanation": "lsuMerge是一个cMutexMerge2_1b实例，其输入来自lsuDelay0的输出i_LsuDriveToLunch1_1和lsuSele1的输出w_driveToLsuMer。它确保两路事件不会同时到达，实现互斥合并。",
       "signals": [
-        "i_LsuDriveToLunch_1",
-        "i_LsuDriveToLunch1_1"
+        "i_LsuDriveToLunch1_1",
+        "w_driveToLsuMer",
+        "w_LsuDriveToLunch_1"
       ],
       "instances": [
-        "lsuDelay0"
+        "lsuMerge"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:001"
@@ -143,24 +144,25 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "subject": "lsuMerge",
-      "summary": "MutexMerge that arbitrates between the delayed LSU event and another LSU path.",
-      "explanation": "lsuMerge (cMutexMerge2_1b) merges i_LsuDriveToLunch1_1 and w_driveToLsuMer, ensuring only one event passes at a time. This prevents conflicts between the two LSU sources.",
+      "subject": "rele0Selector",
+      "summary": "作为SelSplit，将合并后的事件选择性地拆分至rs1Merge和自身反馈延迟路径。",
+      "explanation": "rele0Selector是一个cSelector2_33b_launch实例，输入来自rele0Merge的输出和自身反馈延迟（通过outdelay0）。它输出两路：一路至rs1Merge（w_rele0SelectorDriveToRs1Merge_1），另一路经outdelay0延迟后反馈回自身，形成选择/仲裁逻辑。",
       "signals": [
-        "i_LsuDriveToLunch1_1",
-        "w_driveToLsuMer",
-        "w_LsuDriveToLunch_1"
+        "w_rele0MergeDriveToRele0Selector_1",
+        "w_rele0SelectorDriveToMeDelay_1",
+        "w_rele0SelectorDriveToMe_1",
+        "w_rele0SelectorDriveToRs1Merge_1"
       ],
       "instances": [
-        "lsuMerge"
+        "rele0Selector",
+        "outdelay0"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:002"
@@ -172,27 +174,25 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "subject": "rele0Merge and rele4Merge",
-      "summary": "Parallel WaitMerge instances that combine the LSU event with release splitter events.",
-      "explanation": "Both rele0Merge and rele4Merge (cWaitMerge2_32_1_33b_launch) wait for w_LsuDriveToLunch_1 and a corresponding release splitter signal (w_rele6SplitterDriveToRelo0Merge_1 or w_rele6SplitterDriveToRelo4Merge_1). They gate the LSU event until the release signal arrives, ensuring proper ordering.",
+      "subject": "launchSplitter",
+      "summary": "作为SelSplit，将合并后的寄存器数据与解码器输入合并后，拆分为执行、立即数和寄存器三路。",
+      "explanation": "launchSplitter是一个cSplitter3_185_16_26_143b_launch实例，输入来自i_decoderDriveToLaunch_1和regMerge的输出。它输出三路：w_launchForkDriveToExeMerge_1（至执行路径）、w_launchSpliDriToImmSele_1（至立即数选择）、w_launchSpliDriveToRegSpli_1（至寄存器拆分）。",
       "signals": [
-        "w_LsuDriveToLunch_1",
-        "w_rele6SplitterDriveToRelo0Merge_1",
-        "w_rele6SplitterDriveToRelo4Merge_1",
-        "w_rele0MergeDriveToRele0Selector_1",
-        "w_rele4MergeDriveToRele4Selector_1"
+        "i_decoderDriveToLaunch_1",
+        "w_regMergeDriveToRegSelector_1",
+        "w_launchForkDriveToExeMerge_1",
+        "w_launchSpliDriToImmSele_1",
+        "w_launchSpliDriveToRegSpli_1"
       ],
       "instances": [
-        "rele0Merge",
-        "rele4Merge"
+        "launchSplitter"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:003"
@@ -204,30 +204,23 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "subject": "rele0Selector and rele4Selector",
-      "summary": "SelSplit selectors that route events to either a delay loop or to rs1Merge/rs2Merge.",
-      "explanation": "Each selector (cSelector2_33b_launch) takes an input from its corresponding WaitMerge and a delayed feedback signal. It outputs to either a delay loop (for internal reuse) or to the rs1/rs2 merge network. This allows events to be held or forwarded based on availability.",
+      "subject": "grfSrfSele",
+      "summary": "作为SelSplit，将寄存器拆分后的数据最终分发至GRF和SRF输出。",
+      "explanation": "grfSrfSele是一个cSelector2_17b_launch实例，输入来自regSplitter的输出w_regSpliDriToGrfSrf_1。它输出两路：o_launchDriveToGrf_1和o_launchDriveToSrf_1，分别驱动GRF和SRF。",
       "signals": [
-        "w_rele0MergeDriveToRele0Selector_1",
-        "w_rele0SelectorDriveToMeDelay_1",
-        "w_rele0SelectorDriveToMe_1",
-        "w_rele0SelectorDriveToRs1Merge_1",
-        "w_rele4MergeDriveToRele4Selector_1",
-        "w_rele4SelectorDriveToMeDelay_1",
-        "w_rele4SelectorDriveToMe_1",
-        "w_rele4SelectorDriveToRs2Merge_1"
+        "w_regSpliDriToGrfSrf_1",
+        "o_launchDriveToGrf_1",
+        "o_launchDriveToSrf_1"
       ],
       "instances": [
-        "rele0Selector",
-        "rele4Selector"
+        "grfSrfSele"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:004"
@@ -239,165 +232,9 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "subject": "rs1Merge and rs2Merge",
-      "summary": "MutexMerge instances that combine selector outputs for register file access.",
-      "explanation": "rs1Merge (cMutexMerge3_32b_launch) merges outputs from rele0Selector, rele1Selector, and rele2Selector. rs2Merge merges outputs from rele3Selector, rele4Selector, and rele5Selector. They arbitrate between multiple release selectors to provide a single event stream to regMerge.",
-      "signals": [
-        "w_rele0SelectorDriveToRs1Merge_1",
-        "w_rele1SelectorDriveToRs1Merge_1",
-        "w_rele2SelectorDriveToRs1Merge_1",
-        "w_rs1MergeDriveToRegMerge_1",
-        "w_rele3SelectorDriveToRs2Merge_1",
-        "w_rele4SelectorDriveToRs2Merge_1",
-        "w_rele5SelectorDriveToRs2Merge_1",
-        "w_rs2MergeDriveToRegMerge_1"
-      ],
-      "instances": [
-        "rs1Merge",
-        "rs2Merge"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:005"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "subject": "regMerge",
-      "summary": "WaitMerge that combines rs1 and rs2 event streams.",
-      "explanation": "regMerge (cWaitMerge2_64b_launch) waits for both w_rs1MergeDriveToRegMerge_1 and w_rs2MergeDriveToRegMerge_1 before forwarding to launchSplitter and regSelector. This ensures both register operands are ready.",
-      "signals": [
-        "w_rs1MergeDriveToRegMerge_1",
-        "w_rs2MergeDriveToRegMerge_1",
-        "w_regMergeDriveToRegSelector_1"
-      ],
-      "instances": [
-        "regMerge"
-      ],
-      "related_assignments": [
-        "32"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:006"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "subject": "launchSplitter",
-      "summary": "SelSplit that splits the merged event into three paths: exe, reg, and imm.",
-      "explanation": "launchSplitter (cSplitter3_185_16_26_143b_launch) takes w_regMergeDriveToRegSelector_1 and i_decoderDriveToLaunch_1, producing outputs for exeMerge2 (via delays), regSplitter, and regSelector. This distributes the event to different processing units.",
-      "signals": [
-        "i_decoderDriveToLaunch_1",
-        "w_regMergeDriveToRegSelector_1",
-        "w_launchForkDriveToExeMerge_1",
-        "w_launchSpliDriToImmSele_1",
-        "w_launchSpliDriveToRegSpli_1"
-      ],
-      "instances": [
-        "launchSplitter"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:007"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "subject": "regSplitter",
-      "summary": "SelSplit that splits the register path into grf/srf and release splitter paths.",
-      "explanation": "regSplitter (cSplitter2_16b_launch) takes w_launchSpliDriveToRegSpli_1 and outputs to grfSrfSele (for GRF/SRF outputs) and releSplitter (for release control). This separates data and control paths.",
-      "signals": [
-        "w_launchSpliDriveToRegSpli_1",
-        "w_regSpliDriToGrfSrf_1",
-        "w_regSplitterDriveToReleSplitter_1"
-      ],
-      "instances": [
-        "regSplitter"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:008"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "subject": "grfSrfSele",
-      "summary": "SelSplit that produces the final GRF and SRF output events.",
-      "explanation": "grfSrfSele (cSelector2_17b_launch) takes w_regSpliDriToGrfSrf_1 and outputs o_launchDriveToGrf_1 and o_launchDriveToSrf_1. This is the final split before the module boundary.",
-      "signals": [
-        "w_regSpliDriToGrfSrf_1",
-        "o_launchDriveToGrf_1",
-        "o_launchDriveToSrf_1"
-      ],
-      "instances": [
-        "grfSrfSele"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:009"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
       "subject": "exeMerge2",
-      "summary": "WaitMerge that produces the final EXE output event.",
-      "explanation": "exeMerge2 (cWaitMerge3_104_99_4_207b_launch) merges w_branchDriToExeMerge1_1, w_launchForkDrive1ToExeMergeDelay1_1, and w_regSeleDriveToExeMerge_1 to produce o_launchDriveToExe_1. This combines branch, launch, and register selection paths.",
+      "summary": "作为WaitMerge，将分支、执行延迟和寄存器选择三路事件合并后输出至EXE。",
+      "explanation": "exeMerge2是一个cWaitMerge3_104_99_4_207b_launch实例，输入来自w_branchDriToExeMerge1_1、w_launchForkDrive1ToExeMergeDelay1_1和w_regSeleDriveToExeMerge_1。它输出o_launchDriveToExe_1，并同时驱动writeSDelay0。",
       "signals": [
         "w_branchDriToExeMerge1_1",
         "w_launchForkDrive1ToExeMergeDelay1_1",
@@ -407,27 +244,58 @@
       "instances": [
         "exeMerge2"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "instances"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:010"
+      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:component_role:005"
     },
     {
-      "claim_type": "assignment_interpretation",
+      "claim_type": "data_control_effect",
       "scope": {
         "type": "flow",
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "subject": "w_regMergeDriveToRegSelector1_1",
-      "summary": "Combines the regMerge output with an exception signal.",
-      "explanation": "Assignment 32 ORs w_regMergeDriveToRegSelector_1 with w_driveFExcToIf_1 to produce w_regMergeDriveToRegSelector1_1. This allows exceptions to override or merge with the normal register path.",
+      "summary": "输入LSU数据通过选择逻辑转换为32位数据，用于后续事件处理。",
+      "subject": "i_lsuData_64 与 w_lsuData_32",
+      "explanation": "赋值17显示，w_lsuData_32根据w_rele_6[0]或w_rele_6[4]有效时，从i_lsuData_64的高32位或低32位中选择，否则为0。这表明LSU数据在流中被裁剪或选择，与事件流并行处理。",
+      "signals": [
+        "i_lsuData_64",
+        "w_lsuData_32",
+        "w_rele_6",
+        "w_lsuDataFromHigh_1"
+      ],
+      "related_payload": [
+        "i_lsuData_64"
+      ],
+      "related_assignments": [
+        "17"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/launch.json"
+        }
+      ],
+      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:data_control_effect:001"
+    },
+    {
+      "claim_type": "data_control_effect",
+      "scope": {
+        "type": "flow",
+        "module": "launch",
+        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
+      },
+      "summary": "寄存器合并输出与异常驱动信号合并，影响后续选择器输入。",
+      "subject": "w_regMergeDriveToRegSelector_1 与 w_driveFExcToIf_1",
+      "explanation": "赋值32显示，w_regMergeDriveToRegSelector1_1由w_driveFExcToIf_1或w_regMergeDriveToRegSelector_1驱动。这表明异常事件可以与正常寄存器合并事件合并，影响launchSplitter和regSelector的输入。",
       "signals": [
         "w_regMergeDriveToRegSelector_1",
         "w_driveFExcToIf_1",
@@ -441,73 +309,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "assignments"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:assignment_interpretation:001"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "subject": "w_lsuData_32",
-      "summary": "Selects the appropriate half of LSU data based on a control signal.",
-      "explanation": "Assignment 17 selects either the upper or lower 32 bits of i_lsuData_64 based on w_lsuDataFromHigh_1, gated by w_rele_6[0] or w_rele_6[4]. This shapes the payload for the LSU event.",
-      "signals": [
-        "w_lsuData_32",
-        "w_rele_6",
-        "w_lsuDataFromHigh_1",
-        "i_lsuData_64"
-      ],
-      "related_assignments": [
-        "17"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "assignments"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "data_control_effect",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "summary": "LSU data payload is transformed and propagated through the flow.",
-      "subject": "i_lsuData_64 to o_launchDataToExe_207",
-      "explanation": "The input payload i_lsuData_64 is selected (assignment 17) and then flows through the pipeline. The output payload o_launchDataToExe_207 is associated with the output events. The exact transformation path is not fully traceable from the given context.",
-      "signals": [
-        "i_lsuData_64",
-        "o_launchDataToExe_207"
-      ],
-      "related_payload": [
-        "i_lsuData_64",
-        "o_launchDataToExe_207"
-      ],
-      "related_assignments": [
-        "17"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "interface_data_contract"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:data_control_effect:001"
+      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:data_control_effect:002"
     },
     {
       "claim_type": "completion_backpressure",
@@ -516,20 +321,24 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "summary": "Free/backpressure signals exist but their role in this flow is not fully defined.",
-      "subject": "o_launchFreeToLsu_1 and i_ExeFreeToLaunch_1",
-      "explanation": "The interface contracts mention o_launchFreeToLsu_1 (for input) and i_ExeFreeToLaunch_1 (for outputs). However, the flow steps do not show how these signals interact with the pipeline components. Their impact on event propagation is unclear.",
+      "summary": "流中存在输入和输出的free/backpressure信号，但具体机制未在上下文中详细说明。",
+      "subject": "o_launchFreeToLsu_1 与 i_ExeFreeToLaunch_1",
+      "explanation": "接口契约显示，输入i_LsuDriveToLunch_1有对应的free信号o_launchFreeToLsu_1，输出o_launchDriveToExe_1、o_launchDriveToGrf_1和o_launchDriveToSrf_1共享free信号i_ExeFreeToLaunch_1。这表明流支持背压，但具体如何通过FIFO和合并器传播未明确。",
       "signals": [
         "o_launchFreeToLsu_1",
         "i_ExeFreeToLaunch_1"
       ],
-      "doc_priority": "reference",
+      "instances": [
+        "opDataFifo",
+        "launchDelayFifo1",
+        "writeSFifo"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "interface_data_contract"
+          "source": "knowledge_ir/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:completion_backpressure:001"
@@ -541,9 +350,9 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "summary": "Emphasize the multi-stage pipeline structure and the role of WaitMerge and SelSplit components.",
-      "subject": "flow_004_launch_i_LsuDriveToLunch_1",
-      "explanation": "The flow is characterized by parallel WaitMerge paths (rele0Merge/rele4Merge), selector loops (rele0Selector/rele4Selector), and multiple merge/split stages. The documentation should highlight how events are gated, held, and routed through these components.",
+      "summary": "最终手册应重点描述LSU事件如何通过多级合并、选择和拆分，最终分发至GRF、SRF和EXE。",
+      "subject": "流的分发与合并结构",
+      "explanation": "该流包含多个合并点（如lsuMerge、rele0Merge、rele4Merge、rs1Merge、rs2Merge、regMerge、exeMerge2）和拆分点（如rele0Selector、rele4Selector、launchSplitter、regSplitter、grfSrfSele、rele6Splitter），形成复杂的树状分发结构。手册应强调这些组件的角色和事件路径。",
       "signals": [
         "i_LsuDriveToLunch_1",
         "o_launchDriveToGrf_1",
@@ -551,31 +360,24 @@
         "o_launchDriveToExe_1"
       ],
       "instances": [
-        "lsuDelay0",
         "lsuMerge",
         "rele0Merge",
         "rele4Merge",
-        "rele0Selector",
-        "rele4Selector",
         "rs1Merge",
         "rs2Merge",
         "regMerge",
+        "exeMerge2",
         "launchSplitter",
         "regSplitter",
         "grfSrfSele",
-        "exeMerge2"
-      ],
-      "related_assignments": [
-        "17",
-        "32"
+        "rele6Splitter"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/launch.json",
-          "path": "flow_graph"
+          "source": "parser_pipeline_rtl/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:documentation_focus:001"
@@ -587,61 +389,37 @@
         "module": "launch",
         "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
       },
-      "reason": "The exact mapping from i_lsuData_64 to o_launchDataToExe_207 through the pipeline is not fully traceable from the given context.",
-      "subject": "Data payload transformation path",
-      "needed_source_slice": "assign block for o_launchDataToExe_207 and related payload signals",
+      "reason": "上下文仅提供了free信号的存在，但未说明FIFO和合并器如何实现背压。需要RTL源码确认具体握手逻辑。",
+      "subject": "背压传播机制",
+      "needed_source_slice": "always block或assign块中与free信号相关的逻辑",
       "signals": [
-        "i_lsuData_64",
-        "o_launchDataToExe_207"
+        "o_launchFreeToLsu_1",
+        "i_ExeFreeToLaunch_1"
       ],
-      "related_assignments": [
-        "17"
+      "instances": [
+        "opDataFifo",
+        "launchDelayFifo1",
+        "writeSFifo",
+        "lsuMerge",
+        "rele0Merge",
+        "rele4Merge",
+        "exeMerge2"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "interface_data_contract"
+          "source": "knowledge_ir/modules/launch.json"
         }
       ],
       "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "launch",
-        "flow_id": "flow_004_launch_i_LsuDriveToLunch_1"
-      },
-      "reason": "The flow steps do not show how o_launchFreeToLsu_1 and i_ExeFreeToLaunch_1 interact with pipeline components.",
-      "subject": "Free/backpressure signal interaction",
-      "needed_source_slice": "always blocks or assign statements involving o_launchFreeToLsu_1 and i_ExeFreeToLaunch_1",
-      "signals": [
-        "o_launchFreeToLsu_1",
-        "i_ExeFreeToLaunch_1"
-      ],
-      "doc_priority": "reference",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "interface_data_contract"
-        }
-      ],
-      "id": "semantic:flow:launch:flow_004_launch_i_LsuDriveToLunch_1:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "Data payload transformation",
-      "reason": "The exact path from i_lsuData_64 to o_launchDataToExe_207 is not fully traceable from the given context."
-    },
-    {
-      "field": "Free/backpressure signal interaction",
-      "reason": "The flow steps do not show how free/backpressure signals interact with pipeline components."
+      "field": "背压传播细节",
+      "reason": "上下文未提供free信号如何通过FIFO和合并器传播的详细逻辑，仅提及信号存在。"
     }
   ]
 }

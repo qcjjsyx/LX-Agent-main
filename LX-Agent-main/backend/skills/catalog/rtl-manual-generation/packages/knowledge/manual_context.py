@@ -93,6 +93,7 @@ def build_manual_context(
     semantic_flows = load_semantic_flows(knowledge_root, semantic_index)
 
     module_context_files: Dict[str, str] = {}
+    module_doc_card_files: Dict[str, str] = {}
     interface_context_files: Dict[str, str] = {}
     gap_files: Dict[str, str] = {}
     flow_context_files: Dict[str, List[str]] = {}
@@ -152,10 +153,19 @@ def build_manual_context(
 
         module_dir = out_root / "modules" / safe_filename(str(module_name))
         module_rel = f"modules/{safe_filename(str(module_name))}/module_context.json"
+        module_doc_card_rel = f"modules/{safe_filename(str(module_name))}/module_doc_card.json"
         interfaces_rel = f"modules/{safe_filename(str(module_name))}/interfaces.json"
         gaps_rel = f"modules/{safe_filename(str(module_name))}/gaps.json"
 
+        module_doc_card = build_module_doc_card(
+            module_context=module_context,
+            facts=facts,
+            parser_module=parser_module,
+        )
+        module_context["module_doc_card"] = module_doc_card
+
         write_json(out_root / module_rel, module_context)
+        write_json(out_root / module_doc_card_rel, module_doc_card)
         write_json(
             out_root / interfaces_rel,
             {
@@ -169,6 +179,7 @@ def build_manual_context(
         write_json(out_root / gaps_rel, build_module_gaps(top_module, str(module_name), facts, module_semantic, flow_infos))
 
         module_context_files[str(module_name)] = module_rel
+        module_doc_card_files[str(module_name)] = module_doc_card_rel
         interface_context_files[str(module_name)] = interfaces_rel
         gap_files[str(module_name)] = gaps_rel
 
@@ -234,6 +245,7 @@ def build_manual_context(
             "human_overrides": "human_overrides.json",
             "validation_report": "validation_report.json",
             "modules": module_context_files,
+            "module_doc_cards": module_doc_card_files,
             "interfaces": interface_context_files,
             "flows": flow_context_files,
             "gaps": gap_files,
@@ -250,9 +262,19 @@ def build_manual_context(
             "preferred_entrypoints": [
                 "project_context.json",
                 "modules/<module>/module_context.json",
+                "modules/<module>/module_doc_card.json",
                 "modules/<module>/interfaces.json",
                 "modules/<module>/flows/<flow_id>.json",
             ],
+            "controlled_source_review": {
+                "enabled": True,
+                "allowed_scope": [
+                    "top-level external port grouping",
+                    "module one-line source-purpose hints",
+                    "port grouping where Manual Context only records unknown ports",
+                ],
+                "promotion_rule": "RTL source review context may support ai_inferred or evidence_gap text, but must not promote claims to deterministic_fact.",
+            },
         },
     }
     validation_report = build_validation_report(out_root, manual_manifest, evidence_index)
@@ -818,6 +840,8 @@ def build_project_context(
 ) -> Dict[str, Any]:
     top_semantic = semantic_modules.get(top_module, {})
     top_role_claims = select_claims(top_semantic, MODULE_ROLE_CLAIMS, limit=4)
+    top_facts = module_facts.get(top_module, {})
+    top_parser_module = parser_modules.get(top_module, {})
     reachable = project_facts.get("reachable_modules", topology.get("module_names", []))
     direct_modules = project_facts.get("top_level", {}).get("direct_modules", [])
     region_map = build_region_map(reachable, module_facts, parser_modules, topology)
@@ -834,11 +858,13 @@ def build_project_context(
         "schema": "manual_context_project",
         "schema_version": SCHEMA_VERSION,
         "top_module": claim(top_module, DETERMINISTIC, ["knowledge_ir", "parse"], ["ev:project:top_module"]),
+        "project_purpose": build_project_purpose(top_module, top_role_claims, top_facts),
         "system_summary": semantic_claims_to_manual_description(top_role_claims, [f"ev:{top_module}:semantic_module"]),
         "top_level": {
             "source_file": project_facts.get("top_level", {}).get("file", ""),
             "direct_modules": claim(direct_modules, DETERMINISTIC, ["knowledge_ir", "parse"], ["ev:project:top_level"]),
             "direct_components": claim(project_facts.get("top_level", {}).get("direct_components", []), DETERMINISTIC, ["knowledge_ir"], ["ev:project:top_level"]),
+            "external_port_groups": build_external_port_groups(top_module, top_facts, top_parser_module),
         },
         "major_modules": major_modules,
         "module_hierarchy": {
@@ -851,6 +877,7 @@ def build_project_context(
         "component_families_overview": project_facts.get("component_families", []),
         "cross_module_interfaces": topology.get("signal_edges", [])[:240],
         "manual_toc_plan": build_manual_toc_plan(top_module, reachable),
+        "source_review_context": build_source_review_context(top_module, top_facts, top_parser_module),
         "system_level_gaps": build_system_level_gaps(project_facts, parser_index, top_semantic),
         "doc_focus": DEFAULT_DOC_FOCUS,
     }
@@ -1009,7 +1036,7 @@ def collect_manifest_output_files(manifest: Dict[str, Any]) -> List[str]:
         rel = files.get(key, "")
         if isinstance(rel, str) and rel:
             rels.append(rel)
-    for key in ("modules", "interfaces", "gaps"):
+    for key in ("modules", "module_doc_cards", "interfaces", "gaps"):
         values = files.get(key, {})
         if isinstance(values, dict):
             rels.extend(str(rel) for rel in values.values() if isinstance(rel, str) and rel)
@@ -1167,6 +1194,360 @@ def build_event_data_summary(facts: Dict[str, Any], direction: str) -> Dict[str,
             for contract in contracts
         ],
     }
+
+
+def build_project_purpose(
+    top_module: str,
+    top_role_claims: List[Dict[str, Any]],
+    top_facts: Dict[str, Any],
+) -> Dict[str, Any]:
+    purpose = semantic_claims_to_manual_description(
+        [
+            item
+            for item in top_role_claims
+            if item.get("claim_type") in {"module_role", "structural_responsibility"}
+        ][:2],
+        [f"ev:{top_module}:semantic_module"],
+    )
+    if purpose.get("value"):
+        purpose["manual_rule"] = "project overview must keep this to one sentence in the final manual"
+        return purpose
+    source_file = top_facts.get("source", {}).get("rtl_file", "")
+    return {
+        "value": f"{top_module} is the top-level RTL module for this project.",
+        "explanation": f"Fallback purpose built from the top module name and source file {source_file}.",
+        "certainty": DERIVED,
+        "confidence": "low",
+        "source_layers": ["manual_context", "knowledge_ir"],
+        "evidence_refs": ["ev:project:top_module"],
+        "manual_rule": "project overview must keep this to one sentence in the final manual",
+        "review_status": "needs_review",
+    }
+
+
+def build_module_doc_card(
+    *,
+    module_context: Dict[str, Any],
+    facts: Dict[str, Any],
+    parser_module: Dict[str, Any],
+) -> Dict[str, Any]:
+    identity = module_context.get("module_identity", {})
+    module_name = str(identity.get("module_name", facts.get("module", "")))
+    position = module_context.get("system_position", {})
+    responsibility = module_context.get("module_responsibility", {})
+    interfaces = module_context.get("interface_summary", {})
+    flows = module_context.get("key_drive_flows", [])
+    components = module_context.get("internal_components", [])
+    assignments = module_context.get("assignment_impact_summary", [])
+    gaps = module_context.get("evidence_gaps", [])
+    review_questions = module_context.get("review_questions", [])
+    source_file = first_source_file(identity, facts, parser_module)
+    port_summary = build_port_summary(module_name, facts, parser_module)
+    page_policy = build_module_page_policy(
+        module_name=module_name,
+        module_role=str(identity.get("module_role", "")),
+        position=position,
+        responsibility=responsibility,
+        port_summary=port_summary,
+        flow_count=len(flows),
+        component_count=len(components),
+        assignment_count=len(assignments),
+        gap_count=len(gaps),
+    )
+    return {
+        "schema": "manual_context_module_doc_card",
+        "schema_version": SCHEMA_VERSION,
+        "top_module": module_context.get("top_module", ""),
+        "module": module_name,
+        "source_file": source_file,
+        "module_role": identity.get("module_role", ""),
+        "page_policy": page_policy,
+        "purpose": responsibility.get("short_summary", empty_inference_gap("No module responsibility claim is available.")),
+        "hierarchy": {
+            "parents": claim_value(position.get("parents")),
+            "children": claim_value(position.get("children")),
+            "component_children": claim_value(position.get("component_children")),
+            "upstream_modules": claim_value(position.get("upstream_modules")),
+            "downstream_modules": claim_value(position.get("downstream_modules")),
+            "region": position.get("region", {}),
+        },
+        "port_summary": port_summary,
+        "key_flow_refs": flows,
+        "counts": {
+            "interfaces": len(collect_interface_items(facts)),
+            "flows": len(flows),
+            "components": len(components),
+            "assignments": len(assignments),
+            "evidence_gaps": len(gaps),
+            "review_questions": len(review_questions),
+        },
+        "source_review_context": build_source_review_context(module_name, facts, parser_module),
+        "evidence_refs": identity.get("evidence_refs", []),
+    }
+
+
+def build_module_page_policy(
+    *,
+    module_name: str,
+    module_role: str,
+    position: Dict[str, Any],
+    responsibility: Dict[str, Any],
+    port_summary: Dict[str, Any],
+    flow_count: int,
+    component_count: int,
+    assignment_count: int,
+    gap_count: int,
+) -> Dict[str, Any]:
+    children = claim_value(position.get("children")) or []
+    primary_ports = port_summary.get("counts", {}).get("primary_event_ports", 0)
+    review_needed = responsibility.get("review_status") == "needs_review" or gap_count > 0
+    if module_role == "top":
+        detail_level = "detailed"
+    elif children or flow_count >= 3 or primary_ports >= 3:
+        detail_level = "detailed"
+    elif flow_count or component_count or assignment_count or port_summary.get("counts", {}).get("total_ports", 0):
+        detail_level = "standard"
+    else:
+        detail_level = "compact"
+    return {
+        "module_page_required": True,
+        "detail_level": detail_level,
+        "reason": (
+            "top module" if module_role == "top"
+            else "structural or flow-heavy module" if detail_level == "detailed"
+            else "module has limited interface/flow evidence" if detail_level == "standard"
+            else "helper or leaf module with little extracted behavior"
+        ),
+        "fixed_sections": [
+            "responsibility",
+            "position",
+            "interface_contract",
+            "drive_flows",
+            "internal_components_and_assignments",
+            "evidence_gaps",
+        ],
+        "review_needed": review_needed,
+    }
+
+
+def build_port_summary(module_name: str, facts: Dict[str, Any], parser_module: Dict[str, Any]) -> Dict[str, Any]:
+    interface = facts.get("interface", {})
+    event_inputs = interface.get("event_inputs", [])
+    event_outputs = interface.get("event_outputs", [])
+    data_inputs = interface.get("data_inputs", [])
+    data_outputs = interface.get("data_outputs", [])
+    control_inputs = interface.get("control_inputs", [])
+    control_outputs = interface.get("control_outputs", [])
+    free_inputs = interface.get("free_inputs", [])
+    free_outputs = interface.get("free_outputs", [])
+    unknown_inputs = interface.get("unknown_inputs", [])
+    unknown_outputs = interface.get("unknown_outputs", [])
+    inout_ports = interface.get("inout_ports", [])
+    return {
+        "counts": {
+            "event_inputs": len(event_inputs),
+            "event_outputs": len(event_outputs),
+            "data_inputs": len(data_inputs),
+            "data_outputs": len(data_outputs),
+            "control_inputs": len(control_inputs),
+            "control_outputs": len(control_outputs),
+            "free_inputs": len(free_inputs),
+            "free_outputs": len(free_outputs),
+            "unknown_inputs": len(unknown_inputs),
+            "unknown_outputs": len(unknown_outputs),
+            "inout_ports": len(inout_ports),
+            "primary_event_ports": len(event_inputs) + len(event_outputs),
+            "total_ports": len(collect_interface_items(facts)),
+        },
+        "event_inputs": signal_facts(event_inputs, module_name),
+        "event_outputs": signal_facts(event_outputs, module_name),
+        "data_inputs": signal_facts(data_inputs, module_name),
+        "data_outputs": signal_facts(data_outputs, module_name),
+        "control_inputs": signal_facts(control_inputs, module_name),
+        "control_outputs": signal_facts(control_outputs, module_name),
+        "free_inputs": signal_facts(free_inputs, module_name),
+        "free_outputs": signal_facts(free_outputs, module_name),
+        "unknown_inputs": signal_facts(unknown_inputs, module_name),
+        "unknown_outputs": signal_facts(unknown_outputs, module_name),
+        "inout_ports": signal_facts(inout_ports, module_name),
+        "external_port_groups": build_external_port_groups(module_name, facts, parser_module),
+        "natural_language_rule": "summarize port groups by role and direction; do not dump every port unless the module page is detailed",
+    }
+
+
+def build_external_port_groups(
+    module_name: str,
+    facts: Dict[str, Any],
+    parser_module: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    groups: Dict[str, Dict[str, Any]] = {}
+    for item in collect_interface_items(facts):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", ""))
+        if not name:
+            continue
+        group_name = classify_port_group(name)
+        group = groups.setdefault(
+            group_name,
+            {
+                "group": group_name,
+                "signals": [],
+                "direction_counts": {},
+                "certainty": DETERMINISTIC,
+                "source_layers": ["knowledge_ir", "parse"],
+                "evidence_refs": [f"ev:{module_name}:interface"],
+            },
+        )
+        direction = str(item.get("direction", "unknown") or "unknown")
+        group["direction_counts"][direction] = group["direction_counts"].get(direction, 0) + 1
+        group["signals"].append(
+            {
+                "name": name,
+                "direction": direction,
+                "width_text": item.get("width_text", ""),
+                "role": item.get("role", "unknown"),
+            }
+        )
+    ordered = sorted(groups.values(), key=lambda item: (port_group_rank(item["group"]), item["group"]))
+    for group in ordered:
+        group["summary"] = build_port_group_summary(group)
+        group["source_review_context"] = {
+            "rtl_file": first_source_file({}, facts, parser_module),
+            "allowed_use": "port grouping and naming evidence only",
+            "claim_promotion": "do_not_promote_to_deterministic_design_intent",
+        }
+    return ordered
+
+
+def build_source_review_context(
+    module_name: str,
+    facts: Dict[str, Any],
+    parser_module: Dict[str, Any],
+) -> Dict[str, Any]:
+    source_file = first_source_file({}, facts, parser_module)
+    return {
+        "module": module_name,
+        "rtl_file": source_file,
+        "allowed": True,
+        "allowed_use": [
+            "external port grouping",
+            "one-line module purpose hint",
+            "port role review when Manual Context only records unknown ports",
+        ],
+        "not_allowed_use": [
+            "inventing connections",
+            "inventing flows",
+            "inventing FSM or always-block behavior",
+            "promoting AI interpretation to deterministic_fact",
+        ],
+        "certainty_policy": "source review text must be marked ai_inferred or evidence_gap unless already present as parser/Knowledge IR fact",
+        "evidence_refs": [f"ev:{module_name}:parser_module", f"ev:{module_name}:knowledge_module"],
+    }
+
+
+def collect_interface_items(facts: Dict[str, Any]) -> List[Dict[str, Any]]:
+    interface = facts.get("interface", {})
+    items: List[Dict[str, Any]] = []
+    for key in (
+        "event_inputs",
+        "event_outputs",
+        "data_inputs",
+        "data_outputs",
+        "control_inputs",
+        "control_outputs",
+        "free_inputs",
+        "free_outputs",
+        "unknown_inputs",
+        "unknown_outputs",
+        "inout_ports",
+    ):
+        for item in interface.get(key, []):
+            if isinstance(item, dict):
+                items.append(item)
+    return items
+
+
+def signal_facts(items: List[Dict[str, Any]], module_name: str) -> List[Dict[str, Any]]:
+    return [
+        signal_fact(item, DETERMINISTIC, ["knowledge_ir"], [f"ev:{module_name}:interface"])
+        for item in items
+        if isinstance(item, dict)
+    ]
+
+
+def classify_port_group(name: str) -> str:
+    lower = name.lower()
+    if any(token in lower for token in ("clk", "rst", "reset", "initmode")):
+        return "clock_reset_init"
+    if "uart0" in lower:
+        return "uart0"
+    if "uart1" in lower:
+        return "uart1"
+    if "iic" in lower or "i2c" in lower:
+        return "iic0"
+    if "spi0" in lower:
+        return "spi0"
+    if "spi1" in lower:
+        return "spi1"
+    if "pwm0" in lower:
+        return "pwm0"
+    if "pwm1" in lower:
+        return "pwm1"
+    if "gpio" in lower or "io_pin" in lower:
+        return "gpio"
+    if lower in {"rx_pin_pad", "tx_pin_pad"} or lower.startswith(("rx_", "tx_")):
+        return "serial_boot_uart"
+    if "drive" in lower or "drv" in lower:
+        return "drive_event"
+    if "free" in lower:
+        return "free_backpressure"
+    return "other_ports"
+
+
+def port_group_rank(group: str) -> int:
+    order = {
+        "clock_reset_init": 0,
+        "serial_boot_uart": 1,
+        "uart0": 2,
+        "uart1": 3,
+        "iic0": 4,
+        "spi0": 5,
+        "spi1": 6,
+        "pwm0": 7,
+        "pwm1": 8,
+        "gpio": 9,
+        "drive_event": 10,
+        "free_backpressure": 11,
+        "other_ports": 99,
+    }
+    return order.get(group, 50)
+
+
+def build_port_group_summary(group: Dict[str, Any]) -> str:
+    signal_count = len(group.get("signals", []))
+    directions = ", ".join(
+        f"{direction}:{count}"
+        for direction, count in sorted(group.get("direction_counts", {}).items())
+    )
+    return f"{group.get('group', '')} ports, count={signal_count}, directions={directions or 'unknown'}"
+
+
+def first_source_file(
+    identity: Dict[str, Any],
+    facts: Dict[str, Any],
+    parser_module: Dict[str, Any],
+) -> str:
+    source_files = identity.get("source_files", []) if isinstance(identity, dict) else []
+    if source_files:
+        return str(source_files[0])
+    return str(facts.get("source", {}).get("rtl_file", "") or parser_module.get("file", ""))
+
+
+def claim_value(value: Any) -> Any:
+    if isinstance(value, dict) and "value" in value:
+        return value.get("value")
+    return value
 
 
 def build_internal_components(facts: Dict[str, Any], module_semantic: Dict[str, Any]) -> List[Dict[str, Any]]:

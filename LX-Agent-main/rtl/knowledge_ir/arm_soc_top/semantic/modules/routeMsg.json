@@ -46,15 +46,15 @@
     }
   ],
   "claim_summary": {
-    "count": 12,
+    "count": 15,
     "by_type": {
       "assignment_interpretation": 2,
       "component_role": 3,
-      "documentation_focus": 1,
+      "documentation_focus": 2,
       "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 2,
-      "structural_responsibility": 1
+      "structural_responsibility": 3
     }
   },
   "claims": [
@@ -64,9 +64,9 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "summary": "Ingress message router that receives a single incoming message and distributes it to one of five directional output paths based on decoded destination.",
+      "summary": "路由消息分发模块，将输入消息根据方向选择分发到五个方向（东、本地、北、南、西）的发送FIFO。",
       "subject": "routeMsg",
-      "explanation": "The module has one event input i_drive with a 51-bit payload i_msg_51, and five event outputs o_driveEArb/LArb/NArb/SArb/WArb each with a 51-bit data output. The internal flow uses a receiveFifo, a conditional fork (dirFork), per-direction delay elements, and per-direction sendFifos. The assign dependencies show directional valid signals (w_eastVld, w_westVld, w_northVld, w_southVld, w_localVld) that are derived from priority arbitration logic, with localVld being the default when no other direction is valid. This matches a router that decodes a destination field from the message and routes accordingly.",
+      "explanation": "模块接收一个输入事件i_drive及其关联的51位消息i_msg_51，通过内部组件（receiveFifo、dirFork、方向延迟单元、方向SendFifo）处理后，产生五个方向的事件输出（o_driveEArb等）和对应的消息输出（o_eastMsg_51等）。方向选择逻辑由dirFork（cCondFork5）和相关的valid信号（w_eastVld, w_westVld等）控制。",
       "signals": [
         "i_drive",
         "i_msg_51",
@@ -94,20 +94,14 @@
         "flow_000_routeMsg_i_drive"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "interface",
-          "path": "knowledge_ir/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
-        },
-        {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:module_role:001"
@@ -118,25 +112,104 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "summary": "Receives one message, decodes its destination, and forwards it to the correct directional output after buffering and arbitration handshake.",
-      "subject": "message routing and distribution",
-      "explanation": "The single input i_drive with payload i_msg_51 enters receiveFifo, then passes through a delay element (delayUart0) to dirFork. The dirFork uses directional valid signals (w_eastVld, w_westVld, w_northVld, w_southVld, w_localVld) to select one of five output paths. Each path has a per-direction delay (delayE/L/N/S/W) and a sendFifo (eastSendFifo etc.) that produces the final o_drive*Arb event. The free signals (i_free*Arb) flow back from the arbiter to each sendFifo, and the receiveFifo produces o_free. The assign dependencies show priority: east/west have highest priority, then north/south (conditional on no east/west), and local is the fallback.",
+      "summary": "通过receiveFifo实例缓冲输入事件i_drive，并产生内部驱动信号w_driveFork。",
+      "subject": "消息接收与缓冲",
+      "explanation": "receiveFifo是一个cFifo1实例，它接收模块的输入事件i_drive，并将其转换为内部事件流w_driveFork，为后续的方向分发做准备。同时，receiveFifo的输出o_free直接连接到模块的o_free，表明其空闲状态直接反映到模块级。",
       "signals": [
         "i_drive",
-        "i_msg_51",
         "w_driveFork",
+        "o_free"
+      ],
+      "instances": [
+        "receiveFifo"
+      ],
+      "related_flows": [
+        "flow_000_routeMsg_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
+        }
+      ],
+      "id": "semantic:module:routeMsg:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "routeMsg"
+      },
+      "summary": "通过dirFork实例和方向valid信号（w_eastVld, w_westVld等）实现消息到五个方向的选路和分发。",
+      "subject": "方向选择与分发",
+      "explanation": "dirFork（cCondFork5）根据来自westToEast和eastToWest模块的valid信号（w_eastVld, w_westVld）以及内部生成的w_northVldSN, w_southVldNS信号，决定将事件流分发到哪个方向。assign依赖显示，方向优先级为：东/西优先，然后是北/南，最后是本地。分发后的信号经过延迟单元（delayE等）后驱动对应的SendFifo。",
+      "signals": [
         "w_driveFork_delay",
+        "w_driveEFifo_t",
+        "w_driveLFifo_t",
+        "w_driveNFifo_t",
+        "w_driveSFifo_t",
+        "w_driveWFifo_t",
         "w_eastVld",
         "w_westVld",
         "w_northVld",
         "w_southVld",
-        "w_localVld",
+        "w_localVld"
+      ],
+      "instances": [
+        "dirFork",
+        "delayE",
+        "delayL",
+        "delayN",
+        "delayS",
+        "delayW"
+      ],
+      "related_flows": [
+        "flow_000_routeMsg_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
+        }
+      ],
+      "id": "semantic:module:routeMsg:structural_responsibility:002"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "routeMsg"
+      },
+      "summary": "五个方向的SendFifo实例（eastSendFifo等）分别缓冲各自方向的事件，并驱动对应的模块输出事件和消息。",
+      "subject": "方向消息输出",
+      "explanation": "每个方向都有一个cFifo1实例（如eastSendFifo），它接收来自对应延迟单元的事件（如w_driveEFifo），并产生模块级输出事件（如o_driveEArb）。同时，对应的消息寄存器（如r_eMsg_51）通过assign语句直接连接到模块输出（如o_eastMsg_51）。方向空闲信号（如i_freeEArb）直接连接到SendFifo的i_freeNext端口，用于控制FIFO的释放。",
+      "signals": [
+        "w_driveEFifo",
+        "w_driveLFifo",
+        "w_driveNFifo",
+        "w_driveSFifo",
+        "w_driveWFifo",
         "o_driveEArb",
         "o_driveLArb",
         "o_driveNArb",
         "o_driveSArb",
         "o_driveWArb",
-        "o_free",
+        "o_eastMsg_51",
+        "o_localMsg_51",
+        "o_northMsg_51",
+        "o_southMsg_51",
+        "o_westMsg_51",
         "i_freeEArb",
         "i_freeLArb",
         "i_freeNArb",
@@ -144,14 +217,6 @@
         "i_freeWArb"
       ],
       "instances": [
-        "receiveFifo",
-        "delayUart0",
-        "dirFork",
-        "delayE",
-        "delayL",
-        "delayN",
-        "delayS",
-        "delayW",
         "eastSendFifo",
         "localSendFifo",
         "northSendFifo",
@@ -162,19 +227,17 @@
         "flow_000_routeMsg_i_drive"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
-      "id": "semantic:module:routeMsg:structural_responsibility:001"
+      "id": "semantic:module:routeMsg:structural_responsibility:003"
     },
     {
       "claim_type": "component_role",
@@ -182,9 +245,42 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "subject": "dirFork (cCondFork5)",
-      "summary": "Conditional 5-way fork that selects the output direction based on decoded destination valid signals.",
-      "explanation": "dirFork receives the delayed drive event from receiveFifo via delayUart0. It has five conditional outputs (o_driveNext0-4) that connect to per-direction delays. The valid signals w_eastVld, w_westVld, w_northVld, w_southVld, and w_localVld control which output fires. The assign dependencies show w_localVld is the default when no other direction is valid, implementing a priority encoder. The two assign_related connections (westToEast.o_msgVld -> dirFork.valid1 for w_eastVld, eastToWest.o_msgVld -> dirFork.valid0 for w_westVld) suggest the valid signals come from external direction decoders.",
+      "subject": "receiveFifo",
+      "summary": "输入事件缓冲器，将模块级输入事件i_drive转换为内部事件流。",
+      "explanation": "receiveFifo是cFifo1实例，作为模块的入口缓冲。它接收i_drive事件，输出w_driveFork事件流，并将空闲状态直接反映到模块输出o_free。这表明它可能是一个深度为1的FIFO，用于同步或简单缓冲。",
+      "signals": [
+        "i_drive",
+        "w_driveFork",
+        "o_free"
+      ],
+      "instances": [
+        "receiveFifo"
+      ],
+      "related_flows": [
+        "flow_000_routeMsg_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
+        }
+      ],
+      "id": "semantic:module:routeMsg:component_role:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "routeMsg"
+      },
+      "subject": "dirFork",
+      "summary": "条件分支分发器，根据方向valid信号将事件流分发到五个方向之一。",
+      "explanation": "dirFork是cCondFork5实例，它根据来自westToEast和eastToNext模块的valid信号（w_eastVld, w_westVld）以及内部生成的w_northVldSN, w_southVldNS信号，决定将输入事件流w_driveFork_delay分发到哪个方向。assign依赖显示，方向优先级为：东/西优先，然后是北/南，最后是本地。分发后的信号（w_driveEFifo_t等）经过延迟单元后驱动对应的SendFifo。",
       "signals": [
         "w_driveFork_delay",
         "w_driveEFifo_t",
@@ -209,44 +305,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
-        }
-      ],
-      "id": "semantic:module:routeMsg:component_role:001"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "routeMsg"
-      },
-      "subject": "receiveFifo (cFifo1)",
-      "summary": "Input buffer that decouples the incoming message from the routing pipeline.",
-      "explanation": "receiveFifo receives the i_drive event and its associated payload i_msg_51. It outputs the drive event to the routing pipeline via w_driveFork. It also produces the o_free signal, indicating when the fifo has space for the next message. This provides flow control back to the sender.",
-      "signals": [
-        "i_drive",
-        "i_msg_51",
-        "w_driveFork",
-        "o_free"
-      ],
-      "instances": [
-        "receiveFifo"
-      ],
-      "related_flows": [
-        "flow_000_routeMsg_i_drive"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:component_role:002"
@@ -257,9 +319,9 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "subject": "per-direction sendFifos (eastSendFifo, localSendFifo, northSendFifo, southSendFifo, westSendFifo)",
-      "summary": "Output buffers for each direction that decouple the routing pipeline from the downstream arbiter.",
-      "explanation": "Each sendFifo receives a drive event from its corresponding delay element (e.g., w_driveEFifo for east). It outputs the o_drive*Arb event to the external arbiter. The i_free*Arb input from the arbiter indicates when the fifo can accept the next message, providing backpressure.",
+      "subject": "eastSendFifo, localSendFifo, northSendFifo, southSendFifo, westSendFifo",
+      "summary": "方向发送FIFO，缓冲并输出对应方向的事件和消息。",
+      "explanation": "每个方向都有一个cFifo1实例，它们接收来自对应延迟单元的事件（如w_driveEFifo），并产生模块级输出事件（如o_driveEArb）。方向空闲信号（如i_freeEArb）直接连接到FIFO的i_freeNext端口，用于控制FIFO的释放。消息数据通过寄存器（如r_eMsg_51）直接连接到模块输出。",
       "signals": [
         "w_driveEFifo",
         "w_driveLFifo",
@@ -271,6 +333,11 @@
         "o_driveNArb",
         "o_driveSArb",
         "o_driveWArb",
+        "o_eastMsg_51",
+        "o_localMsg_51",
+        "o_northMsg_51",
+        "o_southMsg_51",
+        "o_westMsg_51",
         "i_freeEArb",
         "i_freeLArb",
         "i_freeNArb",
@@ -287,13 +354,15 @@
       "related_flows": [
         "flow_000_routeMsg_i_drive"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:component_role:003"
@@ -305,16 +374,14 @@
         "module": "routeMsg"
       },
       "subject": "w_northVld, w_southVld, w_localVld",
-      "summary": "Priority arbitration logic for directional valid signals.",
-      "explanation": "Assignments 6, 8, and 9 implement a priority encoder. w_northVld is asserted when w_northVldSN is true AND neither w_eastVld nor w_westVld is asserted. w_southVld follows the same pattern with w_southVldNS. w_localVld is the default, asserted only when no other direction (west, east, south, north) is valid. This establishes a priority order: east/west > north/south > local.",
+      "summary": "方向valid信号的生成逻辑，实现方向优先级：东/西优先，然后是北/南，最后是本地。",
+      "explanation": "assign依赖显示，w_northVld和w_southVld的生成条件中包含了~w_eastVld和~w_westVld，表明东/西方向具有更高优先级。w_localVld的生成条件为~(w_westVld | w_eastVld | w_southVld | w_northVld)，表明本地方向优先级最低，仅在其他所有方向都无效时才被选中。",
       "signals": [
         "w_northVld",
         "w_southVld",
         "w_localVld",
         "w_eastVld",
-        "w_westVld",
-        "w_northVldSN",
-        "w_southVldNS"
+        "w_westVld"
       ],
       "related_assignments": [
         "6",
@@ -329,8 +396,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:assignment_interpretation:001"
@@ -342,8 +411,8 @@
         "module": "routeMsg"
       },
       "subject": "o_westMsg_51, o_localMsg_51, o_eastMsg_51, o_northMsg_51, o_southMsg_51",
-      "summary": "Output message payloads driven from internal registered signals.",
-      "explanation": "Assignments 16-20 show that each directional output message (o_*Msg_51) is driven by a corresponding registered signal (r_*Msg_51). This indicates the message payload is registered before being sent to the output, providing a pipeline stage.",
+      "summary": "消息输出直接连接到内部寄存器，表明消息数据在模块内部被寄存后输出。",
+      "explanation": "assign依赖显示，所有方向的消息输出（如o_westMsg_51）都直接连接到对应的内部寄存器（如r_wMsg_51）。这表明消息数据在模块内部被寄存，可能是在方向选择逻辑之后，以确保输出数据的稳定性和时序。",
       "signals": [
         "o_westMsg_51",
         "o_localMsg_51",
@@ -371,8 +440,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:assignment_interpretation:002"
@@ -383,13 +454,12 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "summary": "Single message input with bundled payload and flow control.",
-      "subject": "i_drive / i_msg_51 input pair",
-      "explanation": "The i_drive event carries the 51-bit message payload i_msg_51. The receiveFifo provides o_free backpressure. This is a standard push interface where the sender asserts i_drive when i_msg_51 is valid, and the receiver asserts o_free when it can accept.",
+      "summary": "输入事件i_drive与输入消息i_msg_51构成一个事件-载荷对，共同表示一个待路由的消息。",
+      "subject": "输入事件与消息的关联",
+      "explanation": "事件-载荷合约显示，i_drive事件与i_msg_51载荷相关联，置信度为低。这表明模块接收一个事件驱动的消息，消息内容在i_msg_51中。模块内部处理逻辑将消息数据寄存并分发到对应方向。",
       "signals": [
         "i_drive",
-        "i_msg_51",
-        "o_free"
+        "i_msg_51"
       ],
       "related_payload": [
         "i_msg_51"
@@ -399,12 +469,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface",
-          "path": "knowledge_ir/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:interface_intent:001"
@@ -415,44 +483,37 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "summary": "Five directional output interfaces, each with a push event, payload, and backpressure.",
-      "subject": "o_drive*Arb / o_*Msg_51 output pairs with i_free*Arb backpressure",
-      "explanation": "Each direction (east, local, north, south, west) has an output event o_drive*Arb, a 51-bit data output o_*Msg_51, and a free input i_free*Arb. The sendFifo asserts o_drive*Arb when it has a message, and the downstream arbiter asserts i_free*Arb when it can accept. This is a standard push interface with backpressure.",
+      "summary": "每个方向输出事件（如o_driveEArb）与对应的空闲输入信号（如i_freeEArb）构成一个事件-空闲对，用于下游模块的流控。",
+      "subject": "输出事件与空闲信号的关联",
+      "explanation": "事件-载荷合约显示，每个方向输出事件（如o_driveEArb）都与一个空闲输入信号（如i_freeEArb）相关联，置信度为低。这表明下游模块通过空闲信号通知routeMsg是否可以发送下一个事件，实现了基于信用的流控机制。",
       "signals": [
         "o_driveEArb",
-        "o_eastMsg_51",
-        "i_freeEArb",
         "o_driveLArb",
-        "o_localMsg_51",
-        "i_freeLArb",
         "o_driveNArb",
-        "o_northMsg_51",
-        "i_freeNArb",
         "o_driveSArb",
-        "o_southMsg_51",
-        "i_freeSArb",
         "o_driveWArb",
-        "o_westMsg_51",
+        "i_freeEArb",
+        "i_freeLArb",
+        "i_freeNArb",
+        "i_freeSArb",
         "i_freeWArb"
       ],
       "related_payload": [
-        "o_eastMsg_51",
-        "o_localMsg_51",
-        "o_northMsg_51",
-        "o_southMsg_51",
-        "o_westMsg_51"
+        "i_freeEArb",
+        "i_freeLArb",
+        "i_freeNArb",
+        "i_freeSArb",
+        "i_freeWArb"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface",
-          "path": "knowledge_ir/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:interface_intent:002"
@@ -463,17 +524,15 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "summary": "The manual should emphasize how the destination is decoded and how the priority arbitration works.",
-      "subject": "routing decision logic",
-      "explanation": "The module's core function is routing a message to one of five directions. The assign dependencies show a priority encoder, but the source of the valid signals (w_eastVld, w_westVld, w_northVldSN, w_southVldNS) is not fully explained in the context. The manual should describe the destination decoding mechanism and the priority scheme.",
+      "summary": "文档应重点描述方向选择逻辑，包括优先级和valid信号的生成。",
+      "subject": "方向选择逻辑",
+      "explanation": "方向选择是模块的核心功能，由dirFork和相关的valid信号实现。assign依赖显示了方向优先级：东/西优先，然后是北/南，最后是本地。文档应详细解释这些valid信号的来源和优先级逻辑。",
       "signals": [
         "w_eastVld",
         "w_westVld",
         "w_northVld",
         "w_southVld",
-        "w_localVld",
-        "w_northVldSN",
-        "w_southVldNS"
+        "w_localVld"
       ],
       "instances": [
         "dirFork"
@@ -486,15 +545,53 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "routeMsg"
+      },
+      "summary": "文档应描述事件流从输入到输出的完整路径，以及基于空闲信号的流控机制。",
+      "subject": "事件流与流控",
+      "explanation": "模块内部事件流从i_drive开始，经过receiveFifo、dirFork、延迟单元和方向SendFifo，最终输出到o_driveEArb等。每个方向SendFifo都通过i_freeEArb等信号实现流控。文档应清晰描述这一事件流路径和流控机制。",
+      "signals": [
+        "i_drive",
+        "w_driveFork",
+        "w_driveFork_delay",
+        "w_driveEFifo_t",
+        "w_driveEFifo",
+        "o_driveEArb",
+        "i_freeEArb"
+      ],
+      "instances": [
+        "receiveFifo",
+        "dirFork",
+        "delayE",
+        "eastSendFifo"
+      ],
+      "related_flows": [
+        "flow_000_routeMsg_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
+        }
+      ],
+      "id": "semantic:module:routeMsg:documentation_focus:002"
     },
     {
       "claim_type": "source_review_request",
@@ -502,15 +599,12 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "reason": "The compact context shows w_eastVld and w_westVld come from external modules (westToEast, eastToWest) and w_northVldSN/w_southVldNS are not defined. The full RTL source is needed to understand how these valid signals are generated and how the destination field in i_msg_51 is decoded.",
-      "subject": "directional valid signal generation",
-      "needed_source_slice": "always block or assign block generating w_eastVld, w_westVld, w_northVldSN, w_southVldNS",
+      "reason": "当前上下文仅显示了w_eastVld和w_westVld来自westToEast和eastToWest模块，但w_northVldSN和w_southVldNS的来源未明确。需要查看RTL源代码以确定这些信号的生成逻辑。",
+      "subject": "方向valid信号的来源",
+      "needed_source_slice": "assign block",
       "signals": [
-        "w_eastVld",
-        "w_westVld",
         "w_northVldSN",
-        "w_southVldNS",
-        "i_msg_51"
+        "w_southVldNS"
       ],
       "instances": [
         "westToEast",
@@ -524,12 +618,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
         },
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:source_review_request:001"
@@ -540,16 +632,15 @@
         "type": "module",
         "module": "routeMsg"
       },
-      "reason": "The assign dependencies show output messages driven from registered signals (r_*Msg_51), but the context does not show how these registers are loaded. The full RTL source is needed to understand the pipeline stages and timing.",
-      "subject": "message payload registration and pipeline",
-      "needed_source_slice": "always block or assign block for r_eMsg_51, r_wMsg_51, r_nMsg_51, r_sMsg_51, r_lMsg_51",
+      "reason": "当前上下文显示消息输出连接到内部寄存器（如r_wMsg_51），但寄存器的更新逻辑未明确。需要查看RTL源代码以确定寄存器何时被更新。",
+      "subject": "消息数据寄存逻辑",
+      "needed_source_slice": "always block",
       "signals": [
-        "r_eMsg_51",
         "r_wMsg_51",
-        "r_nMsg_51",
-        "r_sMsg_51",
         "r_lMsg_51",
-        "i_msg_51"
+        "r_eMsg_51",
+        "r_nMsg_51",
+        "r_sMsg_51"
       ],
       "related_flows": [
         "flow_000_routeMsg_i_drive"
@@ -559,8 +650,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/routeMsg.json"
+          "source": "knowledge_ir/modules/routeMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/routeMsg.json"
         }
       ],
       "id": "semantic:module:routeMsg:source_review_request:002"

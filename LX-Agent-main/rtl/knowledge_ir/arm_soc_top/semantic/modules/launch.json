@@ -46,15 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 21,
+    "count": 12,
     "by_type": {
-      "assignment_interpretation": 5,
-      "component_role": 4,
+      "assignment_interpretation": 2,
+      "component_role": 3,
       "documentation_focus": 2,
-      "interface_intent": 4,
+      "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 1,
-      "structural_responsibility": 4
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -64,9 +63,9 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "Central instruction launch and operand preparation module that decodes, merges, and routes instruction data and register operands to execution units based on drive events from multiple pipeline stages.",
+      "summary": "指令发射与数据准备中心，负责接收来自解码器、执行单元、加载存储单元、通用寄存器文件和系统寄存器文件的驱动事件，仲裁数据依赖，组装操作数，并最终向执行单元、通用寄存器文件、指令预取单元、程序状态寄存器和系统寄存器文件发射指令。",
       "subject": "launch",
-      "explanation": "The module receives drive events from decoder, execute, LSU, GRF, SRF, and PSR, and uses them to select, merge, and forward decoded instruction fields, register data, and immediate values to the appropriate execution targets (EXE, GRF, IF, PSR, SRF). The high number of SelSplit, WaitMerge, and MutexMerge components indicates a complex routing and synchronization fabric.",
+      "explanation": "模块接收来自多个功能单元的驱动事件（i_*DriveToLaunch_1）和数据负载，通过内部复杂的互斥合并、等待合并、选择/拆分和FIFO组件网络，处理寄存器重命名、数据转发和立即数扩展，最终生成发射到各下游单元的事件和数据。其核心作用是作为指令流水线的“发射级”，确保指令所需的操作数就绪后，再向下游发射。",
       "signals": [
         "i_decoderDriveToLaunch_1",
         "i_ExeDriveToLunch_1",
@@ -74,8 +73,11 @@
         "i_GrfDriveToLaunch_1",
         "i_SrfDriveToLaunch_1",
         "i_PSRDriveToLaunch_1",
-        "i_decoDrive1ToLaunch_1",
-        "i_driveFExcToIf_1"
+        "o_launchDriveToExe_1",
+        "o_launchDriveToGrf_1",
+        "o_launchDriveToIf_1",
+        "o_launchDriveToPsr_1",
+        "o_launchDriveToSrf_1"
       ],
       "instances": [
         "launchSplitter",
@@ -85,70 +87,7 @@
         "branchSpli",
         "regMerge",
         "rs1Merge",
-        "rs2Merge",
-        "immMerge",
-        "psrDataMerge"
-      ],
-      "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1",
-        "flow_001_launch_i_GrfDriveToLaunch_1",
-        "flow_002_launch_i_SrfDriveToLaunch_1",
-        "flow_003_launch_i_ExeDriveToLunch_1",
-        "flow_004_launch_i_LsuDriveToLunch_1",
-        "flow_005_launch_i_decoDrive1ToLaunch_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:module_role:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "summary": "Distributes decoded instruction fields from the decoder to multiple internal paths (immediate extraction, register address, execution control) and forwards register operands from GRF/SRF/EXE/LSU based on release signals.",
-      "subject": "instruction decode distribution and operand forwarding",
-      "explanation": "The launchSplitter takes i_decoderData_185 and splits it into fields for immediate processing, register addressing, and execution data. The regMerge, rs1Merge, rs2Merge, and associated rele*Merge/Selector components implement a forwarding network that selects the correct register data based on which execution unit produced the result (release tracking).",
-      "signals": [
-        "i_decoderData_185",
-        "i_decoderDriveToLaunch_1",
-        "w_launchForkData2_143",
-        "w_launchSpliData0_16",
-        "w_launchSpliData1_26",
-        "w_lastRs1Data_32",
-        "w_lastRs2Data_32",
-        "w_Rs1AndRs2Data_64"
-      ],
-      "instances": [
-        "launchSplitter",
-        "regSplitter",
-        "releSplitter",
-        "rele6Splitter",
-        "rs1Merge",
-        "rs2Merge",
-        "regMerge",
-        "rele0Merge",
-        "rele1Merge",
-        "rele2Merge",
-        "rele3Merge",
-        "rele4Merge",
-        "rele5Merge",
-        "rele0Selector",
-        "rele1Selector",
-        "rele2Selector",
-        "rele3Selector",
-        "rele4Selector",
-        "rele5Selector"
+        "rs2Merge"
       ],
       "related_flows": [
         "flow_000_launch_i_decoderDriveToLaunch_1",
@@ -162,10 +101,72 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "internal_event_flow"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
+        }
+      ],
+      "id": "semantic:module:launch:module_role:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "launch"
+      },
+      "summary": "从多个源（执行单元、加载存储单元、通用寄存器文件）收集并仲裁寄存器操作数，处理数据相关性和转发。",
+      "subject": "操作数准备与数据转发",
+      "explanation": "模块通过rele0-5Merge和rele0-5Selector组件网络，根据指令的寄存器地址（w_rs1Addr_4, w_rs2Addr_4）与先前指令的目标寄存器地址（w_preRd1Addr_4, w_preRd2Addr_4）进行比较，选择来自执行单元（w_exeData_32）、加载存储单元（w_lsuData_32）或通用寄存器文件（w_rs1Data_32, w_rs2Data_32）的数据。assign_dependencies中的索引14-19和索引20-21揭示了这一数据转发逻辑。",
+      "signals": [
+        "w_exeData_32",
+        "w_lsuData_32",
+        "w_rs1Data_32",
+        "w_rs2Data_32",
+        "w_rele_6",
+        "w_releData_6",
+        "w_exeDataFromHigh_1",
+        "w_lsuDataFromHigh_1"
+      ],
+      "instances": [
+        "rele0Merge",
+        "rele1Merge",
+        "rele2Merge",
+        "rele3Merge",
+        "rele4Merge",
+        "rele5Merge",
+        "rele0Selector",
+        "rele1Selector",
+        "rele2Selector",
+        "rele3Selector",
+        "rele4Selector",
+        "rele5Selector",
+        "rs1Merge",
+        "rs2Merge",
+        "regMerge"
+      ],
+      "related_flows": [
+        "flow_003_launch_i_ExeDriveToLunch_1",
+        "flow_004_launch_i_LsuDriveToLunch_1",
+        "flow_001_launch_i_GrfDriveToLaunch_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:launch:structural_responsibility:001"
@@ -176,16 +177,22 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "Extracts and generates various immediate types (zero, sign, decode, thumb) from decoder data, then selects the correct immediate based on instruction type for ALU operations.",
-      "subject": "immediate value generation and selection",
-      "explanation": "The ImmSplitter distributes immediate data to four FIFOs (zeroFifo, signFifo, decoFifo, thumbFifo). The immMerge selects among them. The immExeMerge and regImmMerge combine the selected immediate with register data to form the final operand for execution.",
+      "summary": "解码来自解码器的立即数类型，进行符号扩展、零扩展或Thumb展开，并最终与寄存器操作数组装成完整的操作数。",
+      "subject": "立即数处理与操作数组装",
+      "explanation": "模块通过ImmSplitter将解码后的立即数信息分发到不同的FIFO（zeroFifo, signFifo, decoFifo, thumbFifo），然后由immMerge合并，再经过immExeMerge和regImmMerge，最终与来自regSelector的寄存器数据（w_lastRs1AndRs2Data_64）组装成96位的操作数（w_op_96）。assign_dependencies中的索引38-45和索引47-53展示了立即数类型标志的提取和扩展逻辑。",
       "signals": [
-        "w_immSplitterDriveToZeroFifo_1",
-        "w_immSplitterDriveToSignFifo_1",
-        "w_immSplitterDriveToDecoFifo_1",
-        "w_immSplitterDriveToThumbFifo_1",
-        "w_immData_32",
-        "w_regImmMerDriToOpData_1"
+        "i_decoderData_185",
+        "w_launchSpliData1_26",
+        "w_ImmSeleData0_26",
+        "w_zeroImm_16",
+        "w_signImm_16",
+        "w_decoImm_16",
+        "w_thumbImm_16",
+        "w_immZero_32",
+        "w_immSign_32",
+        "w_immDecode_32",
+        "w_immThumb_32",
+        "w_op_96"
       ],
       "instances": [
         "ImmSplitter",
@@ -206,89 +213,15 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:launch:structural_responsibility:002"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "summary": "Handles branch instruction decoding and PSR (Program Status Register) update events, generating branch target PC and PSR write data.",
-      "subject": "branch and PSR update path",
-      "explanation": "The i_decoDrive1ToLaunch_1 event triggers the branchSpli, which drives o_launchDriveToPsr_1. The psrRele0Merge and psrRele1Merge combine EXE data and PSR data with release signals, feeding into psrDataMerge and branchSplitter for branch condition evaluation and target calculation.",
-      "signals": [
-        "i_decoDrive1ToLaunch_1",
-        "o_launchDriveToPsr_1",
-        "i_PSRDriveToLaunch_1",
-        "i_psrData_32",
-        "w_psrData_32",
-        "w_branchPc_32",
-        "o_branchPc_32"
-      ],
-      "instances": [
-        "branchSpli",
-        "psrRele0Merge",
-        "psrRele1Merge",
-        "psrRele0Selector",
-        "psrRele1Selector",
-        "psrDataMerge",
-        "branchSplitter",
-        "psrReleSpli"
-      ],
-      "related_flows": [
-        "flow_005_launch_i_decoDrive1ToLaunch_1",
-        "flow_006_launch_i_PSRDriveToLaunch_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:structural_responsibility:003"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "summary": "Forwards an exception flag from the decoder to the instruction fetch unit.",
-      "subject": "exception forwarding to IF",
-      "explanation": "The i_driveFExcToIf_1 event is connected to driveFExcToIfDelay, but no module event output is reached from this flow, suggesting it may be combined with other signals or used internally. The assign w_regMergeDriveToRegSelector1_1 = w_driveFExcToIf_1 | w_regMergeDriveToRegSelector_1 indicates it is ORed with the register merge drive signal.",
-      "signals": [
-        "i_driveFExcToIf_1"
-      ],
-      "instances": [
-        "driveFExcToIfDelay"
-      ],
-      "related_flows": [
-        "flow_007_launch_i_driveFExcToIf_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:structural_responsibility:004"
     },
     {
       "claim_type": "component_role",
@@ -297,16 +230,16 @@
         "module": "launch"
       },
       "subject": "launchSplitter",
-      "summary": "Primary decoder data distributor that splits the 185-bit decoder data into three main paths: execution data (143 bits), register address data (16 bits), and immediate data (26 bits).",
-      "explanation": "The launchSplitter receives i_decoderDriveToLaunch_1 and i_decoderData_185. It outputs w_launchForkData2_143 (execution control), w_launchSpliData0_16 (register addresses), and w_launchSpliData1_26 (immediate data). It also generates drive events for the execution merge path and register splitter.",
+      "summary": "解码器事件分发器，将来自解码器的驱动事件和数据分发到指令发射、寄存器拆分和立即数处理路径。",
+      "explanation": "该组件接收来自解码器的驱动事件（i_decoderDriveToLaunch_1）和185位解码数据（i_decoderData_185），将其拆分为三个主要数据流：143位的指令控制信息（w_launchForkData2_143）、16位的寄存器地址信息（w_launchSpliData0_16）和26位的立即数信息（w_launchSpliData1_26），并分别驱动到exeMerge2、regSplitter和ImmSelector路径。",
       "signals": [
         "i_decoderDriveToLaunch_1",
         "i_decoderData_185",
+        "w_launchForkDriveToExeMerge_1",
+        "w_launchSpliDriveToRegSpli_1",
         "w_launchForkData2_143",
         "w_launchSpliData0_16",
-        "w_launchSpliData1_26",
-        "w_launchForkDriveToExeMerge_1",
-        "w_launchSpliDriveToRegSpli_1"
+        "w_launchSpliData1_26"
       ],
       "instances": [
         "launchSplitter"
@@ -319,10 +252,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_component_connections"
         }
       ],
       "id": "semantic:module:launch:component_role:001"
@@ -334,34 +269,32 @@
         "module": "launch"
       },
       "subject": "exeMerge2",
-      "summary": "Final execution data merger that combines decoded instruction fields, register operands, and branch data into a 207-bit payload for the execute unit.",
-      "explanation": "exeMerge2 is a WaitMerge that waits for three input events: w_launchForkDrive1ToExeMergeDelay1_1 (decoded data), w_regSeleDriveToExeMerge_1 (register operands), and w_branchDriToExeMerge1_1 (branch data). It outputs o_launchDriveToExe_1 and o_launchDataToExe_207.",
+      "summary": "执行单元发射仲裁器，等待来自解码器路径的指令控制信息和来自操作数准备路径的操作数数据，然后向执行单元发射。",
+      "explanation": "该组件是一个cWaitMerge3，等待三个输入事件：来自launchSplitter的指令控制信息（w_launchForkDrive1ToExeMergeDelay1_1）、来自opDataSpli的操作数就绪信号（w_regSeleDriveToExeMerge_1）以及可能的其他路径。当所有输入就绪后，它将指令控制信息（w_launchDataToExe1_99）和操作数数据组装成207位的发射数据（o_launchDataToExe_207），并驱动输出事件o_launchDriveToExe_1。",
       "signals": [
         "o_launchDriveToExe_1",
         "o_launchDataToExe_207",
         "w_launchForkDrive1ToExeMergeDelay1_1",
         "w_regSeleDriveToExeMerge_1",
-        "w_branchDriToExeMerge1_1"
+        "w_launchDataToExe1_99"
       ],
       "instances": [
         "exeMerge2"
       ],
       "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1",
-        "flow_001_launch_i_GrfDriveToLaunch_1",
-        "flow_002_launch_i_SrfDriveToLaunch_1",
-        "flow_003_launch_i_ExeDriveToLunch_1",
-        "flow_004_launch_i_LsuDriveToLunch_1"
+        "flow_000_launch_i_decoderDriveToLaunch_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_component_connections"
         }
       ],
       "id": "semantic:module:launch:component_role:002"
@@ -372,34 +305,19 @@
         "type": "module",
         "module": "launch"
       },
-      "subject": "regMerge and rs1Merge/rs2Merge",
-      "summary": "Register operand forwarding network that selects the correct register data from EXE, LSU, or GRF based on release tracking.",
-      "explanation": "rs1Merge and rs2Merge are MutexMerge components that select among three sources (EXE, GRF, LSU) for each register operand. regMerge is a WaitMerge that waits for both rs1 and rs2 data to be ready, then forwards them together to regSelector for final operand assembly.",
+      "subject": "regMerge",
+      "summary": "寄存器操作数等待合并器，等待来自rs1Merge和rs2Merge的两个寄存器操作数都就绪后，再驱动后续的寄存器选择逻辑。",
+      "explanation": "该组件是一个cWaitMerge2，等待两个输入事件：来自rs1Merge的rs1数据就绪信号（w_rs1MergeDriveToRegMerge_1）和来自rs2Merge的rs2数据就绪信号（w_rs2MergeDriveToRegMerge_1）。当两者都就绪后，它将64位的寄存器数据（w_Rs1AndRs2Data_64）和驱动事件（w_regMergeDriveToRegSelector_1）传递给regSelector。",
       "signals": [
-        "w_lastRs1Data_32",
-        "w_lastRs2Data_32",
+        "w_rs1MergeDriveToRegMerge_1",
+        "w_rs2MergeDriveToRegMerge_1",
         "w_Rs1AndRs2Data_64",
         "w_regMergeDriveToRegSelector_1"
       ],
       "instances": [
-        "rs1Merge",
-        "rs2Merge",
-        "regMerge",
-        "rele0Selector",
-        "rele1Selector",
-        "rele2Selector",
-        "rele3Selector",
-        "rele4Selector",
-        "rele5Selector",
-        "rele0Merge",
-        "rele1Merge",
-        "rele2Merge",
-        "rele3Merge",
-        "rele4Merge",
-        "rele5Merge"
+        "regMerge"
       ],
       "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1",
         "flow_001_launch_i_GrfDriveToLaunch_1",
         "flow_002_launch_i_SrfDriveToLaunch_1",
         "flow_003_launch_i_ExeDriveToLunch_1",
@@ -410,52 +328,15 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_component_connections"
         }
       ],
       "id": "semantic:module:launch:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "subject": "grfSrfMerge and grfSrfSele",
-      "summary": "Merges GRF and SRF drive events and data, then selects the target (GRF or SRF) for the merged result.",
-      "explanation": "grfSrfMerge is a MutexMerge that combines i_GrfDriveToLaunch_1 and i_SrfDriveToLaunch_1 events along with their associated data (i_rsData_64 and i_sRsData_32). grfSrfSele then selects whether to drive the result to o_launchDriveToGrf_1 or o_launchDriveToSrf_1.",
-      "signals": [
-        "i_GrfDriveToLaunch_1",
-        "i_SrfDriveToLaunch_1",
-        "i_rsData_64",
-        "i_sRsData_32",
-        "o_launchDriveToGrf_1",
-        "o_launchDriveToSrf_1"
-      ],
-      "instances": [
-        "grfSrfMerge",
-        "grfSrfSele",
-        "grfSplitter"
-      ],
-      "related_flows": [
-        "flow_001_launch_i_GrfDriveToLaunch_1",
-        "flow_002_launch_i_SrfDriveToLaunch_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:component_role:004"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -463,17 +344,18 @@
         "type": "module",
         "module": "launch"
       },
-      "subject": "w_exeData_32",
-      "summary": "Selects the correct 32-bit word from the 96-bit EXE data bus based on release tracking and high/low word selection.",
-      "explanation": "Assign 15 selects between the upper or lower 32 bits of i_ExeData_96 based on w_exeDataFromHigh_1, which is derived from register address comparison (assign 14). The selection is gated by release bits w_rele_6[1] or w_rele_6[5].",
+      "subject": "w_exeDataFromHigh_1",
+      "summary": "判断执行单元返回的数据是否来自高32位。",
+      "explanation": "该赋值通过比较当前指令的源寄存器地址（w_rs1Addr_4, w_rs2Addr_4）与先前执行单元目标寄存器地址（w_preRd1Addr_4），决定是否从96位执行数据（i_ExeData_96）的高32位（[63:32]）选取数据。这是数据转发路径中的关键控制信号。",
       "signals": [
-        "w_exeData_32",
-        "i_ExeData_96",
         "w_exeDataFromHigh_1",
-        "w_rele_6"
+        "w_rs1Addr_4",
+        "w_preRd1Addr_4",
+        "w_isRn",
+        "w_rs2Addr_4",
+        "w_isRm"
       ],
       "related_assignments": [
-        "14",
         "15"
       ],
       "related_flows": [
@@ -481,13 +363,11 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
         }
       ],
       "id": "semantic:module:launch:assignment_interpretation:001"
@@ -498,84 +378,9 @@
         "type": "module",
         "module": "launch"
       },
-      "subject": "w_lsuData_32",
-      "summary": "Selects the correct 32-bit word from the 64-bit LSU data bus based on release tracking and high/low word selection.",
-      "explanation": "Assign 17 selects between the upper or lower 32 bits of i_lsuData_64 based on w_lsuDataFromHigh_1, which is derived from register address comparison (assign 16). The selection is gated by release bits w_rele_6[0] or w_rele_6[4].",
-      "signals": [
-        "w_lsuData_32",
-        "i_lsuData_64",
-        "w_lsuDataFromHigh_1",
-        "w_rele_6"
-      ],
-      "related_assignments": [
-        "16",
-        "17"
-      ],
-      "related_flows": [
-        "flow_004_launch_i_LsuDriveToLunch_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "subject": "w_immSign_32",
-      "summary": "Generates the sign-extended immediate value by selecting among multiple immediate types (5, 8, 11, 12, 16-bit) and handling BL/UCB instructions.",
-      "explanation": "Assign 49 implements a multiplexer that selects the correct sign extension based on instruction type flags (w_signimm5_1, w_signimm8_1, etc.) and handles the BL/UCB case by concatenating i_blImm9_9 with the sign immediate.",
-      "signals": [
-        "w_immSign_32",
-        "w_signimm5_1",
-        "w_signimm8_1",
-        "w_signimm12_1",
-        "w_signimm16_1",
-        "w_signimm11_1",
-        "w_bl_1",
-        "w_ucb32Bit_1",
-        "i_blImm9_9",
-        "w_signImm_16"
-      ],
-      "related_assignments": [
-        "49"
-      ],
-      "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
       "subject": "w_b_1",
-      "summary": "Evaluates branch condition based on condition codes and instruction type (conditional branch, CBZ, CBNZ).",
-      "explanation": "Assign 75 implements a full condition code evaluation for ARM conditional branches (cond1_4 values 0x0-0xE) and also handles CBZ/CBNZ by checking if w_op1_32 is zero or non-zero.",
+      "summary": "条件分支判断结果，决定是否进行分支跳转。",
+      "explanation": "该赋值根据指令的条件码（w_cond1_4）、程序状态寄存器标志位（w_z2_1, w_c2_1, w_n2_1, w_v2_1）以及CBZ/CBNZ指令的操作数结果，综合判断分支条件是否成立。这是控制流路径中的关键信号。",
       "signals": [
         "w_b_1",
         "w_cond1_4",
@@ -583,71 +388,27 @@
         "w_c2_1",
         "w_n2_1",
         "w_v2_1",
-        "w_isCb_1",
         "w_cbz_1",
         "w_cbnz_1",
         "w_op1_32"
       ],
       "related_assignments": [
-        "75"
+        "75",
+        "76"
       ],
       "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1"
+        "flow_005_launch_i_decoDrive1ToLaunch_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
         }
       ],
-      "id": "semantic:module:launch:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "subject": "w_op1_32, w_op2_32, w_op3_32",
-      "summary": "Selects the three ALU operands from register data, immediate values, PC, or link register based on instruction type.",
-      "explanation": "Assigns 63-65 implement operand selection for the ALU. w_op1_32 selects from rn, rm, PC, thumb immediate, BL PC, or last immediate. w_op2_32 selects from rm, saturate immediate, thumb immediate, or last immediate. w_op3_32 selects from rn, saturate immediate, or link register.",
-      "signals": [
-        "w_op1_32",
-        "w_op2_32",
-        "w_op3_32",
-        "w_rnData_32",
-        "w_rmData_32",
-        "w_pc_32",
-        "w_last2Imm_32",
-        "w_immThumb_32",
-        "w_blPc_32",
-        "w_lr_32"
-      ],
-      "related_assignments": [
-        "63",
-        "64",
-        "65"
-      ],
-      "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:assignment_interpretation:005"
+      "id": "semantic:module:launch:assignment_interpretation:002"
     },
     {
       "claim_type": "interface_intent",
@@ -655,25 +416,27 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "Primary instruction decode interface that provides both the drive event and the full 185-bit decoded instruction data.",
-      "subject": "decoder drive interface",
-      "explanation": "The i_decoderDriveToLaunch_1 event is paired with i_decoderData_185 payload. This is the main entry point for decoded instructions into the launch module. The event triggers the launchSplitter which distributes the data to all internal paths.",
+      "summary": "每个发射事件（o_launchDriveTo*_1）都关联一个207位的数据负载（o_launchDataToExe_207），表明发射到不同目标单元的数据格式是统一的。",
+      "subject": "发射事件与数据负载的关联",
+      "explanation": "从event_payload_contracts可以看出，多个输出事件（o_launchDriveToExe_1, o_launchDriveToGrf_1, o_launchDriveToIf_1, o_launchDriveToPsr_1, o_launchDriveToSrf_1）都共享同一个数据负载o_launchDataToExe_207。这表明发射到不同单元的数据包结构是相同的，下游单元根据事件类型解析数据包中的相关字段。",
       "signals": [
-        "i_decoderDriveToLaunch_1",
-        "i_decoderData_185"
+        "o_launchDriveToExe_1",
+        "o_launchDriveToGrf_1",
+        "o_launchDriveToIf_1",
+        "o_launchDriveToPsr_1",
+        "o_launchDriveToSrf_1",
+        "o_launchDataToExe_207"
       ],
       "related_payload": [
-        "i_decoderData_185"
+        "o_launchDataToExe_207"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:launch:interface_intent:001"
@@ -684,98 +447,32 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "Output interface that provides the complete 207-bit execution packet to the execute unit, including decoded instruction fields, register operands, and immediate values.",
-      "subject": "execute drive interface",
-      "explanation": "The o_launchDriveToExe_1 event is paired with o_launchDataToExe_207 payload. This is the main output from the launch module to the execute pipeline stage. The free signal i_ExeFreeToLaunch_1 indicates when the execute unit is ready to accept new data.",
+      "summary": "每个输入驱动事件（i_*DriveToLaunch_1）都对应一个输出释放信号（o_launchFreeTo*_1），构成请求-确认握手协议。",
+      "subject": "输入驱动事件与释放信号的配对",
+      "explanation": "从event_payload_contracts可以看出，每个输入事件（如i_ExeDriveToLunch_1）都关联一个释放信号（如o_launchFreeToExe_1）。这表明模块使用一种简单的握手协议：上游单元通过驱动事件请求服务，模块在处理完成后通过释放信号通知上游单元可以发送下一个请求。",
       "signals": [
-        "o_launchDriveToExe_1",
-        "o_launchDataToExe_207",
-        "i_ExeFreeToLaunch_1"
+        "i_ExeDriveToLunch_1",
+        "o_launchFreeToExe_1",
+        "i_LsuDriveToLunch_1",
+        "o_launchFreeToLsu_1",
+        "i_decoderDriveToLaunch_1",
+        "o_launchFree1ToDecoder_1"
       ],
       "related_payload": [
-        "o_launchDataToExe_207"
+        "i_ExeData_96",
+        "i_lsuData_64",
+        "i_decoderData_185"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:launch:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "summary": "Output interface for writing results back to the general register file (GRF) and special register file (SRF).",
-      "subject": "GRF/SRF write-back interface",
-      "explanation": "The o_launchDriveToGrf_1 and o_launchDriveToSrf_1 events are outputs that trigger register file writes. The associated free signals (i_ExeFreeToLaunch_1, i_IfFreeToLaunch_1) indicate when the target is ready. The payload o_launchDataToExe_207 is shared with the execute interface, suggesting the same data packet is used for both execution and register write-back.",
-      "signals": [
-        "o_launchDriveToGrf_1",
-        "o_launchDriveToSrf_1",
-        "o_launchDataToExe_207",
-        "i_ExeFreeToLaunch_1",
-        "i_IfFreeToLaunch_1"
-      ],
-      "related_payload": [
-        "o_launchDataToExe_207"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:interface_intent:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "summary": "A set of handshake signals that indicate when downstream modules are ready to accept new data, forming a distributed flow control mechanism.",
-      "subject": "free signal network",
-      "explanation": "The module has 6 free inputs and 7 free outputs. These signals are used by the SelSplit components (exeSele0, lsuSele1, rele0Selector, etc.) to implement backpressure and arbitration. The free signals form a feedback loop that controls when new data can be launched.",
-      "signals": [
-        "i_ExeFreeToLaunch_1",
-        "i_IfFreeToLaunch_1",
-        "i_PSRFreeToLaunch_1",
-        "i_bFreeFromIf",
-        "i_grfFreeTolaunch_1",
-        "i_srfFreeTolaunch_1",
-        "o_launchFree1ToDecoder_1",
-        "o_launchFreeToDecoder_1",
-        "o_launchFreeToExe_1",
-        "o_launchFreeToGrf_1",
-        "o_launchFreeToLsu_1",
-        "o_launchFreeToPSR_1",
-        "o_launchFreeToSrf_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:interface_intent:004"
     },
     {
       "claim_type": "documentation_focus",
@@ -783,18 +480,16 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "The manual should emphasize the complex operand forwarding network that selects register data from multiple execution units based on release tracking.",
-      "subject": "operand forwarding and release tracking",
-      "explanation": "The module contains 6 release merge/selector pairs (rele0-5) that track which execution unit produced the result for each register operand. This is a critical design aspect for understanding pipeline data hazards and forwarding logic.",
+      "summary": "手册应重点描述模块如何从多个源（执行单元、加载存储单元、通用寄存器文件）仲裁和转发寄存器数据，以及如何处理立即数。",
+      "subject": "数据转发与操作数准备逻辑",
+      "explanation": "这是模块最核心和最复杂的部分，涉及大量的比较、选择和合并逻辑。理解这一部分对于理解整个流水线的数据流至关重要。assign_dependencies和key_instances中的rele*组件和rs*Merge组件提供了清晰的证据。",
       "signals": [
+        "w_exeData_32",
+        "w_lsuData_32",
+        "w_rs1Data_32",
+        "w_rs2Data_32",
         "w_rele_6",
-        "w_releData_6",
-        "w_rele0Data_33",
-        "w_rele1Data_33",
-        "w_rele2Data_33",
-        "w_rele3Data_33",
-        "w_rele4Data_33",
-        "w_rele5Data_33"
+        "w_releData_6"
       ],
       "instances": [
         "rele0Merge",
@@ -809,25 +504,26 @@
         "rele3Selector",
         "rele4Selector",
         "rele5Selector",
-        "releSplitter",
-        "rele6Splitter"
+        "rs1Merge",
+        "rs2Merge",
+        "regMerge"
       ],
       "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1",
-        "flow_001_launch_i_GrfDriveToLaunch_1",
-        "flow_002_launch_i_SrfDriveToLaunch_1",
         "flow_003_launch_i_ExeDriveToLunch_1",
-        "flow_004_launch_i_LsuDriveToLunch_1"
+        "flow_004_launch_i_LsuDriveToLunch_1",
+        "flow_001_launch_i_GrfDriveToLaunch_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:launch:documentation_focus:001"
@@ -838,105 +534,59 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "The manual should detail the multi-stage immediate generation pipeline that uses FIFOs to decouple immediate extraction from operand selection.",
-      "subject": "immediate generation pipeline",
-      "explanation": "The immediate path uses four FIFOs (zero, sign, decode, thumb) to buffer immediate data before selection. This suggests a pipeline depth where immediate extraction and operand selection are separated by FIFO stages.",
-      "signals": [
-        "w_immSplitterDriveToZeroFifo_1",
-        "w_immSplitterDriveToSignFifo_1",
-        "w_immSplitterDriveToDecoFifo_1",
-        "w_immSplitterDriveToThumbFifo_1",
-        "w_zeroFifoDriveToImmMerge_1",
-        "w_signFifoDriveToImmMerge_1",
-        "w_decoFifoDriveToImmMerge_1",
-        "w_thumbFifoDriveToImmMerge_1"
-      ],
+      "summary": "手册应解释模块如何等待所有操作数（寄存器数据、立即数、控制信息）就绪后才向下游发射指令。",
+      "subject": "发射仲裁与同步机制",
+      "explanation": "模块大量使用cWaitMerge组件（如exeMerge2, regMerge, rele*Merge）来实现同步。这些组件等待多个输入事件都到达后，才产生输出。这是实现指令发射的关键机制。",
       "instances": [
-        "ImmSplitter",
-        "zeroFifo",
-        "signFifo",
-        "decoFifo",
-        "thumbFifo",
-        "immMerge",
-        "immExeMerge",
+        "exeMerge2",
+        "regMerge",
+        "rele0Merge",
+        "rele1Merge",
+        "rele2Merge",
+        "rele3Merge",
+        "rele4Merge",
+        "rele5Merge",
         "regImmMerge"
       ],
       "related_flows": [
         "flow_000_launch_i_decoderDriveToLaunch_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         },
         {
-          "source": "parser_pipeline_rtl/modules/launch.json"
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "component_families"
         }
       ],
       "id": "semantic:module:launch:documentation_focus:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "reason": "The free signal network has 13 signals but their exact connectivity to internal components and the arbitration logic is not fully detailed in the compact context.",
-      "subject": "free signal network detailed connectivity",
-      "needed_source_slice": "always block, assign block",
-      "signals": [
-        "i_ExeFreeToLaunch_1",
-        "i_IfFreeToLaunch_1",
-        "i_PSRFreeToLaunch_1",
-        "i_bFreeFromIf",
-        "i_grfFreeTolaunch_1",
-        "i_srfFreeTolaunch_1",
-        "o_launchFree1ToDecoder_1",
-        "o_launchFreeToDecoder_1",
-        "o_launchFreeToExe_1",
-        "o_launchFreeToGrf_1",
-        "o_launchFreeToLsu_1",
-        "o_launchFreeToPSR_1",
-        "o_launchFreeToSrf_1"
-      ],
-      "instances": [
-        "exeSele0",
-        "lsuSele1",
-        "rele0Selector",
-        "rele1Selector",
-        "rele2Selector",
-        "rele3Selector",
-        "rele4Selector",
-        "rele5Selector",
-        "Selector"
-      ],
-      "related_flows": [
-        "all"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/launch.json"
-        }
-      ],
-      "id": "semantic:module:launch:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_PSRDriveToLaunch_1",
-      "reason": "no module event output reached from i_PSRDriveToLaunch_1"
+      "reason": "该输入事件在内部事件流中没有到达任何模块输出事件，其具体作用不明确。可能仅用于内部状态更新或作为条件判断的一部分，但现有上下文无法确认。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "internal_event_flow"
+        }
+      ]
     },
     {
       "field": "internal_event_flow.i_driveFExcToIf_1",
-      "reason": "no module event output reached from i_driveFExcToIf_1"
+      "reason": "该输入事件在内部事件流中没有到达任何模块输出事件，其具体作用不明确。可能用于触发异常处理或刷新流水线，但现有上下文无法确认。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "internal_event_flow"
+        }
+      ]
     }
   ]
 }

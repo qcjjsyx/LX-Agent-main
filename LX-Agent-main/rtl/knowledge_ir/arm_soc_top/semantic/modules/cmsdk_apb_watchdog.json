@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 12,
     "by_type": {
       "assignment_interpretation": 3,
       "component_role": 1,
       "documentation_focus": 2,
       "interface_intent": 2,
       "module_role": 1,
-      "structural_responsibility": 2
+      "structural_responsibility": 3
     }
   },
   "claims": [
@@ -63,9 +63,9 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "APB-programmable watchdog timer wrapper that decodes APB transactions and routes control/data to a watchdog counter core.",
+      "summary": "该模块是APB总线接口的看门狗定时器顶层，负责将APB总线协议转换为内部看门狗功能子模块的控制与数据。",
       "subject": "cmsdk_apb_watchdog",
-      "explanation": "The module decodes APB address and control signals to generate register write enables for lock, ITCR, and ITOP registers, and selects between watchdog core outputs and test override signals for WDOGINT and WDOGRES.",
+      "explanation": "模块通过assign逻辑将APB地址、数据和控制信号解码为内部写使能信号（如wdog_lock_wr_en、wdog_itcr_wr_en），并驱动子模块u_apb_watchdog_frc。输出WDOGINT和WDOGRES通过wdog_itcr选择来自子模块的真实中断/复位或测试模式信号。",
       "signals": [
         "PSEL",
         "PADDR",
@@ -84,10 +84,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
+          "source": "module_facts",
+          "path": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:module_role:001"
@@ -98,15 +100,15 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "Generates per-register write enables based on APB address, select, and write strobe, with lock protection for test registers.",
-      "subject": "APB address decoding and write enable generation",
-      "explanation": "Assigns wdog_lock_wr_en, wdog_itcr_wr_en, wdog_itop_wr_en using PADDR comparisons with ARM_WDOG* parameters, gated by PSEL, PWRITE, and PENABLE. Lock register write requires a magic key (0x1ACCE551) on PWDATA.",
+      "summary": "模块根据APB地址和选择信号，生成针对不同内部寄存器的写使能脉冲，用于控制看门狗锁定、中断测试寄存器等。",
+      "subject": "APB地址解码与写使能生成",
+      "explanation": "assign 1-4 分别生成wdog_lock_wr_en、wdog_itcr_wr_en、wdog_itop_wr_en，这些使能信号在PADDR匹配特定地址且PSEL和PWRITE有效时产生，并受wdog_lock状态影响（锁定后禁止写入ITCR/ITOP）。",
       "signals": [
         "PADDR",
         "PSEL",
         "PWRITE",
         "PENABLE",
-        "PWDATA",
+        "wdog_lock",
         "wdog_lock_wr_en",
         "wdog_itcr_wr_en",
         "wdog_itop_wr_en"
@@ -116,7 +118,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "assign_dependencies[1-4]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:001"
@@ -127,31 +130,55 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "Provides APB read data from the watchdog core and selects between core interrupt/reset outputs and test override values.",
-      "subject": "Read data path and output selection",
-      "explanation": "PRDATA is driven by i_prdata from the watchdog core. WDOGINT and WDOGRES are muxed between core outputs (i_wdogint, i_wdogres) and test override bits (wdog_itop[1], wdog_itop[0]) based on wdog_itcr.",
+      "summary": "模块在APB读操作时使能内部读数据路径，并通过assign 6将内部读数据i_prdata连接到输出PRDATA。",
+      "subject": "读数据路径与输出选择",
+      "explanation": "assign 5生成prdata_next_en，在PSEL有效、非写、非使能阶段时使能，表明这是APB地址阶段的读使能。assign 6直接将i_prdata赋值给PRDATA，表明读数据由内部组合逻辑或子模块提供。",
       "signals": [
+        "PSEL",
+        "PWRITE",
+        "PENABLE",
+        "prdata_next_en",
         "PRDATA",
+        "i_prdata"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies[5-6]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        }
+      ],
+      "id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:002"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "cmsdk_apb_watchdog"
+      },
+      "summary": "模块通过wdog_itcr信号选择输出真实看门狗中断/复位或测试模式下的强制信号。",
+      "subject": "中断与复位输出多路选择",
+      "explanation": "assign 7和8分别控制WDOGINT和WDOGRES。当wdog_itcr为0时，输出子模块产生的i_wdogint和i_wdogres；否则输出测试寄存器wdog_itop的对应位，用于验证。",
+      "signals": [
         "WDOGINT",
         "WDOGRES",
-        "i_prdata",
+        "wdog_itcr",
         "i_wdogint",
         "i_wdogres",
-        "wdog_itcr",
         "wdog_itop"
-      ],
-      "instances": [
-        "u_apb_watchdog_frc"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "assign_dependencies[7-8]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
-      "id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:002"
+      "id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:003"
     },
     {
       "claim_type": "component_role",
@@ -160,8 +187,8 @@
         "module": "cmsdk_apb_watchdog"
       },
       "subject": "u_apb_watchdog_frc",
-      "summary": "Core watchdog counter and control logic that implements the actual watchdog timer function.",
-      "explanation": "Receives APB interface signals (PCLK, PENABLE, PRESETn, PWDATA, PWRITE) and watchdog-specific clocks (WDOGCLK, WDOGCLKEN, WDOGRESn). Provides read data (frc_data) and interrupt/reset outputs to the wrapper.",
+      "summary": "该子模块是看门狗定时器的核心功能单元，负责定时计数、产生中断和复位信号，并接收APB数据写入。",
+      "explanation": "子模块接收PCLK、PENABLE、PRESETn、PWDATA、PWRITE、WDOGCLK、WDOGCLKEN、WDOGRESn等信号，输出frc_data。它实现了看门狗的实际定时逻辑，而顶层模块负责APB接口协议转换。",
       "signals": [
         "PCLK",
         "PENABLE",
@@ -181,7 +208,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "key_instances",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        },
+        {
+          "source": "key_component_connections",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:component_role:001"
@@ -192,44 +224,17 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "subject": "frc_sel",
-      "summary": "Decodes APB address to select this watchdog instance when PSEL is asserted.",
-      "explanation": "Compares PADDR[11:5] with ARM_WDOG1A parameter to generate a select signal for the watchdog core.",
+      "subject": "wdog_lock_wr_en",
+      "summary": "该assign生成看门狗锁定寄存器的写使能，用于保护关键配置不被意外修改。",
+      "explanation": "当PADDR匹配锁定寄存器地址且PSEL和PWRITE有效时，在PENABLE为低（地址阶段）产生写使能脉冲。写数据wdog_lock_wr_val通过比较PWDATA与密钥0x1ACCE551决定锁定状态。",
       "signals": [
-        "frc_sel",
-        "PSEL",
-        "PADDR"
-      ],
-      "related_assignments": [
-        "0"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:001"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog"
-      },
-      "subject": "wdog_lock_wr_en and wdog_lock_wr_val",
-      "summary": "Implements a write-once lock mechanism that prevents modification of test registers after a magic key write.",
-      "explanation": "wdog_lock_wr_en is generated from address decode and APB control. wdog_lock_wr_val is set to 0 (unlock) only when PWDATA equals 0x1ACCE551, otherwise 1 (lock). This lock signal gates ITCR and ITOP write enables.",
-      "signals": [
-        "wdog_lock_wr_en",
-        "wdog_lock_wr_val",
         "PADDR",
-        "PWDATA",
         "PSEL",
         "PWRITE",
-        "PENABLE"
+        "PENABLE",
+        "wdog_lock_wr_en",
+        "wdog_lock_wr_val",
+        "PWDATA"
       ],
       "related_assignments": [
         "1",
@@ -240,7 +245,39 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "assign_dependencies[1-2]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        }
+      ],
+      "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "cmsdk_apb_watchdog"
+      },
+      "subject": "wdog_itcr_wr_en",
+      "summary": "该assign生成中断测试控制寄存器的写使能，仅在看门狗未锁定时允许写入。",
+      "explanation": "当PADDR匹配ITCR地址且PSEL和PWRITE有效时，在PENABLE为低且wdog_lock为0时产生写使能。这实现了锁定保护机制，防止在锁定状态下修改测试配置。",
+      "signals": [
+        "PADDR",
+        "PSEL",
+        "PWRITE",
+        "PENABLE",
+        "wdog_lock",
+        "wdog_itcr_wr_en"
+      ],
+      "related_assignments": [
+        "3"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies[3]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:002"
@@ -251,24 +288,29 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "subject": "prdata_next_en",
-      "summary": "Generates a read enable strobe for the APB read data path.",
-      "explanation": "Asserted when PSEL is active, PWRITE is low (read), and PENABLE is low (address phase), indicating a read transaction is starting.",
+      "subject": "wdog_itop_wr_en",
+      "summary": "该assign生成中断测试输出寄存器的写使能，同样受锁定保护。",
+      "explanation": "与ITCR写使能逻辑相同，但地址匹配ITOP寄存器。该使能用于写入测试输出值，通过assign 7和8影响WDOGINT和WDOGRES。",
       "signals": [
-        "prdata_next_en",
+        "PADDR",
         "PSEL",
         "PWRITE",
-        "PENABLE"
+        "PENABLE",
+        "wdog_lock",
+        "wdog_itop_wr_en"
       ],
       "related_assignments": [
-        "5"
+        "4",
+        "7",
+        "8"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "assign_dependencies[4]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:003"
@@ -279,14 +321,14 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "Standard APB slave interface for register access, with address decoding for watchdog-specific registers.",
-      "subject": "APB slave interface",
-      "explanation": "Uses PSEL, PENABLE, PWRITE, PADDR, PWDATA, and PRDATA for APB transactions. Address decoding uses ARM_WDOG* parameters to map registers. Read data is provided by the watchdog core.",
+      "summary": "该模块实现APB从设备接口，通过地址解码将APB事务映射到内部寄存器空间，并生成读/写控制信号。",
+      "subject": "APB从接口",
+      "explanation": "接口包含PADDR[11:2]、PWDATA、PRDATA、PSEL、PENABLE、PWRITE等标准APB信号。assign 0通过地址高位解码选择子模块，assign 1-5生成内部写使能和读使能，符合APB协议规范。",
       "signals": [
+        "PADDR",
         "PSEL",
         "PENABLE",
         "PWRITE",
-        "PADDR",
         "PWDATA",
         "PRDATA"
       ],
@@ -299,10 +341,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
+          "source": "interface",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "assign_dependencies[0-6]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:interface_intent:001"
@@ -313,9 +357,60 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "Provides interrupt and reset outputs with test override capability.",
-      "subject": "Watchdog output interface",
-      "explanation": "WDOGINT and WDOGRES are muxed between core outputs and test override bits (wdog_itop[1:0]) controlled by wdog_itcr. This allows software to force interrupt/reset for testing.",
+      "summary": "模块提供两个独立输出：WDOGINT（中断请求）和WDOGRES（复位请求），分别用于系统中断和复位控制。",
+      "subject": "看门狗输出接口",
+      "explanation": "这两个输出通过assign 7和8从内部信号选择产生，支持正常模式和测试模式。正常模式下由子模块驱动，测试模式下由ITOP寄存器控制。",
+      "signals": [
+        "WDOGINT",
+        "WDOGRES"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies[7-8]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        }
+      ],
+      "id": "semantic:module:cmsdk_apb_watchdog:interface_intent:002"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "cmsdk_apb_watchdog"
+      },
+      "summary": "手册应重点描述寄存器地址映射、写使能条件以及锁定保护机制，这是理解模块配置的关键。",
+      "subject": "寄存器地址映射与锁定保护",
+      "explanation": "assign 1-4展示了不同寄存器的地址解码和写使能逻辑，其中锁定保护（wdog_lock）影响ITCR和ITOP的写入。手册需明确每个寄存器的地址、访问权限和锁定影响。",
+      "signals": [
+        "PADDR",
+        "wdog_lock",
+        "wdog_lock_wr_en",
+        "wdog_itcr_wr_en",
+        "wdog_itop_wr_en"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies[1-4]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        }
+      ],
+      "id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "cmsdk_apb_watchdog"
+      },
+      "summary": "手册应强调WDOGINT和WDOGRES的输出选择机制，包括正常模式与测试模式的切换。",
+      "subject": "中断与复位输出选择逻辑",
+      "explanation": "assign 7和8通过wdog_itcr选择输出源，测试模式下由ITOP寄存器控制。手册需说明测试模式的使能条件和输出行为。",
       "signals": [
         "WDOGINT",
         "WDOGRES",
@@ -327,62 +422,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog:interface_intent:002"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog"
-      },
-      "summary": "The manual should detail the APB register map, including the lock register write sequence with magic key, and the test control/override registers.",
-      "subject": "Register map and lock mechanism",
-      "explanation": "The lock mechanism (wdog_lock) gates access to ITCR and ITOP registers, which control test mode and output override. This is critical for understanding watchdog configuration and test.",
-      "signals": [
-        "PADDR",
-        "PWDATA",
-        "wdog_lock",
-        "wdog_itcr",
-        "wdog_itop"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog"
-      },
-      "summary": "The manual should describe the interface between this wrapper and the cmsdk_apb_watchdog_frc core, including clock domains and reset.",
-      "subject": "Watchdog core interface",
-      "explanation": "The wrapper passes APB signals and watchdog-specific clocks (WDOGCLK, WDOGCLKEN, WDOGRESn) to the core. Understanding this boundary is important for integration.",
-      "signals": [
-        "PCLK",
-        "WDOGCLK",
-        "WDOGCLKEN",
-        "WDOGRESn",
-        "PRESETn"
-      ],
-      "instances": [
-        "u_apb_watchdog_frc"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "assign_dependencies[7-8]",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:002"
@@ -390,8 +431,14 @@
   ],
   "evidence_gaps": [
     {
-      "field": "internal_event_flow",
-      "reason": "No internal event flow information is provided in the compact context. The watchdog core's internal counter behavior, timeout generation, and interrupt/reset assertion logic are not described."
+      "field": "子模块内部定时逻辑",
+      "reason": "上下文未提供子模块cmsdk_apb_watchdog_frc的内部实现细节，如定时器计数宽度、预分频、中断/复位产生条件等。",
+      "evidence": [
+        {
+          "source": "key_instances",
+          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        }
+      ]
     }
   ]
 }

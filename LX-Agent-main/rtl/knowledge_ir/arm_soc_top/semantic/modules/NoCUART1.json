@@ -64,9 +64,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "NoCUART1 is a UART wrapper that bridges a NoC event-driven interface to a legacy 16550 UART core, adding flow control and data reshaping.",
+      "summary": "NoCUART1 是一个 UART 桥接模块，负责在 NoC 事件驱动接口和标准 UART 外设 (m16550s) 之间进行协议转换与数据同步。",
       "subject": "NoCUART1",
-      "explanation": "The module connects NoC event/drive signals (i_drvFNoc, i_freeFNoc) through a pipeline of FIFOs and a pmtAck component to a uart_instance (m16550s), and outputs reshaped data (o_data2Noc_51) and events (o_drv2Noc, o_free2Noc). The assign dependency shows data reshaping from internal registers to output.",
+      "explanation": "模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 与 NoC 通信，内部使用 cFifo2、cPmtFifo1 和 cFifo1 组件链对驱动事件进行缓冲、握手和延迟，最终连接到 uart_instance (m16550s) 的标准 UART 信号。这表明其核心作用是桥接 NoC 的轻量级事件协议与 UART 的并行寄存器接口。",
       "signals": [
         "i_drvFNoc",
         "o_drv2Noc",
@@ -77,8 +77,8 @@
       ],
       "instances": [
         "cfifo0",
-        "cfifo1",
         "pmtAck",
+        "cfifo1",
         "uart_instance"
       ],
       "related_flows": [
@@ -89,10 +89,22 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "interface.event_outputs"
+        },
+        {
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "interface.data_outputs"
+        },
+        {
+          "source": "key_component_connections"
+        },
+        {
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:NoCUART1:module_role:001"
@@ -103,21 +115,21 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "NoCUART1 converts NoC drive events into UART transactions and returns reshaped data and free events.",
-      "subject": "NoC-to-UART event and data bridging",
-      "explanation": "The event flow from i_drvFNoc passes through cfifo0, pmtAck, delay11, cfifo1, and delays 8-10 to produce o_drv2Noc. The free path goes from i_freeFNoc to cfifo1 and from cfifo0 to o_free2Noc. The data output is assembled from internal registers (r_dataFNoc_51, r_dataHigh, ReceiveData, r_X, r_Y).",
+      "summary": "模块将 NoC 的输入驱动事件 (i_drvFNoc) 及其关联数据 (i_dataFNoc_51) 转换为 UART 的寄存器写操作，并将 UART 的读回数据打包为输出驱动事件 (o_drv2Noc) 及其数据 (o_data2Noc_51)。",
+      "subject": "NoC 到 UART 的事件驱动桥接",
+      "explanation": "输入事件流经 cfifo0 -> pmtAck -> cfifo1 的组件链，最终驱动 uart_instance。输出数据路径 (o_data2Noc_51) 由内部寄存器 (r_dataFNoc_51, r_dataHigh, ReceiveData, r_X, r_Y) 拼接而成，表明模块负责收集 UART 状态和数据以响应 NoC 请求。空闲信号 (i_freeFNoc/o_free2Noc) 用于流控。",
       "signals": [
         "i_drvFNoc",
-        "o_drv2Noc",
-        "i_freeFNoc",
-        "o_free2Noc",
         "i_dataFNoc_51",
-        "o_data2Noc_51"
+        "o_drv2Noc",
+        "o_data2Noc_51",
+        "i_freeFNoc",
+        "o_free2Noc"
       ],
       "instances": [
         "cfifo0",
-        "cfifo1",
         "pmtAck",
+        "cfifo1",
         "uart_instance"
       ],
       "related_flows": [
@@ -128,10 +140,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "interface.event_payload_contracts"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "key_component_connections"
+        },
+        {
+          "source": "assign_dependencies"
+        },
+        {
+          "source": "internal_event_flow_refs"
         }
       ],
       "id": "semantic:module:NoCUART1:structural_responsibility:001"
@@ -142,13 +160,12 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "cfifo0",
-      "summary": "cfifo0 is the input FIFO that buffers incoming NoC drive events before processing.",
-      "explanation": "cfifo0 receives i_drvFNoc and outputs w_drv2Pmt to pmtAck. It also outputs o_free2Noc, indicating it manages the free signal for the input path.",
+      "subject": "cfifo0 (cFifo2)",
+      "summary": "作为输入驱动事件的入口 FIFO，对来自 NoC 的 i_drvFNoc 事件进行缓冲和同步，输出到 pmtAck。",
+      "explanation": "cfifo0 接收 i_drvFNoc 事件，其输出 w_drv2Pmt 连接到 pmtAck 的输入。它位于事件流的最前端，负责处理 NoC 与内部逻辑之间的时钟域或速率匹配。",
       "signals": [
         "i_drvFNoc",
-        "w_drv2Pmt",
-        "o_free2Noc"
+        "w_drv2Pmt"
       ],
       "instances": [
         "cfifo0"
@@ -161,10 +178,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:001"
@@ -175,9 +192,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "pmtAck",
-      "summary": "pmtAck is a payment/acknowledgment FIFO that manages handshake between the input FIFO and the output FIFO chain.",
-      "explanation": "pmtAck receives w_drv2Pmt from cfifo0 and outputs w_drv2fifo1 to delay11, which then feeds cfifo1. This suggests it tracks transaction completion or credit return.",
+      "subject": "pmtAck (cPmtFifo1)",
+      "summary": "作为握手和确认组件，在 cfifo0 和 cfifo1 之间提供带握手的传递，确保事件被可靠地传递到 UART 侧。",
+      "explanation": "pmtAck 接收来自 cfifo0 的 w_drv2Pmt 事件，其输出 w_drv2fifo1 经过延迟后送入 cfifo1。其名称 \"pmtAck\" 暗示它可能实现了一种“传递-确认”协议，用于管理事件流。",
       "signals": [
         "w_drv2Pmt",
         "w_drv2fifo1"
@@ -193,10 +210,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:002"
@@ -207,13 +224,12 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "cfifo1",
-      "summary": "cfifo1 is the output FIFO that buffers drive events before final delay chain to output.",
-      "explanation": "cfifo1 receives w_drv2fifo1_delay from delay11 and outputs w_drv2Noc_delay to delay8. It also receives i_freeFNoc, indicating it manages free signals for the output path.",
+      "subject": "cfifo1 (cFifo1)",
+      "summary": "作为输出驱动事件的出口 FIFO，对来自 pmtAck 的事件进行延迟和缓冲，最终输出到 NoC。",
+      "explanation": "cfifo1 接收经过延迟的 w_drv2fifo1_delay 事件，其输出 w_drv2Noc_delay 经过三级延迟链 (delay8, delay9, delay10) 后生成 o_drv2Noc。它位于事件流的末端，负责输出同步。",
       "signals": [
         "w_drv2fifo1_delay",
-        "w_drv2Noc_delay",
-        "i_freeFNoc"
+        "w_drv2Noc_delay"
       ],
       "instances": [
         "cfifo1"
@@ -226,10 +242,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:003"
@@ -241,11 +257,9 @@
         "module": "NoCUART1"
       },
       "subject": "uart_instance (m16550s)",
-      "summary": "uart_instance is the legacy 16550 UART core that performs serial communication.",
-      "explanation": "uart_instance connects to standard UART signals (SIN, SOUT, BAUD, BRGE, CLOCK, IRQ, modem signals) and provides w_rdata output. It receives WDATA input, suggesting a bus interface for configuration.",
+      "summary": "标准 UART 内核，负责串行数据的收发，并通过并行寄存器接口与 NoC 桥接逻辑交互。",
+      "explanation": "uart_instance 连接了所有标准 UART 信号 (SIN, SOUT, RCLK, IRQ, 握手信号等) 以及数据总线 (WDATA, w_rdata)。它是模块功能的最终执行者，但桥接逻辑负责将其封装为 NoC 事件。",
       "signals": [
-        "SIN",
-        "SOUT",
         "BAUD",
         "BRGE",
         "CLOCK",
@@ -260,6 +274,8 @@
         "NRTS",
         "RCLK",
         "RCLK_BAUD",
+        "SIN",
+        "SOUT",
         "WDATA",
         "w_rdata"
       ],
@@ -274,10 +290,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "key_instances"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:004"
@@ -289,8 +305,8 @@
         "module": "NoCUART1"
       },
       "subject": "o_data2Noc_51",
-      "summary": "This assign reshapes internal data into the 51-bit NoC output payload.",
-      "explanation": "The output is constructed from r_dataFNoc_51 (bits 50 and 49:42), r_dataHigh, ReceiveData, r_X, and r_Y. This suggests the module extracts and reorders UART data and status bits for the NoC interface.",
+      "summary": "输出数据由多个内部状态字段拼接而成，用于向 NoC 报告 UART 的当前状态和接收到的数据。",
+      "explanation": "赋值将 r_dataFNoc_51 (可能为输入数据的回环或高位)、r_dataHigh (高位数据)、ReceiveData (接收数据)、r_X 和 r_Y (状态标志) 拼接成 51 位输出。这表明 NoC 通过一次读事件即可获取 UART 的完整状态快照。",
       "signals": [
         "o_data2Noc_51",
         "r_dataFNoc_51",
@@ -306,11 +322,11 @@
         "flow_000_NoCUART1_i_drvFNoc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:NoCUART1:assignment_interpretation:001"
@@ -321,13 +337,13 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "The i_drvFNoc/o_drv2Noc pair forms a request/response drive handshake with associated data payloads.",
-      "subject": "NoC drive event interface",
-      "explanation": "i_drvFNoc carries i_dataFNoc_51 as payload, and o_drv2Noc carries o_data2Noc_51. The free signals (i_freeFNoc, o_free2Noc) suggest a credit-based flow control mechanism.",
+      "summary": "模块实现了一个基于事件驱动、数据伴随、空闲流控的三线协议，用于与 NoC 通信。",
+      "subject": "NoC 事件-数据-空闲协议",
+      "explanation": "每个输入事件 (i_drvFNoc) 都伴随一个 51 位数据载荷 (i_dataFNoc_51)，输出事件 (o_drv2Noc) 也伴随数据 (o_data2Noc_51)。独立的空闲信号 (i_freeFNoc/o_free2Noc) 用于指示接收方是否准备好处理下一个事件，实现背压流控。",
       "signals": [
         "i_drvFNoc",
-        "o_drv2Noc",
         "i_dataFNoc_51",
+        "o_drv2Noc",
         "o_data2Noc_51",
         "i_freeFNoc",
         "o_free2Noc"
@@ -338,13 +354,28 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "interface.event_outputs"
+        },
+        {
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "interface.data_outputs"
+        },
+        {
+          "source": "interface.free_inputs"
+        },
+        {
+          "source": "interface.free_outputs"
+        },
+        {
+          "source": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:NoCUART1:interface_intent:001"
@@ -355,22 +386,19 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "The manual should emphasize the event-driven pipeline from NoC input to UART and back, and the data reshaping logic.",
-      "subject": "Event flow and data reshaping",
-      "explanation": "The module's core function is bridging NoC events to UART transactions. The event flow through FIFOs and delays, and the data output assembly from multiple internal registers, are key to understanding its behavior.",
+      "summary": "手册应重点描述输入事件如何通过 FIFO/握手链驱动 UART 寄存器写操作，以及输出数据如何从 UART 状态寄存器打包。",
+      "subject": "事件流与数据打包",
+      "explanation": "模块的核心价值在于桥接，因此事件流路径 (cfifo0 -> pmtAck -> cfifo1) 和输出数据打包逻辑 (o_data2Noc_51 的拼接) 是理解其功能的关键。UART 内核本身是标准外设，只需简要说明其配置和连接。",
       "signals": [
         "i_drvFNoc",
         "o_drv2Noc",
         "i_dataFNoc_51",
-        "o_data2Noc_51",
-        "i_freeFNoc",
-        "o_free2Noc"
+        "o_data2Noc_51"
       ],
       "instances": [
         "cfifo0",
-        "cfifo1",
         "pmtAck",
-        "uart_instance"
+        "cfifo1"
       ],
       "related_flows": [
         "flow_000_NoCUART1_i_drvFNoc"
@@ -380,10 +408,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "internal_event_flow_refs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "assign_dependencies"
+        },
+        {
+          "source": "key_component_connections"
         }
       ],
       "id": "semantic:module:NoCUART1:documentation_focus:001"
@@ -394,15 +425,14 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "reason": "The compact context does not show how UART data (w_rdata, ReceiveData) and control signals (WDATA) are connected to the event pipeline. The internal registers r_dataFNoc_51, r_dataHigh, r_X, r_Y are not explained.",
-      "subject": "UART data path and control registers",
-      "needed_source_slice": "always block, assign block, instance connections",
+      "reason": "当前上下文仅提供了赋值表达式，但未说明 r_dataFNoc_51, r_dataHigh, ReceiveData, r_X, r_Y 这些内部寄存器的具体来源和更新条件，需要查看 RTL 源文件中的 always 块以理解其完整语义。",
+      "subject": "输出数据打包逻辑 (o_data2Noc_51)",
+      "needed_source_slice": "always block",
       "signals": [
-        "w_rdata",
-        "ReceiveData",
-        "WDATA",
+        "o_data2Noc_51",
         "r_dataFNoc_51",
         "r_dataHigh",
+        "ReceiveData",
         "r_X",
         "r_Y"
       ],
@@ -414,13 +444,10 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IONet/UART/NoCUART1.v"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:NoCUART1:source_review_request:001"

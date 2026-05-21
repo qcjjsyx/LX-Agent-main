@@ -46,13 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 6,
+    "count": 10,
     "by_type": {
       "assignment_interpretation": 2,
+      "documentation_focus": 1,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1,
-      "structural_responsibility": 1
+      "source_review_request": 3,
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -62,19 +63,20 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "Memory-mapped GPIO controller providing register-based pin control, data I/O, and interrupt management.",
+      "summary": "通用输入输出控制模块，提供寄存器映射的GPIO引脚控制和中断管理功能",
       "subject": "gpio_module",
-      "explanation": "The module has a 32-bit address/data bus interface (addr_i, data_i, data_o) and a set of internal registers (gpio_ctrl, gpio_data, int_enable, etc.) that are read via address decoding. It also drives an interrupt output (irq) based on masked interrupt status.",
+      "explanation": "模块通过地址映射的寄存器接口（addr_i/data_i）实现对GPIO引脚（io_pin_i）的读写控制，并生成中断信号（irq），表明其作为SoC内部GPIO外设的角色",
       "signals": [
         "addr_i",
         "data_i",
         "data_o",
+        "io_pin_i",
         "gpio_ctrl_o",
         "gpio_data_o",
         "irq"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
@@ -82,8 +84,8 @@
           "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/gpio_module.json",
-          "path": "assignments"
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:gpio_module:module_role:001"
@@ -94,44 +96,12 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "Provides a memory-mapped register file for GPIO configuration, data, and interrupt control, with readback via address decoding.",
-      "subject": "register-based GPIO control and status",
-      "explanation": "The assign_dependencies show data_o is a multiplexed read of multiple registers (gpio_ctrl, gpio_data, int_enable, etc.) based on addr_i[7:0]. The module also drives gpio_ctrl_o and gpio_data_o as outputs, and generates irq from int_status & int_enable.",
+      "summary": "根据地址输入（addr_i）选择内部寄存器，将对应值输出到data_o",
+      "subject": "寄存器地址译码与数据回读",
+      "explanation": "assign依赖索引2显示data_o通过多级条件选择器从gpio_ctrl、gpio_data、int_enable等8个寄存器中选通输出，实现标准的APB/AXI从设备寄存器读回功能",
       "signals": [
         "addr_i",
-        "data_i",
         "data_o",
-        "gpio_ctrl_o",
-        "gpio_data_o",
-        "irq"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/gpio_module.json",
-          "path": "assignments"
-        },
-        {
-          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
-          "path": "module_source"
-        }
-      ],
-      "id": "semantic:module:gpio_module:structural_responsibility:001"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "gpio_module"
-      },
-      "subject": "data_o",
-      "summary": "Readback multiplexer for all GPIO registers, selected by address bits addr_i[7:0].",
-      "explanation": "The assign at index 2 selects one of eight registers (GPIO_CTRL, GPIO_DATA, GPIO_INT_ENABLE, etc.) to drive data_o. This is the primary read path for software access.",
-      "signals": [
-        "data_o",
-        "addr_i",
         "gpio_ctrl",
         "gpio_data",
         "int_enable",
@@ -141,16 +111,65 @@
         "high_level_en",
         "low_level_en"
       ],
-      "related_assignments": [
-        "2"
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[2]"
+        }
+      ],
+      "id": "semantic:module:gpio_module:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "gpio_module"
+      },
+      "summary": "将中断状态寄存器（int_status）与中断使能寄存器（int_enable）按位相与后归约，产生单一中断输出irq",
+      "subject": "中断生成逻辑",
+      "explanation": "assign依赖索引3显示irq = |(int_status & int_enable)，表明模块支持多中断源（如边沿/电平触发）的合并输出",
+      "signals": [
+        "irq",
+        "int_status",
+        "int_enable"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/gpio_module.json",
-          "path": "assignments"
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[3]"
+        }
+      ],
+      "id": "semantic:module:gpio_module:structural_responsibility:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "gpio_module"
+      },
+      "subject": "gpio_ctrl_o",
+      "summary": "将内部控制寄存器gpio_ctrl直接驱动到输出端口，供顶层模块观察GPIO配置状态",
+      "explanation": "assign依赖索引0显示gpio_ctrl_o = gpio_ctrl，属于纯接口驱动赋值，不参与内部数据路径处理",
+      "signals": [
+        "gpio_ctrl_o",
+        "gpio_ctrl"
+      ],
+      "related_assignments": [
+        "0"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[0]"
         }
       ],
       "id": "semantic:module:gpio_module:assignment_interpretation:001"
@@ -161,24 +180,23 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "subject": "irq",
-      "summary": "Interrupt request generated by ANDing interrupt status with enable mask.",
-      "explanation": "The assign at index 3 drives irq high when any bit in int_status is set and the corresponding bit in int_enable is set. This is a simple combinatorial OR-reduction.",
+      "subject": "gpio_data_o",
+      "summary": "将内部数据寄存器gpio_data直接驱动到输出端口，反映当前GPIO引脚采样值或输出值",
+      "explanation": "assign依赖索引1显示gpio_data_o = gpio_data，属于接口驱动赋值，用于外部模块读取GPIO数据状态",
       "signals": [
-        "irq",
-        "int_status",
-        "int_enable"
+        "gpio_data_o",
+        "gpio_data"
       ],
       "related_assignments": [
-        "3"
+        "1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/gpio_module.json",
-          "path": "assignments"
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[1]"
         }
       ],
       "id": "semantic:module:gpio_module:assignment_interpretation:002"
@@ -189,42 +207,46 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "A 32-bit address/data bus for register read/write access, with no handshake or event signals.",
-      "subject": "memory-mapped bus interface",
-      "explanation": "The interface has addr_i, data_i, data_o, but no event_inputs, event_outputs, or control_inputs/outputs. This suggests a simple synchronous bus where the module is selected externally and data_o is driven combinatorially from addr_i.",
+      "summary": "通过addr_i[7:0]译码访问8个内部寄存器，实现标准存储器映射外设的读写协议",
+      "subject": "寄存器地址映射接口",
+      "explanation": "assign依赖索引2中地址比较常量（GPIO_CTRL、GPIO_DATA等）表明模块定义了8个地址映射寄存器，覆盖控制、数据、中断使能、边沿/电平触发选择及中断状态",
       "signals": [
         "addr_i",
-        "data_i",
         "data_o"
       ],
+      "related_payload": [
+        "gpio_ctrl",
+        "gpio_data",
+        "int_enable",
+        "rising_edge_en",
+        "falling_edge_en",
+        "int_status",
+        "high_level_en",
+        "low_level_en"
+      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/gpio_module.json",
-          "path": "interface"
-        },
-        {
           "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
-          "path": "module_source"
+          "path": "assign_dependencies[2]"
         }
       ],
       "id": "semantic:module:gpio_module:interface_intent:001"
     },
     {
-      "claim_type": "source_review_request",
+      "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "gpio_module"
       },
-      "reason": "The compact context lacks assign_dependencies for writing to internal registers (gpio_ctrl, gpio_data, int_enable, etc.) and for sampling io_pin_i. RTL source review is needed to understand the write enable, clocking, and pin-to-register data path.",
-      "subject": "register write and pin sampling logic",
-      "needed_source_slice": "always block; assign block",
+      "summary": "手册应重点列出8个内部寄存器的地址偏移、功能描述和位定义",
+      "subject": "寄存器地址映射表",
+      "explanation": "模块核心功能完全依赖地址译码实现，但当前上下文未提供寄存器常量定义（如GPIO_CTRL的具体值），需在RTL源码中确认",
       "signals": [
-        "data_i",
         "addr_i",
-        "io_pin_i",
+        "data_o",
         "gpio_ctrl",
         "gpio_data",
         "int_enable",
@@ -236,28 +258,100 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[2]"
+        }
+      ],
+      "id": "semantic:module:gpio_module:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "gpio_module"
+      },
+      "reason": "当前上下文仅列出寄存器名称（GPIO_CTRL等），未提供具体地址偏移值，无法生成完整的地址映射表",
+      "subject": "寄存器地址常量定义",
+      "needed_source_slice": "module declaration|comments",
+      "signals": [
+        "addr_i"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
           "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
-          "path": "module_source"
+          "path": "assign_dependencies[2]"
         }
       ],
       "id": "semantic:module:gpio_module:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "gpio_module"
+      },
+      "reason": "模块有io_pin_i输入和gpio_data_o输出，但未提供内部gpio_data寄存器的更新逻辑（如读引脚还是写输出），无法确定引脚方向控制机制",
+      "subject": "GPIO引脚方向与数据路径",
+      "needed_source_slice": "always block|assign block",
+      "signals": [
+        "io_pin_i",
+        "gpio_data_o",
+        "gpio_data"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "interface"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[1]"
+        }
+      ],
+      "id": "semantic:module:gpio_module:source_review_request:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "gpio_module"
+      },
+      "reason": "模块有int_status、int_enable、rising_edge_en等寄存器，但未提供中断状态如何根据io_pin_i变化更新的逻辑（边沿检测、电平检测）",
+      "subject": "中断触发逻辑",
+      "needed_source_slice": "always block|assign block",
+      "signals": [
+        "int_status",
+        "int_enable",
+        "rising_edge_en",
+        "falling_edge_en",
+        "high_level_en",
+        "low_level_en",
+        "io_pin_i"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[2]"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v",
+          "path": "assign_dependencies[3]"
+        }
+      ],
+      "id": "semantic:module:gpio_module:source_review_request:003"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "internal register write logic",
-      "reason": "No assign_dependencies or event flows describe how data_i writes to registers (gpio_ctrl, gpio_data, etc.). The write path is missing from the compact context."
-    },
-    {
-      "field": "GPIO pin interface (io_pin_i)",
-      "reason": "io_pin_i is listed as a data input, but no assign_dependencies or connections show how it drives internal registers (e.g., gpio_data) or how gpio_data_o relates to it. The pin I/O direction and sampling logic are unclear."
-    },
-    {
-      "field": "interrupt generation logic",
-      "reason": "While irq is derived from int_status & int_enable, the context does not show how int_status is set (e.g., from io_pin_i edge/level detection). The interrupt source logic is missing."
-    }
-  ]
+  "evidence_gaps": []
 }

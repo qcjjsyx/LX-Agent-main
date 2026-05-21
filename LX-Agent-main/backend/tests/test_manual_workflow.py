@@ -1,0 +1,345 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+from backend import manual_cli
+from backend import manual_workflow as mw
+
+
+class FakeCompletions:
+    def create(self, **kwargs):
+        payload = {
+            "claims": [
+                {
+                    "subject": "模块职责",
+                    "summary": "该模块根据输入驱动信号生成输出驱动响应。",
+                    "explanation": "源码切片显示 i_drive 参与输出赋值。",
+                    "certainty": "ai_inferred",
+                    "signals": ["i_drive", "o_drive"],
+                    "instances": [],
+                    "source_refs": [{"file": "rtl/rtl/foo.v", "line_start": 1, "line_end": 5}],
+                }
+            ],
+            "open_questions": [],
+        }
+        message = SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class FakeClient:
+    def __init__(self):
+        self.chat = SimpleNamespace(completions=FakeCompletions())
+
+
+class ManualWorkflowRenderingTest(unittest.TestCase):
+    def test_public_manual_filters_internal_metadata(self):
+        digest = {
+            "top_module": "top",
+            "project_context": {
+                "project_purpose": {
+                    "value": "顶层集成模块。",
+                    "certainty": "ai_inferred",
+                    "confidence": "medium",
+                    "review_status": "needs_review",
+                    "requires_rtl_source_review": True,
+                    "evidence_refs": ["ev:top"],
+                },
+                "top_level": {
+                    "source_file": "rtl/rtl/top.v",
+                    "direct_modules": {"value": ["child"], "evidence_refs": ["ev:top"]},
+                    "external_port_groups": [
+                        {
+                            "group": "clock_reset_init",
+                            "signals": [{"name": "clk", "direction": "input"}],
+                            "direction_counts": {"input": 1},
+                            "evidence_refs": ["ev:ports"],
+                        }
+                    ],
+                },
+            },
+            "system_topology": {
+                "module_count": 2,
+                "edges": [
+                    {
+                        "parent": "top",
+                        "child": "child",
+                        "relationship": "instantiates",
+                        "certainty": "deterministic_fact",
+                        "evidence_refs": ["ev:edge"],
+                    }
+                ],
+            },
+            "modules": [
+                {
+                    "module_name": "child",
+                    "source_files": ["rtl/rtl/child.v"],
+                    "page_policy": {"detail_level": "detailed"},
+                    "system_position": {"region": {"value": "cpu"}},
+                    "responsibility": {
+                        "short_summary": {
+                            "value": "子模块职责。",
+                            "certainty": "ai_inferred",
+                            "confidence": "high",
+                            "review_status": "ready",
+                            "evidence_refs": ["ev:child"],
+                        }
+                    },
+                    "port_summary": {},
+                    "interfaces": {"interface_groups": []},
+                    "key_drive_flows": [],
+                    "internal_components": {"primary_samples": []},
+                    "assignment_impact_summary": {"primary_samples": []},
+                }
+            ],
+        }
+        state = {"top_module": "top", "_manual_output_stem": "top_generated", "evidence_digest": digest}
+
+        manual = mw._render_manual_context_markdown(state)
+        module_page = mw._render_module_page(digest, digest["modules"][0])
+        public_text = manual + "\n" + module_page
+
+        for forbidden in (
+            "confidence=",
+            "review_status",
+            "requires_rtl_source_review",
+            "| Evidence |",
+            "evidence=",
+            "evidence_refs",
+            "详情级别",
+            "关键 Drive-centered Flow 索引",
+            "证据缺口与 Review 问题",
+            "证据边界与写作规则",
+        ):
+            self.assertNotIn(forbidden, public_text)
+
+    def test_review_report_carries_gaps_and_source_review(self):
+        digest = {
+            "top_module": "top",
+            "known_modules": ["child"],
+            "source_review_report": {
+                "target_count": 1,
+                "reviewed_modules": 1,
+                "claim_count": 1,
+                "unresolved_count": 0,
+                "modules": [
+                    {
+                        "module": "child",
+                        "status": "reviewed",
+                        "claim_count": 1,
+                        "open_question_count": 0,
+                        "report_file": "modules/child/source_review_report.json",
+                    }
+                ],
+            },
+            "evidence_boundary": ["公开手册不展示内部证据字段。"],
+            "modules": [
+                {
+                    "module_name": "child",
+                    "responsibility": {
+                        "short_summary": {"value": "子模块职责。", "certainty": "ai_inferred"}
+                    },
+                    "source_review_claims": [
+                        {
+                            "subject": "模块职责",
+                            "summary": "源码复核后的中文职责。",
+                            "certainty": "ai_inferred",
+                            "source_refs": [{"file": "rtl/rtl/child.v", "line_start": 1, "line_end": 8}],
+                            "evidence_refs": ["ev:child:semantic_module"],
+                        }
+                    ],
+                    "source_review_report": {"open_questions": []},
+                    "evidence_gaps": [
+                        {
+                            "field": "reset behavior",
+                            "reason": "reset polarity needs confirmation",
+                            "evidence_refs": ["ev:gap"],
+                        }
+                    ],
+                    "gap_file": {"gaps": []},
+                    "review_questions": [
+                        {
+                            "subject": "reset behavior",
+                            "question": "Confirm reset polarity.",
+                            "evidence_refs": ["ev:review"],
+                        }
+                    ],
+                }
+            ],
+        }
+        state = {"top_module": "top", "evidence_digest": digest}
+        manual = "[打开](top_generated_modules/child.md)\nAI 推断：子模块职责。"
+        review = mw._build_manual_sanity_review(state, manual, {"child": "AI 推断：子模块职责。"})
+
+        self.assertIn("Source Review 结果", review)
+        self.assertIn("ev:child:semantic_module", review)
+        self.assertIn("rtl/rtl/child.v:1-8", review)
+        self.assertIn("reset polarity needs confirmation", review)
+        self.assertIn("ev:gap", review)
+
+    def test_manual_renders_top_structure_diagram_from_topology(self):
+        digest = {
+            "top_module": "top",
+            "project_context": {
+                "project_purpose": {"value": "顶层集成模块。", "certainty": "ai_inferred"},
+                "top_level": {
+                    "source_file": "rtl/rtl/top.v",
+                    "direct_modules": {"value": ["child"]},
+                    "external_port_groups": [],
+                },
+            },
+            "system_topology": {
+                "module_count": 3,
+                "edges": [
+                    {"parent": "top", "child": "child", "relationship": "instantiates"},
+                    {"parent": "child", "child": "leaf", "relationship": "instantiates"},
+                ],
+            },
+            "modules": [],
+        }
+        state = {"top_module": "top", "_manual_output_stem": "top_generated", "evidence_digest": digest}
+
+        manual = mw._render_manual_context_markdown(state)
+
+        self.assertIn("### 2.3 顶层结构图", manual)
+        self.assertIn("```mermaid", manual)
+        self.assertIn('top["top"] --> child["child"]', manual)
+        self.assertIn("`-- child", manual)
+        self.assertIn("`-- leaf", manual)
+
+    def test_module_page_renders_local_structure_diagram(self):
+        module = {
+            "module_name": "parent",
+            "source_files": ["rtl/parent.v"],
+            "page_policy": {"detail_level": "standard"},
+            "system_position": {
+                "parents": ["top"],
+                "children": ["child"],
+                "component_children": ["helper"],
+                "upstream_modules": [],
+                "downstream_modules": [],
+            },
+            "responsibility": {
+                "short_summary": {"value": "父模块。", "certainty": "ai_inferred"}
+            },
+            "port_summary": {},
+            "interfaces": {"interface_groups": []},
+            "key_drive_flows": [],
+            "internal_components": {
+                "primary_samples": [
+                    {"instance_name": "u_child", "module_type": "child"},
+                ]
+            },
+            "assignment_impact_summary": {"primary_samples": []},
+        }
+
+        page = mw._render_module_page({"modules": [module]}, module)
+
+        self.assertIn("### 1.1 本模块结构图", page)
+        self.assertIn("```mermaid", page)
+        self.assertIn('parent["parent"] -->|instance| u_child_child["u_child: child"]', page)
+        self.assertIn("|-- u_child: child", page)
+
+    def test_source_review_writes_claims_back_to_manual_context(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_path = root / "rtl" / "rtl" / "foo.v"
+            source_path.parent.mkdir(parents=True)
+            source_path.write_text(
+                "module foo(input i_drive, output o_drive);\n"
+                "assign o_drive = i_drive;\n"
+                "endmodule\n",
+                encoding="utf-8",
+            )
+            manual_context_dir = root / "rtl" / "manual_context" / "top"
+            module_dir = manual_context_dir / "modules" / "foo"
+            module_dir.mkdir(parents=True)
+            (module_dir / "module_context.json").write_text("{}", encoding="utf-8")
+            (module_dir / "module_doc_card.json").write_text("{}", encoding="utf-8")
+
+            state = {"project_root": str(root), "manual_context_dir": str(manual_context_dir)}
+            target = {
+                "module": "foo",
+                "source_file": "rtl/rtl/foo.v",
+                "items": [
+                    {
+                        "kind": "module_responsibility",
+                        "subject": "模块职责",
+                        "summary": "Needs review",
+                        "signals": ["i_drive", "o_drive"],
+                        "instances": [],
+                        "evidence_refs": ["ev:foo"],
+                    }
+                ],
+            }
+
+            report = mw._review_source_for_module(state, target, FakeClient(), "fake-model")
+            mw._write_source_review_module_report(state, report)
+
+            module_context = json.loads((module_dir / "module_context.json").read_text(encoding="utf-8"))
+            self.assertEqual(module_context["source_review_report"]["status"], "reviewed")
+            self.assertEqual(module_context["source_review_claims"][0]["summary"], "该模块根据输入驱动信号生成输出驱动响应。")
+
+    def test_manual_output_override_is_used_by_cli_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "debug_manual.md"
+            state = mw._ensure_state({"manual_output_override": str(output_path)})
+
+            self.assertEqual(mw._manual_output_path(state, "继续"), output_path)
+
+    def test_cli_builds_manual_workflow_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = manual_cli.build_parser().parse_args([
+                "--project-root",
+                temp_dir,
+                "--top-module",
+                "top",
+                "--output",
+                str(Path(temp_dir) / "manual.md"),
+                "--force",
+                "--no-llm",
+            ])
+
+            state = manual_cli.build_initial_state(args)
+
+            self.assertEqual(state["top_module"], "top")
+            self.assertEqual(state["stage"], "references")
+            self.assertTrue(state["force_regenerate"])
+            self.assertEqual(state["manual_output_override"], str((Path(temp_dir) / "manual.md").resolve()))
+
+    def test_cli_applies_tool_timeouts_to_environment(self):
+        args = manual_cli.build_parser().parse_args([
+            "--top-module",
+            "top",
+            "--no-llm",
+            "--parser-timeout",
+            "300",
+            "--knowledge-timeout",
+            "1800",
+        ])
+        old_values = {
+            key: manual_cli.os.environ.get(key)
+            for key in (
+                "RTL_MANUAL_PARSER_TIMEOUT",
+                "RTL_MANUAL_KNOWLEDGE_TIMEOUT",
+                "RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT",
+            )
+        }
+        try:
+            for key in old_values:
+                manual_cli.os.environ.pop(key, None)
+            manual_cli.apply_runtime_env(args)
+            self.assertEqual(manual_cli.os.environ["RTL_MANUAL_PARSER_TIMEOUT"], "300")
+            self.assertEqual(manual_cli.os.environ["RTL_MANUAL_KNOWLEDGE_TIMEOUT"], "1800")
+            self.assertEqual(manual_cli.os.environ["RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT"], "1920")
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    manual_cli.os.environ.pop(key, None)
+                else:
+                    manual_cli.os.environ[key] = value
+
+
+if __name__ == "__main__":
+    unittest.main()

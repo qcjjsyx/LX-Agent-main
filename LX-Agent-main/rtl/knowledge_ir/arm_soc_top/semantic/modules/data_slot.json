@@ -46,15 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 20,
+    "count": 11,
     "by_type": {
       "assignment_interpretation": 3,
       "component_role": 3,
       "documentation_focus": 2,
-      "interface_intent": 6,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 3,
-      "structural_responsibility": 2
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -64,9 +63,9 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "Central data routing and arbitration hub between CPU, Dcache, and Mesh domains.",
+      "summary": "数据槽模块，作为CPU、Dcache和Mesh之间的数据通路仲裁与分发中心",
       "subject": "data_slot",
-      "explanation": "The module receives drive events from Dcache, Mesh, and CPU (via cfifo0), arbitrates between Dcache and Mesh data paths using MutexMerge, and routes CPU-originated requests to either Dcache or Mesh via select1. Free signals are propagated back to the source to indicate completion.",
+      "explanation": "模块接收来自Dcache、Mesh和CPU的驱动事件，通过内部组件（MutexMerge、SelSplit、cFifo）进行仲裁和路由，最终将数据分发到CPU、Dcache和Mesh。事件-载荷契约和内部流图表明其核心功能是数据路径的调度和转发。",
       "signals": [
         "i_driveFromDcache",
         "i_driveFromMesh",
@@ -104,24 +103,28 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "Routes CPU-originated requests (i_drvCpu2Mux) to either Dcache or Mesh based on address decode.",
-      "subject": "CPU-to-Dcache/Mesh request routing",
-      "explanation": "The CPU drive event is queued in cfifo0, then delayed (delaymux) before being presented to select1. select1 uses address decode signals (w_toCache_1, w_toMesh_1) to steer the event to either o_driveToDcache or o_driveToMesh. Free signals from the target (i_freeFromDcache, i_freeFromMesh) are routed back through select1 to cfifo0 and then to o_freeCPUFMux.",
+      "summary": "模块负责将来自CPU的请求（通过i_drvCpu2Mux）根据地址范围（w_toCache_1, w_toMesh_1）分发到Dcache或Mesh，并将来自Dcache和Mesh的响应（通过i_driveFromDcache, i_driveFromMesh）仲裁后转发到CPU。",
+      "subject": "数据路径仲裁与分发",
+      "explanation": "内部流图显示，i_drvCpu2Mux事件通过cfifo0和select1组件，根据地址解码信号（w_toCache_1, w_toMesh_1）路由到o_driveToDcache或o_driveToMesh。而i_driveFromDcache和i_driveFromMesh事件通过MutexMerge组件仲裁后，路由到o_driveToCpu。这构成了一个完整的请求-响应数据路径。",
       "signals": [
         "i_drvCpu2Mux",
+        "i_driveFromDcache",
+        "i_driveFromMesh",
+        "o_driveToCpu",
         "o_driveToDcache",
         "o_driveToMesh",
-        "o_freeCPUFMux",
-        "i_freeFromDcache",
-        "i_freeFromMesh"
+        "w_toCache_1",
+        "w_toMesh_1"
       ],
       "instances": [
         "cfifo0",
-        "select1",
-        "delaymux"
+        "MutexMerge",
+        "select1"
       ],
       "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux"
+        "flow_000_data_slot_i_drvCpu2Mux",
+        "flow_001_data_slot_i_driveFromDcache",
+        "flow_002_data_slot_i_driveFromMesh"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -137,65 +140,28 @@
       "id": "semantic:module:data_slot:structural_responsibility:001"
     },
     {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "summary": "Arbitrates between Dcache and Mesh data sources for forwarding to the CPU.",
-      "subject": "Dcache/Mesh data arbitration to CPU",
-      "explanation": "Drive events from Dcache (i_driveFromDcache) and Mesh (i_driveFromMesh) are delayed and then presented to MutexMerge. MutexMerge selects one source, forwards its data payload (i_dcache_data or w_dataFromMesh_64) to the CPU as w_memData_64, and generates the o_driveToCpu event. Free signals are returned to the non-selected source.",
-      "signals": [
-        "i_driveFromDcache",
-        "i_driveFromMesh",
-        "o_driveToCpu",
-        "o_freeToDcache",
-        "o_freeToMesh",
-        "i_dcache_data",
-        "i_dataFMesh"
-      ],
-      "instances": [
-        "MutexMerge",
-        "delay_driveFromDcache",
-        "delay_driveFromMesh",
-        "delay2CPU"
-      ],
-      "related_flows": [
-        "flow_001_data_slot_i_driveFromDcache",
-        "flow_002_data_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:structural_responsibility:002"
-    },
-    {
       "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "cfifo0",
-      "summary": "Input FIFO for CPU-originated requests, providing buffering and flow control.",
-      "explanation": "cfifo0 (cFifo1) receives the i_drvCpu2Mux event and outputs w_drvCpu2Mux. It also manages the free handshake, receiving the free signal from select1 and outputting o_freeCPUFMux back to the CPU.",
+      "subject": "MutexMerge",
+      "summary": "互斥合并器，用于仲裁来自Dcache和Mesh的响应事件，确保同一时刻只有一个响应被转发到CPU。",
+      "explanation": "MutexMerge接收来自delay_driveFromDcache和delay_driveFromMesh的驱动事件，并输出一个仲裁后的驱动事件到CPU。其输入数据包括来自Dcache的64位数据和来自Mesh的64位数据，输出合并后的数据。这表明它处理了来自两个源的竞争访问。",
       "signals": [
-        "i_drvCpu2Mux",
-        "w_drvCpu2Mux",
-        "o_freeCPUFMux"
+        "w_delay_driveFromDcache",
+        "w_delay_driveFromMesh",
+        "w_driveToCpu",
+        "i_dcache_data",
+        "w_dataFromMesh_64",
+        "w_memData_64"
       ],
       "instances": [
-        "cfifo0"
+        "MutexMerge"
       ],
       "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux"
+        "flow_001_data_slot_i_driveFromDcache",
+        "flow_002_data_slot_i_driveFromMesh"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -216,48 +182,9 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "MutexMerge",
-      "summary": "Mutex arbiter for Dcache and Mesh data paths to CPU, ensuring exclusive access.",
-      "explanation": "MutexMerge (cMutexMerge2_64b) receives delayed drive events from Dcache and Mesh. It selects one, forwards its data payload to the CPU, and generates the o_driveToCpu event. It also manages free signals, returning them to the non-selected source.",
-      "signals": [
-        "w_delay_driveFromDcache",
-        "w_delay_driveFromMesh",
-        "w_driveToCpu",
-        "i_dcache_data",
-        "w_dataFromMesh_64",
-        "w_memData_64",
-        "o_freeToDcache",
-        "o_freeToMesh"
-      ],
-      "instances": [
-        "MutexMerge"
-      ],
-      "related_flows": [
-        "flow_001_data_slot_i_driveFromDcache",
-        "flow_002_data_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:component_role:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
       "subject": "select1",
-      "summary": "Destination selector for CPU-originated requests, routing to Dcache or Mesh.",
-      "explanation": "select1 (cSelector2_1b) receives the delayed CPU drive event (w_drvCpu2Mux_delay) and uses address decode signals to route it to either o_driveToDcache or o_driveToMesh. It also manages free signals from the selected target.",
+      "summary": "选择器/分发器，根据地址解码结果将CPU请求分发到Dcache或Mesh路径。",
+      "explanation": "select1接收来自delaymux的CPU驱动事件，并根据内部逻辑（可能基于w_toCache_1和w_toMesh_1信号）将其分发到o_driveToDcache或o_driveToMesh。其输出事件分别连接到delay3和delay2，最终驱动到Dcache和Mesh。",
       "signals": [
         "w_drvCpu2Mux_delay",
         "w_driveToDcache",
@@ -282,6 +209,39 @@
           "source": "parser_pipeline_rtl/modules/data_slot.json"
         }
       ],
+      "id": "semantic:module:data_slot:component_role:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "data_slot"
+      },
+      "subject": "cfifo0",
+      "summary": "CPU请求的输入FIFO，用于缓冲来自CPU的驱动事件，处理可能的背压。",
+      "explanation": "cfifo0接收i_drvCpu2Mux事件，并输出w_drvCpu2Mux到后续的delaymux。其输出o_freeCPUFMux用于向CPU发送释放信号，表明FIFO已处理完一个请求。这表明它起到了事件缓冲和流控的作用。",
+      "signals": [
+        "i_drvCpu2Mux",
+        "w_drvCpu2Mux",
+        "o_freeCPUFMux"
+      ],
+      "instances": [
+        "cfifo0"
+      ],
+      "related_flows": [
+        "flow_000_data_slot_i_drvCpu2Mux"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/data_slot.json"
+        }
+      ],
       "id": "semantic:module:data_slot:component_role:003"
     },
     {
@@ -290,37 +250,17 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "address decode assignments (w_toMesh_1, w_toCache_1, w_toUART0_1, etc.)",
-      "summary": "Decode CPU address to determine target peripheral or memory region.",
-      "explanation": "Assignments 4-15 decode i_data_bus_addr (derived from r_cpu_addr) to generate target select signals for Mesh, Cache, UART0, UART1, PWM0, PWM1, IIC, TIMER, SPI0, SPI1, WD, and GPIO. These signals likely control the select1 routing and possibly other downstream logic.",
+      "subject": "w_toCache_1, w_toMesh_1",
+      "summary": "地址解码信号，用于确定CPU请求的目标是Dcache还是Mesh。",
+      "explanation": "赋值语句显示，w_toCache_1在地址大于等于0x00021200时有效，w_toMesh_1在地址在0x00001000到0x00001200之间时有效。这些信号驱动select1组件的分发逻辑，是请求路由的关键控制信号。",
       "signals": [
         "i_data_bus_addr",
-        "w_toMesh_1",
         "w_toCache_1",
-        "w_toUART0_1",
-        "w_toUART1_1",
-        "w_toPWM0_1",
-        "w_toPWM1_1",
-        "w_toIIC_1",
-        "w_toTIMER_1",
-        "w_toSPI0_1",
-        "w_toSPI1_1",
-        "w_toWD_1",
-        "w_toGPIO_1"
+        "w_toMesh_1"
       ],
       "related_assignments": [
         "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10",
-        "11",
-        "12",
-        "13",
-        "14",
-        "15"
+        "5"
       ],
       "related_flows": [
         "flow_000_data_slot_i_drvCpu2Mux"
@@ -329,9 +269,6 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/data_slot.json"
         }
@@ -344,16 +281,18 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "w_meshData_32",
-      "summary": "Extracts and aligns data from a 64-bit word based on byte enables.",
-      "explanation": "Assignment 18 uses a complex conditional to extract a 32-bit word from a 64-bit data bus based on the byte enable signal (we). This is a typical operation for preparing data for a narrower Mesh interface.",
+      "subject": "data_pre_51",
+      "summary": "组装发往Mesh的51位数据包，包含写使能、地址、数据、X和Y坐标。",
+      "explanation": "赋值语句显示，data_pre_51由w_meshWen_1, w_meshAddr_8, w_meshData_32, w_meshX_5, w_meshY_5拼接而成。这表明发往Mesh的数据是一个结构化的数据包，包含了路由和操作信息。",
       "signals": [
+        "data_pre_51",
+        "w_meshWen_1",
+        "w_meshAddr_8",
         "w_meshData_32",
-        "we",
-        "data"
+        "w_meshX_5",
+        "w_meshY_5"
       ],
       "related_assignments": [
-        "18",
         "21"
       ],
       "related_flows": [
@@ -363,9 +302,6 @@
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/data_slot.json"
         }
@@ -378,20 +314,16 @@
         "type": "module",
         "module": "data_slot"
       },
-      "subject": "data_pre_51",
-      "summary": "Assembles the final 51-bit Mesh data packet.",
-      "explanation": "Assignment 21 concatenates write enable, address, data, and X/Y coordinates into a 51-bit packet for transmission to the Mesh.",
+      "subject": "w_meshData_32",
+      "summary": "根据字节写使能信号从64位数据中提取32位数据，用于Mesh数据包。",
+      "explanation": "赋值语句是一个复杂的条件表达式，根据we（写使能）信号的不同位模式，从data信号中提取相应的字节或半字，并零扩展到32位。这表明Mesh接口可能支持不同粒度的写操作。",
       "signals": [
-        "data_pre_51",
-        "w_meshWen_1",
-        "w_meshAddr_8",
         "w_meshData_32",
-        "w_meshX_5",
-        "w_meshY_5"
+        "we",
+        "data"
       ],
       "related_assignments": [
-        "21",
-        "22"
+        "18"
       ],
       "related_flows": [
         "flow_000_data_slot_i_drvCpu2Mux"
@@ -400,9 +332,6 @@
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/data_slot.json"
         }
@@ -415,19 +344,35 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "CPU-originated request with a 105-bit payload containing address, data, and control.",
-      "subject": "CPU request interface (i_drvCpu2Mux / i_dataCPU2Mux_105)",
-      "explanation": "The i_drvCpu2Mux event is accompanied by a 105-bit data payload (i_dataCPU2Mux_105). This payload is likely decomposed into address, data, byte enables, and other control signals for routing and processing.",
+      "summary": "模块使用事件驱动和释放信号构成握手协议，用于管理数据路径的流控和资源释放。",
+      "subject": "事件-释放握手协议",
+      "explanation": "每个驱动事件（i_driveFromDcache, i_driveFromMesh, i_drvCpu2Mux）都对应一个释放信号（o_freeToDcache, o_freeToMesh, o_freeCPUFMux）。类似地，输出驱动事件（o_driveToCpu, o_driveToDcache, o_driveToMesh）也对应输入释放信号（i_freeFromCpu, i_freeFromDcache, i_freeFromMesh）。这表明模块内部使用了一种请求-确认或令牌传递的流控机制。",
       "signals": [
+        "i_driveFromDcache",
+        "o_freeToDcache",
+        "i_driveFromMesh",
+        "o_freeToMesh",
         "i_drvCpu2Mux",
-        "i_dataCPU2Mux_105"
+        "o_freeCPUFMux",
+        "o_driveToCpu",
+        "i_freeFromCpu",
+        "o_driveToDcache",
+        "i_freeFromDcache",
+        "o_driveToMesh",
+        "i_freeFromMesh"
       ],
       "related_payload": [
-        "i_dataCPU2Mux_105"
+        "i_dcache_data",
+        "i_dataCPU2Mux_105",
+        "o_dcache_addr",
+        "o_dcache_data",
+        "o_dcache_we",
+        "o_data2Mesh",
+        "o_memData_65"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/data_slot.json"
@@ -439,164 +384,18 @@
       "id": "semantic:module:data_slot:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "summary": "Dcache response providing a 64-bit data payload to the CPU.",
-      "subject": "Dcache response interface (i_driveFromDcache / i_dcache_data)",
-      "explanation": "The i_driveFromDcache event is accompanied by a 64-bit data payload (i_dcache_data). This is the data read from the cache.",
-      "signals": [
-        "i_driveFromDcache",
-        "i_dcache_data"
-      ],
-      "related_payload": [
-        "i_dcache_data"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "summary": "Mesh response providing a 51-bit payload, likely containing data and routing info.",
-      "subject": "Mesh response interface (i_driveFromMesh / i_dataFMesh)",
-      "explanation": "The i_driveFromMesh event is accompanied by a 51-bit data payload (i_dataFMesh). This payload is used to construct a 64-bit data word (w_dataFromMesh_64) for the CPU.",
-      "signals": [
-        "i_driveFromMesh",
-        "i_dataFMesh"
-      ],
-      "related_payload": [
-        "i_dataFMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:interface_intent:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "summary": "Write request to Dcache with address, data, and byte enables.",
-      "subject": "Dcache write interface (o_driveToDcache / o_dcache_addr, o_dcache_data, o_dcache_we)",
-      "explanation": "The o_driveToDcache event is accompanied by a 32-bit address, 64-bit data, and 8-bit write enable. This is a standard interface for writing to a cache or memory.",
-      "signals": [
-        "o_driveToDcache",
-        "o_dcache_addr",
-        "o_dcache_data",
-        "o_dcache_we"
-      ],
-      "related_payload": [
-        "o_dcache_addr",
-        "o_dcache_data",
-        "o_dcache_we"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:interface_intent:004"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "summary": "Write request to Mesh with a 51-bit data packet.",
-      "subject": "Mesh write interface (o_driveToMesh / o_data2Mesh)",
-      "explanation": "The o_driveToMesh event is accompanied by a 51-bit data payload (o_data2Mesh). This payload contains the write enable, address, data, and routing coordinates for the Mesh.",
-      "signals": [
-        "o_driveToMesh",
-        "o_data2Mesh"
-      ],
-      "related_payload": [
-        "o_data2Mesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:interface_intent:005"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "summary": "Response to CPU with a 65-bit data payload, including a carry bit.",
-      "subject": "CPU response interface (o_driveToCpu / o_memData_65)",
-      "explanation": "The o_driveToCpu event is accompanied by a 65-bit data payload (o_memData_65). This payload is formed by concatenating a 64-bit data word (w_memData_64) with a carry bit (r_carry).",
-      "signals": [
-        "o_driveToCpu",
-        "o_memData_65"
-      ],
-      "related_payload": [
-        "o_memData_65"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:interface_intent:006"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "The manual should focus on the two main data paths: CPU-to-Dcache/Mesh and Dcache/Mesh-to-CPU.",
-      "subject": "Data routing and arbitration logic",
-      "explanation": "The module's primary function is to route data between three domains. The documentation should clearly describe the flow for each path, the role of key components (cfifo0, MutexMerge, select1), and the address decode logic that determines the destination for CPU requests.",
+      "summary": "手册应重点描述模块如何根据地址范围将CPU请求分发到Dcache或Mesh，以及如何仲裁来自Dcache和Mesh的响应。",
+      "subject": "数据路径仲裁与分发逻辑",
+      "explanation": "这是模块的核心功能，由select1和MutexMerge组件实现。地址解码信号（w_toCache_1, w_toMesh_1）是分发逻辑的关键。文档应清晰说明地址映射规则和仲裁策略。",
       "signals": [
+        "i_data_bus_addr",
+        "w_toCache_1",
+        "w_toMesh_1",
         "i_drvCpu2Mux",
         "i_driveFromDcache",
         "i_driveFromMesh",
@@ -605,9 +404,8 @@
         "o_driveToMesh"
       ],
       "instances": [
-        "cfifo0",
-        "MutexMerge",
-        "select1"
+        "select1",
+        "MutexMerge"
       ],
       "related_flows": [
         "flow_000_data_slot_i_drvCpu2Mux",
@@ -633,26 +431,22 @@
         "type": "module",
         "module": "data_slot"
       },
-      "summary": "Emphasize the free signal handshake as the mechanism for flow control and transaction completion.",
-      "subject": "Free signal handshake protocol",
-      "explanation": "Every drive event has a corresponding free signal that indicates the transaction is complete and the source can proceed. The documentation should explain how free signals are routed through cfifo0, MutexMerge, and select1 to ensure proper backpressure.",
+      "summary": "手册应详细解释事件驱动和释放信号的握手协议，包括时序和流控机制。",
+      "subject": "事件-释放握手协议",
+      "explanation": "这是模块与外部组件（CPU、Dcache、Mesh）交互的基础。理解该协议对于正确使用模块至关重要。文档应说明每个驱动事件何时被确认，以及释放信号如何用于背压管理。",
       "signals": [
-        "i_freeFromCpu",
-        "i_freeFromDcache",
-        "i_freeFromMesh",
-        "o_freeCPUFMux",
+        "i_driveFromDcache",
         "o_freeToDcache",
-        "o_freeToMesh"
-      ],
-      "instances": [
-        "cfifo0",
-        "MutexMerge",
-        "select1"
-      ],
-      "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux",
-        "flow_001_data_slot_i_driveFromDcache",
-        "flow_002_data_slot_i_driveFromMesh"
+        "i_driveFromMesh",
+        "o_freeToMesh",
+        "i_drvCpu2Mux",
+        "o_freeCPUFMux",
+        "o_driveToCpu",
+        "i_freeFromCpu",
+        "o_driveToDcache",
+        "i_freeFromDcache",
+        "o_driveToMesh",
+        "i_freeFromMesh"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -666,104 +460,16 @@
         }
       ],
       "id": "semantic:module:data_slot:documentation_focus:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "reason": "The 105-bit CPU payload (i_dataCPU2Mux_105) is likely decomposed into multiple internal signals (e.g., r_cpu_addr, r_cpu_data, r_cpuWen_8). The exact bit mapping is not evident from the compact context.",
-      "subject": "CPU request payload decomposition",
-      "needed_source_slice": "assign block",
-      "signals": [
-        "i_dataCPU2Mux_105",
-        "r_cpu_addr",
-        "r_cpu_data",
-        "r_cpuWen_8"
-      ],
-      "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "reason": "The 51-bit Mesh payload (i_dataFMesh) is used to construct a 64-bit data word (w_dataFromMesh_64). The exact bit mapping and the role of r_data0 are not clear.",
-      "subject": "Mesh response payload decomposition",
-      "needed_source_slice": "assign block",
-      "signals": [
-        "i_dataFMesh",
-        "w_dataFromMesh_64",
-        "r_data0"
-      ],
-      "related_flows": [
-        "flow_002_data_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "data_slot"
-      },
-      "reason": "The compact context references delay components (delay_driveFromDcache, delay_driveFromMesh, delay2CPU, delay2, delay3, delaymux, delay2CPU2) but does not describe their implementation or configuration.",
-      "subject": "Delay component implementation",
-      "needed_source_slice": "instance connections",
-      "instances": [
-        "delay_driveFromDcache",
-        "delay_driveFromMesh",
-        "delay2CPU",
-        "delay2",
-        "delay3",
-        "delaymux",
-        "delay2CPU2"
-      ],
-      "related_flows": [
-        "flow_000_data_slot_i_drvCpu2Mux",
-        "flow_001_data_slot_i_driveFromDcache",
-        "flow_002_data_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/data_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:module:data_slot:source_review_request:003"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "内部寄存器定义",
+      "reason": "上下文未提供内部寄存器（如r_cpuWen_8, r_cpu_data, r_cpu_addr, r_data0, r_carry）的详细定义和更新逻辑，这些是理解数据路径的关键。"
+    },
+    {
+      "field": "地址解码逻辑的完整映射",
+      "reason": "上下文仅提供了w_toCache_1和w_toMesh_1的地址范围，但未提供其他外设（如UART、PWM、IIC等）的地址解码信号（w_toUART0_1等）如何被使用，这些信号可能用于更细粒度的路由或控制。"
+    }
+  ]
 }
