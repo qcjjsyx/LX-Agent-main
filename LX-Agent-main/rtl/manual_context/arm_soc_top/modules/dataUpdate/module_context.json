@@ -6,10 +6,10 @@
     "module_name": "dataUpdate",
     "module_role": "submodule",
     "source_files": [
-      "rtl/rtl/Lsu/dataUpate.v"
+      "rtl\\rtl\\Lsu\\dataUpate.v"
     ],
     "source": {
-      "rtl_file": "rtl/rtl/Lsu/dataUpate.v",
+      "rtl_file": "rtl\\rtl\\Lsu\\dataUpate.v",
       "parser_module": "modules/dataUpdate.json"
     },
     "certainty": "deterministic_fact",
@@ -110,8 +110,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "数据更新模块，负责将加载数据按类型（lb/lhw/lw/ldw）进行字节对齐和符号扩展，并管理存储数据的地址偏移和字节写使能生成。",
-      "explanation": "模块接收来自 LSU 的加载/存储请求，通过 dataUpdateSelector 分流，loadSelector 将加载请求分发到 8 个加载 FIFO，storeSelector 将存储请求分发到 4 个存储 FIFO。加载数据经 lbMerge 合并后输出到写回单元，存储数据经 outMerge 合并后输出到内存接口。",
+      "value": "数据更新模块，负责在 LSU 内部协调加载和存储操作的数据流，并驱动最终的内存访问和写回路径。",
+      "explanation": "该模块接收来自 LSU 的加载/存储请求，通过选择器、FIFO 和合并器组成的流水线，将加载数据格式化后发送到写回阶段，并将存储数据（地址、数据、写使能）发送到内存接口。其核心作用是作为 LSU 内部数据路径的仲裁和分发中心。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -138,6 +138,7 @@
         "loadSelector",
         "storeSelector",
         "lbMerge",
+        "lidleMerge",
         "outMerge",
         "lIdleFifo",
         "lbFifo",
@@ -173,8 +174,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "数据更新模块，负责将加载数据按类型（lb/lhw/lw/ldw）进行字节对齐和符号扩展，并管理存储数据的地址偏移和字节写使能生成。",
-        "explanation": "模块接收来自 LSU 的加载/存储请求，通过 dataUpdateSelector 分流，loadSelector 将加载请求分发到 8 个加载 FIFO，storeSelector 将存储请求分发到 4 个存储 FIFO。加载数据经 lbMerge 合并后输出到写回单元，存储数据经 outMerge 合并后输出到内存接口。",
+        "value": "数据更新模块，负责在 LSU 内部协调加载和存储操作的数据流，并驱动最终的内存访问和写回路径。",
+        "explanation": "该模块接收来自 LSU 的加载/存储请求，通过选择器、FIFO 和合并器组成的流水线，将加载数据格式化后发送到写回阶段，并将存储数据（地址、数据、写使能）发送到内存接口。其核心作用是作为 LSU 内部数据路径的仲裁和分发中心。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -201,6 +202,7 @@
           "loadSelector",
           "storeSelector",
           "lbMerge",
+          "lidleMerge",
           "outMerge",
           "lIdleFifo",
           "lbFifo",
@@ -235,8 +237,8 @@
         ]
       },
       {
-        "value": "将加载数据按指令类型（lb/lhw/lw/ldw）进行字节对齐、符号扩展或零扩展，并处理未对齐访问。",
-        "explanation": "loadSelector 根据指令类型将加载请求分发到对应的 FIFO（lbFifo/lhwFifo/lwFifo/ldwFifo）。每个 FIFO 前的组合逻辑（assign 1-4）根据地址偏移和未对齐标志，从 64 位内存数据中提取正确的字节/半字/字，并进行符号扩展或零扩展。lbMerge 将各 FIFO 的输出合并为 74 位写回数据。",
+        "value": "将来自内存的原始加载数据（i_memData_64）根据加载类型（lb, lh, lw, ldw）和地址对齐情况进行符号扩展或零扩展，并通过 lbMerge 合并后驱动写回阶段。",
+        "explanation": "从 key_instances 和 assign_dependencies 可见，loadSelector 将输入数据分发到不同的加载类型 FIFO（如 lbFifo, lwFifo），每个 FIFO 内部或上游的 assign 块（如 w_lbGrfData_32, w_lwGrfData_32）根据地址和符号标志进行数据格式化。格式化后的数据通过 lbMerge 合并为 74 位宽的数据（o_dataUpdateToWritebackData_74）并驱动 o_dataUpdateDriveToWriteback_1 事件。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -245,22 +247,23 @@
         "semantic_claim_id": "semantic:module:dataUpdate:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "i_memAddr_32",
           "i_memData_64",
-          "i_addrFromPeripheralFlag_1",
+          "i_memAddr_32",
           "i_loadSign_1",
           "i_misaligned_1",
+          "i_addrFromPeripheralFlag_1",
           "w_lbGrfData_32",
-          "w_lhwGrfData_32",
           "w_lwGrfData_32",
+          "w_lhwGrfData_32",
           "w_ldwGrfData_64",
-          "o_dataUpdateToWritebackData_74"
+          "o_dataUpdateToWritebackData_74",
+          "o_dataUpdateDriveToWriteback_1"
         ],
         "instances": [
           "loadSelector",
           "lbFifo",
-          "lhwFifo",
           "lwFifo",
+          "lhwFifo",
           "ldwFifo",
           "lbMerge"
         ],
@@ -275,13 +278,16 @@
         ],
         "semantic_evidence": [
           {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
+          {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
         ]
       },
       {
-        "value": "将存储数据按指令类型（sw/sh/sd）进行字节对齐和写使能生成，并处理地址偏移。",
-        "explanation": "storeSelector 将存储请求分发到对应的 FIFO（swFifo/shwFifo/sdwFifo）。每个 FIFO 前的组合逻辑（assign 12-20）根据地址偏移计算写使能（w_swMemWen_8）和数据对齐（w_swMemData_64, w_shwMemData_64, w_sdwMemData_64）。outMerge 将各 FIFO 的输出合并为 104 位内存接口数据（地址+数据+写使能）。",
+        "value": "将来自 LSU 的存储数据（i_storeData_64）和地址（i_memAddr_32）根据存储类型（sb, sh, sw, sdw）打包成内存接口格式，并通过 outMerge 合并后驱动内存访问。",
+        "explanation": "从 key_instances 和 assign_dependencies 可见，storeSelector 将输入数据分发到不同的存储类型 FIFO（如 swFifo, shwFifo）。每个 FIFO 的输入数据由 assign 块（如 w_swMemData_64, w_shwMemData_64）根据地址和存储类型进行字节对齐和写使能生成。这些 FIFO 的输出通过 outMerge 合并为 104 位宽的数据（包含地址、数据和写使能），并驱动 o_dataUpdateDriveToMem_1 事件。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -292,22 +298,22 @@
         "signals": [
           "i_storeData_64",
           "i_memAddr_32",
-          "w_swMemAddr_32",
+          "w_storeData_64",
           "w_swMemData_64",
-          "w_swMemWen_8",
-          "w_shwMemAddr_32",
           "w_shwMemData_64",
-          "w_sdwMemAddr_32",
           "w_sdwMemData_64",
+          "w_swMemWen_8",
           "o_memAddr_32",
           "o_memData_64",
-          "o_memWen_8"
+          "o_memWen_8",
+          "o_dataUpdateDriveToMem_1"
         ],
         "instances": [
           "storeSelector",
           "swFifo",
           "shwFifo",
           "sdwFifo",
+          "sidleFifo",
           "outMerge"
         ],
         "related_flows": [
@@ -321,6 +327,9 @@
         ],
         "semantic_evidence": [
           {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
+          {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
         ]
@@ -328,8 +337,8 @@
     ],
     "documentation_focus": [
       {
-        "value": "重点文档化加载数据的字节对齐、符号扩展和未对齐处理逻辑。",
-        "explanation": "加载路径包含复杂的字节对齐和符号扩展逻辑（assign 1-4），这些逻辑是数据更新模块的核心功能。文档应详细说明每种加载指令（lb/lhw/lw/ldw）的数据提取方式、符号扩展规则和未对齐处理机制。",
+        "value": "文档应重点描述不同加载类型（lb, lh, lw, ldw）的数据格式化规则，包括符号扩展、零扩展、地址对齐和外设地址特殊处理。",
+        "explanation": "从 assign_dependencies 可见，加载路径的核心逻辑在于根据加载类型和地址将 64 位内存数据转换为 32 位或 64 位的通用寄存器数据。这些规则复杂且关键，需要详细说明。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -338,31 +347,22 @@
         "semantic_claim_id": "semantic:module:dataUpdate:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "w_lbGrfData_32",
-          "w_lhwGrfData_32",
-          "w_lwGrfData_32",
-          "w_ldwGrfData_64",
+          "i_memData_64",
+          "i_memAddr_32",
+          "i_loadSign_1",
+          "i_misaligned_1",
           "i_addrFromPeripheralFlag_1",
-          "w_lbAddr_32",
-          "w_lwAddr_32",
-          "w_lhwAddr_32",
-          "w_ldwAddr_32",
-          "w_lbLoadSign_1",
-          "w_lwLoadSign_1",
-          "w_lhwLoadSign_1",
-          "w_ldwLoadSign_1",
-          "w_lbMisaligned_1",
-          "w_lwMisaligned_1",
-          "w_lhwMisaligned_1",
-          "w_ldwMisaligned_1"
+          "w_lbGrfData_32",
+          "w_lwGrfData_32",
+          "w_lhwGrfData_32",
+          "w_ldwGrfData_64"
         ],
         "instances": [
           "loadSelector",
           "lbFifo",
           "lwFifo",
           "lhwFifo",
-          "ldwFifo",
-          "lbMerge"
+          "ldwFifo"
         ],
         "related_flows": [
           "load_data_flow"
@@ -380,8 +380,8 @@
         ]
       },
       {
-        "value": "重点文档化存储数据的地址偏移、字节对齐和写使能生成逻辑。",
-        "explanation": "存储路径包含地址偏移计算（assign 18-20）和写使能生成逻辑（assign 12），这些逻辑决定了存储数据如何写入内存。文档应详细说明每种存储指令（sw/sh/sd）的数据对齐方式和写使能生成规则。",
+        "value": "文档应重点描述不同存储类型（sb, sh, sw, sdw）的数据打包规则，包括字节对齐、写使能生成和地址偏移。",
+        "explanation": "从 assign_dependencies 可见，存储路径的核心逻辑在于根据存储类型和地址将 64 位存储数据打包成内存接口格式，并生成正确的写使能信号。这些规则复杂且关键，需要详细说明。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -390,22 +390,19 @@
         "semantic_claim_id": "semantic:module:dataUpdate:documentation_focus:002",
         "doc_priority": "primary",
         "signals": [
-          "w_swMemAddr_32",
-          "w_swMemData_64",
-          "w_swMemWen_8",
-          "w_shwMemAddr_32",
-          "w_shwMemData_64",
-          "w_sdwMemAddr_32",
-          "w_sdwMemData_64",
+          "i_storeData_64",
+          "i_memAddr_32",
           "w_storeData_64",
-          "w_memAddr_32"
+          "w_swMemData_64",
+          "w_shwMemData_64",
+          "w_sdwMemData_64",
+          "w_swMemWen_8"
         ],
         "instances": [
           "storeSelector",
           "swFifo",
           "shwFifo",
-          "sdwFifo",
-          "outMerge"
+          "sdwFifo"
         ],
         "related_flows": [
           "store_data_flow"
@@ -423,42 +420,22 @@
         ]
       },
       {
-        "value": "重点文档化数据更新模块的事件驱动流水线架构。",
-        "explanation": "模块采用事件驱动架构，通过 dataUpdateSelector、loadSelector、storeSelector 等选择器将请求分发到不同的 FIFO，再通过 lbMerge、outMerge 等合并器输出。文档应说明事件流（驱动事件）和数据流的交互方式，以及 free 信号（i_dataRoutFreeToDataUpate_1、i_writebackFreeToDataUpate_1）的背压控制机制。",
+        "value": "文档应说明 dataUpdate 模块如何通过空闲信号（i_dataRoutFreeToDataUpate_1, i_writebackFreeToDataUpate_1）与下游模块进行握手，以及如何通过 o_dataUpdateToLsu_1 信号向上游 LSU 反馈完成状态。",
+        "explanation": "从 interface 和 event_payload_contracts 可见，dataUpdate 模块依赖空闲信号来驱动输出事件，这表明其内部 FIFO 和合并器构成了一个背压感知的流水线。o_dataUpdateToLsu_1 信号则用于通知 LSU 当前请求已完成。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:dataUpdate:documentation_focus:003",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
-          "i_lsuToDataUpdate_1",
-          "o_dataUpdateDriveToMem_1",
-          "o_dataUpdateDriveToWriteback_1",
           "i_dataRoutFreeToDataUpate_1",
           "i_writebackFreeToDataUpate_1",
-          "w_driveToLoadSelector_1",
-          "w_driveToStoreSelector_1"
+          "o_dataUpdateToLsu_1"
         ],
         "instances": [
-          "dataUpdateSelector",
-          "loadSelector",
-          "storeSelector",
-          "lbMerge",
-          "outMerge",
-          "lIdleFifo",
-          "lbFifo",
-          "lwFifo",
-          "lhwFifo",
-          "ldwFifo",
-          "lwmFifo",
-          "lhwmFifo",
-          "ldwmFifo",
-          "sidleFifo",
-          "swFifo",
-          "shwFifo",
-          "sdwFifo"
+          "dataUpdateSelector"
         ],
         "related_flows": [
           "load_data_flow",
@@ -472,7 +449,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/dataUpdate.json"
+            "source": "knowledge_ir/modules/dataUpdate.json"
           }
         ]
       }
@@ -635,8 +612,8 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "加载数据合并器，将多个加载 FIFO 的输出合并为 74 位写回数据。",
-        "explanation": "lbMerge 接收来自 lbFifo、lwFifo、lhwFifo、ldwFifo 的输出数据，以及 i_dHi_4 和 i_dLo_4 信号，合并为 74 位写回数据 o_dataUpdateToWritebackData_74。该数据包含目标寄存器地址和加载结果。",
+        "value": "加载数据合并器，将来自不同加载类型 FIFO 的格式化数据合并为统一的写回数据。",
+        "explanation": "从 key_instances 可见，lbMerge 接收来自 lbFifo, lwFifo, lhwFifo, ldwFifo 的驱动事件和数据，并将它们合并为 74 位宽的 o_dataUpdateToWritebackData_74。它还接收 i_dHi_4 和 i_dLo_4 信号，这些信号可能用于指示数据在写回总线中的位置。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -649,16 +626,15 @@
           "w_driveFlw",
           "w_driveFlhw",
           "w_driveFldw",
-          "i_dHi_4",
-          "i_dLo_4",
-          "w_lbFifoToDataMerge_34",
-          "w_lwFifoToDataMerge_34",
-          "w_lhwFifoToDataMerge_34",
-          "w_ldwFifoToDataMerge_66",
-          "o_dataUpdateToWritebackData_74"
+          "o_dataUpdateToWritebackData_74",
+          "o_dataUpdateDriveToWriteback_1"
         ],
         "instances": [
-          "lbMerge"
+          "lbMerge",
+          "lbFifo",
+          "lwFifo",
+          "lhwFifo",
+          "ldwFifo"
         ],
         "related_flows": [
           "load_data_flow"
@@ -670,6 +646,9 @@
           "ev:dataUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
@@ -731,8 +710,8 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "存储数据合并器，将加载和存储 FIFO 的输出合并为 104 位内存接口数据。",
-        "explanation": "outMerge 接收来自 lidleMerge 和 sidleMerge 的输出，合并为 104 位数据，包含内存地址（o_memAddr_32）、内存数据（o_memData_64）和写使能（o_memWen_8）。该模块是加载和存储路径的最终输出合并点。",
+        "value": "输出合并器，将加载和存储路径的最终请求合并为统一的内存访问请求。",
+        "explanation": "从 key_instances 可见，outMerge 接收来自 lidleMerge（加载路径）和 sidleFifo（存储路径）的驱动事件和数据，并将它们合并为 104 位宽的数据，输出到 o_memAddr_32, o_memData_64, o_memWen_8。这表明加载和存储操作最终共享同一个内存接口。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -743,14 +722,15 @@
         "signals": [
           "w_drvFlidleMerge",
           "w_drvFsidleMerge",
-          "w_storeDataAddr_104",
-          "o_dataUpdateDriveToMem_1",
           "o_memAddr_32",
           "o_memData_64",
-          "o_memWen_8"
+          "o_memWen_8",
+          "o_dataUpdateDriveToMem_1"
         ],
         "instances": [
-          "outMerge"
+          "outMerge",
+          "lidleMerge",
+          "sidleFifo"
         ],
         "related_flows": [
           "load_data_flow",
@@ -763,6 +743,9 @@
           "ev:dataUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
@@ -792,8 +775,8 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "加载/存储请求分流器，根据 i_lsuToDataUpdate_1 信号将请求导向加载或存储路径。",
-        "explanation": "dataUpdateSelector 接收来自 LSU 的请求信号 i_lsuToDataUpdate_1，并输出两个驱动事件：w_driveToLoadSelector_1 和 w_driveToStoreSelector_1，分别触发加载和存储处理流程。同时输出 o_dataUpdateToLsu_1 作为反馈信号。",
+        "value": "顶层选择器，根据 LSU 的请求类型（加载或存储）将输入事件（i_lsuToDataUpdate_1）路由到加载或存储数据路径。",
+        "explanation": "从 key_component_connections 可见，dataUpdateSelector 接收 i_lsuToDataUpdate_1 作为驱动事件，并输出 w_driveToLoadSelector_1 和 w_driveToStoreSelector_1 分别驱动 loadSelector 和 storeSelector。同时，它从加载和存储路径接收反馈信号（w_loadSelectorToDataUpdateSelector_1, w_storeSelectorToDataUpdateSelector_1）并输出 o_dataUpdateToLsu_1 作为完成指示。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -803,8 +786,6 @@
         "doc_priority": "primary",
         "signals": [
           "i_lsuToDataUpdate_1",
-          "i_load_1",
-          "i_store_1",
           "w_driveToLoadSelector_1",
           "w_driveToStoreSelector_1",
           "o_dataUpdateToLsu_1"
@@ -823,6 +804,9 @@
           "ev:dataUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
@@ -888,8 +872,8 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "加载请求分发器，根据指令类型将加载请求分发到 8 个加载 FIFO。",
-        "explanation": "loadSelector 接收来自 dataUpdateSelector 的驱动事件 w_driveToLoadSelector_1，并根据指令类型（lb/lhw/lw/ldw/lwm/lhwm/ldwm/lIdle）将请求分发到对应的 FIFO。同时输出地址、数据、符号扩展标志和未对齐标志等控制信号。",
+        "value": "加载路径分发器，将加载请求根据加载类型（lb, lh, lw, ldw 等）分发到对应的 FIFO 流水线。",
+        "explanation": "从 key_instances 可见，loadSelector 接收来自 dataUpdateSelector 的驱动事件，并输出 8 个不同的驱动信号（如 w_lbDrive, w_lwDrive）分别连接到对应的加载类型 FIFO。同时，它将输入数据（如 i_memAddr_32, i_memData_64）分发到这些 FIFO 的输入数据端口。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -906,27 +890,18 @@
           "w_ldwDrive",
           "w_lwmDrive",
           "w_lhwmDrive",
-          "w_ldwmDrive",
-          "w_lIdleAddr_32",
-          "w_lbAddr_32",
-          "w_lwAddr_32",
-          "w_lhwAddr_32",
-          "w_ldwAddr_32",
-          "w_lbData_64",
-          "w_lwData_64",
-          "w_lhwData_64",
-          "w_ldwData_64",
-          "w_lbLoadSign_1",
-          "w_lwLoadSign_1",
-          "w_lhwLoadSign_1",
-          "w_ldwLoadSign_1",
-          "w_lbMisaligned_1",
-          "w_lwMisaligned_1",
-          "w_lhwMisaligned_1",
-          "w_ldwMisaligned_1"
+          "w_ldwmDrive"
         ],
         "instances": [
-          "loadSelector"
+          "loadSelector",
+          "lIdleFifo",
+          "lbFifo",
+          "lwFifo",
+          "lhwFifo",
+          "ldwFifo",
+          "lwmFifo",
+          "lhwmFifo",
+          "ldwmFifo"
         ],
         "related_flows": [
           "load_data_flow"
@@ -938,6 +913,9 @@
           "ev:dataUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
@@ -971,8 +949,8 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "存储请求分发器，根据指令类型将存储请求分发到 4 个存储 FIFO。",
-        "explanation": "storeSelector 接收来自 dataUpdateSelector 的驱动事件 w_driveToStoreSelectorDelay1_1，并根据指令类型（sw/sh/sd/sIdle）将请求分发到对应的 FIFO。同时输出存储数据和控制信号。",
+        "value": "存储路径分发器，将存储请求根据存储类型（sb, sh, sw, sdw）分发到对应的 FIFO 流水线。",
+        "explanation": "从 key_instances 可见，storeSelector 接收来自 dataUpdateSelector 的驱动事件（经过延迟），并输出 4 个不同的驱动信号（如 w_swDrive, w_shwDrive）分别连接到对应的存储类型 FIFO。同时，它将输入数据（如 i_storeData_64）分发到这些 FIFO 的输入数据端口。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -985,15 +963,14 @@
           "w_sIdleDrive",
           "w_swDrive",
           "w_shwDrive",
-          "w_sdwDrive",
-          "w_storeData1_64",
-          "w_storeData2_64",
-          "w_storeData3_64",
-          "w_storeData4_64",
-          "w_storeSelectorToDataUpdateSelector_1"
+          "w_sdwDrive"
         ],
         "instances": [
-          "storeSelector"
+          "storeSelector",
+          "sidleFifo",
+          "swFifo",
+          "shwFifo",
+          "sdwFifo"
         ],
         "related_flows": [
           "store_data_flow"
@@ -1005,6 +982,9 @@
           "ev:dataUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
@@ -1410,8 +1390,8 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "字节加载数据对齐和符号扩展逻辑。",
-        "explanation": "根据 i_addrFromPeripheralFlag_1 标志和地址偏移 w_lbAddr_32[2:0]，从 64 位内存数据 w_lbData_64 中提取正确的字节，并根据 w_lbLoadSign_1 进行符号扩展或零扩展。外围设备访问时直接取低 8 位。",
+        "value": "根据加载字节（lb）指令的地址和符号标志，从 64 位内存数据中提取并符号/零扩展为 32 位数据。",
+        "explanation": "该赋值（index 1）根据 i_addrFromPeripheralFlag_1 选择是否进行外设地址的特殊处理，否则根据 w_lbAddr_32[2:0] 从 w_lbData_64 的 8 个字节中选择一个，并根据 w_lbLoadSign_1 进行符号扩展或零扩展。这是加载数据格式化的核心逻辑。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1420,11 +1400,11 @@
         "semantic_claim_id": "semantic:module:dataUpdate:assignment_interpretation:001",
         "doc_priority": "primary",
         "signals": [
+          "w_lbGrfData_32",
           "i_addrFromPeripheralFlag_1",
-          "w_lbAddr_32",
           "w_lbData_64",
-          "w_lbLoadSign_1",
-          "w_lbGrfData_32"
+          "w_lbAddr_32",
+          "w_lbLoadSign_1"
         ],
         "instances": [],
         "related_flows": [
@@ -1471,8 +1451,8 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "字加载数据对齐和未对齐处理逻辑。",
-        "explanation": "根据 i_addrFromPeripheralFlag_1 标志、未对齐标志 w_lwMisaligned_1 和地址偏移 w_lwAddr_32[2:0]，从 64 位内存数据 w_lwData_64 中提取正确的字。未对齐时从 w_lwmTemp_64 中拼接数据。",
+        "value": "根据加载字（lw）指令的地址和对齐情况，从 64 位内存数据中提取并组合为 32 位数据。",
+        "explanation": "该赋值（index 4）处理了 lw 指令的对齐和非对齐情况。如果 i_addrFromPeripheralFlag_1 为真，则直接取低 32 位。否则，根据 w_lwMisaligned_1 和 w_lwAddr_32[2:0] 从 w_lwData_64 和 w_lwmTemp_64 中提取正确的 32 位数据。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1481,12 +1461,12 @@
         "semantic_claim_id": "semantic:module:dataUpdate:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
+          "w_lwGrfData_32",
           "i_addrFromPeripheralFlag_1",
-          "w_lwAddr_32",
           "w_lwData_64",
           "w_lwMisaligned_1",
-          "w_lwmTemp_64",
-          "w_lwGrfData_32"
+          "w_lwAddr_32",
+          "w_lwmTemp_64"
         ],
         "instances": [],
         "related_flows": [
@@ -1540,6 +1520,60 @@
       "certainty": "derived_fact",
       "source_layers": [
         "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:assignments"
+      ]
+    },
+    {
+      "assignment_id": "assign_12",
+      "index": 12,
+      "lhs": "w_swMemWen_8",
+      "rhs": "w_swMemAddr_32[2:0] == 3'b100 ? 8'b0000_0000 : w_swMemAddr_32[2:0] == 3'b101 ? 8'b0000_0001 : w_swMemAddr_32[2:0] == 3'b110 ? 8'b0000_0011 : w_swMemAddr_32[2:0] == 3'b111 ? 8'b0000_0111 : 8'b0000_0000",
+      "lhs_terms": [
+        "w_swMemWen_8"
+      ],
+      "rhs_terms": [
+        "w_swMemAddr_32"
+      ],
+      "impact_area": "control_path",
+      "doc_priority": "primary",
+      "interpretation": {
+        "value": "根据存储字（sw）指令的地址，生成对应的字节写使能信号。",
+        "explanation": "该赋值（index 12）根据 w_swMemAddr_32[2:0] 的值，生成 8 位写使能信号，用于指示内存的哪些字节需要被写入。例如，地址为 3'b101 时，只写第 1 个字节（8'b0000_0001）。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:dataUpdate:assignment_interpretation:003",
+        "doc_priority": "primary",
+        "signals": [
+          "w_swMemWen_8",
+          "w_swMemAddr_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "store_data_flow"
+        ],
+        "related_assignments": [
+          "12"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:dataUpdate:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/dataUpdate.json"
+          }
+        ]
+      },
+      "certainty": "derived_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:dataUpdate:assignments"
@@ -1824,60 +1858,6 @@
       ]
     },
     {
-      "assignment_id": "assign_12",
-      "index": 12,
-      "lhs": "w_swMemWen_8",
-      "rhs": "w_swMemAddr_32[2:0] == 3'b100 ? 8'b0000_0000 : w_swMemAddr_32[2:0] == 3'b101 ? 8'b0000_0001 : w_swMemAddr_32[2:0] == 3'b110 ? 8'b0000_0011 : w_swMemAddr_32[2:0] == 3'b111 ? 8'b0000_0111 : 8'b0000_0000",
-      "lhs_terms": [
-        "w_swMemWen_8"
-      ],
-      "rhs_terms": [
-        "w_swMemAddr_32"
-      ],
-      "impact_area": "control_path",
-      "doc_priority": "secondary",
-      "interpretation": {
-        "value": "字存储写使能生成逻辑。",
-        "explanation": "根据地址偏移 w_swMemAddr_32[2:0] 生成 8 位写使能，用于控制内存写入的字节范围。偏移为 3'b100 时写使能为 0，偏移为 3'b111 时写使能为 8'b0000_0111。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:dataUpdate:assignment_interpretation:003",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_swMemAddr_32",
-          "w_swMemWen_8"
-        ],
-        "instances": [],
-        "related_flows": [
-          "store_data_flow"
-        ],
-        "related_assignments": [
-          "12"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:dataUpdate:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/dataUpdate.json"
-          }
-        ]
-      },
-      "certainty": "derived_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:assignments"
-      ]
-    },
-    {
       "assignment_id": "assign_13",
       "index": 13,
       "lhs": "w_sIdleMemData_64",
@@ -1982,42 +1962,17 @@
       "impact_area": "data_path",
       "doc_priority": "secondary",
       "interpretation": {
-        "value": "字存储数据对齐逻辑。",
-        "explanation": "根据地址偏移 w_swMemAddr_32[2:0] 将 32 位存储数据 w_storeData_64 对齐到 64 位内存数据的高位。偏移为 3'b101 时数据放在低 8 位，偏移为 3'b111 时数据放在低 24 位。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:dataUpdate:assignment_interpretation:004",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_swMemAddr_32",
-          "w_storeData_64",
-          "w_swMemData_64"
-        ],
-        "instances": [],
-        "related_flows": [
-          "store_data_flow"
-        ],
-        "related_assignments": [
-          "16"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:dataUpdate:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/dataUpdate.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:dataUpdate:assignments"
@@ -2146,7 +2101,39 @@
   ],
   "important_internal_signals": [
     {
+      "signal": "i_memAddr_32",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 22,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
       "signal": "o_dataUpdateDriveToMem_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_dataUpdateDriveToWriteback_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 18,
@@ -2242,7 +2229,7 @@
       ]
     },
     {
-      "signal": "i_lsuToDataUpdate_1",
+      "signal": "i_memData_64",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 14,
@@ -2258,23 +2245,7 @@
       ]
     },
     {
-      "signal": "i_memAddr_32",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_dataUpdateDriveToWriteback_1",
+      "signal": "i_storeData_64",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 14,
@@ -2322,202 +2293,10 @@
       ]
     },
     {
-      "signal": "w_swMemAddr_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_driveToLoadSelector_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lbAddr_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lwAddr_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lbLoadSign_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lwMisaligned_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_writebackFreeToDataUpate_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_load_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_store_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_memData_64",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_storeData_64",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_swMemData_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
       "signal": "w_swMemWen_8",
       "kind": "wire",
       "width_text": "[7:0]",
-      "importance_score": 10,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2526,6 +2305,54 @@
       ],
       "evidence_refs": [
         "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_lsuToDataUpdate_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_loadSign_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_misaligned_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface",
         "ev:dataUpdate:semantic_module"
       ]
     },
@@ -2562,9 +2389,25 @@
       ]
     },
     {
-      "signal": "w_shwMemAddr_32",
+      "signal": "w_storeData_64",
       "kind": "wire",
-      "width_text": "[31:0]",
+      "width_text": "[63:0]",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_swMemData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
       "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -2594,22 +2437,6 @@
       ]
     },
     {
-      "signal": "w_sdwMemAddr_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
       "signal": "w_sdwMemData_64",
       "kind": "wire",
       "width_text": "[63:0]",
@@ -2626,7 +2453,7 @@
       ]
     },
     {
-      "signal": "w_driveToStoreSelector_1",
+      "signal": "w_driveToLoadSelector_1",
       "kind": "wire",
       "width_text": "1",
       "importance_score": 8,
@@ -2642,162 +2469,34 @@
       ]
     },
     {
-      "signal": "w_lhwAddr_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
+      "signal": "o_dataUpdateToLsu_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
       "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "parse",
+        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:interface",
         "ev:dataUpdate:semantic_module"
       ]
     },
     {
-      "signal": "w_ldwAddr_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
+      "signal": "i_writebackFreeToDataUpate_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
       "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "parse",
+        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lbData_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lwData_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lwLoadSign_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lhwLoadSign_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_ldwLoadSign_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lbMisaligned_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_lhwMisaligned_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_ldwMisaligned_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:interface",
         "ev:dataUpdate:semantic_module"
       ]
     },
@@ -2818,7 +2517,7 @@
       ]
     },
     {
-      "signal": "i_loadSign_1",
+      "signal": "i_load_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 6,
@@ -2834,7 +2533,7 @@
       ]
     },
     {
-      "signal": "i_misaligned_1",
+      "signal": "i_store_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 6,
@@ -2850,58 +2549,10 @@
       ]
     },
     {
-      "signal": "o_dataUpdateToLsu_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_dHi_4",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_dLo_4",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:interface",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_storeData_64",
+      "signal": "w_driveToStoreSelector_1",
       "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 6,
+      "width_text": "1",
+      "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -3042,7 +2693,197 @@
       ]
     },
     {
-      "signal": "w_lIdleAddr_32",
+      "signal": "w_driveToStoreSelectorDelay1_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_sIdleDrive",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_swDrive",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_shwDrive",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_sdwDrive",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveFlb",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveFlw",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveFlhw",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveFldw",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_drvFlidleMerge",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_drvFsidleMerge",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_lbData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_lbAddr_32",
       "kind": "wire",
       "width_text": "[31:0]",
       "importance_score": 4,
@@ -3058,39 +2899,7 @@
       ]
     },
     {
-      "signal": "w_lhwData_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_ldwData_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:dataUpdate:parser_module",
-        "ev:dataUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_driveToStoreSelectorDelay1_1",
+      "signal": "w_lbLoadSign_1",
       "kind": "wire",
       "width_text": "1",
       "importance_score": 4,
@@ -3103,6 +2912,142 @@
       "evidence_refs": [
         "ev:dataUpdate:parser_module",
         "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_lwData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_lwMisaligned_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_lwAddr_32",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_lwmTemp_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_swMemAddr_32",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:parser_module",
+        "ev:dataUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_dLo_4",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface"
+      ]
+    },
+    {
+      "signal": "i_stateValid_12",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface"
+      ]
+    },
+    {
+      "signal": "i_dHi_4",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface"
+      ]
+    },
+    {
+      "signal": "i_lsuType_2",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:dataUpdate:interface"
       ]
     }
   ],
@@ -3377,8 +3322,8 @@
     ],
     "semantic_notes": [
       {
-        "value": "将加载数据按指令类型（lb/lhw/lw/ldw）进行字节对齐、符号扩展或零扩展，并处理未对齐访问。",
-        "explanation": "loadSelector 根据指令类型将加载请求分发到对应的 FIFO（lbFifo/lhwFifo/lwFifo/ldwFifo）。每个 FIFO 前的组合逻辑（assign 1-4）根据地址偏移和未对齐标志，从 64 位内存数据中提取正确的字节/半字/字，并进行符号扩展或零扩展。lbMerge 将各 FIFO 的输出合并为 74 位写回数据。",
+        "value": "将来自内存的原始加载数据（i_memData_64）根据加载类型（lb, lh, lw, ldw）和地址对齐情况进行符号扩展或零扩展，并通过 lbMerge 合并后驱动写回阶段。",
+        "explanation": "从 key_instances 和 assign_dependencies 可见，loadSelector 将输入数据分发到不同的加载类型 FIFO（如 lbFifo, lwFifo），每个 FIFO 内部或上游的 assign 块（如 w_lbGrfData_32, w_lwGrfData_32）根据地址和符号标志进行数据格式化。格式化后的数据通过 lbMerge 合并为 74 位宽的数据（o_dataUpdateToWritebackData_74）并驱动 o_dataUpdateDriveToWriteback_1 事件。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -3387,22 +3332,23 @@
         "semantic_claim_id": "semantic:module:dataUpdate:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "i_memAddr_32",
           "i_memData_64",
-          "i_addrFromPeripheralFlag_1",
+          "i_memAddr_32",
           "i_loadSign_1",
           "i_misaligned_1",
+          "i_addrFromPeripheralFlag_1",
           "w_lbGrfData_32",
-          "w_lhwGrfData_32",
           "w_lwGrfData_32",
+          "w_lhwGrfData_32",
           "w_ldwGrfData_64",
-          "o_dataUpdateToWritebackData_74"
+          "o_dataUpdateToWritebackData_74",
+          "o_dataUpdateDriveToWriteback_1"
         ],
         "instances": [
           "loadSelector",
           "lbFifo",
-          "lhwFifo",
           "lwFifo",
+          "lhwFifo",
           "ldwFifo",
           "lbMerge"
         ],
@@ -3416,6 +3362,9 @@
           "ev:dataUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/dataUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/dataUpdate.json"
           }
@@ -3494,7 +3443,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "dataUpdate",
-    "source_file": "rtl/rtl/Lsu/dataUpate.v",
+    "source_file": "rtl\\rtl\\Lsu\\dataUpate.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -3511,8 +3460,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "数据更新模块，负责将加载数据按类型（lb/lhw/lw/ldw）进行字节对齐和符号扩展，并管理存储数据的地址偏移和字节写使能生成。",
-      "explanation": "模块接收来自 LSU 的加载/存储请求，通过 dataUpdateSelector 分流，loadSelector 将加载请求分发到 8 个加载 FIFO，storeSelector 将存储请求分发到 4 个存储 FIFO。加载数据经 lbMerge 合并后输出到写回单元，存储数据经 outMerge 合并后输出到内存接口。",
+      "value": "数据更新模块，负责在 LSU 内部协调加载和存储操作的数据流，并驱动最终的内存访问和写回路径。",
+      "explanation": "该模块接收来自 LSU 的加载/存储请求，通过选择器、FIFO 和合并器组成的流水线，将加载数据格式化后发送到写回阶段，并将存储数据（地址、数据、写使能）发送到内存接口。其核心作用是作为 LSU 内部数据路径的仲裁和分发中心。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -3539,6 +3488,7 @@
         "loadSelector",
         "storeSelector",
         "lbMerge",
+        "lidleMerge",
         "outMerge",
         "lIdleFifo",
         "lbFifo",
@@ -3963,7 +3913,7 @@
           ],
           "summary": "drive_event ports, count=2, directions=output:2",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/Lsu/dataUpate.v",
+            "rtl_file": "rtl\\rtl\\Lsu\\dataUpate.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -3997,7 +3947,7 @@
           ],
           "summary": "free_backpressure ports, count=2, directions=input:2",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/Lsu/dataUpate.v",
+            "rtl_file": "rtl\\rtl\\Lsu\\dataUpate.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -4128,7 +4078,7 @@
           ],
           "summary": "other_ports ports, count=18, directions=input:13, output:5",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/Lsu/dataUpate.v",
+            "rtl_file": "rtl\\rtl\\Lsu\\dataUpate.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -4147,7 +4097,7 @@
     },
     "source_review_context": {
       "module": "dataUpdate",
-      "rtl_file": "rtl/rtl/Lsu/dataUpate.v",
+      "rtl_file": "rtl\\rtl\\Lsu\\dataUpate.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",

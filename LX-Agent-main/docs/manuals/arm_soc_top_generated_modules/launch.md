@@ -1,8 +1,8 @@
 # 模块 `launch`
 
-- 源文件：`rtl/rtl/launch/launch.v`。
-- 职责：AI 推断：指令发射与数据准备中心，负责接收来自解码器、执行单元、加载存储单元、通用寄存器文件和系统寄存器文件的驱动事件，仲裁数据依赖，组装操作数，并最终向执行单元、通用寄存器文件、指令预取单元、程序状态寄存器和系统寄存器文件发射指令。。
-- 说明：模块接收来自多个功能单元的驱动事件（i_*DriveToLaunch_1）和数据负载，通过内部复杂的互斥合并、等待合并、选择/拆分和FIFO组件网络，处理寄存器重命名、数据转发和立即数扩展，最终生成发射到各下游单元的事件和数据。其核心作用是作为指令流水线的“发射级”，确保指令所需的操作数就绪后，再向下游发射。
+- 源文件：`rtl\rtl\launch\launch.v`。
+- 职责：AI 推断：指令发射与数据准备中心，负责收集来自译码、执行、加载、通用寄存器、系统寄存器等多个功能单元的驱动事件，仲裁并合并数据，最终向执行、通用寄存器、程序计数器、程序状态寄存器、系统寄存器等目标单元发射指令操作数和控制信息。。
+- 说明：模块接收来自译码器、执行单元、加载存储单元、通用寄存器组、系统寄存器组和程序状态寄存器的驱动事件，通过内部复杂的合并、选择、延迟和FIFO组件网络，将指令的立即数、寄存器数据、PC值、条件码等操作数进行准备和路由，最终生成发射到执行单元、通用寄存器、程序计数器、程序状态寄存器和系统寄存器的驱动事件和数据。其核心是数据流和事件流的同步与分发。
 
 ## 1. 层级位置
 
@@ -109,7 +109,7 @@ launch
 - Payload：`i_ExeDriveToLunch_1` -> `i_ExeData_96 [95:0]`, `o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=12，join=21，blocking=16。
-- AI 推断：最终手册应重点描述执行事件如何通过多个合并和拆分点，最终分发至三个不同目标。
+- AI 推断：最终手册应重点描述执行驱动事件如何通过释放选择器网络分发到三个终点，以及 96 位数据如何被解析为 32 位数据块。
 
 ### `i_GrfDriveToLaunch_1`
 
@@ -117,7 +117,7 @@ launch
 - Payload：`o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=13，join=20，blocking=15。
-- AI 推断：GRF驱动事件经过launch模块处理后，最终通过grfSrfSele输出回GRF，形成反馈路径。
+- AI 推断：操作数数据与控制信号在发射流中并行传播，最终在exeMerge2处与指令信息结合。
 
 ### `i_LsuDriveToLunch_1`
 
@@ -125,7 +125,7 @@ launch
 - Payload：`i_LsuDriveToLunch_1` -> `i_lsuData_64 [63:0]`, `o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=12，join=20，blocking=15。
-- AI 推断：最终手册应重点描述LSU事件如何通过多级合并、选择和拆分，最终分发至GRF、SRF和EXE。
+- AI 推断：文档应重点解释rele0Selector/rele4Selector的选择逻辑和反馈延迟路径，这是流中实现释放等待的关键结构。
 
 ### `i_PSRDriveToLaunch_1`
 
@@ -133,7 +133,7 @@ launch
 - Payload：未记录。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：最终手册应强调该流在psrRele1Merge处截断，未到达模块输出，并说明合并器作为事件汇聚点的作用
+- AI 推断：文档应强调该流作为事件合并路径的输入分支，其传播被合并器阻断，且缺乏 payload 和赋值信息，需要 RTL 源审查以确认完整行为。
 
 ### `i_SrfDriveToLaunch_1`
 
@@ -141,7 +141,7 @@ launch
 - Payload：`o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=13，join=20，blocking=15。
-- AI 推断：该流的输出端口o_launchDriveToExe_1关联了一个free信号i_ExeFreeToLaunch_1，用于下游背压。
+- AI 推断：输入驱动经过流处理后，输出到GRF和SRF的驱动信号携带了寄存器地址信息。
 
 ### `i_decoDrive1ToLaunch_1`
 
@@ -149,7 +149,7 @@ launch
 - Payload：`i_decoDrive1ToLaunch_1` -> `i_decoderData_185 [184:0]`, `o_launchDriveToPsr_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToPsr_1`。
 - 结构复杂度：branch=2，join=2，blocking=2。
-- AI 推断：最终手册应重点描述解码器事件如何通过两级分支和两个等待合并器实现并行释放控制
+- AI 推断：最终手册应强调该流从解码器输入到PSR输出的两级扇出和两处合并，以及直接输出路径与内部释放路径的并行性。
 
 ### `i_decoderDriveToLaunch_1`
 
@@ -157,7 +157,7 @@ launch
 - Payload：`i_decoderDriveToLaunch_1` -> `i_decoderData_185 [184:0]`, `o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=14，join=24，blocking=17。
-- AI 推断：最终手册应重点描述事件从单一输入到三个输出端口的扇出路径，以及各路径上的选择、延迟和合并逻辑。
+- AI 推断：最终手册应重点描述解码器事件如何通过launchSplitter、exeSele0、lsuSele1等组件进行路径选择，以及如何通过exeMerge2、grfSrfSele等组件合并输出。
 
 ### `i_driveFExcToIf_1`
 
@@ -165,7 +165,7 @@ launch
 - Payload：未记录。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：该流将输入事件信号 i_driveFExcToIf_1 作为控制信号，通过延迟和或运算影响合并选择信号 w_regMergeDriveToRegSelector1_1。
+- AI 推断：该流的事件信号 i_driveFExcToIf_1 无显式数据载荷，仅作为控制事件传递，最终参与逻辑或合并。
 
 
 ## 5. 内部组件与 assign 影响
@@ -192,10 +192,8 @@ launch
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_15` | data_path | `w_exeData_32` | (w_rele_6[1] == 1'b1 \| w_rele_6[5] == 1'b1) ? (w_exeDataFromHigh_1 ? i_ExeData_96[63:32] : i_... | AI 推断：判断执行单元返回的数据是否来自高32位。 |
+| `assign_15` | data_path | `w_exeData_32` | (w_rele_6[1] == 1'b1 \| w_rele_6[5] == 1'b1) ? (w_exeDataFromHigh_1 ? i_ExeData_96[63:32] : i_... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_17` | data_path | `w_lsuData_32` | (w_rele_6[0] == 1'b1 \| w_rele_6[4] == 1'b1) ? (w_lsuDataFromHigh_1 ? i_lsuData_64[63:32] : i_... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_36` | data_path | `o_pc_32` | w_is16_1 ? w_pc1_32 + 2 : w_pc1_32 + 4 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_49` | data_path | `w_immSign_32` | {{32{w_signimm5_1 & ~w_bl_1 & ~w_ucb32Bit_1}} & {{28{w_signImm_16[4]}}, w_signImm_16[4:0]}} \|... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_75` | data_path | `w_b_1` | (w_cond1_4 == 4'b0000 & w_z2_1 == 1'b1 & w_isCb_1 == 1'b1) \| (w_cond1_4 == 4'b0001 & w_z2_1 =... | AI 推断：条件分支判断结果，决定是否进行分支跳转。 |
-| `assign_76` | data_path | `w_branchPc_32` | r_branchPc_32 | AI 推断：条件分支判断结果，决定是否进行分支跳转。 |
 | `assign_0` | unknown | `o_b_1` | w_b_1 | 证据不足：No Semantic Layer assignment interpretation is available. |

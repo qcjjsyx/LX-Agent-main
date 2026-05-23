@@ -1,8 +1,8 @@
 # 模块 `wb`
 
-- 源文件：`rtl/rtl/WB/wb.v`。
-- 职责：AI 推断：写回阶段模块，负责将执行结果分发到通用寄存器组、程序计数器、谓词寄存器、XPSR以及GRF读取路径。。
-- 说明：模块接收来自互斥合并单元和加载存储单元的两个驱动事件，通过分路器、选择器、互斥合并器和FIFO等组件，将数据分发到五个输出驱动事件和对应的数据输出端口。自由信号用于协调下游模块的释放。
+- 源文件：`rtl\rtl\WB\wb.v`。
+- 职责：AI 推断：写回阶段模块，负责将执行结果分发到通用寄存器组、程序计数器、物理寄存器组和异常状态寄存器。。
+- 说明：模块接收来自 LSU 和互斥合并单元的驱动事件，通过内部的分发、选择、延迟和合并组件，将数据路由到不同的目标寄存器组，并管理相应的释放信号。
 
 ## 1. 层级位置
 
@@ -83,7 +83,7 @@ wb
 - Payload：`o_drive_grf` -> `o_WBdataToGRF_8 [7:0]`, `o_drive_grf` -> `o_grfData_74 [73:0]`。
 - 输出/影响：`o_drive_grf`。
 - 结构复杂度：branch=0，join=2，blocking=3。
-- AI 推断：手册应重点描述该流中两级互斥合并器（MutexMerge2 和 MutexMerge1）的仲裁逻辑、FIFO 缓冲的深度与背压行为，以及延迟单元的延迟周期。
+- AI 推断：该流是纯事件驱动流，输入事件 i_driveMutexMerge2 经过合并和缓冲后，最终产生输出事件 o_drive_grf，同时携带数据 o_grfData_74 和 o_WBdataToGRF_8 输出。
 
 ### `i_lsuDriveToWB`
 
@@ -91,7 +91,7 @@ wb
 - Payload：`o_drive_grf` -> `o_WBdataToGRF_8 [7:0]`, `o_drive_grf` -> `o_grfData_74 [73:0]`, `o_drive_pc` -> `o_pcData_32 [31:0]`, `o_drive_prf` -> `o_prfData_40 [39:0]`, `o_drive_xpsr` -> `o_xpsrData_4 [3:0]`, `o_wbDriveReadGRF` -> `o_WBdataToGRF_8 [7:0]`, `o_wbDriveReadGRF` -> `o_grfData_74 [73:0]`。
 - 输出/影响：`o_drive_prf`, `o_wbDriveReadGRF`, `o_drive_xpsr`, `o_drive_pc`, `o_drive_grf`。
 - 结构复杂度：branch=4，join=2，blocking=3。
-- AI 推断：文档应重点描述 LSU 写回事件如何通过 Splitter 和 Selector 分发至不同目标，以及 MutexMerge1 如何合并直接与延迟反馈路径。
+- AI 推断：每个输出事件关联特定数据负载，但数据路径与事件路径在组件内部耦合，外部仅见事件驱动。
 
 
 ## 5. 内部组件与 assign 影响
@@ -112,6 +112,6 @@ wb
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_11` | data_path | `o_WBdataToGRF_8` | w_dataReadGRF_87[85:78] | AI 推断：从GRF读取数据包中提取8位数据，用于GRF写入。 |
-| `assign_23` | data_path | `w_dataToMutexMerge2_64` | {i_dataFromGRF_64[63:32],w_data1_64[63:32]} | AI 推断：组合来自GRF和内部数据，形成MutexMerge2的输入数据。 |
+| `assign_11` | data_path | `o_WBdataToGRF_8` | w_dataReadGRF_87[85:78] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_23` | data_path | `w_dataToMutexMerge2_64` | {i_dataFromGRF_64[63:32],w_data1_64[63:32]} | AI 推断：构造 MutexMerge2 的输入数据，将外部 GRF 数据的高 32 位与内部数据的高 32 位拼接。 |
 | `assign_25` | control_path | `o_bitOpOver_1` | w_driveMutexMerge12Delay_1 | 证据不足：No Semantic Layer assignment interpretation is available. |

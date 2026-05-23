@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "intAndExc_pop",
-  "source_file": "rtl/rtl/int/intAndExc_pop.v",
+  "source_file": "rtl\\rtl\\int\\intAndExc_pop.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "中断与异常出栈调度器，负责将来自DR（数据读取器）和Top（顶层）的出栈请求分发到SP（栈指针）、WGRF（通用寄存器文件写入）和WPSR（程序状态字写入）等目标单元。",
-    "explanation": "模块接收两个驱动事件输入（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将请求路由到四个输出驱动事件，并携带相应的数据负载（地址、SP值、寄存器数据、PSR数据）。自由信号（free）用于握手确认。",
+    "value": "中断与异常出栈调度器，负责将来自DR（数据RAM）和Top（顶层）的出栈请求分发到SP、DR、WGRF、WPSR四个目标，并管理对应的地址/数据负载与释放信号。",
+    "explanation": "模块接收两个事件输入（i_driveFromDR, i_driveFromTop），通过内部组件链（Splitter、Selector、MutexMerge）和延迟单元，将事件路由到四个输出事件，并同时输出对应的地址和数据负载。释放信号（free）从各目标返回，经组件处理后输出回DR和Top，形成完整的请求-释放握手。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -35,13 +35,19 @@
       "o_driveToDR",
       "o_driveToSP",
       "o_driveToWGRF",
-      "o_driveToWPSR"
+      "o_driveToWPSR",
+      "i_freeFromDR",
+      "i_freeFromSP",
+      "i_freeFromWGRF",
+      "i_freeFromWPSR",
+      "o_freeToDR",
+      "o_freeToTop"
     ],
     "instances": [
       "u0_cSplitter2_NoData_intAndExc_pop",
+      "u0_cMutexMerge2_NoData_intAndExc_pop",
       "u0_cSelector2_1b_intAndExc_pop",
-      "u0_cSelector2_73b_intAndExc_pop",
-      "u0_cMutexMerge2_NoData_intAndExc_pop"
+      "u0_cSelector2_73b_intAndExc_pop"
     ],
     "related_flows": [
       "flow_000_intAndExc_pop_i_driveFromDR",
@@ -411,7 +417,7 @@
         ],
         "summary": "drive_event ports, count=6, directions=input:2, output:4",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+          "rtl_file": "rtl\\rtl\\int\\intAndExc_pop.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -470,7 +476,7 @@
         ],
         "summary": "free_backpressure ports, count=6, directions=input:4, output:2",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+          "rtl_file": "rtl\\rtl\\int\\intAndExc_pop.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -529,7 +535,7 @@
         ],
         "summary": "other_ports ports, count=6, directions=input:2, output:4",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+          "rtl_file": "rtl\\rtl\\int\\intAndExc_pop.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -546,23 +552,25 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_intAndExc_pop_i_driveFromDR.json",
       "reader_takeaway": {
-        "value": "事件o_driveToSP携带递增后的SP地址负载。",
-        "explanation": "赋值9显示o_SP_32由i_SP_32加32得到，且o_driveToSP事件通过cSelector2_1b输出。这表明SP写操作的事件与地址负载紧密耦合，每次事件触发都会更新SP指针。",
+        "value": "事件流中，WGRF和WPSR路径携带数据负载，SP和DR路径也关联数据，但数据来源和选择逻辑不同。",
+        "explanation": "WGRF和WPSR事件由cSelector2_73b分发，直接关联o_dataToWGRF_72和o_dataToWPSR_32数据；DR事件关联o_addrToDR_32，由内部寄存器选择；SP事件关联o_SP_32，为固定增量。数据负载与事件路径绑定，但数据生成逻辑独立于事件流。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "o_driveToSP",
-          "o_SP_32",
-          "i_SP_32"
+          "o_dataToWGRF_72",
+          "o_dataToWPSR_32",
+          "o_addrToDR_32",
+          "o_SP_32"
         ],
         "instances": [],
         "related_flows": [],
         "related_assignments": [
+          "5",
           "9"
         ],
         "requires_rtl_source_review": false,
@@ -573,80 +581,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-            "path": "assignments"
+            "source": "interface.data_ports"
           },
           {
-            "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-            "path": "interface_data_contract"
+            "source": "assignment_facts"
           }
         ],
         "supporting_claims": [
           {
-            "value": "事件o_driveToWGRF携带73位写数据负载。",
-            "explanation": "接口负载契约显示o_driveToWGRF事件关联73位数据o_dataToWGRF_72，且该数据由cSelector2_73b直接输出。这表明WGRF写操作的事件与数据在同一个选择器实例中同步分发。",
+            "value": "手册应重点描述事件从DR输入到四个目标的分发路径，以及各路径的数据负载关联。",
+            "explanation": "流结构清晰：拆分、延迟、选择、合并、分发。关键点包括cSplitter2的拆分、cSelector2_1b的选择、cMutexMerge2的合并仲裁、cSelector2_73b的数据分发。数据负载与事件路径的绑定关系需明确，但数据生成逻辑（如地址选择、SP增量）可简要说明。",
             "certainty": "ai_inferred",
-            "confidence": "high",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:002",
-            "doc_priority": "primary",
-            "signals": [
-              "o_driveToWGRF",
-              "o_dataToWGRF_72"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
-              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "interface_data_contract"
-              }
-            ]
-          },
-          {
-            "value": "事件o_driveToWPSR携带32位写数据负载。",
-            "explanation": "接口负载契约显示o_driveToWPSR事件关联32位数据o_dataToWPSR_32，且该数据由cSelector2_73b直接输出。这表明WPSR写操作的事件与数据在同一个选择器实例中同步分发。",
-            "certainty": "ai_inferred",
-            "confidence": "high",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:data_control_effect:003",
-            "doc_priority": "primary",
-            "signals": [
-              "o_driveToWPSR",
-              "o_dataToWPSR_32"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
-              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "interface_data_contract"
-              }
-            ]
-          },
-          {
-            "value": "文档应重点描述事件如何从i_driveFromDR分支，经延迟同步后，通过选择器和合并器分发至四个目标。",
-            "explanation": "该流的核心是事件的分发路径：cSplitter2_NoData的分支、两级延迟的对齐、cSelector2_1b的选择（SP或DR合并）、cMutexMerge2的仲裁以及cSelector2_73b的最终分发。这些组件的交互定义了流的语义，应详细说明。",
-            "certainty": "ai_inferred",
-            "confidence": "high",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
@@ -654,63 +600,26 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromDR",
-              "w_drive0",
-              "w_drive1",
-              "w_drive0Delay",
-              "w_drive0Delay1",
-              "w_drive2",
               "o_driveToSP",
               "o_driveToDR",
               "o_driveToWGRF",
-              "o_driveToWPSR"
+              "o_driveToWPSR",
+              "o_dataToWGRF_72",
+              "o_dataToWPSR_32",
+              "o_addrToDR_32",
+              "o_SP_32"
             ],
             "instances": [
               "u0_cSplitter2_NoData_intAndExc_pop",
-              "Delay0",
-              "Delay1",
               "u0_cSelector2_1b_intAndExc_pop",
               "u0_cMutexMerge2_NoData_intAndExc_pop",
-              "u0_cSelector2_73b_intAndExc_pop"
+              "u0_cSelector2_73b_intAndExc_pop",
+              "Delay0",
+              "Delay1"
             ],
             "related_flows": [],
             "related_assignments": [
               "0",
-              "9"
-            ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
-              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "flow_graph.assignment_dependencies"
-              }
-            ]
-          },
-          {
-            "value": "文档应明确每个输出事件携带的数据负载及其来源。",
-            "explanation": "o_driveToSP携带递增的SP地址（赋值9），o_driveToWGRF和o_driveToWPSR分别携带73位和32位数据（来自cSelector2_73b），而o_driveToDR的地址负载由r_outNum_2选择（赋值5）。这些数据关联是理解事件语义的关键。",
-            "certainty": "ai_inferred",
-            "confidence": "high",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:documentation_focus:002",
-            "doc_priority": "primary",
-            "signals": [
-              "o_SP_32",
-              "o_dataToWGRF_72",
-              "o_dataToWPSR_32",
-              "o_addrToDR_32"
-            ],
-            "instances": [
-              "u0_cSelector2_73b_intAndExc_pop"
-            ],
-            "related_flows": [],
-            "related_assignments": [
               "5",
               "9"
             ],
@@ -722,16 +631,21 @@
             ],
             "semantic_evidence": [
               {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "interface_data_contract"
+                "source": "instances.connections"
+              },
+              {
+                "source": "transparent_flows"
+              },
+              {
+                "source": "interface.data_ports"
               }
             ]
           },
           {
-            "value": "来自DR的单一事件驱动，经拆分、延迟、选择与互斥合并后，分发至SP、DR、WGRF和WPSR四个目标。",
-            "explanation": "该流从输入端口i_driveFromDR发起，通过cSplitter2_NoData实例分为两路：一路经两级延迟后由cSelector2_73b分发至WGRF和WPSR；另一路经cSelector2_1b选择后，一路直接输出至SP，另一路与来自顶层的i_driveFromTop在cMutexMerge2中合并后输出至DR。整个流体现了事件的分支、延迟同步和仲裁合并。",
+            "value": "来自DR的驱动事件经过拆分、延迟、选择与合并后，分发至SP、DR、WGRF和WPSR四个目标。",
+            "explanation": "该流从输入端口i_driveFromDR接收事件，通过cSplitter2_NoData实例分为两路：一路经两级延迟后由cSelector2_73b分发至WGRF和WPSR；另一路经cSelector2_1b选择后，一路直达SP，另一路与来自Top的事件在cMutexMerge2中合并后驱动至DR。",
             "certainty": "ai_inferred",
-            "confidence": "high",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
@@ -771,12 +685,47 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/intAndExc_pop.json",
-                "path": "internal_event_flow"
+                "source": "instances.connections"
               },
               {
-                "source": "parser_pipeline_rtl/modules/intAndExc_pop.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "transparent_flows"
+              },
+              {
+                "source": "interface.event_ports"
+              }
+            ]
+          },
+          {
+            "value": "各输出事件端口关联空闲信号，但流中未体现反压机制。",
+            "explanation": "接口合同显示o_driveToDR关联i_freeFromDR，o_driveToSP关联i_freeFromSP，o_driveToWGRF关联i_freeFromWGRF，o_driveToWPSR关联i_freeFromWPSR，但流步骤中未包含空闲信号路径，无法确定反压如何影响事件传播。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:intAndExc_pop:flow_000_intAndExc_pop_i_driveFromDR:completion_backpressure:001",
+            "doc_priority": "reference",
+            "signals": [
+              "i_freeFromDR",
+              "i_freeFromSP",
+              "i_freeFromWGRF",
+              "i_freeFromWPSR"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:intAndExc_pop:flow:flow_000_intAndExc_pop_i_driveFromDR",
+              "ev:intAndExc_pop:semantic_flow:flow_000_intAndExc_pop_i_driveFromDR"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports"
+              },
+              {
+                "source": "interface.data_ports"
               }
             ]
           }
@@ -795,10 +744,10 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_intAndExc_pop_i_driveFromTop.json",
       "reader_takeaway": {
-        "value": "手册应重点描述MutexMerge的仲裁行为及其对输出事件时机的影响",
-        "explanation": "流中唯一实例是合并器，且为阻塞点，说明事件路径在此处可能因仲裁而延迟或丢弃。手册需说明i_driveFromTop和w_drive2的优先级或互斥规则，以及如何影响o_driveToDR的生成。",
+        "value": "文档应强调该流是顶层到DR的单级事件直通路径，并说明MutexMerge的仲裁角色。",
+        "explanation": "该流结构简单，但MutexMerge的仲裁行为是关键。文档应解释i_driveFromTop和w_drive2两个事件源如何通过MutexMerge合并，以及仲裁对事件传播的影响。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -814,28 +763,30 @@
         ],
         "related_flows": [],
         "related_assignments": [
-          "assign 0"
+          "0"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
           "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
         ],
         "semantic_evidence": [
           {
-            "source": "flow.blocking_points"
+            "source": "module_facts",
+            "path": "knowledge_ir/modules/intAndExc_pop.json"
           },
           {
-            "source": "flow.join_points"
+            "source": "parser_module",
+            "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "顶层驱动事件通过互斥合并器仲裁后，作为唯一输出事件驱动到下游DR模块",
-            "explanation": "该流仅包含一个实例步骤，i_driveFromTop与内部选择器产生的w_drive2在MutexMerge实例处合并，合并后的输出直接驱动o_driveToDR。流中无分支，合并点即阻塞点，表明事件路径在此仲裁。",
+            "value": "顶层输入事件i_driveFromTop通过MutexMerge仲裁器后直接驱动输出事件o_driveToDR，构成一条单级事件直通路径。",
+            "explanation": "该流仅包含一个步骤：i_driveFromTop作为输入之一进入u0_cMutexMerge2_NoData_intAndExc_pop，其输出o_driveNext直接连接到模块输出o_driveToDR。没有分支或中间寄存器，表明这是一个从顶层到DR的快速事件传递通道。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "high",
             "source_layers": [
               "semantic_layer"
             ],
@@ -843,15 +794,16 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromTop",
-              "w_drive2",
-              "o_driveToDR"
+              "o_driveToDR",
+              "w_drive2"
             ],
             "instances": [
               "u0_cMutexMerge2_NoData_intAndExc_pop"
             ],
             "related_flows": [],
             "related_assignments": [
-              "assign 0"
+              "0",
+              "5"
             ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
@@ -861,16 +813,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections"
+                "source": "module_facts",
+                "path": "knowledge_ir/modules/intAndExc_pop.json"
               },
               {
-                "source": "transparent_flows"
+                "source": "parser_module",
+                "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
               }
             ]
           },
           {
-            "value": "输出地址由r_outNum_2选择，与事件流无直接数据耦合",
-            "explanation": "o_addrToDR_32通过多路选择器从四个候选地址中选出，选择信号r_outNum_2可能由合并器内部状态决定。该地址与事件流中的i_driveFromTop或w_drive2无直接赋值依赖，表明事件流仅控制输出时机，不携带地址数据。",
+            "value": "输出地址o_addrToDR_32由内部状态r_outNum_2选择，与事件流i_driveFromTop无直接数据耦合。",
+            "explanation": "事件流i_driveFromTop仅驱动事件信号，而输出地址o_addrToDR_32由r_outNum_2从四个候选地址中选择。该选择逻辑独立于事件流，表明事件传播与数据选择是解耦的。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -889,23 +843,24 @@
             "instances": [],
             "related_flows": [],
             "related_assignments": [
-              "assign 5"
+              "5"
             ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
             "evidence_refs": [
               "ev:intAndExc_pop:flow:flow_001_intAndExc_pop_i_driveFromTop",
               "ev:intAndExc_pop:semantic_flow:flow_001_intAndExc_pop_i_driveFromTop"
             ],
             "semantic_evidence": [
               {
-                "source": "parser_module.assignments"
+                "source": "parser_module",
+                "path": "parser_pipeline_rtl/modules/intAndExc_pop.json"
               }
             ]
           },
           {
-            "value": "输入事件有free信号但证据不足，输出事件有free信号但未在流中体现",
-            "explanation": "接口合同显示i_driveFromTop有o_freeToTop（低置信度），o_driveToDR有i_freeFromDR（中置信度）。但流上下文未提供这些free信号与合并器或事件传播的交互关系，无法判断是否构成背压或完成握手。",
+            "value": "输入事件i_driveFromTop关联的free信号o_freeToTop和输出事件o_driveToDR关联的free信号i_freeFromDR构成可能的背压路径，但当前上下文未提供直接连接证据。",
+            "explanation": "接口契约显示i_driveFromTop有free信号o_freeToTop，o_driveToDR有free信号i_freeFromDR，表明存在握手机制。但当前流步骤中未包含这些信号，无法确定它们是否直接参与此流。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -930,7 +885,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface_payload_contracts"
+                "source": "module_facts",
+                "path": "knowledge_ir/modules/intAndExc_pop.json"
               }
             ]
           }
@@ -948,11 +904,11 @@
     "components": 4,
     "assignments": 10,
     "evidence_gaps": 0,
-    "review_questions": 4
+    "review_questions": 2
   },
   "source_review_context": {
     "module": "intAndExc_pop",
-    "rtl_file": "rtl/rtl/int/intAndExc_pop.v",
+    "rtl_file": "rtl\\rtl\\int\\intAndExc_pop.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

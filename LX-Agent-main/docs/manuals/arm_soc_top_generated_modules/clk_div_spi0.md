@@ -1,8 +1,8 @@
 # 模块 `clk_div_spi0`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v`。
-- 职责：AI 推断：sclk_m由nss_out和cnt[BR]决定，实现片选使能下的可编程分频；sclk_out由bit8_out门控，确保仅在数据窗口输出时钟。。
-- 说明：assign sclk_m = nss_out ? 1'b0 : cnt[BR]（slice5 line105）直接使用组合逻辑，当nss_out为1时强制为0，否则输出cnt中由BR选择的位置。assign sclk_out = bit8_out ? sclk_m : 1'b0（slice5 line106）用bit8_out门控sclk_m，bit8_out由sclk_cnt != 0组合生成（slice5 line104），实现了数据传输窗口内的时钟门控，符合结构责任声明。
+- 源文件：`rtl\rtl\IONet\SPI\SPI0\clk_div_spi0.v`。
+- 职责：AI 推断：RTL中通过组合逻辑将cnt[BR]与nss_out组合生成sclk_m，再经bit8_out门控输出sclk_out，与模块角色描述一致。。
+- 说明：切片第105行assign sclk_m = nss_out ? 1'b0 : cnt[BR]实现了基于BR和nss_out对cnt的选通；第106行assign sclk_out = bit8_out ? sclk_m : 1'b0实现bit8_out对sclk_out的门控；第104行assign bit8_out = (sclk_cnt != 0)确认了bit8_out来自sclk_cnt的状态。未发现与描述矛盾。
 
 ## 1. 层级位置
 
@@ -59,6 +59,6 @@ clk_div_spi0
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 : cnt[BR] | AI 推断：最终SPI主时钟输出，由bit8_out使能信号门控sclk_m，仅在数据传输位期间输出有效时钟。 |
-| `assign_2` | unknown | `sclk_out` | bit8_out ? sclk_m : 1'b0 | AI 推断：该信号作为数据传输使能标志，当sclk_cnt非零时有效，用于门控sclk_out的输出。 |
-| `assign_0` | unknown | `bit8_out` | (sclk_cnt != 0) ? 1'b1 : 1'b0 | AI 推断：该信号作为数据传输使能标志，当sclk_cnt非零时有效，用于门控sclk_out的输出。 |
+| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 : cnt[BR] | AI 推断：该赋值根据片选状态和分频计数器生成内部中间时钟。 |
+| `assign_2` | unknown | `sclk_out` | bit8_out ? sclk_m : 1'b0 | AI 推断：该赋值在字节传输进行中时输出分频时钟，否则保持低电平。 |
+| `assign_0` | unknown | `bit8_out` | (sclk_cnt != 0) ? 1'b1 : 1'b0 | AI 推断：该赋值将sclk_cnt非零状态转换为字节传输进行中的标志信号。 |

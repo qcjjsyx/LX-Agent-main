@@ -1,8 +1,8 @@
 # 模块 `wd2noc`
 
-- 源文件：`rtl/rtl/IONet/Watchdog/wd2noc.v`。
-- 职责：AI 推断：看门狗事件到NoC的同步与转发模块，将看门狗中断/复位事件通过7级Fifo1链传递到NoC域。
-- 说明：模块接收i_drive事件及其关联的i_msg载荷，通过fifo0~fifo6组成的链式Fifo1结构逐级传递，最终输出o_drive和o_msg。i_free和o_free构成独立的释放信号路径，表明模块支持事件驱动的流控机制。utt_wd实例(cmsdk_apb_watchdog)提供看门狗核心功能，其输出wdogint和wdogres通过assign连接到o_INT和o_RES。
+- 源文件：`rtl\rtl\IONet\Watchdog\wd2noc.v`。
+- 职责：AI 推断：看门狗事件到NoC的同步与转发模块，将看门狗中断和复位事件通过7级Fifo1链传递到NoC域。
+- 说明：模块接收i_drive事件及其关联的i_msg载荷，通过fifo0到fifo6的级联Fifo1链逐级传递，最终从o_drive输出，同时o_msg输出对应的载荷数据。i_free/o_free构成独立的释放握手通道，用于控制事件流的释放。utt_wd实例(cmsdk_apb_watchdog)提供看门狗中断(wdogint)和复位(o_RES)信号。
 
 ## 1. 层级位置
 
@@ -69,7 +69,7 @@ wd2noc
 - Payload：`i_drive` -> `i_msg [50:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：i_drive 事件与输入数据载荷 i_msg 同时存在，但当前上下文中未显示两者之间的直接耦合关系。
+- AI 推断：最终手册应强调该流图不完整，并指出需要 RTL 源审查来填充缺失的内部步骤和端点。
 
 
 ## 5. 内部组件与 assign 影响
@@ -90,6 +90,6 @@ wd2noc
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | unknown | `o_msg` | o_msg_reg | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | unknown | `o_INT` | wdogint | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | unknown | `o_RES` | ~o_res_sync2 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | control_path | `o_msg` | o_msg_reg | AI 推断：将内部寄存器o_msg_reg直接驱动到模块输出o_msg，构成事件载荷的数据路径 |
+| `assign_3` | unknown | `o_INT` | wdogint | AI 推断：将看门狗中断信号wdogint直接连接到模块输出o_INT |
+| `assign_4` | unknown | `o_RES` | ~o_res_sync2 | AI 推断：将看门狗复位信号o_res_sync2反相后输出到模块o_RES |

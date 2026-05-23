@@ -1,8 +1,8 @@
 # 模块 `clk_div`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/clk_div.v`。
-- 职责：AI 推断：该模块根据波特率选择信号和SPI模式配置，从系统时钟生成可配置的SPI串行时钟（sclk_out）及其完成指示信号（sclk_done）。。
-- 说明：模块仅有一个数据输入BR[2:0]用于选择分频比，输出sclk_out和sclk_done由内部计数器cnt和sclk_cnt以及控制信号nss_out、rx_only、bit8_out、DFF共同决定，表明其核心功能是SPI时钟分频与门控。
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\clk_div.v`。
+- 职责：AI 推断：该模块根据波特率选择信号和SPI模式控制信号，从系统时钟分频产生SPI主时钟和输出时钟，并生成时钟完成指示信号。。
+- 说明：模块输入为波特率选择BR和SPI控制信号nss_out、rx_only、bit8_out、DFF，输出为sclk_m、sclk_out和sclk_done。assign依赖显示sclk_m由nss_out和cnt[BR]决定，sclk_out由rx_only和bit8_out门控，sclk_done由DFF选择不同位宽的计数器比较结果。无内部事件流和实例，表明其为纯组合逻辑或简单时序分频器。
 
 ## 1. 层级位置
 
@@ -51,6 +51,6 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 :cnt[BR] | AI 推断：在片选有效（nss_out为低）时，根据BR选择内部计数器cnt的某一位作为中间时钟；片选无效时强制为低电平。 |
-| `assign_2` | unknown | `sclk_out` | rx_only ? sclk_m : (bit8_out ? sclk_m : 1'b0) | AI 推断：在仅接收模式（rx_only）或8位传输模式（bit8_out）下输出sclk_m，否则输出低电平，实现传输模式相关的时钟门控。 |
-| `assign_3` | unknown | `sclk_done` | DFF ? ((~sclk_cnt[4]) & sclk_cnt_buf) : ((~sclk_cnt[3]) & sclk_cnt_buf) | AI 推断：根据DFF配置选择sclk_cnt的第4位或第3位的下降沿（通过sclk_cnt_buf检测）产生时钟完成脉冲，指示一次SPI时钟传输结束。 |
+| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 :cnt[BR] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | unknown | `sclk_out` | rx_only ? sclk_m : (bit8_out ? sclk_m : 1'b0) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_3` | unknown | `sclk_done` | DFF ? ((~sclk_cnt[4]) & sclk_cnt_buf) : ((~sclk_cnt[3]) & sclk_cnt_buf) | 证据不足：No Semantic Layer assignment interpretation is available. |

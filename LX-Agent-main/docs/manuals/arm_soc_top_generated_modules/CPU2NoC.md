@@ -1,8 +1,8 @@
 # 模块 `CPU2NoC`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v`。
-- 职责：AI 推断：w_channelChoose 由 r_IOAddr 落在特定地址范围决定，选择 NoC 通道 0 或通道 1。。
-- 说明：在 slice 3 第 72-76 行，w_channelChoose 通过比较 r_IOAddr 与各外设地址范围产生值：当 r_IOAddr 在 UART0~UART1、PWM1~I2C0、SPI0~SPI1、UART1~PWM0、WATCHDOG~GPIO 区间时为 0，否则为 1。slice 4 第 114-117 行显示 select0 输入包含 {~w_channelChoose, r_IOAddr, r_data_32}，表明 -w_channelChoose 直接参与选择。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\CPU2NoC.v`。
+- 职责：AI 推断：CPU2NoC 是 CPU 与 NoC 之间的双向事件驱动桥接模块，负责将 CPU 的驱动事件分发至两个 NoC 通道，并将两个 NoC 通道的驱动事件合并后转发至 CPU。。
+- 说明：模块通过事件驱动接口与 CPU 和 NoC 通道交互，内部使用 fifo、mutex、selector 和 splitter 组件实现事件的路由、合并和分发。输入事件 i_drvFCPU 经过内部流处理后，最终驱动两个 NoC 通道的输出事件 o_drv2NoCChanel0 和 o_drv2NoCChanel1；而来自两个 NoC 通道的输入事件 i_drvFNoCChannel0 和 i_drvFNoCChannel1 则被合并后驱动 CPU 的输出事件 o_drv2CPU。数据路径与事件路径并行，payload 数据随事件流动。
 
 ## 1. 层级位置
 
@@ -86,7 +86,7 @@ CPU2NoC
 - Payload：`i_drvFCPU` -> `i_dataFCPU_51 [50:0]`, `o_drv2NoCChanel0` -> `o_data2NoCChanel0_51 [50:0]`, `o_drv2NoCChanel1` -> `o_data2NoCChanel1_51 [50:0]`。
 - 输出/影响：`o_drv2NoCChanel0`, `o_drv2NoCChanel1`。
 - 结构复杂度：branch=5，join=1，blocking=3。
-- AI 推断：手册应重点描述事件从输入到两个NoC通道输出及CPU存储回路的完整路径，以及各分叉/合并节点的角色
+- AI 推断：事件流携带51位数据载荷，事件有效时数据同步传播，但当前上下文未明确事件与数据的握手关系。
 
 ### `i_drvFNoCChannel0`
 
@@ -94,7 +94,7 @@ CPU2NoC
 - Payload：`i_drvFNoCChannel0` -> `i_dataFNoCChannel0_51 [50:0]`。
 - 输出/影响：`o_drv2CPU`。
 - 结构复杂度：branch=0，join=1，blocking=3。
-- AI 推断：输入事件驱动 i_drvFNoCChannel0 携带 51 位数据载荷 i_dataFNoCChannel0_51，数据与事件同步传播。
+- AI 推断：51位数据负载与事件驱动i_drvFNoCChannel0绑定，通过mutexRead传递到后续路径。
 
 ### `i_drvFNoCChannel1`
 
@@ -102,7 +102,7 @@ CPU2NoC
 - Payload：`i_drvFNoCChannel1` -> `i_dataFNoCChannel1_51 [50:0]`。
 - 输出/影响：`o_drv2CPU`。
 - 结构复杂度：branch=0，join=1，blocking=3。
-- AI 推断：输入数据载荷，与事件驱动 i_drvFNoCChannel1 关联，通过 mutexRead 传递。
+- AI 推断：输入数据信号 i_dataFNoCChannel1_51 作为事件驱动 i_drvFNoCChannel1 的伴随载荷，被送入合并器。
 
 
 ## 5. 内部组件与 assign 影响
@@ -127,5 +127,5 @@ CPU2NoC
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `o_data2CPU_51` | r_data2CPU_51 | AI 推断：将内部寄存器 r_data2CPU_51 的值赋给输出数据端口，表明 CPU 输出数据由内部状态保持。 |
-| `assign_0` | control_path | `o_free2CPU` | o_drv2CPU | AI 推断：将 o_drv2CPU 事件信号直接赋值给 o_free2CPU，表明 CPU 的释放信号与驱动事件同步。 |
+| `assign_1` | data_path | `o_data2CPU_51` | r_data2CPU_51 | AI 推断：将内部寄存器 r_data2CPU_51 的值直接输出到 CPU 数据总线。 |
+| `assign_0` | control_path | `o_free2CPU` | o_drv2CPU | AI 推断：将 CPU 输出驱动事件直接作为释放信号反馈给 CPU，实现自握手。 |

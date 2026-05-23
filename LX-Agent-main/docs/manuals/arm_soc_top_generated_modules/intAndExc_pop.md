@@ -1,8 +1,8 @@
 # 模块 `intAndExc_pop`
 
-- 源文件：`rtl/rtl/int/intAndExc_pop.v`。
-- 职责：AI 推断：中断与异常出栈调度器，负责将来自DR（数据读取器）和Top（顶层）的出栈请求分发到SP（栈指针）、WGRF（通用寄存器文件写入）和WPSR（程序状态字写入）等目标单元。。
-- 说明：模块接收两个驱动事件输入（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将请求路由到四个输出驱动事件，并携带相应的数据负载（地址、SP值、寄存器数据、PSR数据）。自由信号（free）用于握手确认。
+- 源文件：`rtl\rtl\int\intAndExc_pop.v`。
+- 职责：AI 推断：中断与异常出栈调度器，负责将来自DR（数据RAM）和Top（顶层）的出栈请求分发到SP、DR、WGRF、WPSR四个目标，并管理对应的地址/数据负载与释放信号。。
+- 说明：模块接收两个事件输入（i_driveFromDR, i_driveFromTop），通过内部组件链（Splitter、Selector、MutexMerge）和延迟单元，将事件路由到四个输出事件，并同时输出对应的地址和数据负载。释放信号（free）从各目标返回，经组件处理后输出回DR和Top，形成完整的请求-释放握手。
 
 ## 1. 层级位置
 
@@ -70,7 +70,7 @@ intAndExc_pop
 - Payload：`o_driveToDR` -> `o_addrToDR_32 [31:0]`, `o_driveToSP` -> `o_SP_32 [31:0]`, `o_driveToWGRF` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToSP`, `o_driveToDR`, `o_driveToWGRF`, `o_driveToWPSR`。
 - 结构复杂度：branch=3，join=1，blocking=1。
-- AI 推断：事件o_driveToSP携带递增后的SP地址负载。
+- AI 推断：事件流中，WGRF和WPSR路径携带数据负载，SP和DR路径也关联数据，但数据来源和选择逻辑不同。
 
 ### `i_driveFromTop`
 
@@ -78,7 +78,7 @@ intAndExc_pop
 - Payload：`o_driveToDR` -> `o_addrToDR_32 [31:0]`。
 - 输出/影响：`o_driveToDR`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：手册应重点描述MutexMerge的仲裁行为及其对输出事件时机的影响
+- AI 推断：文档应强调该流是顶层到DR的单级事件直通路径，并说明MutexMerge的仲裁角色。
 
 
 ## 5. 内部组件与 assign 影响
@@ -96,10 +96,10 @@ intAndExc_pop
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_addrToDR0_32` | i_SP_32 | AI 推断：基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。 |
-| `assign_2` | data_path | `w_addrToDR1_32` | i_SP_32 + 8 | AI 推断：基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。 |
-| `assign_3` | data_path | `w_addrToDR2_32` | i_SP_32 + 16 | AI 推断：基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。 |
-| `assign_4` | data_path | `w_addrToDR3_32` | i_SP_32 + 24 | AI 推断：基于当前SP值计算四个可能的DR读取地址，分别对应SP+0、+8、+16、+24的偏移。 |
-| `assign_5` | data_path | `o_addrToDR_32` | (r_outNum_2 == 2'b00)? w_addrToDR0_32: (r_outNum_2 == 2'b01)? w_addrToDR1_32: (r_outNum_2 == ... | AI 推断：根据内部状态r_outNum_2从四个候选地址中选择一个输出到DR，实现出栈地址的多路选择。 |
-| `assign_9` | data_path | `o_SP_32` | i_SP_32 + 32 | AI 推断：更新后的栈指针值，为当前SP值加32，表示出栈操作后栈顶指针的上移。 |
-| `assign_0` | control_path | `w_fire0` | i_driveFromTop \| w_drive2 | AI 推断：生成驱动DR的触发信号，由Top直接请求或SP路径返回事件触发。 |
+| `assign_1` | data_path | `w_addrToDR0_32` | i_SP_32 | AI 推断：根据当前出栈序号r_outNum_2，从四个预计算地址中选择一个作为DR地址输出。 |
+| `assign_2` | data_path | `w_addrToDR1_32` | i_SP_32 + 8 | AI 推断：根据当前出栈序号r_outNum_2，从四个预计算地址中选择一个作为DR地址输出。 |
+| `assign_3` | data_path | `w_addrToDR2_32` | i_SP_32 + 16 | AI 推断：根据当前出栈序号r_outNum_2，从四个预计算地址中选择一个作为DR地址输出。 |
+| `assign_4` | data_path | `w_addrToDR3_32` | i_SP_32 + 24 | AI 推断：根据当前出栈序号r_outNum_2，从四个预计算地址中选择一个作为DR地址输出。 |
+| `assign_5` | data_path | `o_addrToDR_32` | (r_outNum_2 == 2'b00)? w_addrToDR0_32: (r_outNum_2 == 2'b01)? w_addrToDR1_32: (r_outNum_2 == ... | AI 推断：根据当前出栈序号r_outNum_2，从四个预计算地址中选择一个作为DR地址输出。 |
+| `assign_9` | data_path | `o_SP_32` | i_SP_32 + 32 | AI 推断：出栈后更新SP指针，增加32字节（对应四个64位数据）。 |
+| `assign_0` | control_path | `w_fire0` | i_driveFromTop \| w_drive2 | AI 推断：生成MutexMerge的驱动使能信号，合并来自Top的直接事件和来自DR经SP路径的事件。 |

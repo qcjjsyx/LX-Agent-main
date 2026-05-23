@@ -1,8 +1,8 @@
 # 模块 `ander`
 
-- 源文件：`rtl/rtl/Execute/and.v`。
-- 职责：AI 推断：该模块执行两个32位操作数的按位与运算，并输出结果。。
-- 说明：模块仅包含一个赋值语句，将输入oprand1和oprand2按位与的结果赋给输出result，无事件或控制信号，表明其功能是纯组合逻辑的位运算单元。
+- 源文件：`rtl\rtl\Execute\and.v`。
+- 职责：AI 推断：纯组合逻辑按位与运算单元，执行两个32位操作数的按位与操作并输出结果。
+- 说明：模块仅包含一个assign语句，将oprand1和oprand2按位与后赋值给result，无时钟、无事件、无控制信号，表明其为一个纯组合逻辑的按位与运算单元
 
 ## 1. 层级位置
 
@@ -50,4 +50,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `result` | oprand1 & oprand2 | AI 推断：该赋值直接实现核心功能：将两个输入操作数按位与，驱动输出。 |
+| `assign_0` | data_path | `result` | oprand1 & oprand2 | AI 推断：将两个输入操作数按位与后驱动输出，构成模块唯一的数据路径 |

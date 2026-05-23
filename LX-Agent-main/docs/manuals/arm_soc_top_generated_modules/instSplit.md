@@ -1,8 +1,8 @@
 # 模块 `instSplit`
 
-- 源文件：`rtl/rtl/IF/instSplit.v`。
-- 职责：AI 推断：指令拆分与分发模块，将取回的64位指令包拆分为最多4条指令，并管理指令FIFO的驱动与释放。。
-- 说明：模块接收来自ICache的驱动事件(i_drvFICache)和64位指令包(i_inst_64)，根据基地址(i_basePC_32)的低两位确定有效指令起始位置，将指令包拆分为最多4条33位指令(含有效位)及其对应的PC，并通过o_instCount输出有效指令数量。拆分后的指令通过o_drv2Merge事件驱动下游合并模块。同时，模块管理一个内部FIFO(fetchFifo)来缓冲驱动事件，并处理来自合并模块的释放信号(i_freeFMerge)以生成释放回ICache的信号(o_free2ICache)。
+- 源文件：`rtl\rtl\IF\instSplit.v`。
+- 职责：AI 推断：指令拆分与分发模块，将取指单元提供的64位指令包拆分为最多4条32位指令，并管理指令计数与下一PC计算。。
+- 说明：模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位（i_basePC_32[2:1]）确定指令起始位置，将64位指令拆分为最多4个33位指令槽（含有效位），同时计算并输出归一化的下一PC（o_normNextPc_32）和有效指令计数（o_instCount）。内部通过fetchFifo（cFifo3_fetch）实现事件流同步与延迟控制。
 
 ## 1. 层级位置
 
@@ -54,7 +54,7 @@ instSplit
 - Payload：未记录。
 - 输出/影响：`o_drv2Merge`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应重点描述从 i_drvFICache 到 o_drv2Merge 的纯事件传递路径，强调三级延迟链与FIFO的流水线同步作用，并注明FIFO为唯一阻塞点。
+- AI 推断：该流仅传递事件驱动信号，无显式数据负载或控制信号参与。
 
 
 ## 5. 内部组件与 assign 影响
@@ -69,7 +69,7 @@ instSplit
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `w_state` | ~w_intExcpBranchValid & r_preState | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | control_path | `w_state` | ~w_intExcpBranchValid & r_preState | AI 推断：异常分支状态控制，决定是否保持前一个状态。 |
 | `assign_2` | data_path | `w_part1_16` | i_inst_64[15:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_3` | data_path | `w_part2_16` | i_inst_64[31:16] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_4` | data_path | `w_part3_16` | i_inst_64[47:32] | 证据不足：No Semantic Layer assignment interpretation is available. |

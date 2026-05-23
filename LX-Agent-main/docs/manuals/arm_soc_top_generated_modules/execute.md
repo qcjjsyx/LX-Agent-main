@@ -1,8 +1,8 @@
 # 模块 `execute`
 
-- 源文件：`rtl/rtl/Execute/execute.v`。
-- 职责：AI 推断：执行模块是处理器流水线的执行阶段，负责接收来自发射阶段（Launch）的指令，从通用寄存器组（GRF）和加载存储单元（LSU）获取操作数，执行算术逻辑运算，并将结果写回或发送给后续阶段。。
-- 说明：模块通过事件驱动接口接收来自发射、GRF和LSU的驱动信号，并输出驱动信号到发射、异常处理、GRF和LSU。数据输入包括来自GRF的64位数据、来自发射的207位指令数据和来自LSU的64位数据。内部包含大量用于操作数选择、运算执行和结果合并的组件，如exeSelector、adder、muller等。
+- 源文件：`rtl\rtl\Execute\execute.v`。
+- 职责：AI 推断：执行模块是处理器流水线的执行阶段核心，负责接收来自发射（Launch）、通用寄存器堆（GRF）和加载存储单元（LSU）的指令与数据，完成算术逻辑运算、移位、饱和、乘法、除法等操作，并将结果写回GRF、发送给LSU或触发异常。。
+- 说明：模块通过多个事件驱动输入（i_launchDriveToExecute_1, i_grfDriveToExecute_1, i_LsuDriveToExe_1）接收不同来源的请求，内部通过大量选择器、合并器、FIFO和运算单元（adder, shifter, muller, satQ等）构成复杂的运算数据路径，最终通过事件驱动输出（o_executeDriveToGrf_1, o_executeDriveToLsu_1, o_exeDriveToExcp_1）分发结果。
 
 ## 1. 层级位置
 
@@ -105,7 +105,7 @@ execute
 - Payload：`i_LsuDriveToExe_1` -> `i_lsuToExeData_64 [63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=2，join=8，blocking=6。
-- AI 推断：最终手册应重点描述LSU驱动事件如何通过合并器、选择器和拆分器形成多路径分发，以及数据负载的关联方式。
+- AI 推断：文档应强调该流在regMerge处终止，未到达模块输出，且数据路径与事件控制路径分离。
 
 ### `i_grfDriveToExecute_1`
 
@@ -113,7 +113,7 @@ execute
 - Payload：`i_grfDriveToExecute_1` -> `i_grfToExecuteData_64 [63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=3，join=7，blocking=5。
-- AI 推断：64 位数据信号 i_grfToExecuteData_64 作为 GRF 驱动事件的伴随载荷，随事件流传播。
+- AI 推断：64位数据信号 i_grfToExecuteData_64 作为驱动事件 i_grfDriveToExecute_1 的伴随载荷，通过 grfResSplitter 传递。
 
 ### `i_launchDriveToExecute_1`
 
@@ -121,7 +121,7 @@ execute
 - Payload：`i_launchDriveToExecute_1` -> `i_launchDataToExe_207 [206:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=7，join=18，blocking=16。
-- AI 推断：数据信号与驱动事件并行输入，数据解包为后续所有运算提供指令上下文
+- AI 推断：输入数据总线i_launchDataToExe_207作为伴随载荷，与驱动事件i_launchDriveToExecute_1同步到达，为流中所有组件提供指令解码和运算所需的数据。
 
 ### `i_launchDrive_1`
 
@@ -129,7 +129,7 @@ execute
 - Payload：`i_launchDrive_1` -> `i_launchDataToExe_207 [206:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：207位载荷i_launchDataToExe_207是此流中唯一的控制与数据载体，其解包结果直接驱动执行阶段的所有后续操作。
+- AI 推断：手册应重点描述 i_launchDataToExe_207 的位域定义及其到内部线网的映射关系，这是理解执行单元数据路径的基础。
 
 
 ## 5. 内部组件与 assign 影响
@@ -156,11 +156,11 @@ execute
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `{w_c_1,w_addtype1_3,w_msr_1,w_bfi_1,w_bfc_1,w_sbfx_1,w_ubfx_1,w_msbit_5,w_lsbit_5, w_isMultiLS_1,w_n_4,w_registerList_16, w_pc_32, w_load_1, w_loadStoreWidth_2, w_loadSign_1, w_isLS_1, w_writeRd_1, w_dHi_4, w_dLo_4, w_shift_3, w_P_1, w_W_1, w_U_1, w_S_1, w_grfFlag_1, w_opNot_1, w_isXt_1, w_shiftC_1, w_shiftS_1, w_shiftNum_1, w_revType_2, w_satqS_1, w_mulDivS_1, w_insPath_8, w_op3_32, w_op2_32, w_op1_32}` | i_launchDataToExe_207 | AI 推断：将207位发射数据解析为多个控制信号和操作数。 |
+| `assign_1` | control_path | `{w_c_1,w_addtype1_3,w_msr_1,w_bfi_1,w_bfc_1,w_sbfx_1,w_ubfx_1,w_msbit_5,w_lsbit_5, w_isMultiLS_1,w_n_4,w_registerList_16, w_pc_32, w_load_1, w_loadStoreWidth_2, w_loadSign_1, w_isLS_1, w_writeRd_1, w_dHi_4, w_dLo_4, w_shift_3, w_P_1, w_W_1, w_U_1, w_S_1, w_grfFlag_1, w_opNot_1, w_isXt_1, w_shiftC_1, w_shiftS_1, w_shiftNum_1, w_revType_2, w_satqS_1, w_mulDivS_1, w_insPath_8, w_op3_32, w_op2_32, w_op1_32}` | i_launchDataToExe_207 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_2` | control_path | `o_grfFlag_1` | w_grfFlag_1 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_38` | data_path | `w_lsuR1Data_32` | w_rs1Addr_4 == w_preRdHiAddr_4 ? i_lsuToExeData_64[63:32] : i_lsuToExeData_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_39` | data_path | `w_lsuR2Data_32` | w_rs2Addr_4 == w_preRdHiAddr_4 ? i_lsuToExeData_64[63:32] : i_lsuToExeData_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_53` | data_path | `o_exeToLaunchData_96` | {w_nzcv_4,{28{1'b0}},r_resMutexMergeToFinalWaitMergeData_64} | AI 推断：构造发送到发射阶段的结果数据，包含NZCV标志和64位运算结果。 |
+| `assign_53` | data_path | `o_exeToLaunchData_96` | {w_nzcv_4,{28{1'b0}},r_resMutexMergeToFinalWaitMergeData_64} | AI 推断：将最终运算结果（64位）与条件标志位（nzcv）拼接，形成96位数据返回给发射阶段，用于更新流水线状态。 |
 | `assign_56` | data_path | `w_address_32` | w_P_1 == 1'b1 ? o_executeDataToLsu_163[31:0] : o_executeDataToLsu_163[63:32] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_58` | data_path | `o_exeToExcpData_36` | {w_pc_32,w_excNum_4} | AI 推断：构造发送到异常处理单元的数据，包含PC和异常编号。 |
-| `assign_0` | control_path | `o_wen_2` | i_wen_2 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_58` | data_path | `o_exeToExcpData_36` | {w_pc_32,w_excNum_4} | AI 推断：将当前PC值与异常编号拼接，形成36位异常数据输出，用于触发异常处理。 |
+| `assign_0` | control_path | `o_wen_2` | i_wen_2 | AI 推断：写使能信号直通，将输入的写使能直接传递到输出，用于控制后续模块的写操作。 |

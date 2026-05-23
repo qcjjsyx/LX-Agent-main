@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "adder64",
-  "input_hash": "33ae49cbd92bba573eeed53358104c7176f1eaf3e3b12ebed28513bbcb73186a",
+  "input_hash": "aa59b9bf5860f9f4688d57fa8be9c7927f2eb1863f44173b5b290a2328246ea3",
   "source_context": "ai_context/modules/adder64.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/Execute/adder64.v",
+      "source": "rtl\\rtl\\Execute\\adder64.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/Execute/adder64.v",
+        "rtl_file": "rtl\\rtl\\Execute\\adder64.v",
         "parser_module": "modules/adder64.json"
       }
     }
@@ -62,9 +62,9 @@
         "type": "module",
         "module": "adder64"
       },
-      "summary": "64位有符号/无符号加法器，根据符号选择信号输出结果和溢出标志",
+      "summary": "64位加法器，支持有符号/无符号加法模式选择，并生成进位和溢出标志",
       "subject": "adder64",
-      "explanation": "模块通过assign依赖实现无符号和有符号两种加法路径，由symbol信号选择最终结果，并分别计算carry_out和overflow标志，表明其核心角色是支持双模式算术加法",
+      "explanation": "模块通过assign依赖实现双模式加法：无符号模式（symbol=1）使用unsignedSum，有符号模式（symbol=0）使用signedSum，同时根据模式生成carry_out和overflow标志",
       "signals": [
         "oprand1",
         "oprand2",
@@ -93,16 +93,17 @@
         "type": "module",
         "module": "adder64"
       },
-      "summary": "同时计算无符号和有符号64位加法结果，通过symbol信号选择输出",
+      "summary": "根据symbol信号选择无符号或有符号64位加法，输出结果、进位和溢出标志",
       "subject": "双模式加法运算",
-      "explanation": "assign依赖显示unsignedSum和signedSum分别对应无符号和有符号加法路径，result由symbol选择，carry_out仅对无符号有效，overflow仅对有符号有效，表明模块结构上并行计算两种模式",
+      "explanation": "无符号模式（symbol=1）计算unsignedSum[64:0]并输出carry_out=unsignedSum[64]；有符号模式（symbol=0）计算signedSum[63:0]并检测溢出条件：oprand1[63]==oprand2[63]且oprand1[63]!=result[63]",
       "signals": [
-        "unsignedSum",
-        "signedSum",
+        "oprand1",
+        "oprand2",
+        "carry_in",
+        "symbol",
         "result",
         "carry_out",
-        "overflow",
-        "symbol"
+        "overflow"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -124,17 +125,17 @@
         "module": "adder64"
       },
       "subject": "unsignedSum",
-      "summary": "无符号加法中间结果，包含进位位用于carry_out输出",
-      "explanation": "通过{1'b0, oprand1} + {1'b0, oprand2} + carry_in扩展至65位，最高位用于carry_out判断，表明该信号是carry_out的驱动源",
+      "summary": "无符号加法中间结果，位宽65位，用于无符号模式的结果和进位输出",
+      "explanation": "将oprand1和oprand2扩展为65位（高位补0）后与carry_in相加，结果的高位（bit64）作为carry_out，低位（bits63:0）作为无符号模式下的result",
       "signals": [
         "unsignedSum",
         "oprand1",
         "oprand2",
-        "carry_in",
-        "carry_out"
+        "carry_in"
       ],
       "related_assignments": [
         "0",
+        "2",
         "3"
       ],
       "doc_priority": "secondary",
@@ -157,20 +158,17 @@
         "module": "adder64"
       },
       "subject": "signedSum",
-      "summary": "有符号加法中间结果，通过符号扩展处理有符号溢出",
-      "explanation": "使用$signed({oprand1[63], oprand1})进行符号扩展后加法，结果用于有符号模式下的result选择，但overflow计算独立于signedSum，表明溢出检测基于操作数和结果符号位",
+      "summary": "有符号加法中间结果，位宽65位，用于有符号模式的结果",
+      "explanation": "将oprand1和oprand2符号扩展为65位后与carry_in进行有符号加法，结果取低64位作为有符号模式下的result",
       "signals": [
         "signedSum",
         "oprand1",
         "oprand2",
-        "carry_in",
-        "result",
-        "overflow"
+        "carry_in"
       ],
       "related_assignments": [
         "1",
-        "2",
-        "4"
+        "2"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
@@ -192,8 +190,8 @@
         "module": "adder64"
       },
       "subject": "overflow",
-      "summary": "有符号溢出标志，基于操作数和结果符号位比较",
-      "explanation": "当symbol为0（有符号模式）时，检测oprand1[63] == oprand2[63]且oprand1[63] != result[63]，表明溢出判断遵循标准有符号算术规则，与signedSum中间结果无关",
+      "summary": "有符号模式下的溢出标志，基于操作数和结果的符号位检测",
+      "explanation": "仅在symbol=0（有符号模式）时有效，检测条件为两个操作数符号相同但结果符号不同，表示有符号加法溢出",
       "signals": [
         "overflow",
         "oprand1",
@@ -204,7 +202,7 @@
       "related_assignments": [
         "4"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -223,16 +221,10 @@
         "type": "module",
         "module": "adder64"
       },
-      "summary": "两个64位操作数输入和一个64位结果输出，构成纯组合逻辑加法器接口",
-      "subject": "数据输入输出组",
-      "explanation": "无事件输入输出，无控制信号（除symbol选择外），表明接口设计为纯数据驱动，结果直接由操作数和carry_in组合产生",
+      "summary": "两个64位数据输入oprand1和oprand2作为加法操作数，无事件或控制信号，纯组合逻辑运算",
+      "subject": "加法操作数接口",
+      "explanation": "接口仅包含数据输入和输出，无时钟、复位或握手信号，表明adder64为纯组合逻辑模块，运算结果直接由输入决定",
       "signals": [
-        "oprand1",
-        "oprand2",
-        "result",
-        "carry_in"
-      ],
-      "related_payload": [
         "oprand1",
         "oprand2",
         "result"
@@ -256,9 +248,9 @@
         "type": "module",
         "module": "adder64"
       },
-      "summary": "文档应重点说明symbol信号如何控制无符号/有符号模式，以及carry_out和overflow的语义差异",
-      "subject": "双模式选择与标志输出",
-      "explanation": "模块核心语义在于symbol选择两种加法路径，carry_out仅对无符号有效，overflow仅对有符号有效，且overflow计算独立于signedSum中间结果，需明确解释避免误解",
+      "summary": "文档应重点说明symbol信号如何控制无符号/有符号模式切换，以及两种模式下carry_out和overflow的含义差异",
+      "subject": "双模式加法选择机制",
+      "explanation": "模块核心语义在于symbol驱动的模式选择，无符号模式关注进位输出，有符号模式关注溢出检测，两种模式的结果计算路径不同",
       "signals": [
         "symbol",
         "carry_out",
@@ -282,27 +274,11 @@
   "evidence_gaps": [
     {
       "field": "carry_in",
-      "reason": "carry_in未在接口列表中明确声明，但出现在assign依赖中，需确认其是否为模块端口或内部信号",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/adder64.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder64.json"
-        }
-      ]
+      "reason": "上下文未明确carry_in的来源或连接关系，仅出现在assign依赖中，需RTL源确认其驱动源"
     },
     {
       "field": "symbol",
-      "reason": "symbol未在接口列表中明确声明，但出现在assign依赖中，需确认其是否为模块端口或内部信号",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/adder64.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder64.json"
-        }
-      ]
+      "reason": "上下文未明确symbol信号的来源或连接关系，仅出现在assign依赖中，需RTL源确认其驱动源"
     }
   ]
 }

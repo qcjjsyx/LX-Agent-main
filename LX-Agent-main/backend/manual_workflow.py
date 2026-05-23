@@ -501,11 +501,7 @@ def _update_state_from_user_input(state, user_input):
     _normalize_evidence_selection(state)
 
     parser_dir = _select_parser_dir(state["project_root"])
-    artifact_base = _artifact_base_from_parser(state["project_root"], parser_dir)
-    state["parser_dir"] = str(parser_dir)
-    if state.get("top_module"):
-        state["knowledge_dir"] = str(artifact_base / "knowledge_ir" / state["top_module"])
-        state["manual_context_dir"] = str(artifact_base / "manual_context" / state["top_module"])
+    _refresh_artifact_paths(state, parser_dir)
 
 
 def _extract_params(text):
@@ -767,6 +763,15 @@ def _artifact_base_from_parser(project_root, parser_dir):
     return Path(project_root)
 
 
+def _refresh_artifact_paths(state, parser_dir=None):
+    parser_dir = Path(parser_dir) if parser_dir is not None else _select_parser_dir(state["project_root"])
+    artifact_base = _artifact_base_from_parser(state["project_root"], parser_dir)
+    state["parser_dir"] = str(parser_dir)
+    if state.get("top_module"):
+        state["knowledge_dir"] = str(artifact_base / "knowledge_ir" / state["top_module"])
+        state["manual_context_dir"] = str(artifact_base / "manual_context" / state["top_module"])
+
+
 def _parser_artifacts_ready(state):
     parser_dir = _select_parser_dir(state["project_root"])
     required_items = [
@@ -785,6 +790,7 @@ def _run_parser_stage(state, event_logger=None):
 
     ready, parser_dir, missing = _parser_artifacts_ready(state)
     if ready and not _should_force_stage(state, "parser"):
+        _refresh_artifact_paths(state, parser_dir)
         _log_event(
             event_logger,
             "tool_skip",
@@ -851,6 +857,9 @@ def _run_parser_stage(state, event_logger=None):
         result_preview=_clip_text(result, 1200),
     )
     _mark_stage_done(state, "parser")
+    ready, parser_dir, missing = _parser_artifacts_ready(state)
+    if ready:
+        _refresh_artifact_paths(state, parser_dir)
     state["stage"] = "knowledge"
     return _format_reply(
         state,

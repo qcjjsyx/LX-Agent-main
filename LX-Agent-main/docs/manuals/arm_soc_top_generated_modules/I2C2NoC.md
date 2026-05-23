@@ -1,8 +1,8 @@
 # 模块 `I2C2NoC`
 
-- 源文件：`rtl/rtl/IONet/IIC/I2C2NoC.v`。
-- 职责：AI 推断：该模块作为I2C主控制器（mi2cv2）与片上网络（NoC）之间的桥接与数据同步模块，负责将I2C总线事件转换为NoC可识别的驱动事件，并管理数据路径的延迟与同步。。
-- 说明：模块通过cfifo3_0接收来自NoC的驱动事件i_drvFNoc，经过一系列延迟单元（delay1至delay18）和FIFO（cfifo1、cfifo2）构成的流水线，最终输出驱动事件o_drv2Noc到NoC。同时，模块内部实例化I2C主控制器U1（mi2cv2），其数据输出（w_rdata）被组合到输出数据o_data2Noc_51中。这表明模块的核心作用是同步和桥接I2C与NoC之间的控制与数据流。
+- 源文件：`rtl\rtl\IONet\IIC\I2C2NoC.v`。
+- 职责：AI 推断：该模块作为I2C主控制器（mi2cv2）与片上网络（NoC）之间的桥接与事件驱动接口适配器。。
+- 说明：模块将来自NoC的驱动事件（i_drvFNoc）及其关联的51位数据（i_dataFNoc_51）通过内部FIFO和延迟链进行同步与整形，最终生成输出驱动事件（o_drv2Noc）和输出数据（o_data2Noc_51）。同时，它还处理空闲信号（i_freeFNoc, o_free2Noc）以管理数据流控制。核心组件是I2C控制器实例U1（mi2cv2）和三个FIFO实例（cfifo1, cfifo2, cfifo3_0）。
 
 ## 1. 层级位置
 
@@ -65,7 +65,7 @@ I2C2NoC
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
 - 输出/影响：`o_drv2Noc`。
 - 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：最终手册应强调事件流是纯控制路径，数据负载的构成由独立的赋值逻辑处理。
+- AI 推断：最终手册应重点描述事件从i_drvFNoc到o_drv2Noc的串行传播路径，以及FIFO和延迟链的角色，同时说明数据载荷的拼接关系。
 
 
 ## 5. 内部组件与 assign 影响
@@ -83,5 +83,5 @@ I2C2NoC
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | control_path | `o_free2Noc` | w_freeFfifo2 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `o_data2Noc_51` | {r_dataFNoc[50],r_dataFNoc[49:42],r_middle_24,RDATA,r_last_10} | AI 推断：该赋值将I2C主控制器的数据输出（w_rdata）与输入数据（r_dataFNoc）的特定字段组合，形成最终的NoC输出数据包。 |
+| `assign_2` | data_path | `o_data2Noc_51` | {r_dataFNoc[50],r_dataFNoc[49:42],r_middle_24,RDATA,r_last_10} | AI 推断：该赋值将多个内部数据片段拼接成最终的51位输出数据，这些片段包括来自I2C控制器（U1）的读取数据（RDATA）和经过延迟/处理的数据。 |
 | `assign_0` | unknown | `RESETN` | rst | 证据不足：No Semantic Layer assignment interpretation is available. |

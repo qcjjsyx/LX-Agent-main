@@ -1,8 +1,8 @@
 # 模块 `multiStoreDataUpate`
 
-- 源文件：`rtl/rtl/Lsu/multiStoreDataUpate.v`。
-- 职责：AI 推断：该模块负责根据输入地址和寄存器列表，生成多存储操作所需的下一地址、下一寄存器列表、数据写入使能以及写回控制信号。。
-- 说明：模块接收32位地址和16位寄存器列表，输出更新后的地址、寄存器列表、数据写入使能、写回使能以及结束标志。赋值依赖显示地址的低3位用于计算计数，寄存器列表用于生成结束标志，表明这是一个状态更新和地址生成逻辑。
+- 源文件：`rtl\rtl\Lsu\multiStoreDataUpate.v`。
+- 职责：AI 推断：该模块负责管理多存储（multi-store）操作中数据更新的地址、寄存器列表和写使能控制，并生成下一拍的状态信息。。
+- 说明：模块接收当前地址和寄存器列表，输出下一地址、下一寄存器列表、数据写使能、高低字节数据以及结束标志和写回使能。其内部通过组合逻辑根据地址低位和寄存器列表状态计算下一拍的控制信号，表明其核心作用是驱动多存储操作的迭代更新流程。
 
 ## 1. 层级位置
 
@@ -53,8 +53,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `o_dHi_4` | r_k_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_2` | unknown | `o_dLo_4` | r_j_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：根据num生成写回使能，控制写回操作的粒度。 |
-| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：当寄存器列表为空时，输出结束标志，指示多存储操作完成。 |
+| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：根据存储数量（num）生成写回使能信号，控制后续写回操作的粒度。 |
+| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：当寄存器列表为空时，断言结束标志，指示多存储操作完成。 |
 | `assign_5` | data_path | `o_nextAddress_32` | r_nextAddress_32 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_6` | control_path | `o_dataRoutWen_8` | num == 2'b10 ? 8'b1111_1111 : (num==2'b01 ? (r_count_2 == 2'b10 ? 8'b0000_1111 : 8'b1111_0000... | AI 推断：根据输入地址的低3位，生成初始计数，用于控制数据写入使能的生成。 |
+| `assign_6` | control_path | `o_dataRoutWen_8` | num == 2'b10 ? 8'b1111_1111 : (num==2'b01 ? (r_count_2 == 2'b10 ? 8'b0000_1111 : 8'b1111_0000... | AI 推断：根据存储数量（num）生成写回使能信号，控制后续写回操作的粒度。 |
 | ... | ... | ... | ... | 其余 2 条 assign 省略 |

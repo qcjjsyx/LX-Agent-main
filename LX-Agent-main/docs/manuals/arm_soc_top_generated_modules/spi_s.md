@@ -1,8 +1,8 @@
 # 模块 `spi_s`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/spi_s.v`。
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\spi_s.v`。
 - 职责：AI 推断：SPI从机核心数据收发与CRC校验控制模块。
-- 说明：该模块作为SPI从机，负责接收主机发送的数据(data_in)并输出响应数据(data_out)，同时支持CRC校验功能(TXCRC输入)，通过内部状态机控制发送(tx)、接收(rx_done)和CRC计算(crc_done)的时序。
+- 说明：该模块作为SPI从机，负责接收主机发送的数据并输出响应数据，同时支持可选的CRC校验功能。通过内部状态机控制发送、接收和CRC计算的完成信号，实现与主机的同步通信。
 
 ## 1. 层级位置
 
@@ -52,8 +52,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `tx` | rxonly ? 1'b0 :(CPHA ? tx_reg :((tx_cnt == 4'b0) ? tx_reg0 : tx_reg)) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | unknown | `rx_done` | DFF ? ((~rx_cnt[3]) & cnt_buf_rx) : ((~rx_cnt[2]) & cnt_buf_rx) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | unknown | `tx_done` | DFF ? ((~tx_cnt[3]) & cnt_buf_tx) : ((~tx_cnt[2]) & cnt_buf_tx) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | unknown | `sclk_rise` | S_en ? (~sclk_buf) & sclk : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | unknown | `crc_done` | DFF ? ((~crc_cnt[3]) & cnt_buf_crc) : ((~crc_cnt[2]) & cnt_buf_crc) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | unknown | `rx_done` | DFF ? ((~rx_cnt[3]) & cnt_buf_rx) : ((~rx_cnt[2]) & cnt_buf_rx) | AI 推断：接收、发送和CRC计算完成标志，由DFF配置决定计数阈值。 |
+| `assign_3` | unknown | `tx_done` | DFF ? ((~tx_cnt[3]) & cnt_buf_tx) : ((~tx_cnt[2]) & cnt_buf_tx) | AI 推断：接收、发送和CRC计算完成标志，由DFF配置决定计数阈值。 |
+| `assign_4` | unknown | `sclk_rise` | S_en ? (~sclk_buf) & sclk : 1'b0 | AI 推断：SPI时钟上升沿检测信号，仅在使能时有效。 |
+| `assign_5` | unknown | `crc_done` | DFF ? ((~crc_cnt[3]) & cnt_buf_crc) : ((~crc_cnt[2]) & cnt_buf_crc) | AI 推断：接收、发送和CRC计算完成标志，由DFF配置决定计数阈值。 |
 | `assign_0` | unknown | `busy` | enable \| !TXE \| crc_en | 证据不足：No Semantic Layer assignment interpretation is available. |

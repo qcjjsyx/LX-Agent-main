@@ -1,8 +1,8 @@
 # 模块 `socmem`
 
-- 源文件：`rtl/rtl/memory/socmem.v`。
-- 职责：AI 推断：片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并通过事件驱动流与IF和LSU单元交互。。
-- 说明：模块通过事件输入i_driveFrmIf和i_driveFrmLsu接收来自IF和LSU的驱动请求，内部包含ICache、DCache、ROM和stack实例，并通过事件输出o_driveNextToIf和o_driveNextToLsu返回处理完成信号。事件流经过Fifo1族组件和延迟链，表明存在流水线或握手机制。
+- 源文件：`rtl\rtl\memory\socmem.v`。
+- 职责：AI 推断：片上存储器子系统，仲裁并路由来自IF和LSU的访存请求到DCache、ICache、ROM和Stack。。
+- 说明：模块通过事件驱动接口接收IF和LSU的驱动信号，内部使用Fifo1组件和延迟链进行请求排队和时序对齐，最终将数据返回给请求源。地址范围决定数据源选择。
 
 ## 1. 层级位置
 
@@ -67,7 +67,7 @@ socmem
 - Payload：未记录。
 - 输出/影响：`o_driveNextToIf`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：最终手册应重点解释事件流路径、FIFO 缓冲作用，以及输出事件与空闲信号之间的耦合关系。
+- AI 推断：该驱动流将输入事件 i_driveFrmIf 经过一个 FIFO 缓冲和三级延迟链后，转换为输出事件 o_driveNextToIf。
 
 ### `i_driveFrmLsu`
 
@@ -75,7 +75,7 @@ socmem
 - Payload：未记录。
 - 输出/影响：`o_driveNextToLsu`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：该流为纯事件驱动流，无有效载荷信号
+- AI 推断：该流传递的是纯驱动事件，没有显式的数据负载。
 
 
 ## 5. 内部组件与 assign 影响
@@ -91,7 +91,7 @@ socmem
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | control_path | `o_freeToIf` | o_driveNextToIf | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | control_path | `o_idataR_65` | (routeSelect==1) ? {o_idataR_t_64,r_iaddrcarry} : {w_idataROM_64,r_iaddrcarry} | AI 推断：根据routeSelect选择指令数据输出源，routeSelect为1时来自ICache，否则来自ROM。 |
-| `assign_4` | control_path | `o_freeToLsu` | o_driveNextToLsu | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | data_path | `o_ddataR_64` | (r_daddress_32<32'h00041200) ? o_ddataR_t_64 : o_ddataR_tStack_64 | AI 推断：根据数据地址r_daddress_32选择数据输出源，地址低于0x41200时来自DCache，否则来自stack。 |
+| `assign_2` | control_path | `o_freeToIf` | o_driveNextToIf | AI 推断：空闲信号直接跟随对应的下一个驱动事件输出，表示请求处理完成。 |
+| `assign_3` | control_path | `o_idataR_65` | (routeSelect==1) ? {o_idataR_t_64,r_iaddrcarry} : {w_idataROM_64,r_iaddrcarry} | AI 推断：指令读数据多路选择器，根据routeSelect信号在ICache数据和ROM数据之间选择，并附加地址进位位。 |
+| `assign_4` | control_path | `o_freeToLsu` | o_driveNextToLsu | AI 推断：空闲信号直接跟随对应的下一个驱动事件输出，表示请求处理完成。 |
+| `assign_5` | data_path | `o_ddataR_64` | (r_daddress_32<32'h00041200) ? o_ddataR_t_64 : o_ddataR_tStack_64 | AI 推断：数据读多路选择器，根据地址范围在DCache数据和Stack数据之间选择。 |

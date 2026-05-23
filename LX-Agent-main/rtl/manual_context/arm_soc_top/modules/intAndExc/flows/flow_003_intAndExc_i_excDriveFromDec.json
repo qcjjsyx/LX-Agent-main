@@ -380,8 +380,8 @@
         "w_cmpMerDrive_1"
       ],
       "role_in_flow": {
-        "value": "异常/中断事件合并器，将来自解码、执行、取指、 LSU 的异常事件和取指中断事件合并为单一事件流。",
-        "explanation": "cmpMerge 是 cWaitMerge5_180b_int 类型，接收 5 个输入驱动（i_excDriveFromDec、i_excDriveFromExe、i_excDriveFromIF、i_excDriveFromLsu、i_intDriveFromIF）和 1 个反馈驱动（w_intAndExeSeleDriveToMe），输出 w_cmpMerDrive_1。它作为流的第一个合并点，仲裁多个源的事件。",
+        "value": "异常与中断驱动事件的仲裁合并器，将来自解码、执行、取指、 LSU 的异常驱动和 IF 的中断驱动合并为单一事件流。",
+        "explanation": "cmpMerge 是 cWaitMerge5_180b_int 类型的合并器，接收五个输入驱动（i_excDriveFromDec, i_excDriveFromExe, i_excDriveFromIF, i_excDriveFromLsu, i_intDriveFromIF）以及一个来自 intAndExeSele 的反馈驱动（w_intAndExeSeleDriveToMe | o_DriveToIf_1），输出合并后的驱动 w_cmpMerDrive_1。它作为事件流的第一个仲裁点，决定哪个驱动事件可以继续传播。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -411,6 +411,9 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/intAndExc.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
       },
@@ -462,8 +465,8 @@
         "w_intSeleDrive_1"
       ],
       "role_in_flow": {
-        "value": "事件选择/拆分器，在异常事件流和堆栈指针（SR）驱动之间进行选择，并拆分出反馈路径和主路径。",
-        "explanation": "intAndExeSele 是 cSelector2_181b_int 类型，输入 w_SRDrive_1（堆栈指针驱动）和 w_cmpMerDrive1_1（延迟后的合并事件），输出 w_intAndExeSeleDriveToMe（反馈至 cmpMerge）和 w_intSeleDrive_1（主路径）。它根据选择条件决定事件流向。",
+        "value": "事件选择/拆分器，根据输入驱动选择将事件路由到内部反馈路径或中断选择路径。",
+        "explanation": "intAndExeSele 是 cSelector2_181b_int 类型的选择拆分器，接收来自 SRMerge 的 w_SRDrive_1 和经过延迟的 w_cmpMerDrive1_1 作为输入。它输出两个驱动：w_intAndExeSeleDriveToMe（反馈回 cmpMerge）和 w_intSeleDrive_1（进入中断选择路径）。该组件实现了事件流中的关键分支点，决定事件是继续向输出端传播还是反馈回合并器。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -490,6 +493,9 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/intAndExc.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
       },
@@ -567,8 +573,8 @@
         "w_vecDriveToDataRoute_1"
       ],
       "role_in_flow": {
-        "value": "事件拆分器，将选择后的事件流拆分为写回合并路径和数据路由路径。",
-        "explanation": "preStackSpli 是 cSplitter2_1b 类型，输入 w_intSeleDrive1_1（延迟后的选择事件），输出 w_preSSpliDriToWbMer_1（至 WbMerge）和 w_vecDriveToDataRoute_1（至 WbtopcMerge）。它实现事件的分发决策。",
+        "value": "中断选择路径上的事件拆分器，将事件分流至写回合并路径和数据路由路径。",
+        "explanation": "preStackSpli 是 cSplitter2_1b 类型的拆分器，接收来自 preDelay0 延迟后的 w_intSeleDrive1_1。它输出两个驱动：w_preSSpliDriToWbMer_1（进入 WbMerge）和 w_vecDriveToDataRoute_1（进入 WbtopcMerge）。该组件实现了事件在中断处理路径上的进一步分支，分别导向写回逻辑和直接数据路由。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -594,6 +600,9 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/intAndExc.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
       },
@@ -736,8 +745,8 @@
         "w_outMerDriToDR_1"
       ],
       "role_in_flow": {
-        "value": "异常出栈模块，处理异常事件的出栈操作，生成写 WGRF 和 WPSR 的输出事件及数据。",
-        "explanation": "u_outStack 是 intAndExc_pop 类型，输入 w_DRSeleDriToWbSpli_1（来自数据路由选择器）和 w_inOutDriToOutMer_1（来自 inOutSele），输出 o_driveToWGRF_1、o_driveToWPSR_1、w_driveFromoutStackSP（堆栈指针反馈）和 w_outMerDriToDR_1（至 dataRoteMerge）。它作为流的最终处理节点之一。",
+        "value": "异常出栈处理模块，负责将异常事件转换为写通用寄存器文件和写处理器状态寄存器的输出驱动。",
+        "explanation": "u_outStack 是 intAndExc_pop 类型的模块实例，接收来自 inOutSele 的 w_inOutDriToOutMer_1 和来自 DRSelector 的 w_DRSeleDriToWbSpli_1。它输出 o_driveToWGRF_1 和 o_driveToWPSR_1 两个最终输出驱动，以及 w_driveFromoutStackSP（反馈回 SRMerge）和 w_outMerDriToDR_1（进入 dataRoteMerge）。该组件是异常事件流中产生最终写回输出的关键节点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -766,6 +775,9 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/intAndExc.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
       },
@@ -1052,8 +1064,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "异常事件驱动携带解码阶段的 PC 和异常编号数据，用于后续异常处理。",
-    "explanation": "i_excDriveFromDec 事件与 i_decPCAndNum_36 数据相关联，通过 assign 4 拆分为 w_decPC_32 和 w_decExcNum_4，这些数据在流中用于向量地址计算和异常处理。",
+    "value": "解码异常驱动事件携带 PC 和异常编号作为有效载荷，驱动流与数据流紧密耦合。",
+    "explanation": "输入事件 i_excDriveFromDec 的伴随有效载荷是 i_decPCAndNum_36，包含解码 PC 和异常编号。这些数据在流中通过赋值 4 被拆分，并用于后续的向量地址计算（赋值 13）和栈指针操作（赋值 17）。事件驱动流控制着这些数据的传播路径，而数据内容则决定了异常处理的具体行为。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -1070,7 +1082,9 @@
     "instances": [],
     "related_flows": [],
     "related_assignments": [
-      "4"
+      "4",
+      "13",
+      "17"
     ],
     "requires_rtl_source_review": false,
     "review_status": "ready",
@@ -1081,12 +1095,15 @@
     "semantic_evidence": [
       {
         "source": "knowledge_ir/modules/intAndExc.json"
+      },
+      {
+        "source": "parser_pipeline_rtl/modules/intAndExc.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "数据路由输出事件携带 104 位数据，包含异常处理结果。",
-        "explanation": "o_driveToDataRoute_1 事件与 o_dataRouteData_104 数据相关联，数据宽度为 104 位，由 dataRoteMerge 输出。",
+        "value": "三个输出端点各自携带特定格式的有效载荷数据，分别对应数据路由、写通用寄存器和写处理器状态寄存器。",
+        "explanation": "o_driveToDataRoute_1 携带 104 位数据 o_dataRouteData_104，o_driveToWGRF_1 携带 72 位数据 o_dataToWGRF_72，o_driveToWPSR_1 携带 32 位数据 o_dataToWPSR_32。这些有效载荷在流中通过 dataRoteMerge 和 u_outStack 等组件与事件驱动同步生成，体现了事件驱动与数据载荷的并行传播关系。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1096,63 +1113,9 @@
         "doc_priority": "primary",
         "signals": [
           "o_driveToDataRoute_1",
-          "o_dataRouteData_104"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:intAndExc:flow:flow_003_intAndExc_i_excDriveFromDec",
-          "ev:intAndExc:semantic_flow:flow_003_intAndExc_i_excDriveFromDec"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/intAndExc.json"
-          }
-        ]
-      },
-      {
-        "value": "写通用寄存器文件输出事件携带 72 位数据。",
-        "explanation": "o_driveToWGRF_1 事件与 o_dataToWGRF_72 数据相关联，数据宽度为 72 位，由 u_outStack 输出。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:intAndExc:flow_003_intAndExc_i_excDriveFromDec:data_control_effect:003",
-        "doc_priority": "primary",
-        "signals": [
+          "o_dataRouteData_104",
           "o_driveToWGRF_1",
-          "o_dataToWGRF_72"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:intAndExc:flow:flow_003_intAndExc_i_excDriveFromDec",
-          "ev:intAndExc:semantic_flow:flow_003_intAndExc_i_excDriveFromDec"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/intAndExc.json"
-          }
-        ]
-      },
-      {
-        "value": "写处理器状态寄存器输出事件携带 32 位数据。",
-        "explanation": "o_driveToWPSR_1 事件与 o_dataToWPSR_32 数据相关联，数据宽度为 32 位，由 u_outStack 输出。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:intAndExc:flow_003_intAndExc_i_excDriveFromDec:data_control_effect:004",
-        "doc_priority": "primary",
-        "signals": [
+          "o_dataToWGRF_72",
           "o_driveToWPSR_1",
           "o_dataToWPSR_32"
         ],
@@ -1168,12 +1131,15 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/intAndExc.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
       },
       {
-        "value": "文档应重点描述异常事件从解码到三个输出端点的完整路径，包括分支点（intAndExeSele、preStackSpli、inOutSele）和合并点（cmpMerge、WbMerge、WbtopcMerge、dataRoteMerge、SRMerge）。",
-        "explanation": "流包含多个分支和合并点，每个点决定事件的分发和汇聚。文档应清晰说明每个分支/合并点的选择条件和数据路径，以及延迟单元（Delay3、Delay1、preDelay0）的时序作用。",
+        "value": "手册应重点描述异常事件在 cmpMerge、intAndExeSele、preStackSpli、inOutSele 等组件处的分支与合并决策逻辑。",
+        "explanation": "该驱动流包含多个分支点（intAndExeSele, preStackSpli, inOutSele, u_outStack）和合并点（cmpMerge, WbMerge, WbtopcMerge, dataRoteMerge, SRMerge），这些节点决定了异常事件的传播路径和最终输出目标。手册应解释每个分支/合并点的选择条件（如异常类型、优先级、栈状态等），以及这些决策如何影响事件到三个输出端点的路由。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1182,24 +1148,23 @@
         "semantic_claim_id": "semantic:flow:intAndExc:flow_003_intAndExc_i_excDriveFromDec:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "w_intAndExeSeleDriveToMe",
+          "i_excDriveFromDec",
+          "w_cmpMerDrive_1",
           "w_intSeleDrive_1",
           "w_preSSpliDriToWbMer_1",
           "w_vecDriveToDataRoute_1",
-          "w_WbMerDriToInOut_1",
-          "w_pcDriveToDataRoute_1"
+          "w_inOutDriToOutMer_1"
         ],
         "instances": [
+          "cmpMerge",
           "intAndExeSele",
           "preStackSpli",
           "inOutSele",
-          "WbMerge",
-          "WbtopcMerge",
-          "dataRoteMerge",
-          "SRMerge"
+          "u_outStack"
         ],
         "related_flows": [],
         "related_assignments": [
+          "13",
           "15"
         ],
         "requires_rtl_source_review": false,
@@ -1211,12 +1176,15 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/intAndExc.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
       },
       {
-        "value": "解码阶段异常事件驱动流，将 i_excDriveFromDec 事件经过合并、选择、拆分、延迟和堆栈处理后，分发至数据路由、写通用寄存器文件和写处理器状态寄存器三个输出端点。",
-        "explanation": "该流以 i_excDriveFromDec 为起点，通过 cmpMerge 与其他异常/中断事件合并，经 intAndExeSele 选择后，一路经 preStackSpli 拆分，分别进入 WbMerge/WbtopcMerge 合并路径和 u_outStack 堆栈路径，最终由 dataRoteMerge 输出 o_driveToDataRoute_1，由 u_outStack 输出 o_driveToWGRF_1 和 o_driveToWPSR_1。流中包含多个延迟单元（Delay3、Delay1、preDelay0）用于时序对齐。",
+        "value": "解码阶段异常驱动事件经过合并、选择、拆分、延迟和堆栈处理后，最终分发至数据路由、写通用寄存器文件和写处理器状态寄存器三个输出端点。",
+        "explanation": "该驱动流从输入端口 i_excDriveFromDec 进入，首先在 cmpMerge 中与来自执行、取指、 LSU 的异常驱动以及 IF 的中断驱动合并，然后经过延迟、选择/拆分、再合并、再拆分，最终通过 dataRoteMerge 输出到 o_driveToDataRoute_1，通过 u_outStack 输出到 o_driveToWGRF_1 和 o_driveToWPSR_1。流中包含多个分支和合并点，体现了异常事件在内部处理路径上的路由和仲裁逻辑。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1232,6 +1200,7 @@
         ],
         "instances": [
           "cmpMerge",
+          "Delay3",
           "intAndExeSele",
           "preStackSpli",
           "WbMerge",
@@ -1261,6 +1230,42 @@
             "source": "parser_pipeline_rtl/modules/intAndExc.json"
           }
         ]
+      },
+      {
+        "value": "上下文未提供内部反压或完成信号的详细信息，但接口契约暗示了反压信号的存在。",
+        "explanation": "接口契约中列出了每个输出事件对应的 free 信号（如 i_freeFromDataRoute_1, i_freeFromWGRF_1, i_freeFromWPSR_1），表明模块外部存在反压机制。然而，内部流步骤和组件连接中未明确显示这些 free 信号如何与内部合并器（如 cmpMerge, WbMerge, dataRoteMerge）的等待/仲裁逻辑交互。因此，反压的详细传播路径需要 RTL 源码审查。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:intAndExc:flow_003_intAndExc_i_excDriveFromDec:completion_backpressure:001",
+        "doc_priority": "secondary",
+        "signals": [
+          "i_freeFromDataRoute_1",
+          "i_freeFromWGRF_1",
+          "i_freeFromWPSR_1"
+        ],
+        "instances": [
+          "cmpMerge",
+          "WbMerge",
+          "WbtopcMerge",
+          "dataRoteMerge",
+          "SRMerge"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:intAndExc:flow:flow_003_intAndExc_i_excDriveFromDec",
+          "ev:intAndExc:semantic_flow:flow_003_intAndExc_i_excDriveFromDec"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/intAndExc.json"
+          }
+        ]
       }
     ]
   },
@@ -1277,11 +1282,27 @@
     {
       "hint": "Call out merge/arbitration points because they affect event ordering.",
       "source": "manual_context_policy"
+    },
+    {
+      "hint": "Mark interpretation as review-needed; do not present it as confirmed design intent.",
+      "source": "manual_context_policy"
     }
   ],
   "evidence_refs": [
     "ev:intAndExc:flow:flow_003_intAndExc_i_excDriveFromDec",
     "ev:intAndExc:semantic_flow:flow_003_intAndExc_i_excDriveFromDec"
   ],
-  "gaps": []
+  "gaps": [
+    {
+      "field": "semantic_flow.i_excDriveFromDec",
+      "reason": "Semantic Layer requested RTL source review for this flow.",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:intAndExc:semantic_flow:flow_003_intAndExc_i_excDriveFromDec"
+      ]
+    }
+  ]
 }

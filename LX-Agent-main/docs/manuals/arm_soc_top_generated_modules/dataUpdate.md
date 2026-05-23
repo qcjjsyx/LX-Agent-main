@@ -1,8 +1,8 @@
 # 模块 `dataUpdate`
 
-- 源文件：`rtl/rtl/Lsu/dataUpate.v`。
-- 职责：AI 推断：数据更新模块，负责将加载数据按类型（lb/lhw/lw/ldw）进行字节对齐和符号扩展，并管理存储数据的地址偏移和字节写使能生成。。
-- 说明：模块接收来自 LSU 的加载/存储请求，通过 dataUpdateSelector 分流，loadSelector 将加载请求分发到 8 个加载 FIFO，storeSelector 将存储请求分发到 4 个存储 FIFO。加载数据经 lbMerge 合并后输出到写回单元，存储数据经 outMerge 合并后输出到内存接口。
+- 源文件：`rtl\rtl\Lsu\dataUpate.v`。
+- 职责：AI 推断：数据更新模块，负责在 LSU 内部协调加载和存储操作的数据流，并驱动最终的内存访问和写回路径。。
+- 说明：该模块接收来自 LSU 的加载/存储请求，通过选择器、FIFO 和合并器组成的流水线，将加载数据格式化后发送到写回阶段，并将存储数据（地址、数据、写使能）发送到内存接口。其核心作用是作为 LSU 内部数据路径的仲裁和分发中心。
 
 ## 1. 层级位置
 
@@ -113,7 +113,8 @@ dataUpdate
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `w_lbGrfData_32` | i_addrFromPeripheralFlag_1 ? {24'b0,w_lbData_64[7:0]} : (w_lbAddr_32[2:0] == 3'b000 ? w_lbLoa... | AI 推断：字节加载数据对齐和符号扩展逻辑。 |
-| `assign_4` | control_path | `w_lwGrfData_32` | i_addrFromPeripheralFlag_1 ? w_lwData_64[31:0] : (w_lwMisaligned_1 ? (w_lwAddr_32[2:0] == 3'b... | AI 推断：字加载数据对齐和未对齐处理逻辑。 |
+| `assign_1` | control_path | `w_lbGrfData_32` | i_addrFromPeripheralFlag_1 ? {24'b0,w_lbData_64[7:0]} : (w_lbAddr_32[2:0] == 3'b000 ? w_lbLoa... | AI 推断：根据加载字节（lb）指令的地址和符号标志，从 64 位内存数据中提取并符号/零扩展为 32 位数据。 |
+| `assign_4` | control_path | `w_lwGrfData_32` | i_addrFromPeripheralFlag_1 ? w_lwData_64[31:0] : (w_lwMisaligned_1 ? (w_lwAddr_32[2:0] == 3'b... | AI 推断：根据加载字（lw）指令的地址和对齐情况，从 64 位内存数据中提取并组合为 32 位数据。 |
 | `assign_10` | control_path | `w_storeValid_4` | i_stateValid_12[3:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_12` | control_path | `w_swMemWen_8` | w_swMemAddr_32[2:0] == 3'b100 ? 8'b0000_0000 : w_swMemAddr_32[2:0] == 3'b101 ? 8'b0000_0001 :... | AI 推断：根据存储字（sw）指令的地址，生成对应的字节写使能信号。 |
 | `assign_0` | control_path | `w_loadValid_8` | i_stateValid_12[11:4] | 证据不足：No Semantic Layer assignment interpretation is available. |

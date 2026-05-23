@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "launch",
-  "input_hash": "275fbc4bbdee8cb7033e1cd8db1c391b9ae23c2f76069283b759bde32bcf6102",
+  "input_hash": "c7f9641208681fb89a50bfc464a481bc5eef6e38d844abf45623dc0abed44966",
   "source_context": "ai_context/modules/launch.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/launch/launch.v",
+      "source": "rtl\\rtl\\launch\\launch.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/launch/launch.v",
+        "rtl_file": "rtl\\rtl\\launch\\launch.v",
         "parser_module": "modules/launch.json"
       }
     }
@@ -48,12 +48,11 @@
   "claim_summary": {
     "count": 8,
     "by_type": {
-      "assignment_interpretation": 2,
       "component_role": 2,
-      "documentation_focus": 1,
+      "documentation_focus": 2,
       "interface_intent": 1,
       "module_role": 1,
-      "structural_responsibility": 1
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -63,9 +62,9 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "指令发射与数据准备中心，负责接收来自解码器、执行单元、加载存储单元、通用寄存器文件、系统寄存器文件和程序状态寄存器的驱动事件，仲裁并合并数据，最终向执行单元、通用寄存器文件、指令获取单元、程序状态寄存器和系统寄存器文件发射指令及操作数。",
+      "summary": "指令发射与数据准备中心，负责收集来自译码、执行、加载、通用寄存器、系统寄存器等多个功能单元的驱动事件，仲裁并合并数据，最终向执行、通用寄存器、程序计数器、程序状态寄存器、系统寄存器等目标单元发射指令操作数和控制信息。",
       "subject": "launch",
-      "explanation": "模块拥有8个事件输入和5个事件输出，以及7个数据输入和5个数据输出，表明其作为中央集线器，协调多个功能单元之间的指令流和数据流。内部包含大量选择器、合并器和FIFO，用于处理数据依赖、操作数转发和指令排序。",
+      "explanation": "模块接收来自译码器、执行单元、加载存储单元、通用寄存器组、系统寄存器组和程序状态寄存器的驱动事件，通过内部复杂的合并、选择、延迟和FIFO组件网络，将指令的立即数、寄存器数据、PC值、条件码等操作数进行准备和路由，最终生成发射到执行单元、通用寄存器、程序计数器、程序状态寄存器和系统寄存器的驱动事件和数据。其核心是数据流和事件流的同步与分发。",
       "signals": [
         "i_decoderDriveToLaunch_1",
         "i_ExeDriveToLunch_1",
@@ -84,14 +83,19 @@
         "exeMerge2",
         "grfSrfSele",
         "PcSelector",
-        "branchSpli"
+        "branchSpli",
+        "regMerge",
+        "immMerge",
+        "rs1Merge",
+        "rs2Merge"
       ],
       "related_flows": [
         "flow_000_launch_i_decoderDriveToLaunch_1",
         "flow_001_launch_i_GrfDriveToLaunch_1",
         "flow_002_launch_i_SrfDriveToLaunch_1",
         "flow_003_launch_i_ExeDriveToLunch_1",
-        "flow_004_launch_i_LsuDriveToLunch_1"
+        "flow_004_launch_i_LsuDriveToLunch_1",
+        "flow_005_launch_i_decoDrive1ToLaunch_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -104,6 +108,10 @@
         {
           "source": "knowledge_ir/modules/launch.json",
           "path": "internal_event_flow"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:launch:module_role:001"
@@ -114,28 +122,86 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "根据指令的源寄存器地址，从执行单元、加载存储单元或通用寄存器文件的转发数据中选择正确的操作数。",
-      "subject": "操作数转发与数据依赖解析",
-      "explanation": "通过rele0Selector至rele5Selector等选择器，结合w_releData_6等依赖掩码信号，从多个数据源（如w_exeData_32, w_lsuData_32, w_rs1Data_32）中选择正确的操作数，并送入rs1Merge和rs2Merge进行合并。",
+      "summary": "将来自译码器的指令描述数据（i_decoderData_185）拆分为控制字段、立即数、寄存器地址等，并与来自执行单元、加载存储单元、通用寄存器组的数据进行合并和选择，最终形成发射到执行单元的数据包（o_launchDataToExe_207）。",
+      "subject": "指令操作数准备与发射",
+      "explanation": "译码器驱动事件（i_decoderDriveToLaunch_1）触发launchSplitter将185位译码数据拆分为143位控制字段、16位寄存器地址和26位立即数类型指示。立即数通过ImmSelector和多个FIFO（zeroFifo, signFifo, decoFifo, thumbFifo）进行类型分发和延迟，最终由immMerge合并。寄存器数据通过rs1Merge和rs2Merge从执行、加载、通用寄存器组中选择，再由regMerge合并。最终，控制字段、寄存器数据和立即数在exeMerge2中同步，形成207位的发射数据包。",
       "signals": [
-        "w_releData_6",
-        "w_exeData_32",
-        "w_lsuData_32",
-        "w_rs1Data_32",
-        "w_rs2Data_32",
-        "w_exeRs1Data_32",
-        "w_grfRs1Data_32",
-        "w_lsuRs1Data_32"
+        "i_decoderData_185",
+        "o_launchDataToExe_207",
+        "i_ExeData_96",
+        "i_lsuData_64",
+        "i_rsData_64",
+        "i_sRsData_32",
+        "i_blImm9_9"
       ],
       "instances": [
+        "launchSplitter",
+        "ImmSelector",
+        "zeroFifo",
+        "signFifo",
+        "decoFifo",
+        "thumbFifo",
+        "immMerge",
+        "rs1Merge",
+        "rs2Merge",
+        "regMerge",
+        "exeMerge2"
+      ],
+      "related_flows": [
+        "flow_000_launch_i_decoderDriveToLaunch_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "internal_event_flow"
+        }
+      ],
+      "id": "semantic:module:launch:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "launch"
+      },
+      "summary": "根据指令的源寄存器地址与先前发射指令的目标寄存器地址的匹配情况，从执行单元或加载存储单元的结果数据中选择正确的操作数，实现数据旁路。",
+      "subject": "寄存器数据旁路与转发",
+      "explanation": "通过assign_dependencies中的索引14、16、18、19，模块比较当前指令的源寄存器地址（w_rs1Addr_4, w_rs2Addr_4）与先前指令的目标寄存器地址（w_preRd1Addr_4, w_preRd2Addr_4）。如果匹配，则从执行单元数据（i_ExeData_96）或加载存储单元数据（i_lsuData_64）的高32位或低32位中选择数据，而不是等待寄存器文件更新。这构成了一个关键的数据转发路径，减少了流水线停顿。",
+      "signals": [
+        "w_exeDataFromHigh_1",
+        "w_lsuDataFromHigh_1",
+        "w_releData_6",
+        "i_ExeData_96",
+        "i_lsuData_64",
+        "w_rs1Addr_4",
+        "w_rs2Addr_4",
+        "w_preRd1Addr_4",
+        "w_preRd2Addr_4"
+      ],
+      "instances": [
+        "rele0Merge",
+        "rele1Merge",
+        "rele2Merge",
+        "rele3Merge",
+        "rele4Merge",
+        "rele5Merge",
         "rele0Selector",
         "rele1Selector",
         "rele2Selector",
         "rele3Selector",
         "rele4Selector",
-        "rele5Selector",
-        "rs1Merge",
-        "rs2Merge"
+        "rele5Selector"
       ],
       "related_flows": [
         "flow_003_launch_i_ExeDriveToLunch_1",
@@ -147,14 +213,14 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/launch.json",
-          "path": "key_instances"
+          "path": "assign_dependencies"
         },
         {
           "source": "knowledge_ir/modules/launch.json",
-          "path": "assign_dependencies"
+          "path": "key_instances"
         }
       ],
-      "id": "semantic:module:launch:structural_responsibility:001"
+      "id": "semantic:module:launch:structural_responsibility:002"
     },
     {
       "claim_type": "component_role",
@@ -163,8 +229,8 @@
         "module": "launch"
       },
       "subject": "launchSplitter",
-      "summary": "解码器数据分发器，将解码后的指令信息（i_decoderData_185）拆分为控制、立即数和寄存器地址等多个数据流。",
-      "explanation": "接收来自解码器的事件i_decoderDriveToLaunch_1和数据i_decoderData_185，将其拆分为w_launchForkData2_143（用于后续控制流）、w_launchSpliData0_16（寄存器地址）和w_launchSpliData1_26（立即数类型和值），分别驱动到不同的处理路径。",
+      "summary": "译码数据分发器，将185位译码数据拆分为控制、寄存器地址和立即数三个子流，并分别路由到不同的处理路径。",
+      "explanation": "该组件接收来自译码器的驱动事件（i_decoderDriveToLaunch_1）和数据（i_decoderData_185）。它将数据拆分为143位的控制/操作数信息（w_launchForkData2_143）、16位的寄存器地址（w_launchSpliData0_16）和26位的立即数类型指示（w_launchSpliData1_26）。这些子流分别被发送到exeMerge2、regSplitter和ImmSelector，是后续所有数据准备流程的起点。",
       "signals": [
         "i_decoderDriveToLaunch_1",
         "i_decoderData_185",
@@ -185,6 +251,10 @@
         {
           "source": "knowledge_ir/modules/launch.json",
           "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
         }
       ],
       "id": "semantic:module:launch:component_role:001"
@@ -196,14 +266,14 @@
         "module": "launch"
       },
       "subject": "exeMerge2",
-      "summary": "执行单元数据最终合并器，等待操作数数据和立即数数据就绪后，合并为完整的发射数据包。",
-      "explanation": "这是一个WaitMerge类型的组件，等待来自操作数路径（w_regSeleDriveToExeMerge_1）和立即数/控制路径（w_launchForkDrive1ToExeMergeDelay1_1）的事件，然后将w_launchDataToExe1_99等数据合并为最终的o_launchDataToExe_207，并产生发射事件o_launchDriveToExe_1。",
+      "summary": "发射到执行单元的数据同步与打包器，等待来自译码器路径的控制数据和来自寄存器/立即数路径的操作数都就绪后，才生成发射事件和数据包。",
+      "explanation": "该组件是一个WaitMerge，它需要等待三个输入事件：来自译码器路径的延迟控制数据（w_launchForkDrive1ToExeMergeDelay1_1）、来自寄存器选择路径的操作数（w_regSeleDriveToExeMerge_1）以及可能的来自分支路径的数据（w_branchDriToExeMerge1_1）。只有当所有输入事件都到达后，它才会输出发射事件（o_launchDriveToExe_1）和打包好的207位数据（o_launchDataToExe_207）。这确保了发射到执行单元的数据是完整且同步的。",
       "signals": [
-        "w_regSeleDriveToExeMerge_1",
-        "w_launchForkDrive1ToExeMergeDelay1_1",
-        "w_launchDataToExe1_99",
+        "o_launchDriveToExe_1",
         "o_launchDataToExe_207",
-        "o_launchDriveToExe_1"
+        "w_launchForkDrive1ToExeMergeDelay1_1",
+        "w_regSeleDriveToExeMerge_1",
+        "w_branchDriToExeMerge1_1"
       ],
       "instances": [
         "exeMerge2"
@@ -218,73 +288,13 @@
         {
           "source": "knowledge_ir/modules/launch.json",
           "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:module:launch:component_role:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "subject": "w_exeData_32",
-      "summary": "从执行单元返回的96位数据中，根据依赖关系选择正确的32位操作数。",
-      "explanation": "该赋值根据w_rele_6[1]或w_rele_6[5]是否有效，以及w_exeDataFromHigh_1信号，从i_ExeData_96的高32位或低32位中选择数据。这实现了执行单元结果的转发。",
-      "signals": [
-        "w_exeData_32",
-        "w_rele_6",
-        "w_exeDataFromHigh_1",
-        "i_ExeData_96"
-      ],
-      "related_assignments": [
-        "15"
-      ],
-      "related_flows": [
-        "flow_003_launch_i_ExeDriveToLunch_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:launch:assignment_interpretation:001"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "launch"
-      },
-      "subject": "w_immSign_32",
-      "summary": "根据指令类型和立即数编码，生成有符号扩展的32位立即数。",
-      "explanation": "该赋值根据w_signimm5_1, w_signimm8_1, w_signimm12_1, w_signimm16_1, w_bl_1, w_ucb32Bit_1等标志，从w_signImm_16和i_blImm9_9中选择并符号扩展，生成最终的立即数。这是指令译码的关键部分。",
-      "signals": [
-        "w_immSign_32",
-        "w_signimm5_1",
-        "w_signImm_16",
-        "i_blImm9_9"
-      ],
-      "related_assignments": [
-        "49"
-      ],
-      "related_flows": [
-        "flow_000_launch_i_decoderDriveToLaunch_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/launch.json",
-          "path": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:launch:assignment_interpretation:002"
     },
     {
       "claim_type": "interface_intent",
@@ -292,24 +302,29 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "每个事件输入/输出端口都与一个数据负载和一个释放信号相关联，形成完整的请求-应答握手协议。",
-      "subject": "事件-数据-释放信号契约",
-      "explanation": "例如，i_ExeDriveToLunch_1事件携带i_ExeData_96数据负载，并由o_launchFreeToExe_1释放信号应答。这表明模块间通信是基于事件驱动的，数据在事件有效时被采样，并在处理完成后通过释放信号通知源端。",
+      "summary": "模块的每个主要接口方向都遵循一个隐式协议：一个驱动事件（event_drive）携带一个数据负载（payload_data），并由一个反向的就绪信号（event_free）进行流控。",
+      "subject": "事件-数据-就绪信号三元组",
+      "explanation": "从事件-负载合约可以看出，对于大多数输入和输出方向，都存在一个对应的驱动事件、一个数据负载和一个就绪信号。例如，输入方向i_ExeDriveToLunch_1携带i_ExeData_96，并由o_launchFreeToExe_1进行流控。输出方向o_launchDriveToExe_1携带o_launchDataToExe_207，并由i_ExeFreeToLaunch_1进行流控。这种三元组结构表明模块使用一种基于握手的事件驱动接口，而不是简单的组合逻辑。",
       "signals": [
         "i_ExeDriveToLunch_1",
         "i_ExeData_96",
-        "o_launchFreeToExe_1"
+        "o_launchFreeToExe_1",
+        "o_launchDriveToExe_1",
+        "o_launchDataToExe_207",
+        "i_ExeFreeToLaunch_1"
       ],
       "related_payload": [
         "i_ExeData_96",
-        "i_lsuData_64",
-        "i_decoderData_185",
         "o_launchDataToExe_207"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "interface"
+        },
         {
           "source": "knowledge_ir/modules/launch.json",
           "path": "event_payload_contracts"
@@ -323,25 +338,25 @@
         "type": "module",
         "module": "launch"
       },
-      "summary": "手册应重点描述操作数转发路径、依赖解析逻辑以及选择器（rele*Selector）的优先级和仲裁机制。",
-      "subject": "操作数转发网络",
-      "explanation": "模块的核心功能之一是解决数据冒险，其内部复杂的rele*Merge和rele*Selector网络是实现此功能的关键。文档需要解释如何根据w_releData_6等信号从不同源（EXE, LSU, GRF）选择操作数。",
+      "summary": "手册应重点描述模块如何通过比较寄存器地址来实现数据旁路，以及旁路数据源（执行单元、加载存储单元）的选择逻辑。",
+      "subject": "数据旁路与转发逻辑",
+      "explanation": "这是模块实现高性能流水线的关键机制。assign_dependencies中的索引14、16、18、19直接体现了这一逻辑。文档应解释w_exeDataFromHigh_1和w_lsuDataFromHigh_1信号的生成条件，以及w_releData_6如何指示数据来源。这有助于用户理解流水线数据冒险是如何被解决的。",
       "signals": [
+        "w_exeDataFromHigh_1",
+        "w_lsuDataFromHigh_1",
         "w_releData_6",
-        "w_exeData_32",
-        "w_lsuData_32",
-        "w_rs1Data_32",
-        "w_rs2Data_32"
+        "w_rs1Addr_4",
+        "w_rs2Addr_4",
+        "w_preRd1Addr_4",
+        "w_preRd2Addr_4"
       ],
       "instances": [
-        "rele0Selector",
-        "rele1Selector",
-        "rele2Selector",
-        "rele3Selector",
-        "rele4Selector",
-        "rele5Selector",
-        "rs1Merge",
-        "rs2Merge"
+        "rele0Merge",
+        "rele1Merge",
+        "rele2Merge",
+        "rele3Merge",
+        "rele4Merge",
+        "rele5Merge"
       ],
       "related_flows": [
         "flow_003_launch_i_ExeDriveToLunch_1",
@@ -353,24 +368,67 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/launch.json",
-          "path": "key_instances"
-        },
-        {
-          "source": "knowledge_ir/modules/launch.json",
           "path": "assign_dependencies"
         }
       ],
       "id": "semantic:module:launch:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "launch"
+      },
+      "summary": "手册应详细说明立即数从译码数据中提取、分类（零扩展、符号扩展、译码、Thumb）、通过FIFO延迟，并最终合并到操作数中的完整流程。",
+      "subject": "立即数处理流水线",
+      "explanation": "立即数处理涉及多个组件（ImmSelector, zeroFifo, signFifo, decoFifo, thumbFifo, immMerge）和复杂的assign逻辑（索引38-53）。文档应解释不同立即数类型（w_zeroimm*, w_signimm*, w_decoimm*, w_thumbimm*）是如何被识别和路由的，以及FIFO在此过程中扮演的延迟/同步角色。",
+      "signals": [
+        "i_decoderData_185",
+        "w_launchSpliData1_26",
+        "w_zeroData_24",
+        "w_signData_24",
+        "w_decoData_24",
+        "w_thumbData_24",
+        "w_immZero_32",
+        "w_immSign_32",
+        "w_immDecode_32",
+        "w_immThumb_32"
+      ],
+      "instances": [
+        "ImmSelector",
+        "zeroFifo",
+        "signFifo",
+        "decoFifo",
+        "thumbFifo",
+        "immMerge"
+      ],
+      "related_flows": [
+        "flow_000_launch_i_decoderDriveToLaunch_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "assign_dependencies"
+        },
+        {
+          "source": "knowledge_ir/modules/launch.json",
+          "path": "key_instances"
+        }
+      ],
+      "id": "semantic:module:launch:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_PSRDriveToLaunch_1",
-      "reason": "从i_PSRDriveToLaunch_1开始的内部事件流未到达任何模块事件输出，其最终作用不明确。"
+      "reason": "该事件输入（i_PSRDriveToLaunch_1）的流分析显示没有到达任何模块事件输出，其内部连接仅指向psrRele1Merge，但该组件的输出事件未进一步追踪到模块边界。其确切作用（可能是更新内部状态或影响条件码）无法从当前上下文确定。"
     },
     {
       "field": "internal_event_flow.i_driveFExcToIf_1",
-      "reason": "从i_driveFExcToIf_1开始的内部事件流未到达任何模块事件输出，其最终作用不明确。"
+      "reason": "该事件输入（i_driveFExcToIf_1）的流分析显示没有到达任何模块事件输出，其内部连接仅指向driveFExcToIfDelay。其确切作用（可能是异常标志传递）无法从当前上下文确定。"
     }
   ]
 }

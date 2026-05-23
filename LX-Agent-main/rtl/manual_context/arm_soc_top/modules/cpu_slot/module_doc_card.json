@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "cpu_slot",
-  "source_file": "rtl/rtl/slot/cpu_slot.v",
+  "source_file": "rtl\\rtl\\slot\\cpu_slot.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "该模块是SoC中一个CPU槽位的顶层容器，负责将CPU核心与Mesh网络及本地存储子系统进行事件驱动的数据交互与初始化控制。",
-    "explanation": "模块通过事件驱动接口(i_driveFromMesh/o_driveToMesh)与Mesh网络通信，内部包含CPU核心(u_cpu_core)、数据通路复用器(data_mux)和存储槽(u_memory_slot)，并通过初始化控制链(SoCStart→delayInit→select2→event2CPU)管理启动流程。",
+    "value": "该模块是SoC中一个CPU槽位的顶层容器，负责管理CPU核心与Mesh网络及本地存储之间的数据与事件交互。",
+    "explanation": "模块通过事件驱动接口与Mesh网络通信，内部包含CPU核心、内存槽和数据多路复用器，处理初始化序列和中断信号。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -32,6 +32,7 @@
     "signals": [
       "i_driveFromMesh",
       "o_driveToMesh",
+      "i_IntSig",
       "i_dataFMesh",
       "o_data2Mesh",
       "i_freeFMesh",
@@ -39,12 +40,12 @@
       "initMode"
     ],
     "instances": [
-      "u_cpu_core",
       "data_mux",
+      "u_cpu_core",
       "u_memory_slot",
-      "select2",
-      "event2CPU",
       "cfifo0",
+      "event2CPU",
+      "select2",
       "SoCStart",
       "UARTInitStart"
     ],
@@ -59,12 +60,10 @@
     ],
     "semantic_evidence": [
       {
-        "source": "module_facts",
-        "path": "knowledge_ir/modules/cpu_slot.json"
+        "source": "knowledge_ir/modules/cpu_slot.json"
       },
       {
-        "source": "parser_module",
-        "path": "parser_pipeline_rtl/modules/cpu_slot.json"
+        "source": "parser_pipeline_rtl/modules/cpu_slot.json"
       }
     ]
   },
@@ -338,7 +337,7 @@
         ],
         "summary": "clock_reset_init ports, count=2, directions=input:2",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/cpu_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\cpu_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -373,7 +372,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/cpu_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\cpu_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -408,7 +407,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/cpu_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\cpu_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -473,7 +472,7 @@
         ],
         "summary": "other_ports ports, count=7, directions=input:4, output:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/cpu_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\cpu_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -490,8 +489,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_cpu_slot_i_driveFromMesh.json",
       "reader_takeaway": {
-        "value": "手册应重点描述data_mux如何选择输入驱动并分发至CPU和内存，以及两者如何返回驱动信号。",
-        "explanation": "流的核心结构是data_mux作为中心节点，连接Mesh、CPU核心和内存槽。理解data_mux的选择逻辑和仲裁机制是理解整个流的关键。同时需说明CPU和内存的驱动路径如何形成闭环。",
+        "value": "最终手册应重点描述i_driveFromMesh事件如何通过data_mux在数据路径（LSU）和指令路径（ICache）之间路由，并最终输出回Mesh。",
+        "explanation": "该流涉及data_mux、u_cpu_core和u_memory_slot三个主要组件，形成了从Mesh输入到Mesh输出的闭环。关键交互点在于data_mux的选择逻辑，以及u_cpu_core与u_memory_slot之间的数据缓存和指令缓存访问。手册应阐明这些路径的触发条件和数据流方向。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -504,8 +503,8 @@
           "o_driveToMesh",
           "w_driveDcache2Mux",
           "w_lsuDriveToDataRout_1",
-          "w_dataRoutDriveToLsu_1",
-          "w_driveMux2Dcache"
+          "w_drvCpu2Icache",
+          "w_drvIcache2CPU"
         ],
         "instances": [
           "data_mux",
@@ -513,25 +512,23 @@
           "u_memory_slot"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
           "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/cpu_slot.json",
-            "path": "connection_graph"
+            "source": "instances.connections",
+            "path": "modules/cpu_slot.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "从Mesh输入的事件驱动信号，经数据选择器分发至CPU核心和内存槽，最终返回Mesh输出，构成一个闭环驱动流。",
-            "explanation": "该流以i_driveFromMesh为起点，通过data_mux实例分发，分别驱动u_cpu_core和u_memory_slot，两者产生的驱动信号最终汇聚回data_mux，由o_driveToMesh输出至Mesh。流经三个实例，形成数据与控制的循环路径。",
+            "value": "从Mesh输入的事件驱动信号经过数据选择器、CPU核心和存储槽的循环路径后，最终输出回Mesh。",
+            "explanation": "该流描述了从外部Mesh进入cpu_slot模块的事件驱动信号i_driveFromMesh，通过data_mux实例进行路径选择，然后可能经过u_cpu_core和u_memory_slot实例的处理，最终通过data_mux的o_driveToMesh信号输出回Mesh。这是一个闭环的驱动流，涉及数据路径和指令路径的交互。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -541,91 +538,12 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromMesh",
-              "o_driveToMesh",
-              "w_dataRoutDriveToLsu_1",
-              "w_driveDcache2Mux",
-              "w_lsuDriveToDataRout_1",
-              "w_driveMux2Dcache",
-              "w_drvCpu2Icache",
-              "w_drvIcache2CPU"
+              "o_driveToMesh"
             ],
             "instances": [
               "data_mux",
               "u_cpu_core",
               "u_memory_slot"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
-              "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/cpu_slot.json",
-                "path": "internal_event_flow"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/cpu_slot.json",
-                "path": "connection_graph"
-              }
-            ]
-          },
-          {
-            "value": "o_data2Mesh作为o_driveToMesh的伴随数据载荷，宽度为[50:0]，两者共同构成Mesh输出。",
-            "explanation": "接口负载合约显示o_driveToMesh事件输出伴随o_data2Mesh数据信号，表明驱动流携带数据负载。data_mux的o_data2Mesh输出直接连接至模块顶层o_data2Mesh，说明数据路径与驱动路径并行。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:data_control_effect:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "o_driveToMesh",
-              "o_data2Mesh"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
-              "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/cpu_slot.json",
-                "path": "interface_data_contract"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/cpu_slot.json",
-                "path": "connection_graph"
-              }
-            ]
-          },
-          {
-            "value": "当前上下文未提供任何完成或反压信号，无法推断流的握手协议。",
-            "explanation": "接口负载合约中free_signal字段为空，且流步骤和连接中无相关信号。流可能为纯事件驱动，无显式反压机制，或反压信号在子模块内部实现。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:completion_backpressure:001",
-            "doc_priority": "reference",
-            "signals": [
-              "(无)"
-            ],
-            "instances": [
-              "(无)"
             ],
             "related_flows": [],
             "related_assignments": [],
@@ -637,8 +555,69 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/cpu_slot.json",
-                "path": "interface_data_contract"
+                "source": "instances.connections",
+                "path": "modules/cpu_slot.json"
+              },
+              {
+                "source": "transparent_flows",
+                "path": "modules/cpu_slot.json"
+              }
+            ]
+          },
+          {
+            "value": "事件驱动信号o_driveToMesh伴随一个51位的数据负载o_data2Mesh输出到Mesh。",
+            "explanation": "接口负载契约显示，输出事件o_driveToMesh关联了一个51位宽的payload信号o_data2Mesh。这表明该驱动流不仅传递事件控制信号，还携带了相关的数据负载，可能用于向Mesh返回处理结果。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:data_control_effect:001",
+            "doc_priority": "primary",
+            "signals": [
+              "o_driveToMesh",
+              "o_data2Mesh"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
+              "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface_data_contract",
+                "path": "modules/cpu_slot.json"
+              }
+            ]
+          },
+          {
+            "value": "当前上下文未提供任何关于流完成或反压的信号或机制。",
+            "explanation": "提供的接口负载契约中，free_signal字段为空，且流步骤和连接中未提及任何握手或反压信号。因此，无法推断该驱动流是否具有完成确认或反压控制。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:completion_backpressure:001",
+            "doc_priority": "reference",
+            "signals": [],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
+              "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface_data_contract",
+                "path": "modules/cpu_slot.json"
               }
             ]
           }
@@ -656,11 +635,11 @@
     "components": 8,
     "assignments": 1,
     "evidence_gaps": 0,
-    "review_questions": 0
+    "review_questions": 1
   },
   "source_review_context": {
     "module": "cpu_slot",
-    "rtl_file": "rtl/rtl/slot/cpu_slot.v",
+    "rtl_file": "rtl\\rtl\\slot\\cpu_slot.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -685,9 +664,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "i_driveFromMesh",
-      "summary": "i_driveFromMesh是输入信号，直接连接到CPU核心模块的对应端口",
-      "explanation": "根据切片4的第214行，输入信号i_driveFromMesh在实例化CPU核心时被直接连接到CPU核心模块的.i_driveFromMesh端口，未发现data_mux或其他中间逻辑。",
+      "subject": "flow_000_cpu_slot_i_driveFromMesh",
+      "summary": "i_driveFromMesh经由data_mux实例的.io_driveFromMesh端口直接输入，未涉及u_cpu_core与u_memory_slot的交互",
+      "explanation": "Slice 6显示data_mux实例的端口列表中，i_driveFromMesh直接连接结构体顶层输入信号“i_driveFromMesh”，同时data_mux的输出o_driveToCpu(w_dataRoutDriveToLsu_1)连向u_cpu_core的LSU接口。但RTL仅展示了data_mux的接口连接，未显示u_cpu_core内部对i_driveFromMesh的详细处理，也未显示与u_memory_slot中ICache的直接交互路径。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -697,12 +676,14 @@
       "signals": [
         "i_driveFromMesh"
       ],
-      "instances": [],
+      "instances": [
+        "data_mux"
+      ],
       "source_refs": [
         {
-          "file": "rtl/rtl/slot/cpu_slot.v",
-          "line_start": 214,
-          "line_end": 214
+          "file": "rtl\\rtl\\slot\\cpu_slot.v",
+          "line_start": 212,
+          "line_end": 216
         }
       ],
       "evidence_refs": [
@@ -716,7 +697,7 @@
     "status": "reviewed",
     "claim_count": 1,
     "open_question_count": 1,
-    "source_file": "rtl/rtl/slot/cpu_slot.v",
+    "source_file": "rtl\\rtl\\slot\\cpu_slot.v",
     "report_file": "source_review_report.json"
   }
 }

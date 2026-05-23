@@ -1,8 +1,8 @@
 # 模块 `multiLoadDataUpate`
 
-- 源文件：`rtl/rtl/Lsu/multiLoadDataUpate.v`。
-- 职责：AI 推断：多加载数据更新与写回控制模块，负责从加载数据路由中选择并重组数据，生成写回使能、结束标志及下一轮地址/寄存器列表。。
-- 说明：模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志以及下一轮地址和寄存器列表，表明其是加载单元中数据更新和迭代控制的核心。
+- 源文件：`rtl\rtl\Lsu\multiLoadDataUpate.v`。
+- 职责：AI 推断：多加载数据更新模块，负责在加载指令执行后，根据寄存器列表和地址偏移，生成下一拍地址、寄存器列表、写回数据及写回使能信号。。
+- 说明：模块接收地址、加载数据、寄存器列表等输入，通过内部状态机（由r_k_4、r_j_4、r_count_2、r_registerList_16、r_nextAddress_32等寄存器驱动）计算下一状态和输出，实现多拍加载数据的更新逻辑。
 
 ## 1. 层级位置
 
@@ -52,9 +52,9 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `o_dLo_4` | r_j_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `o_wbackData_64` | num==2'b10 ? i_fromDataRoutData_64 : (num==2'b01 ? (r_count_2 == 2'b10 ? {32'b0,i_fromDataRou... | AI 推断：根据num和r_count_2从i_fromDataRoutData_64中选择32位数据并扩展至64位，实现加载数据的选择与对齐。 |
-| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：根据num生成写回使能信号，控制写回数据的有效字节。 |
-| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：根据r_registerList_16是否全零生成结束标志，指示多加载操作是否完成。 |
+| `assign_2` | data_path | `o_wbackData_64` | num==2'b10 ? i_fromDataRoutData_64 : (num==2'b01 ? (r_count_2 == 2'b10 ? {32'b0,i_fromDataRou... | AI 推断：根据num和r_count_2选择写回数据，支持双字或单字加载的数据对齐。 |
+| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：当内部寄存器列表r_registerList_16全零时，断言结束标志。 |
 | `assign_5` | data_path | `o_nextAddress_32` | r_nextAddress_32 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_6` | unknown | `o_nextRegisterList_16` | r_registerList_16 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | ... | ... | ... | ... | 其余 1 条 assign 省略 |

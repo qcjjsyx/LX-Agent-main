@@ -1,8 +1,8 @@
 # 模块 `perip_slot_timer`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/perip_slot_timer.v`。
-- 职责：AI 推断：该模块是一个基于事件驱动的时隙定时器，用于在网格网络中控制数据包的传输时序。。
-- 说明：模块通过输入事件 `i_driveFrmMesh` 触发内部处理，经过两级 FIFO 和延迟单元后，输出事件 `o_driveNextToMesh`，并伴随有对应的释放信号 `o_freeToMesh` 和 `i_freeNextFrmMesh`，表明其负责管理数据包在网格中的传输与释放时序。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\perip_slot_timer.v`。
+- 职责：AI 推断：该模块是一个基于事件驱动的槽位定时器，用于在网格网络中管理数据包的传输时序和释放。。
+- 说明：模块通过输入事件 `i_driveFrmMesh` 触发内部流程，经过两个FIFO和延迟单元后，输出事件 `o_driveNextToMesh`。同时，它通过 `i_freeNextFrmMesh` 和 `o_freeToMesh` 信号管理释放流程，表明其核心作用是控制数据包在网格中的定时转发与释放。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ perip_slot_timer
 - Payload：未记录。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：该流为纯事件驱动流，无数据负载，控制仅体现在FIFO的门控行为
+- AI 推断：该流仅传递事件驱动信号，无数据负载伴随
 
 
 ## 5. 内部组件与 assign 影响
@@ -75,4 +75,4 @@ perip_slot_timer
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `we` | (!we_r) & rise | AI 推断：该赋值用于生成写使能信号，可能用于控制数据写入或事件锁存。 |
+| `assign_0` | unknown | `we` | (!we_r) & rise | AI 推断：该赋值用于生成写使能信号 `we`，它由 `rise` 信号和 `we_r` 的取反组合而成，可能用于控制数据写入或事件捕获。 |

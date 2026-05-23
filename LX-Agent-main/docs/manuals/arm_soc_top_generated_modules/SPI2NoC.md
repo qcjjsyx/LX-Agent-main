@@ -1,8 +1,8 @@
 # 模块 `SPI2NoC`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v`。
-- 职责：AI 推断：SPI2NoC 是 SPI 子系统与片上网络 (NoC) 之间的桥接模块，负责将 SPI 控制器的驱动事件和数据打包成 NoC 兼容的格式，并处理来自 NoC 的释放信号。。
-- 说明：模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 和数据接口 (i_dataFNoc_51/o_data2Noc_51) 与 NoC 交互，内部使用两个 FIFO (cfifo0, cfifo1) 进行事件缓冲和同步，并包含一个 SPI_control 实例处理 SPI 协议。证据显示输入事件 i_drvFNoc 连接到 cfifo0，输出事件 o_drv2Noc 来自 cfifo1，表明模块是 SPI 与 NoC 之间的异步或同步桥接点。
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\SPI2NoC.v`。
+- 职责：AI 推断：r_apbrdata 在复位时清零，并在 APB 读周期的 FINISH 状态被赋值为 PRDATA。。
+- 说明：根据切片7（第184-186行），r_apbrdata 在复位时清零；切片8（第233行）显示在 state == FINISH 时 r_apbrdata <= PRDATA。切片4（第70行）声明该寄存器；切片9（第250行）中 r_apbrdata 用于拼接到 o_data2Noc_51。切片10（第262行）显示 PRDATA 来自 SPI_control_u 模块输出。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ SPI2NoC
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应强调 i_drvFNoc 作为模块事件入口的角色，以及 cfifo0 作为第一级缓冲的初始化作用。
+- AI 推断：最终手册应强调 i_drvFNoc 作为模块内部事件链的入口，并明确其与 i_dataFNoc_51 的数据关联，同时指出后续传播路径的缺失。
 
 
 ## 5. 内部组件与 assign 影响
@@ -75,4 +75,4 @@ SPI2NoC
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_apbrdata,r_X,r_Y} | AI 推断：该赋值将 SPI 读取的数据 (r_apbrdata) 与 NoC 数据 (r_dataFNoc_51) 及位置信息 (r_X, r_Y) 拼接成 51 位输出数据包。 |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_apbrdata,r_X,r_Y} | AI 推断：该赋值将来自 NoC 的输入数据、SPI 控制器的读数据以及内部状态信号拼接，形成输出到 NoC 的数据包。 |

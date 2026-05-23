@@ -1,8 +1,8 @@
 # 模块 `gpio_slot`
 
-- 源文件：`rtl/rtl/IONet/GPIO/gpio_slot.v`。
-- 职责：AI 推断：该模块是GPIO外设的槽位封装，负责将Mesh网络的事件驱动与自由信号路由到内部GPIO模块和外围槽位控制器。。
-- 说明：模块通过i_driveFrmMesh事件触发，将data_from载荷转发至slot实例，同时将io_pin_i连接到gpio_module，并输出gpio_ctrl_o和gpio_data_o。o_driveNextToMesh和o_freeToMesh信号表明其参与Mesh网络的驱动链和自由链。
+- 源文件：`rtl\rtl\IONet\GPIO\gpio_slot.v`。
+- 职责：AI 推断：GPIO 插槽模块，作为网格驱动事件与 GPIO 功能模块之间的桥接层，负责事件传递和数据路径的重新映射。。
+- 说明：模块通过 perip_slot 实例接收来自网格的驱动事件 (i_driveFrmMesh) 并转发至 gpio_module，同时将 gpio_module 的输出数据 (data_o) 通过 slot 实例重新打包为 data_to 输出至网格。事件-释放协议 (i_driveFrmMesh/o_freeToMesh, o_driveNextToMesh/i_freeNextFrmMesh) 表明其遵循标准的网格外设插槽握手。
 
 ## 1. 层级位置
 
@@ -58,7 +58,7 @@ gpio_slot
 - Payload：未记录。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：此流为纯控制事件流，不携带任何数据负载。
+- AI 推断：手册应强调该流是 GPIO 槽位模块内从网格到下一个网格的透明事件传递路径，无数据载荷或逻辑处理。
 
 
 ## 5. 内部组件与 assign 影响
@@ -73,4 +73,4 @@ gpio_slot
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `data_to` | {w_data_to[50:10],XY} | AI 推断：该赋值将w_data_to的高位与XY拼接，形成最终的data_to输出，用于Mesh网络的数据回传。 |
+| `assign_0` | data_path | `data_to` | {w_data_to[50:10],XY} | AI 推断：将 slot 实例输出的 w_data_to 的高位 (50:10) 与 XY 字段拼接，形成最终的 data_to 输出，实现数据路径的字段重组。 |

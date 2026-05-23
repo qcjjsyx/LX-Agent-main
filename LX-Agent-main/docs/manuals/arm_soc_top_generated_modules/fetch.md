@@ -1,8 +1,8 @@
 # 模块 `fetch`
 
-- 源文件：`rtl/rtl/IF/fetch.v`。
-- 职责：AI 推断：取指模块，负责接收来自顶层、ICache和Dispatch的驱动事件，经过内部流水线处理后，向译码、异常、中断和ICache发送驱动事件，并输出取指地址、指令及PC组合、异常和中断状态。。
-- 说明：模块有三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch），分别对应ICache、顶层和Dispatch的请求。内部通过大量Fifo、MutexMerge、SelSplit等组件构成复杂的流水线，最终产生五个输出驱动事件（o_drv2Dec、o_drv2Excp、o_drv2Excp_2、o_drv2ICache、o_drv2Int）。数据输出包括取指地址、指令与PC的66位组合、异常码和中断状态。
+- 源文件：`rtl\rtl\IF\fetch.v`。
+- 职责：AI 推断：指令获取与预解码核心，负责接收来自ICache、Top和Dispatch的驱动事件，将原始指令数据与PC组合，并分发至解码、异常、中断和ICache下游。。
+- 说明：模块接收三个外部驱动事件（i_drvFICache, i_drvFTop, i_drvFdispatch），通过内部Fifo、Selector、Splitter和MutexMerge组件网络进行流水线化处理，最终产生五个输出驱动事件（o_drv2Dec, o_drv2Excp, o_drv2Excp_2, o_drv2ICache, o_drv2Int）。数据输出包括组合后的指令与PC（o_instAndPC_66）、获取地址（o_fetchAddr_32）和异常/中断状态。内部组件网络表明这是一个多源、多目的地的复杂指令获取与分发结构。
 
 ## 1. 层级位置
 
@@ -105,7 +105,7 @@ fetch
 - Payload：未记录。
 - 输出/影响：`o_drv2Excp`, `o_drv2Dec`, `o_drv2Excp_2`, `o_drv2ICache`。
 - 结构复杂度：branch=5，join=3，blocking=12。
-- AI 推断：最终手册应重点描述事件从输入到四个输出端点的完整路径，以及各组件（选择器、分路器、合并器、FIFO、延迟单元）在路径中的具体作用。
+- AI 推断：最终手册应重点描述 i_drvFICache 事件如何通过多级分支和合并形成四个输出，并强调 FIFO 缓冲和合并仲裁对事件传播的影响。
 
 ### `i_drvFTop`
 
@@ -113,7 +113,7 @@ fetch
 - Payload：`i_drvFTop` -> `i_pcFTop_32 [31:0]`。
 - 输出/影响：`o_drv2Int`, `o_drv2ICache`。
 - 结构复杂度：branch=2，join=2，blocking=7。
-- AI 推断：最终手册应重点描述从 i_drvFTop 到 o_drv2Int 和 o_drv2ICache 的双路径分流、汇合及仲裁逻辑。
+- AI 推断：输入驱动事件i_drvFTop携带程序计数器i_pcFTop_32作为有效载荷。
 
 ### `i_drvFdispatch`
 
@@ -121,7 +121,7 @@ fetch
 - Payload：`i_drvFdispatch` -> `i_pcFdispatch_32 [31:0]`。
 - 输出/影响：`o_drv2Int`, `o_drv2Excp`, `o_drv2Dec`, `o_drv2Excp_2`, `o_drv2ICache`。
 - 结构复杂度：branch=8，join=5，blocking=15。
-- AI 推断：输入事件 i_drvFdispatch 的伴随载荷，是 32 位 PC 值，直接连接到 merge0 的数据输入。
+- AI 推断：与事件流关联的唯一显式载荷，是程序计数器值。
 
 
 ## 5. 内部组件与 assign 影响

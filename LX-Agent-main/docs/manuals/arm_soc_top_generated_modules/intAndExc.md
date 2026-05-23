@@ -1,8 +1,8 @@
 # 模块 `intAndExc`
 
-- 源文件：`rtl/rtl/int/intAndExc.v`。
-- 职责：AI 推断：中断与异常集中仲裁与分发中心，负责收集来自流水线各阶段的中断/异常事件，仲裁优先级，并驱动后续的栈操作、数据路由和PC重定向。。
-- 说明：模块接收来自IF、Dec、Exe、Lsu、WB、DR、RGRF、RPSR等多个流水线阶段的中断/异常驱动事件，通过内部仲裁和选择逻辑，最终产生驱动信号和数据输出到IF、DataRoute、WGRF、WPSR、RGRF、RPSR等目标。同时管理对应的释放信号，形成完整的请求-释放握手协议。
+- 源文件：`rtl\rtl\int\intAndExc.v`。
+- 职责：AI 推断：中断与异常集中仲裁与分发单元，负责收集来自流水线各阶段的中断/异常事件，仲裁优先级，生成目标PC和类型，并分发驱动信号至写回、数据路由、寄存器堆等目标模块。。
+- 说明：模块接收来自IF、Dec、Exe、Lsu、WB、DR、RGRF、RPSR的驱动事件，通过cmpMerge、intAndExeSele等组件仲裁，最终输出驱动信号至If、DataRoute、RGRF、RPSR、WGRF、WPSR，同时输出异常释放信号和中断PC。数据输入包含各阶段PC+异常编号、中断PC+类型、GRF/PSR数据，输出包含数据路由数据、写GRF/PSR数据、中断PC和计数。
 
 ## 1. 层级位置
 
@@ -109,7 +109,7 @@ intAndExc
 - Payload：`o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToWGRF_1`, `o_driveToWPSR_1`, `o_DriveToIf_1`, `o_driveToDataRoute_1`。
 - 结构复杂度：branch=6，join=8，blocking=4。
-- AI 推断：最终手册应重点描述事件如何从单一输入分发到四个输出，以及内部合并点（SRMerge、dataRoteMerge、WbMerge、WbtopcMerge）的仲裁或等待行为。
+- AI 推断：输入数据经DRSelector和dataRoteMerge后输出到数据路由。
 
 ### `i_driveFromRGRF_1`
 
@@ -117,7 +117,7 @@ intAndExc
 - Payload：`o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToRGRF_1`, `o_driveToRPSR_1`, `o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=5，join=8，blocking=4。
-- AI 推断：手册应重点描述异常事件从入栈到出栈的完整路径，以及SP的互斥合并和地址计算。
+- AI 推断：手册应重点描述事件从u_inStack到五个输出端点的完整路径，特别是SRMerge、intAndExeSele、preStackSpli和dataRoteMerge等合并与拆分点的行为。
 
 ### `i_driveFromRPSR_1`
 
@@ -125,7 +125,7 @@ intAndExc
 - Payload：`o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToRGRF_1`, `o_driveToRPSR_1`, `o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=5，join=8，blocking=4。
-- AI 推断：SP合并后的信号作为选择控制，决定事件路径。
+- AI 推断：文档应重点描述从i_driveFromRPSR_1到五个输出端口的路径分支和合并点，特别是intAndExeSele和preStackSpli的分流作用。
 
 ### `i_driveFromWB`
 
@@ -133,7 +133,7 @@ intAndExc
 - Payload：`o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=4，join=7，blocking=4。
-- AI 推断：i_driveFromWB 事件通过多个合并和选择路径，最终驱动 o_driveToDataRoute_1 事件，并携带 104 位载荷数据。
+- AI 推断：i_driveFromWB 作为控制事件驱动整个流，最终通过 dataRoteMerge 输出到 o_driveToDataRoute_1，并携带 104 位数据载荷。
 
 ### `i_excDriveFromDec`
 
@@ -141,7 +141,7 @@ intAndExc
 - Payload：`i_excDriveFromDec` -> `i_decPCAndNum_36 [35:0]`, `o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=4，join=8，blocking=5。
-- AI 推断：异常事件驱动携带解码阶段的 PC 和异常编号数据，用于后续异常处理。
+- AI 推断：解码异常驱动事件携带 PC 和异常编号作为有效载荷，驱动流与数据流紧密耦合。
 
 ### `i_excDriveFromExe`
 
@@ -149,7 +149,7 @@ intAndExc
 - Payload：`i_excDriveFromExe` -> `i_exePCAndNum_36 [35:0]`, `o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=4，join=8，blocking=5。
-- AI 推断：执行阶段异常驱动事件携带36位载荷数据，包含异常PC和异常编号。
+- AI 推断：执行阶段异常事件的负载数据被拆分为PC值和异常编号，为后续处理提供上下文。
 
 ### `i_excDriveFromIF`
 
@@ -157,7 +157,7 @@ intAndExc
 - Payload：`i_excDriveFromIF` -> `i_ifPCAndNum_36 [35:0]`, `o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=4，join=8，blocking=5。
-- AI 推断：异常驱动事件携带 IF 阶段的程序计数器和异常编号作为负载数据，用于后续的异常处理和地址计算。
+- AI 推断：异常驱动事件携带 IF 阶段的 PC 和异常号作为载荷，用于后续的异常处理和地址计算。
 
 ### `i_excDriveFromLsu`
 
@@ -165,7 +165,7 @@ intAndExc
 - Payload：`i_excDriveFromLsu` -> `i_lsuPCAndNum_36 [35:0]`, `o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=4，join=8，blocking=5。
-- AI 推断：LSU 异常驱动携带异常 PC 和异常编号作为载荷。
+- AI 推断：异常驱动事件携带 LSU 的 PC 和异常编号作为有效载荷。
 
 ### `i_intDriveFromIF`
 
@@ -173,7 +173,7 @@ intAndExc
 - Payload：`i_intDriveFromIF` -> `i_ifPCAndNum_36 [35:0]`, `i_intDriveFromIF` -> `i_intPCAndIntNum_38 [37:0]`, `o_driveToDataRoute_1` -> `o_dataRouteData_104 [103:0]`, `o_driveToWGRF_1` -> `o_dataToWGRF_72 [71:0]`, `o_driveToWPSR_1` -> `o_dataToWPSR_32 [31:0]`。
 - 输出/影响：`o_driveToDataRoute_1`, `o_driveToWGRF_1`, `o_driveToWPSR_1`。
 - 结构复杂度：branch=4，join=8，blocking=5。
-- AI 推断：中断驱动 i_intDriveFromIF 携带两个 payload 信号：i_ifPCAndNum_36（取指 PC 和异常号）和 i_intPCAndIntNum_38（中断 PC 和中断类型）。
+- AI 推断：中断事件 i_intDriveFromIF 携带中断 PC 和中断类型载荷，这些载荷通过赋值和组件连接在流路径中传播。
 
 
 ## 5. 内部组件与 assign 影响
@@ -206,4 +206,5 @@ intAndExc
 | `assign_4` | data_path | `{w_decPC_32,w_decExcNum_4}` | i_decPCAndNum_36 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_5` | data_path | `{w_exePC_32,w_exeExcNum_4}` | i_exePCAndNum_36 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_6` | data_path | `{w_lsuPC_32,w_lsuExcNum_4}` | i_lsuPCAndNum_36 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_11` | data_path | `w_pc_32` | w_excNum_4 == w_intNum1_4 ? w_intPC1_32 : w_excNum_4 == w_ifExc1Num_4 ? w_ifPC1_32 : w_excNum... | AI 推断：根据异常编号映射到固定向量地址，生成中断/异常的目标PC。 |
 | `assign_18` | unknown | `o_intAndExc_cnt` | r_intAndExc_cnt | 证据不足：No Semantic Layer assignment interpretation is available. |

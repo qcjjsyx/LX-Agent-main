@@ -209,8 +209,8 @@
         "w_grfResSplitterDriveToRelo3Merge_1"
       ],
       "role_in_flow": {
-        "value": "将 GRF 驱动事件拆分为两路，分别导向 rele1Merge 和 rele3Merge。",
-        "explanation": "作为 cSplitter2_64b_exe 类型的拆分器，接收 i_grfDriveToExecute_1 事件，将其复制或分发至两个输出通道，实现事件扇出。",
+        "value": "将通用寄存器文件结果驱动事件拆分为两条并行路径，分别导向 rele1Merge 和 rele3Merge。",
+        "explanation": "作为 cSplitter2_64b_exe 类型的拆分器，它将输入事件 i_grfDriveToExecute_1 复制或分发到两个输出端口，形成两条独立的驱动路径。这是该流中唯一的原始事件源拆分点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -237,12 +237,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/execute.json",
-            "path": "internal_event_flow"
+            "source": "parser_pipeline_rtl/modules/execute.json",
+            "path": "instances"
           },
           {
-            "source": "rtl/rtl/Execute/execute.v",
-            "path": "module_source"
+            "source": "parser_pipeline_rtl/modules/execute.json",
+            "path": "connection_graph"
           }
         ]
       },
@@ -436,10 +436,10 @@
         "w_regSelectorFreeToRegMerge_1"
       ],
       "role_in_flow": {
-        "value": "将来自 rs1Merge 和 rs2Merge 的事件合并为最终内部事件，但未驱动至模块输出。",
-        "explanation": "作为 cWaitMerge2_64b_exe 类型的等待合并器，接收两路输入事件，在两者都到达后输出 w_regSelectorFreeToRegMerge_1，该信号仅连接至 regMergeDelay1 的输入，未继续传播至模块输出端口，表明该流在模块内部终止。",
+        "value": "作为最终等待合并器，将 rs1Merge 和 rs2Merge 的输出事件合并后输出至寄存器延迟单元。",
+        "explanation": "该实例为 cWaitMerge2_64b_exe 类型，属于 WaitMerge 家族。它接收来自 rs1Merge 和 rs2Merge 的两个输入，并在满足条件后输出单个事件 w_regSelectorFreeToRegMerge_1，该信号连接到 regMergeDelay1.inR。这是该流中事件路径的最终汇聚点。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -451,7 +451,8 @@
           "w_regSelectorFreeToRegMerge_1"
         ],
         "instances": [
-          "regMerge"
+          "regMerge",
+          "regMergeDelay1"
         ],
         "related_flows": [],
         "related_assignments": [
@@ -464,12 +465,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/execute.json",
-            "path": "internal_event_flow"
+            "source": "parser_pipeline_rtl/modules/execute.json",
+            "path": "instances"
           },
           {
-            "source": "rtl/rtl/Execute/execute.v",
-            "path": "module_source"
+            "source": "parser_pipeline_rtl/modules/execute.json",
+            "path": "connection_graph"
           }
         ]
       },
@@ -573,18 +574,18 @@
     }
   ],
   "semantic_meaning": {
-    "value": "64 位数据信号 i_grfToExecuteData_64 作为 GRF 驱动事件的伴随载荷，随事件流传播。",
-    "explanation": "根据接口载荷契约，i_grfToExecuteData_64 与 i_grfDriveToExecute_1 事件关联，作为数据载荷输入至 grfResSplitter，但后续组件连接中未明确显示数据信号的传播路径，需 RTL 源码确认数据是否随事件流拆分、合并和选择。",
+    "value": "64位数据信号 i_grfToExecuteData_64 作为驱动事件 i_grfDriveToExecute_1 的伴随载荷，通过 grfResSplitter 传递。",
+    "explanation": "接口载荷契约表明 i_grfToExecuteData_64 是 i_grfDriveToExecute_1 的关联数据，宽度为 [63:0]。该数据信号连接到 grfResSplitter.i_data_64，因此载荷随事件流经拆分器，但后续路径中未明确显示数据信号的连接，需要 RTL 源码确认数据是否随事件传递至下游。",
     "certainty": "ai_inferred",
-    "confidence": "low",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
     "semantic_claim_id": "semantic:flow:execute:flow_001_execute_i_grfDriveToExecute_1:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
-      "i_grfToExecuteData_64",
-      "i_grfDriveToExecute_1"
+      "i_grfDriveToExecute_1",
+      "i_grfToExecuteData_64"
     ],
     "instances": [],
     "related_flows": [],
@@ -603,14 +604,14 @@
         "path": "interface_data_contract"
       },
       {
-        "source": "rtl/rtl/Execute/execute.v",
-        "path": "module_source"
+        "source": "parser_pipeline_rtl/modules/execute.json",
+        "path": "connection_graph"
       }
     ],
     "supporting_claims": [
       {
-        "value": "手册应强调该流为内部事件流，未到达模块输出，并说明数据载荷的传播路径需 RTL 源码确认。",
-        "explanation": "当前上下文显示该流在 regMerge 处终止，未驱动至模块输出端口，且数据信号 i_grfToExecuteData_64 的传播路径不完整，手册应明确指出这些局限性，避免误导读者认为该流产生外部可见结果。",
+        "value": "最终手册应重点描述该流作为通用寄存器文件结果驱动的内部事件路径，强调其拆分、合并、选择结构，并明确指出该流不产生模块级输出。",
+        "explanation": "该流是一个典型的内部驱动流，从输入端口开始，经过多层组件处理后汇聚到 regMerge，但未到达模块输出。手册应解释每个组件的角色（拆分、等待合并、选择、互斥合并），并说明数据信号 i_grfToExecuteData_64 的伴随关系。同时需警告该流未完成到模块输出，可能与其他流（如 rele4Splitter 相关流）协同工作。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -620,52 +621,7 @@
         "doc_priority": "primary",
         "signals": [
           "i_grfDriveToExecute_1",
-          "w_regSelectorFreeToRegMerge_1",
-          "i_grfToExecuteData_64"
-        ],
-        "instances": [
-          "grfResSplitter",
-          "rele1Merge",
-          "rele3Merge",
-          "rele1Selector",
-          "rele3Selector",
-          "rs1Merge",
-          "rs2Merge",
-          "regMerge"
-        ],
-        "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:execute:flow:flow_001_execute_i_grfDriveToExecute_1",
-          "ev:execute:semantic_flow:flow_001_execute_i_grfDriveToExecute_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/execute.json",
-            "path": "internal_event_flow"
-          },
-          {
-            "source": "rtl/rtl/Execute/execute.v",
-            "path": "module_source"
-          }
-        ]
-      },
-      {
-        "value": "来自通用寄存器文件的驱动事件经拆分、合并与选择后，最终汇聚至寄存器合并单元，但未到达模块输出边界。",
-        "explanation": "该流从顶层输入端口 i_grfDriveToExecute_1 进入，经 grfResSplitter 拆分为两路，分别与来自 rele4Splitter 的事件在 rele1Merge 和 rele3Merge 中合并，再经 rele1Selector 和 rele3Selector 选择后，分别进入 rs1Merge 和 rs2Merge，最终在 regMerge 中合并为 w_regSelectorFreeToRegMerge_1，但该信号仅连接至 regMergeDelay1 的输入，未继续驱动至模块输出端口，表明该流在模块内部终止。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:execute:flow_001_execute_i_grfDriveToExecute_1:flow_intent:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_grfDriveToExecute_1",
+          "i_grfToExecuteData_64",
           "w_regSelectorFreeToRegMerge_1"
         ],
         "instances": [
@@ -694,14 +650,67 @@
             "path": "internal_event_flow"
           },
           {
-            "source": "rtl/rtl/Execute/execute.v",
-            "path": "module_source"
+            "source": "parser_pipeline_rtl/modules/execute.json",
+            "path": "flow_graph.assignment_dependencies"
           }
         ]
       },
       {
-        "value": "存在自由信号 o_executeFreeToGrf_1 表明模块可向 GRF 发送反压，但该信号与当前流的关系不明确。",
-        "explanation": "接口载荷契约中列出了 o_executeFreeToGrf_1 作为 i_grfDriveToExecute_1 事件的自由信号，但当前流上下文中未包含该信号的连接或赋值信息，无法确定其如何影响事件传播或是否与 regMerge 的输出相关。",
+        "value": "通用寄存器文件结果驱动事件从模块输入端口经拆分、合并、选择后最终汇聚至寄存器合并单元，但未到达模块输出端点。",
+        "explanation": "该流仅描述了从输入端口 i_grfDriveToExecute_1 出发，经过 grfResSplitter 拆分、rele1Merge/rele3Merge 合并、rele1Selector/rele3Selector 选择、rs1Merge/rs2Merge 互斥合并，最终到达 regMerge 的路径。上下文明确警告“未从 i_grfDriveToExecute_1 到达模块事件输出”，因此该流是一个内部驱动流，不产生模块级输出事件。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:execute:flow_001_execute_i_grfDriveToExecute_1:flow_intent:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_grfDriveToExecute_1",
+          "w_grfResSplitterDriveToRelo1Merge_1",
+          "w_grfResSplitterDriveToRelo3Merge_1",
+          "w_rele1MergeDriveToRele1Selector_1",
+          "w_rele3MergeDriveToRele3Selector_1",
+          "w_rele1SelectorDriveToRs1Merge_1",
+          "w_rele3SelectorDriveToRs2Merge_1",
+          "w_rs1MergeDriveToRegMerge_1",
+          "w_rs2MergeDriveToRegMerge_1",
+          "w_regSelectorFreeToRegMerge_1"
+        ],
+        "instances": [
+          "grfResSplitter",
+          "rele1Merge",
+          "rele3Merge",
+          "rele1Selector",
+          "rele3Selector",
+          "rs1Merge",
+          "rs2Merge",
+          "regMerge"
+        ],
+        "related_flows": [],
+        "related_assignments": [
+          "(无)"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:execute:flow:flow_001_execute_i_grfDriveToExecute_1",
+          "ev:execute:semantic_flow:flow_001_execute_i_grfDriveToExecute_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/execute.json",
+            "path": "internal_event_flow"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/execute.json",
+            "path": "flow_graph.assignment_dependencies"
+          }
+        ]
+      },
+      {
+        "value": "存在一个自由信号 o_executeFreeToGrf_1 与输入驱动事件关联，但该流内部未显示其连接或使用。",
+        "explanation": "接口载荷契约指出 o_executeFreeToGrf_1 是 i_grfDriveToExecute_1 的自由信号，但上下文中的组件连接和步骤列表均未包含该信号。这表明自由/反压机制可能由模块顶层或其他未提供的逻辑处理，该流内部不涉及。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -728,10 +737,6 @@
           {
             "source": "knowledge_ir/modules/execute.json",
             "path": "interface_data_contract"
-          },
-          {
-            "source": "rtl/rtl/Execute/execute.v",
-            "path": "module_source"
           }
         ]
       }

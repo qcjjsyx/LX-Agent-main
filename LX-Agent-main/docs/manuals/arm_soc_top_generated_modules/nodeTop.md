@@ -1,8 +1,8 @@
 # 模块 `nodeTop`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/nodeTop.v`。
-- 职责：AI 推断：五方向网络节点路由器，负责将来自东、西、南、北、本地五个方向的输入消息路由到目标方向输出。。
-- 说明：模块具有五个方向的驱动事件输入和输出，以及对应的消息数据输入和输出，内部由五个方向的路由器（routeMsg）和仲裁器（arbMsg）实例组成，形成完整的交叉路由结构。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\nodeTop.v`。
+- 职责：AI 推断：五方向网络节点，负责将来自东、本地、北、南、西五个方向的消息进行路由和仲裁，并输出到对应方向。。
+- 说明：模块接收五个方向的驱动事件和消息数据，通过对应的 routeMsg 实例进行路由，再通过 arbMsg 实例进行仲裁，最终输出驱动事件和消息数据。每个方向都有独立的 routeMsg 和 arbMsg 实例，形成完整的消息转发路径。
 
 ## 1. 层级位置
 
@@ -82,7 +82,7 @@ nodeTop
 - Payload：`i_driveEast` -> `i_eastInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
 - 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
 - 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：文档应重点描述从东向输入到五个方向输出的路由和仲裁过程
+- AI 推断：文档应重点描述从东向输入到五个方向输出的分发路径和仲裁逻辑。
 
 ### `i_driveLocal`
 
@@ -90,7 +90,7 @@ nodeTop
 - Payload：`i_driveLocal` -> `i_localInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
 - 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
 - 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：手册应重点描述本地事件如何经路由决策扇出到五个方向仲裁器
+- AI 推断：手册应重点描述本地事件经路由后如何被五个方向仲裁器处理并输出
 
 ### `i_driveNorth`
 
@@ -98,7 +98,7 @@ nodeTop
 - Payload：`i_driveNorth` -> `i_northInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
 - 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
 - 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：最终手册应重点描述从北向输入到五个方向输出的完整分发路径，以及路由和仲裁组件的角色。
+- AI 推断：事件驱动信号 i_driveNorth 与 51 位消息载荷 i_northInMsg_51 并行输入，载荷随事件流经路由和仲裁后输出。
 
 ### `i_driveSouth`
 
@@ -106,7 +106,7 @@ nodeTop
 - Payload：`i_driveSouth` -> `i_southInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
 - 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
 - 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：南向输入事件携带 51 位数据负载，事件驱动与数据同步输入
+- AI 推断：手册应重点描述南向输入事件如何通过southRouteMsg路由到五个方向仲裁器，并最终输出到所有方向。
 
 ### `i_driveWest`
 
@@ -114,7 +114,7 @@ nodeTop
 - Payload：`i_driveWest` -> `i_westInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
 - 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
 - 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：手册应重点描述从西侧输入到五个方向输出的路由分发与仲裁路径，并强调数据载荷的同步传输。
+- AI 推断：手册应重点描述从西侧输入到所有方向输出的路由和仲裁路径，强调 westRouteMsg 的分发逻辑和 arbMsg 的仲裁策略。
 
 
 ## 5. 内部组件与 assign 影响

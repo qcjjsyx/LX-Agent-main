@@ -1,8 +1,8 @@
 # 模块 `arbMsg`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/arbMsg.v`。
-- 职责：AI 推断：五路输入消息仲裁与合并模块，负责从东、本地、北、南、西五个方向中选择一路消息转发至下一级。。
-- 说明：模块接收五个方向的事件驱动信号(i_driveEast等)及其对应的51位消息载荷，通过内部实例arbMerge(cArbMerge5_51b)进行仲裁合并，输出选中的消息(o_msg_51)和驱动事件(o_driveNext)。同时根据下游空闲信号(i_freeNext)生成各方向独立的空闲反馈信号(o_freeEast等)。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\arbMsg.v`。
+- 职责：AI 推断：五路输入到一路输出的消息仲裁与合并模块，用于片上网络（IONet）的路由节点。。
+- 说明：模块接收来自东、本地、北、南、西五个方向的驱动事件（i_drive*）及其对应的51位消息载荷（i_*Msg_51），通过内部实例arbMerge（cArbMerge5_51b）进行仲裁合并，输出一个驱动事件（o_driveNext）和一条合并后的消息（o_msg_51）。同时，它接收来自下一级的空闲信号（i_freeNext），并生成五个方向各自的空闲信号（o_free*），构成完整的握手机制。
 
 ## 1. 层级位置
 
@@ -58,7 +58,7 @@ arbMsg
 - Payload：`i_driveEast` -> `i_eastMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：东向驱动事件携带一个 51 位数据载荷，该载荷通过 arbMerge 合并后输出
+- AI 推断：东向驱动事件 `i_driveEast` 携带一个 51 位的数据负载 `i_eastMsg_51`。
 
 ### `i_driveLocal`
 
@@ -66,7 +66,7 @@ arbMsg
 - Payload：`i_driveLocal` -> `i_localMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：本地驱动事件携带51位数据负载，两者通过arbMerge同步转发
+- AI 推断：手册应重点描述 i_driveLocal 事件如何通过 arbMerge 参与仲裁并输出
 
 ### `i_driveNorth`
 
@@ -74,7 +74,7 @@ arbMsg
 - Payload：`i_driveNorth` -> `i_northMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：驱动事件i_driveNorth控制其关联的51位消息负载i_northMsg_51的传播
+- AI 推断：驱动事件i_driveNorth携带51位北向消息载荷i_northMsg_51
 
 ### `i_driveSouth`
 
@@ -82,7 +82,7 @@ arbMsg
 - Payload：`i_driveSouth` -> `i_southMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：事件驱动信号 i_driveSouth 与数据负载信号 i_southMsg_51 相关联，后者作为输入数据被送入 arbMerge 实例。
+- AI 推断：文档应强调 i_driveSouth 作为 arbMerge 的输入之一，以及有效载荷 i_southMsg_51 的传递路径，但避免过度解释仲裁逻辑。
 
 ### `i_driveWest`
 
@@ -90,7 +90,7 @@ arbMsg
 - Payload：`i_driveWest` -> `i_westMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：西侧事件驱动信号 i_driveWest 与 51 位西侧消息负载 i_westMsg_51 相关联，但控制与数据的耦合方式未知
+- AI 推断：西向事件携带51位消息负载，经合并后输出
 
 
 ## 5. 内部组件与 assign 影响

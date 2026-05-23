@@ -1,8 +1,8 @@
 # 模块 `decoder`
 
-- 源文件：`rtl/rtl/Decode/decoder.v`。
-- 职责：AI 推断：指令解码与分发核心模块，负责将取指阶段传入的PC和指令数据解码为控制信号，并分发至发射和异常处理阶段。。
-- 说明：模块接收来自IF阶段的驱动事件和PC+指令数据，通过内部选择器（decoderSele）根据指令宽度（16位或32位）分流至对应的解码子模块（decoder16/decoder32），解码结果经互斥合并（decoMerge）后输出解码数据、写使能、条件标志等控制信号，同时通过事件分发器（decSpli）将驱动事件分别导向发射（Launch）和异常（Exc）阶段。
+- 源文件：`rtl\rtl\Decode\decoder.v`。
+- 职责：AI 推断：从RTL切片确认，i_driveFromIF经decoderSele选择后，驱动decoder16和decoder32实例，形成解码数据流，最终通过decoderData_187等输出流出模块。。
+- 说明：切片第60-63行显示decoderSele将i_driveFromIF分发给decoder16和decoder32；第77-88行显示decoder16和decoder32实例化；第99-104行显示decMerge合并解码数据；第121-129行always块将合并数据寄存为r_decoderData_191；第163-167行通过连续赋值输出o_decoderData_187、o_blImm9_9、o_nzcvWen_4等，形成从输入到输出的完整数据流语义。
 
 ## 1. 层级位置
 
@@ -69,7 +69,7 @@ decoder
 - Payload：`i_driveFromIF` -> `i_pcAndIns_64 [ 63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=1，join=1，blocking=1。
-- AI 推断：数据负载i_pcAndIns_64与事件驱动i_driveFromIF并行传播，但选择器decoderSele可能使用该数据决定分发路径。
+- AI 推断：手册应重点描述decoderSele的选择条件和decoMerge的仲裁逻辑，以及数据负载的同步方式。
 
 
 ## 5. 内部组件与 assign 影响
@@ -86,8 +86,9 @@ decoder
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | data_path | `o_decoderData_187` | {1'b0, w_decoderData1_191[186:2], w_is16_1} | AI 推断：解码数据输出，由合并后的解码数据w_decoderData1_191和指令宽度标志w_is16_1拼接而成。 |
-| `assign_3` | control_path | `o_wen_2` | w_decoderData1_191[1:0] | AI 推断：写使能输出，直接从解码数据总线的低2位提取。 |
-| `assign_4` | unknown | `o_blImm9_9` | r_blImm9_9 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | control_path | `o_nzcvWen_4` | r_nzcvWen_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_6` | data_path | `o_decPCAndNum_36` | {w_decoderData1_191[136:105],w_decoderData1_191[190:187]} | AI 推断：解码PC和异常编号输出，从解码数据总线中提取PC字段和异常编号字段拼接而成。 |
+| `assign_1` | data_path | `w_decoderData1_191` | r_decoderData_191 | AI 推断：输出36位解码PC和异常编号，从解码数据中提取。 |
+| `assign_2` | data_path | `o_decoderData_187` | {1'b0, w_decoderData1_191[186:2], w_is16_1} | AI 推断：输出解码后的187位数据，包含指令解码结果和16位指令标志。 |
+| `assign_3` | control_path | `o_wen_2` | w_decoderData1_191[1:0] | AI 推断：输出2位写使能信号，从解码数据中提取。 |
+| `assign_4` | unknown | `o_blImm9_9` | r_blImm9_9 | AI 推断：输出9位BL指令立即数，来自寄存器r_blImm9_9。 |
+| `assign_5` | control_path | `o_nzcvWen_4` | r_nzcvWen_4 | AI 推断：输出4位NZCV条件标志写使能，来自寄存器r_nzcvWen_4。 |
+| `assign_6` | data_path | `o_decPCAndNum_36` | {w_decoderData1_191[136:105],w_decoderData1_191[190:187]} | AI 推断：输出36位解码PC和异常编号，从解码数据中提取。 |

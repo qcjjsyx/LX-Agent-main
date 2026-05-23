@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "NoCUART1",
-  "input_hash": "8a5b75b17db45f33225e72a13c588993ee449e793bf2a1f0f5d1d35e6302da95",
+  "input_hash": "36826feacd4a0db90ee8ef0b0b9d0a185acb5dae090951cda7271ab9db14218c",
   "source_context": "ai_context/modules/NoCUART1.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/IONet/UART/NoCUART1.v",
+      "source": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+        "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
         "parser_module": "modules/NoCUART1.json"
       }
     }
@@ -64,9 +64,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "该模块是UART外设与片上网络(NoC)之间的驱动事件与数据同步桥接层，负责将UART中断/状态事件转换为NoC可识别的驱动-确认协议。",
+      "summary": "该模块是UART外设与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC侧的驱动事件和数据通过内部FIFO和延迟链转发至UART实例，并将UART的响应数据打包回NoC。",
       "subject": "NoCUART1",
-      "explanation": "模块通过i_drvFNoc事件驱动输入，经过cfifo0、pmtAck、cfifo1和三级延迟链后，输出o_drv2Noc事件。数据路径o_data2Noc_51由内部寄存器r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y拼接而成，表明模块在事件流中同步采样并重组UART数据。uart_instance直接连接外部UART信号(SIN/SOUT/IRQ/CTS等)，但事件流不直接经过uart_instance，说明模块主要处理NoC侧协议适配而非UART核心功能。",
+      "explanation": "模块通过事件驱动接口(i_drvFNoc/o_drv2Noc)与NoC交互，内部使用cfifo0、pmtAck、cfifo1和延迟链(delay8-11)构成事件流路径，将输入驱动事件传递至uart_instance，同时将UART的接收数据(ReceiveData)与状态位(r_X, r_Y)组合成51位输出数据包(o_data2Noc_51)。自由信号(i_freeFNoc/o_free2Noc)用于FIFO的释放控制。",
       "signals": [
         "i_drvFNoc",
         "o_drv2Noc",
@@ -89,10 +89,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "internal_event_flow"
+        },
+        {
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:NoCUART1:module_role:001"
@@ -103,9 +109,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "模块将输入的驱动事件(i_drvFNoc)通过FIFO和延迟链同步后输出(o_drv2Noc)，同时将UART数据(ReceiveData等)与NoC输入数据(r_dataFNoc_51)重组为输出数据(o_data2Noc_51)。",
-      "subject": "驱动事件同步与数据重组",
-      "explanation": "事件流从i_drvFNoc进入cfifo0，经pmtAck确认后进入cfifo1，再经三级延迟(delay8/9/10)输出。数据路径显示o_data2Noc_51由r_dataFNoc_51的高位、r_dataHigh、ReceiveData、r_X、r_Y拼接，表明模块在事件驱动下采样UART接收数据并打包成NoC数据格式。free信号路径(i_freeFNoc->cfifo1->o_free2Noc)独立于驱动事件流，可能用于流控或释放。",
+      "summary": "模块将NoC侧的驱动事件(i_drvFNoc)通过两级FIFO(cfifo0, cfifo1)和确认单元(pmtAck)及延迟链(delay8-11)传递至UART实例，同时将UART的接收数据与状态位组合成51位数据包(o_data2Noc_51)输出。",
+      "subject": "事件驱动转发与数据打包",
+      "explanation": "事件流从i_drvFNoc进入cfifo0，经pmtAck确认后进入cfifo1，再经过三级延迟(delay8-10)输出o_drv2Noc。数据路径通过assign 0将内部寄存器(r_dataFNoc_51, r_dataHigh, ReceiveData, r_X, r_Y)拼接成o_data2Noc_51。自由信号i_freeFNoc直接连接cfifo1，cfifo0的o_free输出至o_free2Noc。",
       "signals": [
         "i_drvFNoc",
         "o_drv2Noc",
@@ -117,7 +123,8 @@
       "instances": [
         "cfifo0",
         "cfifo1",
-        "pmtAck"
+        "pmtAck",
+        "uart_instance"
       ],
       "related_flows": [
         "flow_000_NoCUART1_i_drvFNoc"
@@ -127,10 +134,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:structural_responsibility:001"
@@ -141,12 +154,13 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "cfifo0 (cFifo2)",
-      "summary": "输入驱动事件的第一级FIFO缓冲，将NoC侧驱动事件同步到模块内部事件流。",
-      "explanation": "cfifo0接收i_drvFNoc事件，输出w_drv2Pmt事件到pmtAck。作为Fifo1家族实例，它提供事件缓冲和同步功能，是NoC到模块内部事件流的入口。",
+      "subject": "cfifo0",
+      "summary": "输入驱动事件的第一个FIFO缓冲，接收NoC侧的驱动事件(i_drvFNoc)并输出至pmtAck单元。",
+      "explanation": "cfifo0是cFifo2类型，属于Fifo1组件族。它作为事件流的入口缓冲，将i_drvFNoc事件暂存并传递给pmtAck。其o_free信号直接连接至o_free2Noc，表明释放信号直接回传NoC。",
       "signals": [
         "i_drvFNoc",
-        "w_drv2Pmt"
+        "w_drv2Pmt",
+        "o_free2Noc"
       ],
       "instances": [
         "cfifo0"
@@ -159,7 +173,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:001"
@@ -170,9 +189,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "pmtAck (cPmtFifo1)",
-      "summary": "驱动事件的确认同步级，在cfifo0之后提供握手确认机制。",
-      "explanation": "pmtAck接收w_drv2Pmt事件，输出w_drv2fifo1事件到delay11。作为PmtFifo1家族唯一实例，它可能在事件流中插入确认或流控逻辑。",
+      "subject": "pmtAck",
+      "summary": "事件确认单元，接收cfifo0的输出事件(w_drv2Pmt)并生成确认后的事件(w_drv2fifo1)传递给cfifo1。",
+      "explanation": "pmtAck是cPmtFifo1类型，属于PmtFifo1组件族。它位于cfifo0和cfifo1之间，负责对驱动事件进行确认处理，确保事件流的有序传递。",
       "signals": [
         "w_drv2Pmt",
         "w_drv2fifo1"
@@ -185,10 +204,15 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:002"
@@ -199,12 +223,13 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "cfifo1 (cFifo1)",
-      "summary": "驱动事件的第二级FIFO缓冲，在延迟链之前提供事件缓冲。",
-      "explanation": "cfifo1接收经延迟的w_drv2fifo1_delay事件，输出w_drv2Noc_delay事件到三级延迟链。作为Fifo1家族实例，它与cfifo0形成两级缓冲结构。",
+      "subject": "cfifo1",
+      "summary": "输出驱动事件的第二个FIFO缓冲，接收pmtAck确认后的事件(w_drv2fifo1_delay)并输出至延迟链(delay8)。",
+      "explanation": "cfifo1是cFifo1类型，属于Fifo1组件族。它位于pmtAck之后，将确认后的事件暂存并输出至延迟链。其i_freeNext连接i_freeFNoc，表明释放信号来自NoC。",
       "signals": [
         "w_drv2fifo1_delay",
-        "w_drv2Noc_delay"
+        "w_drv2Noc_delay",
+        "i_freeFNoc"
       ],
       "instances": [
         "cfifo1"
@@ -217,7 +242,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:003"
@@ -228,24 +258,26 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "subject": "uart_instance (m16550s)",
-      "summary": "标准16550 UART核心实例，提供串行通信功能，但事件流不直接经过它。",
-      "explanation": "uart_instance连接外部UART信号(SIN/SOUT/IRQ/CTS/DCD/DSR/DTR/RTS/RI/RCLK等)和内部数据信号(WDATA/w_rdata)。它不参与驱动事件流，表明模块将UART核心作为独立外设，通过数据路径(ReceiveData等)间接交互。",
+      "subject": "uart_instance",
+      "summary": "核心UART外设实例(m16550s)，负责串行通信的收发功能，与NoCUART1模块通过多个控制/状态信号连接。",
+      "explanation": "uart_instance是m16550s模块实例，通过BAUD、BRGE、CLOCK、IRQ、NCTS、NDCD、NDSR、NDTR、NOUT1、NOUT2、NRI、NRTS、RCLK、RCLK_BAUD、SIN、SOUT等信号与模块边界交互。其WDATA输入和w_rdata输出表明存在数据读写路径，但具体数据流在上下文中未完全展开。",
       "signals": [
-        "SIN",
-        "SOUT",
+        "BAUD",
+        "BRGE",
+        "CLOCK",
         "IRQ",
         "NCTS",
         "NDCD",
         "NDSR",
         "NDTR",
-        "NRTS",
+        "NOUT1",
+        "NOUT2",
         "NRI",
+        "NRTS",
         "RCLK",
         "RCLK_BAUD",
-        "BAUD",
-        "BRGE",
-        "CLOCK",
+        "SIN",
+        "SOUT",
         "WDATA",
         "w_rdata"
       ],
@@ -255,12 +287,17 @@
       "related_flows": [
         "flow_000_NoCUART1_i_drvFNoc"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:component_role:004"
@@ -272,8 +309,8 @@
         "module": "NoCUART1"
       },
       "subject": "o_data2Noc_51",
-      "summary": "输出数据由NoC输入数据高位、UART接收数据高位、UART接收数据、以及两个状态位r_X/r_Y拼接而成，表明模块在事件驱动下打包UART数据。",
-      "explanation": "赋值o_data2Noc_51 = {r_dataFNoc_51[50], r_dataFNoc_51[49:42], r_dataHigh, ReceiveData, r_X, r_Y}显示输出数据包含：1位NoC输入数据最高位、8位NoC输入数据次高位、r_dataHigh(可能为UART数据高位)、ReceiveData(UART接收数据)、以及两个状态位。这表明模块在事件流中采样UART数据并重组为NoC格式。",
+      "summary": "将UART接收数据(ReceiveData)与高位数据(r_dataHigh)、状态位(r_X, r_Y)以及输入数据的高位(r_dataFNoc_51[50:42])组合成51位输出数据包。",
+      "explanation": "该赋值将内部寄存器信号拼接成o_data2Noc_51，其中r_dataFNoc_51[50]为最高位，r_dataFNoc_51[49:42]为次高位，r_dataHigh、ReceiveData、r_X、r_Y依次排列。这表明输出数据包包含了UART接收数据、状态信息以及部分输入数据的回传。",
       "signals": [
         "o_data2Noc_51",
         "r_dataFNoc_51",
@@ -283,17 +320,22 @@
         "r_Y"
       ],
       "related_assignments": [
-        "0"
+        "assign 0"
       ],
       "related_flows": [
         "flow_000_NoCUART1_i_drvFNoc"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:module:NoCUART1:assignment_interpretation:001"
@@ -304,9 +346,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "i_drvFNoc与o_drv2Noc构成NoC到UART的驱动事件通道，携带51位数据载荷(i_dataFNoc_51/o_data2Noc_51)。",
-      "subject": "NoC驱动事件接口",
-      "explanation": "输入事件i_drvFNoc与数据i_dataFNoc_51关联，输出事件o_drv2Noc与数据o_data2Noc_51关联，形成事件-数据对。free信号(i_freeFNoc/o_free2Noc)独立于驱动事件流，可能用于流控或释放指示。",
+      "summary": "该接口对构成NoC侧的驱动事件握手协议，输入事件(i_drvFNoc)触发UART操作，输出事件(o_drv2Noc)表示操作完成。",
+      "subject": "事件驱动接口(i_drvFNoc/o_drv2Noc)",
+      "explanation": "输入事件i_drvFNoc携带51位数据载荷(i_dataFNoc_51)，经过内部事件流处理后，输出事件o_drv2Noc携带51位数据载荷(o_data2Noc_51)。自由信号i_freeFNoc/o_free2Noc用于FIFO的释放控制，表明存在背压或流控机制。",
       "signals": [
         "i_drvFNoc",
         "o_drv2Noc",
@@ -324,7 +366,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "interface"
+        },
+        {
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:NoCUART1:interface_intent:001"
@@ -335,36 +382,40 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "summary": "手册应重点描述从i_drvFNoc到o_drv2Noc的事件同步路径，以及o_data2Noc_51的数据重组逻辑，包括r_dataHigh、ReceiveData、r_X、r_Y的来源和更新时机。",
-      "subject": "驱动事件同步路径与数据重组逻辑",
-      "explanation": "事件流经过cfifo0->pmtAck->cfifo1->三级延迟链，数据重组涉及多个内部寄存器。这些是模块的核心功能，但当前上下文未提供r_dataHigh、ReceiveData、r_X、r_Y的更新逻辑，需要RTL源码补充。",
+      "summary": "手册应重点描述从i_drvFNoc到o_drv2Noc的事件流路径（包括FIFO、确认单元和延迟链），以及o_data2Noc_51的数据打包格式（各字段含义）。",
+      "subject": "事件流路径与数据打包逻辑",
+      "explanation": "事件流路径是模块的核心功能，涉及cfifo0、pmtAck、cfifo1和延迟链的协同工作。数据打包逻辑决定了UART接收数据如何与状态位组合输出，是NoC侧解析的关键。",
       "signals": [
         "i_drvFNoc",
         "o_drv2Noc",
+        "i_dataFNoc_51",
         "o_data2Noc_51",
-        "r_dataFNoc_51",
-        "r_dataHigh",
-        "ReceiveData",
-        "r_X",
-        "r_Y"
+        "w_drv2Pmt",
+        "w_drv2fifo1",
+        "w_drv2Noc_delay",
+        "w_drv2Noc_delay1",
+        "w_drv2Noc_delay2"
       ],
       "instances": [
         "cfifo0",
         "cfifo1",
-        "pmtAck"
+        "pmtAck",
+        "uart_instance"
       ],
       "related_flows": [
         "flow_000_NoCUART1_i_drvFNoc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:module:NoCUART1:documentation_focus:001"
@@ -375,14 +426,14 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "reason": "当前上下文未提供r_dataHigh、ReceiveData、r_X、r_Y的赋值来源和更新条件，无法确定数据重组的具体时序和触发条件。",
-      "subject": "内部寄存器更新逻辑",
-      "needed_source_slice": "assign block, always block",
+      "reason": "上下文仅显示uart_instance有WDATA输入和w_rdata输出，但未说明数据如何从事件流写入UART或从UART读取。需要RTL源确认数据路径的具体实现。",
+      "subject": "uart_instance数据读写路径",
+      "needed_source_slice": "always block, assign block, instance connections",
       "signals": [
-        "r_dataHigh",
-        "ReceiveData",
-        "r_X",
-        "r_Y"
+        "WDATA",
+        "w_rdata",
+        "i_dataFNoc_51",
+        "o_data2Noc_51"
       ],
       "instances": [
         "uart_instance"
@@ -392,10 +443,15 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          "source": "knowledge_ir/modules/NoCUART1.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:source_review_request:001"
@@ -406,9 +462,9 @@
         "type": "module",
         "module": "NoCUART1"
       },
-      "reason": "当前上下文仅显示delay8/delay9/delay10/delay11的输入输出连接，未提供延迟单元的具体实现(如延迟周期数、触发条件)。",
-      "subject": "延迟链实现细节",
-      "needed_source_slice": "instance connections, always block",
+      "reason": "上下文显示存在delay8、delay9、delay10、delay11四个延迟单元，但未说明其延迟周期数或实现方式。需要RTL源确认延迟链的参数。",
+      "subject": "延迟链(delay8-11)的具体实现",
+      "needed_source_slice": "instance connections, module declaration",
       "signals": [
         "w_drv2Noc_delay",
         "w_drv2Noc_delay1",
@@ -429,7 +485,8 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/NoCUART1.json"
+          "source": "parser_pipeline_rtl/modules/NoCUART1.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:module:NoCUART1:source_review_request:002"

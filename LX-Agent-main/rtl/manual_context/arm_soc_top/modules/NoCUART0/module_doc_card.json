@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "NoCUART0",
-  "source_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+  "source_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "基于NoC的UART桥接模块，负责将NoC驱动事件与UART核心进行协议转换和同步",
-    "explanation": "模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck和cfifo1延迟链处理后输出o_drv2Noc，同时连接uart_instance实现串行通信功能，表明其作为NoC与UART之间的适配层",
+    "value": "该模块是UART外设与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC的驱动事件和数据传递给UART实例，并将UART的响应数据打包后返回NoC。",
+    "explanation": "模块通过事件驱动接口(i_drvFNoc/o_drv2Noc)与NoC交互，内部使用FIFO和延迟链进行事件同步与流水线处理，最终将UART实例的接收数据(ReceiveData)与状态位(r_X, r_Y)组合成51位数据包(o_data2Noc_51)输出。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -33,7 +33,9 @@
       "i_drvFNoc",
       "o_drv2Noc",
       "i_dataFNoc_51",
-      "o_data2Noc_51"
+      "o_data2Noc_51",
+      "i_freeFNoc",
+      "o_free2Noc"
     ],
     "instances": [
       "cfifo0",
@@ -52,10 +54,16 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/NoCUART0.json"
+        "source": "knowledge_ir/modules/NoCUART0.json",
+        "path": "interface"
       },
       {
-        "source": "parser_pipeline_rtl/modules/NoCUART0.json"
+        "source": "knowledge_ir/modules/NoCUART0.json",
+        "path": "internal_event_flow"
+      },
+      {
+        "source": "knowledge_ir/modules/NoCUART0.json",
+        "path": "assignment_facts"
       }
     ]
   },
@@ -461,7 +469,7 @@
         ],
         "summary": "clock_reset_init ports, count=3, directions=input:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -496,7 +504,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -531,7 +539,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -650,7 +658,7 @@
         ],
         "summary": "other_ports ports, count=16, directions=input:8, output:8",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -667,92 +675,50 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_NoCUART0_i_drvFNoc.json",
       "reader_takeaway": {
-        "value": "事件流仅传递驱动信号，数据打包通过独立赋值完成，两者在输出端口o_drv2Noc处结合。",
-        "explanation": "流步骤仅涉及事件驱动信号（如i_drvFNoc、w_drv2Pmt等），不包含数据信号。数据打包由赋值0完成，将内部寄存器组合成o_data2Noc_51。这表明事件流控制数据何时输出，而数据内容由独立的寄存器逻辑决定。输出事件o_drv2Noc与数据信号o_data2Noc_51共同构成完整的输出接口。",
+        "value": "最终手册应重点描述从 i_drvFNoc 到 o_drv2Noc 的串行事件传播路径，包括 FIFO 缓冲、确认同步和延迟链的作用。",
+        "explanation": "该流是 NoCUART0 模块中唯一的内部事件流，结构清晰但无分支，手册应强调其串行性和各组件角色，避免过度解释未确认的反压或握手细节。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "o_drv2Noc",
-          "o_data2Noc_51"
+          "i_drvFNoc",
+          "o_drv2Noc"
         ],
-        "instances": [],
+        "instances": [
+          "cfifo0",
+          "pmtAck",
+          "delay11",
+          "cfifo1",
+          "delay8",
+          "delay9",
+          "delay10"
+        ],
         "related_flows": [],
         "related_assignments": [
           "0"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc",
           "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/NoCUART0.json"
-          },
-          {
-            "source": "interface.data_ports",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "knowledge_ir/modules/NoCUART0.json",
+            "path": "internal_event_flow"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述事件流如何控制数据输出，以及延迟链对输出时序的影响。",
-            "explanation": "该流的核心是事件驱动路径，但输出数据由独立赋值打包。手册应解释事件流与数据打包的关系，即事件驱动信号o_drv2Noc何时有效，以及此时o_data2Noc_51的内容如何由内部寄存器决定。此外，延迟链（delay8、delay9、delay10）的总延迟（64+32+8=104个时钟周期）和delay11的16个时钟周期延迟对输出时序的影响也应说明。",
+            "value": "从输入事件 i_drvFNoc 到输出事件 o_drv2Noc 的串行驱动传递流，经过 FIFO 缓冲、确认同步和延迟链，最终将驱动事件输出到片上网络。",
+            "explanation": "该流由单个输入事件 i_drvFNoc 触发，经过 cfifo0 缓冲、pmtAck 确认同步、delay11 延迟、cfifo1 再次缓冲，以及 delay8/delay9/delay10 三级延迟链，最终输出 o_drv2Noc。所有步骤均为串行，无分支或合并点，表明这是一个纯粹的驱动事件传播路径。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "o_drv2Noc",
-              "o_data2Noc_51",
-              "i_drvFNoc",
-              "i_dataFNoc_51"
-            ],
-            "instances": [
-              "cfifo0",
-              "pmtAck",
-              "delay11",
-              "cfifo1",
-              "delay8",
-              "delay9",
-              "delay10"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "0"
-            ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc",
-              "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "flow.steps",
-                "path": "knowledge_ir/modules/NoCUART0.json"
-              },
-              {
-                "source": "interface_payload_contracts",
-                "path": "knowledge_ir/modules/NoCUART0.json"
-              }
-            ]
-          },
-          {
-            "value": "从输入事件驱动i_drvFNoc到输出事件驱动o_drv2Noc的串行流水线，经过FIFO缓冲、确认握手和延迟链，最终将数据打包输出到片上网络。",
-            "explanation": "该流是NoCUART0模块内部的一条单向事件驱动路径，起始于外部输入的驱动事件i_drvFNoc，经过cfifo0（FIFO缓冲）、pmtAck（确认FIFO）、delay11（透明延迟）、cfifo1（FIFO缓冲）、delay8、delay9、delay10（三级延迟链）后，最终输出为o_drv2Noc。流中无分支或合并点，所有步骤为串行连接。FIFO阶段（cfifo0、pmtAck、cfifo1）可能因满/空状态而阻塞事件传播，延迟阶段（delay11、delay8、delay9、delay10）为透明延迟，不改变数据内容。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "high",
             "source_layers": [
               "semantic_layer"
             ],
@@ -760,12 +726,6 @@
             "doc_priority": "primary",
             "signals": [
               "i_drvFNoc",
-              "w_drv2Pmt",
-              "w_drv2fifo1",
-              "w_drv2fifo1_delay",
-              "w_drv2Noc_delay",
-              "w_drv2Noc_delay1",
-              "w_drv2Noc_delay2",
               "o_drv2Noc"
             ],
             "instances": [
@@ -789,25 +749,62 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "knowledge_ir/modules/NoCUART0.json"
+                "source": "knowledge_ir/modules/NoCUART0.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/NoCUART0.json"
+                "source": "parser_pipeline_rtl/modules/NoCUART0.json",
+                "path": "flow_graph"
               }
             ]
           },
           {
-            "value": "流中的三个FIFO阶段（cfifo0、pmtAck、cfifo1）可能因满状态而阻塞上游事件传播，但具体背压信号未在上下文中提供。",
-            "explanation": "上下文将cfifo0、pmtAck、cfifo1标记为阻塞点，表明它们可能因FIFO满而暂停事件流。然而，未提供任何free/backpressure信号（如full、almost_full、valid、ready等），因此无法确认背压机制的具体实现。延迟阶段（delay11、delay8、delay9、delay10）通常不产生背压。",
+            "value": "事件流 i_drvFNoc 到 o_drv2Noc 的传播与载荷信号 o_data2Noc_51 的赋值独立但相关，载荷在事件传播过程中被组合。",
+            "explanation": "事件流通过 FIFO 和延迟链传播，而载荷赋值 o_data2Noc_51 在模块内部完成，不直接参与事件流路径。这表明事件驱动和载荷打包是并行或异步的，最终在输出端口同步。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_drvFNoc",
+              "o_drv2Noc",
+              "o_data2Noc_51"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "0"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc",
+              "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/NoCUART0.json",
+                "path": "interface_payload_contracts"
+              },
+              {
+                "source": "parser_pipeline_rtl/modules/NoCUART0.json",
+                "path": "assignments"
+              }
+            ]
+          },
+          {
+            "value": "当前上下文未提供明确的 free/backpressure 信号，但 FIFO 实例（cfifo0、pmtAck、cfifo1）可能隐含反压机制。",
+            "explanation": "三个 FIFO 级可能通过内部满/空信号实现反压，但上下文中未列出相关信号。延迟模块（delay11、delay8、delay9、delay10）通常不产生反压。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:completion_backpressure:001",
-            "doc_priority": "secondary",
+            "doc_priority": "reference",
             "signals": [],
             "instances": [
               "cfifo0",
@@ -824,8 +821,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "flow.blocking_points",
-                "path": "knowledge_ir/modules/NoCUART0.json"
+                "source": "knowledge_ir/modules/NoCUART0.json",
+                "path": "internal_event_flow"
               }
             ]
           }
@@ -843,11 +840,11 @@
     "components": 3,
     "assignments": 1,
     "evidence_gaps": 0,
-    "review_questions": 1
+    "review_questions": 2
   },
   "source_review_context": {
     "module": "NoCUART0",
-    "rtl_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+    "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -872,9 +869,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "flow_000_NoCUART0_i_drvFNoc",
-      "summary": "事件流仅传递驱动信号，数据打包通过独立赋值完成，两者在输出端口 o_drv2Noc 处结合。",
-      "explanation": "切片显示端口 i_drvFNoc（第30行）仅作为 cFifo0 实例的 i_drive 输入（第68行），用于控制事件驱动；o_data2Noc_51 输出端口在第36行声明，但切片中未见其赋值逻辑；o_free2Noc 在第31行被输出并连接到 cFifo0 的 o_free（第69行）。切片中无数据打包逻辑，与 flow 步骤描述一致。",
+      "subject": "延迟链组件(delay8, delay9, delay10, delay11)",
+      "summary": "UART发送端延迟链各组件类型明确，组合提供确定的总延迟周期。",
+      "explanation": "切片[4]显示delay8为delay64U（64周期）、delay9为delay32U（32周期）、delay10为delay8U（8周期），三者串联驱动o_drv2Noc，总延迟为104个时钟周期。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -882,42 +879,116 @@
         "manual_context"
       ],
       "signals": [
-        "i_drvFNoc",
+        "w_drv2Noc_delay",
+        "w_drv2Noc_delay1",
+        "w_drv2Noc_delay2",
+        "o_drv2Noc"
+      ],
+      "instances": [
+        "delay8",
+        "delay9",
+        "delay10",
+        "delay11"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
+          "line_start": 111,
+          "line_end": 113
+        }
+      ],
+      "evidence_refs": [
+        "ev:NoCUART0:semantic_module",
+        "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc",
+        "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "pmtAck握手机制",
+      "summary": "pmtAck由内部FIFO输出控制，不含独立握手或确认逻辑。",
+      "explanation": "切片[2]显示cfifo0实例连接o_free2Noc至w_freeFPmt，pmtAck信号未出现在任何切片中；其行为完全由cfifo0的状态机决定。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
         "o_free2Noc",
-        "o_data2Noc_51"
+        "w_freeFPmt"
       ],
       "instances": [
         "cfifo0"
       ],
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/UART/NoCUART0.v",
-          "line_start": 30,
-          "line_end": 30
-        },
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART0.v",
-          "line_start": 36,
-          "line_end": 36
-        },
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART0.v",
-          "line_start": 67,
-          "line_end": 69
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
+          "line_start": 66,
+          "line_end": 70
         }
       ],
       "evidence_refs": [
+        "ev:NoCUART0:semantic_module",
         "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc",
         "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc"
       ],
       "review_status": "needs_review"
+    },
+    {
+      "subject": "semantic_flow.i_drvFNoc",
+      "summary": "事件流从i_drvFNoc经两级FIFO与延迟链驱动o_drv2Noc。",
+      "explanation": "切片[2]显示i_drvFNoc直接驱动cfifo0；切片[3,4]显示cfifo1与延迟链(delay11→delay8→delay9→delay10)串联，最终输出o_drv2Noc。路径确认但内部握手机制未完全展开。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_drvFNoc",
+        "w_drv2fifo1_delay",
+        "w_drv2Noc_delay",
+        "o_drv2Noc"
+      ],
+      "instances": [
+        "cfifo0",
+        "cfifo1",
+        "delay11",
+        "delay8",
+        "delay9",
+        "delay10"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
+          "line_start": 66,
+          "line_end": 70
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
+          "line_start": 99,
+          "line_end": 103
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
+          "line_start": 111,
+          "line_end": 113
+        }
+      ],
+      "evidence_refs": [
+        "ev:NoCUART0:semantic_module",
+        "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc",
+        "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc"
+      ],
+      "review_status": "ready"
     }
   ],
   "source_review_report": {
     "status": "reviewed",
-    "claim_count": 1,
-    "open_question_count": 1,
-    "source_file": "rtl/rtl/IONet/UART/NoCUART0.v",
+    "claim_count": 3,
+    "open_question_count": 3,
+    "source_file": "rtl\\rtl\\IONet\\UART\\NoCUART0.v",
     "report_file": "source_review_report.json"
   }
 }

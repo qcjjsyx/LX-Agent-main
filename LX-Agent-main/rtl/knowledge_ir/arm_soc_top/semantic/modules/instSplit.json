@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "instSplit",
-  "input_hash": "c54e7ba78aeb721e807f48f1bfcb44e50050715ebb5ffd949521a80c58a5ce9f",
+  "input_hash": "c0f74be9b3bf8486bd75cfa75c1b192dbf6ef6b89bdfc2795ab8d8e0ee0f9945",
   "source_context": "ai_context/modules/instSplit.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/IF/instSplit.v",
+      "source": "rtl\\rtl\\IF\\instSplit.v",
       "paths": [
         "module_source"
       ]
@@ -40,21 +40,21 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/IF/instSplit.v",
+        "rtl_file": "rtl\\rtl\\IF\\instSplit.v",
         "parser_module": "modules/instSplit.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 18,
+    "count": 9,
     "by_type": {
-      "assignment_interpretation": 7,
+      "assignment_interpretation": 2,
       "component_role": 1,
-      "documentation_focus": 2,
+      "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 2,
-      "structural_responsibility": 3
+      "source_review_request": 1,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -64,14 +64,56 @@
         "type": "module",
         "module": "instSplit"
       },
-      "summary": "指令拆分与分发模块，将64位指令包拆分为最多4条32位指令，并管理指令FIFO的驱动与释放。",
+      "summary": "指令拆分与分发模块，将取指单元提供的64位指令包拆分为最多4条32位指令，并管理指令计数与下一PC计算。",
       "subject": "instSplit",
-      "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位将指令包拆分为最多4条指令，并通过FIFO组件进行流水线缓冲，最终输出拆分后的指令及其PC值，以及驱动事件给Merge模块。",
+      "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位（i_basePC_32[2:1]）确定指令起始位置，将64位指令拆分为最多4个33位指令槽（含有效位），同时计算并输出归一化的下一PC（o_normNextPc_32）和有效指令计数（o_instCount）。内部通过fetchFifo（cFifo3_fetch）实现事件流同步与延迟控制。",
       "signals": [
         "i_drvFICache",
         "i_inst_64",
         "i_basePC_32",
-        "o_drv2Merge",
+        "o_inst0_33",
+        "o_inst1_33",
+        "o_inst2_33",
+        "o_inst3_33",
+        "o_instCount",
+        "o_normNextPc_32"
+      ],
+      "instances": [
+        "fetchFifo"
+      ],
+      "related_flows": [
+        "flow_000_instSplit_i_drvFICache"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/instSplit.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
+        }
+      ],
+      "id": "semantic:module:instSplit:module_role:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "instSplit"
+      },
+      "summary": "将输入的64位指令包按基地址PC对齐，拆分为最多4条33位指令（含有效位），并输出各指令的PC和有效计数。",
+      "subject": "指令拆分与分发",
+      "explanation": "通过assign依赖w_start = i_basePC_32[2:1]确定拆分起始位置，将i_inst_64的四个16位片段（w_part1_16至w_part4_16）组合成33位指令槽。输出o_inst0_33至o_inst3_33及其对应PC，以及有效指令数o_instCount和归一化下一PC o_normNextPc_32。这些输出通过寄存器r_*驱动，表明存在时序逻辑控制。",
+      "signals": [
+        "i_basePC_32",
+        "i_inst_64",
+        "w_start",
+        "w_part1_16",
+        "w_part2_16",
+        "w_part3_16",
+        "w_part4_16",
         "o_inst0_33",
         "o_inst1_33",
         "o_inst2_33",
@@ -90,126 +132,17 @@
         "flow_000_instSplit_i_drvFICache"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:module_role:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "summary": "将输入的64位指令包根据基地址PC的低2位拆分为最多4条32位指令，并分别输出每条指令及其对应的PC值。",
-      "subject": "指令包拆分与分发",
-      "explanation": "通过assign依赖将i_inst_64拆分为w_part1_16到w_part4_16四个16位片段，并结合i_basePC_32[2:1]确定拆分起始点，最终生成o_inst0_33到o_inst3_33以及对应的PC输出。o_instCount指示有效指令数量。",
-      "signals": [
-        "i_inst_64",
-        "i_basePC_32",
-        "w_start",
-        "w_part1_16",
-        "w_part2_16",
-        "w_part3_16",
-        "w_part4_16",
-        "o_inst0_33",
-        "o_inst1_33",
-        "o_inst2_33",
-        "o_inst3_33",
-        "o_inst0PC_32",
-        "o_inst1PC_32",
-        "o_inst2PC_32",
-        "o_inst3PC_32",
-        "o_instCount"
-      ],
-      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         },
         {
-          "source": "modules/instSplit.json"
+          "source": "knowledge_ir/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:structural_responsibility:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "summary": "通过FIFO组件和延迟链对输入驱动事件进行流水线缓冲，确保与指令拆分处理同步。",
-      "subject": "驱动事件流水线缓冲",
-      "explanation": "输入驱动事件i_drvFICache经过fetchFifoDelay_in1、fetchFifoDelay_in2、fetchFifoDelay_in3三级延迟后驱动fetchFifo，fetchFifo输出w_drv2Merge再经fetchFifoDelay1延迟后输出o_drv2Merge。此链保证驱动事件与指令数据在流水线中的时序对齐。",
-      "signals": [
-        "i_drvFICache",
-        "w_drvFICache",
-        "w_drvFICache_t",
-        "w_drvFICache_t1",
-        "w_drv2Merge",
-        "o_drv2Merge"
-      ],
-      "instances": [
-        "fetchFifo",
-        "fetchFifoDelay_in1",
-        "fetchFifoDelay_in2",
-        "fetchFifoDelay_in3",
-        "fetchFifoDelay1"
-      ],
-      "related_flows": [
-        "flow_000_instSplit_i_drvFICache"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:structural_responsibility:002"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "summary": "将来自Merge模块的释放信号转发至ICache，同时将FIFO的释放状态输出。",
-      "subject": "释放信号转发",
-      "explanation": "输入释放信号i_freeFMerge直接连接到fetchFifo的i_freeNext输入，fetchFifo的o_free输出直接连接到o_free2ICache输出，实现释放信号的透明转发。",
-      "signals": [
-        "i_freeFMerge",
-        "o_free2ICache"
-      ],
-      "instances": [
-        "fetchFifo"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:structural_responsibility:003"
     },
     {
       "claim_type": "component_role",
@@ -217,9 +150,9 @@
         "type": "module",
         "module": "instSplit"
       },
-      "subject": "fetchFifo",
-      "summary": "指令拆分结果缓冲FIFO，用于缓存拆分后的指令数据并同步驱动事件。",
-      "explanation": "fetchFifo是cFifo3_fetch类型的FIFO，接收延迟后的驱动事件w_drvFICache作为输入，输出驱动事件w_drv2Merge。它负责在指令拆分逻辑和后续Merge模块之间提供流水线缓冲，确保数据流和事件流的同步。",
+      "subject": "fetchFifo (cFifo3_fetch)",
+      "summary": "事件流同步与延迟控制FIFO，管理驱动事件从输入到输出的流水线延迟。",
+      "explanation": "fetchFifo接收输入驱动事件w_drvFICache，经过内部延迟链（fetchFifoDelay_in1至fetchFifoDelay_in3）后产生输出驱动事件w_drv2Merge。同时处理空闲信号i_freeFMerge和o_free2ICache，实现事件流与空闲控制的同步。该FIFO属于Fifo1系列，实例计数为1。",
       "signals": [
         "w_drvFICache",
         "w_drv2Merge",
@@ -237,10 +170,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         },
         {
-          "source": "modules/instSplit.json"
+          "source": "knowledge_ir/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:component_role:001"
@@ -252,21 +185,24 @@
         "module": "instSplit"
       },
       "subject": "w_start",
-      "summary": "从基地址PC提取指令拆分起始位置。",
-      "explanation": "w_start = i_basePC_32[2:1] 提取基地址PC的低2位（忽略bit0），用于确定64位指令包中第一个有效指令的起始位置（0,1,2,3），控制后续指令拆分逻辑。",
+      "summary": "指令拆分起始位置选择，基于基地址PC的低2位。",
+      "explanation": "w_start = i_basePC_32[2:1]决定64位指令包中哪两个16位片段构成第一条32位指令，影响后续指令槽的分配。这是指令对齐的关键控制信号。",
       "signals": [
         "i_basePC_32",
         "w_start"
       ],
+      "related_assignments": [
+        "0"
+      ],
+      "related_flows": [
+        "flow_000_instSplit_i_drvFICache"
+      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:assignment_interpretation:001"
@@ -278,170 +214,28 @@
         "module": "instSplit"
       },
       "subject": "w_state",
-      "summary": "异常分支条件对状态寄存器的控制。",
-      "explanation": "w_state = ~w_intExcpBranchValid & r_preState 表明当异常分支有效时（w_intExcpBranchValid为高），状态寄存器r_preState将被清零，否则保持原值。这用于在异常发生时清除指令拆分状态。",
+      "summary": "异常分支状态控制，决定是否保持前一个状态。",
+      "explanation": "w_state = ~w_intExcpBranchValid & r_preState，当异常分支有效时强制状态为0，否则保持前状态。这表明模块支持异常分支场景下的状态重置。",
       "signals": [
         "w_intExcpBranchValid",
         "r_preState",
         "w_state"
+      ],
+      "related_assignments": [
+        "1"
+      ],
+      "related_flows": [
+        "flow_000_instSplit_i_drvFICache"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "subject": "w_part1_16, w_part2_16, w_part3_16, w_part4_16",
-      "summary": "将64位指令包拆分为四个16位片段。",
-      "explanation": "这四个assign将输入的64位指令i_inst_64按16位宽度拆分为四个片段，分别对应指令包的低16位、次低16位、次高16位和高16位，为后续的指令重组提供基础。",
-      "signals": [
-        "i_inst_64",
-        "w_part1_16",
-        "w_part2_16",
-        "w_part3_16",
-        "w_part4_16"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "subject": "o_inst0_33, o_inst1_33, o_inst2_33, o_inst3_33",
-      "summary": "输出拆分后的四条指令，每条33位（32位指令+1位有效标志）。",
-      "explanation": "这四个assign将内部寄存器r_inst0_33到r_inst3_33的值直接赋值给对应的输出端口。这些寄存器存储了拆分后的指令及其有效标志，输出宽度为33位，其中高32位为指令，最低位可能为有效标志。",
-      "signals": [
-        "r_inst0_33",
-        "r_inst1_33",
-        "r_inst2_33",
-        "r_inst3_33",
-        "o_inst0_33",
-        "o_inst1_33",
-        "o_inst2_33",
-        "o_inst3_33"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "subject": "o_inst0PC_32, o_inst1PC_32, o_inst2PC_32, o_inst3PC_32",
-      "summary": "输出每条指令对应的PC值。",
-      "explanation": "这四个assign将内部寄存器r_inst0PC_32到r_inst3PC_32的值直接赋值给对应的PC输出端口。这些寄存器存储了每条指令对应的程序计数器值，用于后续流水线阶段。",
-      "signals": [
-        "r_inst0PC_32",
-        "r_inst1PC_32",
-        "r_inst2PC_32",
-        "r_inst3PC_32",
-        "o_inst0PC_32",
-        "o_inst1PC_32",
-        "o_inst2PC_32",
-        "o_inst3PC_32"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "subject": "o_instCount",
-      "summary": "输出当前有效指令数量。",
-      "explanation": "o_instCount = r_instCont_3 将内部指令计数寄存器r_instCont_3的值直接赋值给输出端口，指示当前拆分出的有效指令数量（0-4）。",
-      "signals": [
-        "r_instCont_3",
-        "o_instCount"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:assignment_interpretation:006"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "subject": "o_normNextPc_32",
-      "summary": "输出下一个正常PC值。",
-      "explanation": "o_normNextPc_32 = r_normNextPc_32 将内部寄存器r_normNextPc_32的值直接赋值给输出端口，该值表示在无分支跳转情况下，下一条指令的PC地址。",
-      "signals": [
-        "r_normNextPc_32",
-        "o_normNextPc_32"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:assignment_interpretation:007"
     },
     {
       "claim_type": "interface_intent",
@@ -449,9 +243,9 @@
         "type": "module",
         "module": "instSplit"
       },
-      "summary": "输入驱动事件i_drvFICache触发指令拆分处理，输出驱动事件o_drv2Merge表示拆分完成。",
-      "subject": "驱动事件接口",
-      "explanation": "i_drvFICache来自FICache模块，表示有新的指令包可供拆分。经过内部流水线处理后，o_drv2Merge发送给Merge模块，表示拆分后的指令数据已就绪。两个事件之间通过FIFO和延迟链保持时序同步。",
+      "summary": "输入驱动事件i_drvFICache触发指令拆分流程，输出驱动事件o_drv2Merge表示拆分完成并驱动后续合并模块。",
+      "subject": "驱动事件接口组",
+      "explanation": "输入事件来自FICache，表示新指令包可用；输出事件驱动Merge模块，表示拆分后的指令数据已就绪。事件流通过fetchFifo实现流水线延迟控制，确保数据与事件同步。",
       "signals": [
         "i_drvFICache",
         "o_drv2Merge"
@@ -463,22 +257,18 @@
         "o_inst1_33",
         "o_inst2_33",
         "o_inst3_33",
-        "o_inst0PC_32",
-        "o_inst1PC_32",
-        "o_inst2PC_32",
-        "o_inst3PC_32",
         "o_instCount",
         "o_normNextPc_32"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
+          "source": "knowledge_ir/modules/instSplit.json"
         },
         {
-          "source": "modules/instSplit.json"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:interface_intent:001"
@@ -489,22 +279,22 @@
         "type": "module",
         "module": "instSplit"
       },
-      "summary": "释放信号用于控制FIFO中指令数据的释放，实现背压机制。",
-      "subject": "释放信号接口",
-      "explanation": "i_freeFMerge来自Merge模块，表示下游已消费指令数据，允许释放FIFO中的条目。o_free2ICache发送给ICache，表示FIFO已释放空间，可以接收新的指令包。此接口实现模块间的流控。",
+      "summary": "输入空闲信号i_freeFMerge表示下游Merge模块已就绪，输出空闲信号o_free2ICache表示本模块已就绪接收新指令。",
+      "subject": "空闲信号接口组",
+      "explanation": "空闲信号实现背压控制，通过fetchFifo传递，确保事件流不会溢出。i_freeFMerge来自Merge模块，o_free2ICache反馈给ICache。",
       "signals": [
         "i_freeFMerge",
         "o_free2ICache"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
+          "source": "knowledge_ir/modules/instSplit.json"
         },
         {
-          "source": "modules/instSplit.json"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:interface_intent:002"
@@ -515,59 +305,22 @@
         "type": "module",
         "module": "instSplit"
       },
-      "summary": "文档应重点描述64位指令包如何根据基地址PC拆分为最多4条32位指令。",
-      "subject": "指令拆分逻辑",
-      "explanation": "这是模块的核心功能，涉及w_start信号对拆分起始位置的控制，以及四个16位片段如何重组为32位指令。需要详细说明拆分算法和边界条件。",
+      "summary": "手册应重点描述64位指令包如何根据基地址PC拆分为最多4条指令，以及事件流通过fetchFifo的同步机制。",
+      "subject": "指令拆分逻辑与事件流同步",
+      "explanation": "这是模块的核心功能，涉及指令对齐、有效位生成、指令计数和下一PC计算。事件流同步确保拆分结果与驱动事件时序一致。需要RTL源码确认拆分算法的具体实现细节。",
       "signals": [
-        "i_inst_64",
         "i_basePC_32",
+        "i_inst_64",
         "w_start",
-        "w_part1_16",
-        "w_part2_16",
-        "w_part3_16",
-        "w_part4_16",
         "o_inst0_33",
         "o_inst1_33",
         "o_inst2_33",
         "o_inst3_33",
-        "o_instCount"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "summary": "文档应说明驱动事件如何通过延迟链和FIFO与指令数据同步。",
-      "subject": "驱动事件流水线",
-      "explanation": "驱动事件经过三级延迟后驱动FIFO，FIFO输出再经一级延迟后输出。这种流水线结构确保事件与数据在时序上对齐，需要说明各延迟级的作用和时序关系。",
-      "signals": [
-        "i_drvFICache",
-        "w_drvFICache",
-        "w_drvFICache_t",
-        "w_drvFICache_t1",
-        "w_drv2Merge",
-        "o_drv2Merge"
+        "o_instCount",
+        "o_normNextPc_32"
       ],
       "instances": [
-        "fetchFifo",
-        "fetchFifoDelay_in1",
-        "fetchFifoDelay_in2",
-        "fetchFifoDelay_in3",
-        "fetchFifoDelay1"
+        "fetchFifo"
       ],
       "related_flows": [
         "flow_000_instSplit_i_drvFICache"
@@ -577,13 +330,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
+          "source": "knowledge_ir/modules/instSplit.json"
         },
         {
-          "source": "modules/instSplit.json"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         }
       ],
-      "id": "semantic:module:instSplit:documentation_focus:002"
+      "id": "semantic:module:instSplit:documentation_focus:001"
     },
     {
       "claim_type": "source_review_request",
@@ -591,9 +344,9 @@
         "type": "module",
         "module": "instSplit"
       },
-      "reason": "当前上下文仅提供了指令片段拆分和起始位置提取，但未提供如何从四个16位片段重组为32位指令的具体逻辑，以及o_instCount和o_normNextPc_32的计算方式。",
-      "subject": "指令拆分算法细节",
-      "needed_source_slice": "always block",
+      "reason": "当前上下文仅提供assign依赖和接口信息，缺少always块和状态机细节，无法确定指令拆分的完整算法（如16位片段如何组合成33位指令槽）、有效位生成逻辑、指令计数计算以及下一PC的归一化方法。",
+      "subject": "指令拆分算法与状态机",
+      "needed_source_slice": "always block, assign block, comments",
       "signals": [
         "w_start",
         "w_part1_16",
@@ -604,52 +357,28 @@
         "r_inst1_33",
         "r_inst2_33",
         "r_inst3_33",
-        "r_inst0PC_32",
-        "r_inst1PC_32",
-        "r_inst2PC_32",
-        "r_inst3PC_32",
         "r_instCont_3",
-        "r_normNextPc_32"
+        "r_normNextPc_32",
+        "r_preState"
+      ],
+      "instances": [
+        "fetchFifo"
+      ],
+      "related_flows": [
+        "flow_000_instSplit_i_drvFICache"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IF/instSplit.v"
+          "source": "rtl\\rtl\\IF\\instSplit.v"
         },
         {
-          "source": "modules/instSplit.json"
+          "source": "parser_pipeline_rtl/modules/instSplit.json"
         }
       ],
       "id": "semantic:module:instSplit:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "instSplit"
-      },
-      "reason": "当前上下文仅显示了w_state信号与异常分支有效信号的关系，但未提供异常分支如何影响指令拆分状态和输出的完整逻辑。",
-      "subject": "异常分支处理逻辑",
-      "needed_source_slice": "always block",
-      "signals": [
-        "w_intExcpBranchValid",
-        "r_preState",
-        "w_state"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IF/instSplit.v"
-        },
-        {
-          "source": "modules/instSplit.json"
-        }
-      ],
-      "id": "semantic:module:instSplit:source_review_request:002"
     }
   ],
   "evidence_gaps": []

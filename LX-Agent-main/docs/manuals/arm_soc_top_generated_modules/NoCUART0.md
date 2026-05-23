@@ -1,8 +1,8 @@
 # 模块 `NoCUART0`
 
-- 源文件：`rtl/rtl/IONet/UART/NoCUART0.v`。
-- 职责：AI 推断：基于NoC的UART桥接模块，负责将NoC驱动事件与UART核心进行协议转换和同步。
-- 说明：模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck和cfifo1延迟链处理后输出o_drv2Noc，同时连接uart_instance实现串行通信功能，表明其作为NoC与UART之间的适配层
+- 源文件：`rtl\rtl\IONet\UART\NoCUART0.v`。
+- 职责：AI 推断：事件流从i_drvFNoc经两级FIFO与延迟链驱动o_drv2Noc。。
+- 说明：切片[2]显示i_drvFNoc直接驱动cfifo0；切片[3,4]显示cfifo1与延迟链(delay11→delay8→delay9→delay10)串联，最终输出o_drv2Noc。路径确认但内部握手机制未完全展开。
 
 ## 1. 层级位置
 
@@ -65,7 +65,7 @@ NoCUART0
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
 - 输出/影响：`o_drv2Noc`。
 - 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：事件流仅传递驱动信号，数据打包通过独立赋值完成，两者在输出端口o_drv2Noc处结合。
+- AI 推断：最终手册应重点描述从 i_drvFNoc 到 o_drv2Noc 的串行事件传播路径，包括 FIFO 缓冲、确认同步和延迟链的作用。
 
 
 ## 5. 内部组件与 assign 影响
@@ -82,4 +82,4 @@ NoCUART0
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | AI 推断：将UART接收数据与状态位打包成51位输出数据包。 |

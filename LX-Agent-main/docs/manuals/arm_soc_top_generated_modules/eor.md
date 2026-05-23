@@ -1,8 +1,8 @@
 # 模块 `eor`
 
-- 源文件：`rtl/rtl/Execute/eor.v`。
+- 源文件：`rtl\rtl\Execute\eor.v`。
 - 职责：AI 推断：执行按位异或运算的组合逻辑模块。
-- 说明：模块通过组合赋值 result = oprand1 ^ oprand2 实现两个32位操作数的按位异或，无时钟或控制信号参与，属于纯组合数据通路单元
+- 说明：模块通过组合逻辑将两个32位操作数进行按位异或运算，直接输出结果，不包含时序逻辑或控制信号。
 
 ## 1. 层级位置
 
@@ -50,4 +50,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `result` | oprand1^oprand2 | AI 推断：组合赋值实现按位异或数据通路 |
+| `assign_0` | data_path | `result` | oprand1^oprand2 | AI 推断：将两个操作数的按位异或结果赋值给输出端口 |

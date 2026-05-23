@@ -136,8 +136,8 @@
         "w_delay_driveFromDcache"
       ],
       "role_in_flow": {
-        "value": "输入驱动事件的透明延迟缓冲单元",
-        "explanation": "该实例为delay8U类型，对输入的i_driveFromDcache事件进行固定周期的延迟，输出w_delay_driveFromDcache。其作用是为后续的互斥合并提供时序对齐，不改变事件语义。",
+        "value": "对Dcache驱动事件进行固定周期延迟的透明延迟单元",
+        "explanation": "该实例为delay8U类型，将输入事件i_driveFromDcache延迟固定周期后输出到w_delay_driveFromDcache，不改变事件语义，仅调整时序",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -186,8 +186,8 @@
         "w_driveToCpu"
       ],
       "role_in_flow": {
-        "value": "驱动事件的互斥合并仲裁器",
-        "explanation": "该实例为cMutexMerge2_64b类型，接收来自Dcache延迟后的驱动事件w_delay_driveFromDcache和来自Mesh延迟后的驱动事件w_delay_driveFromMesh，进行互斥合并后输出w_driveToCpu。同时，它接收来自Dcache的64位数据负载i_dcache_data作为i_data1_64输入。该模块可能根据仲裁结果选择其中一个输入事件通过，并可能携带对应的数据负载。",
+        "value": "互斥合并器，仲裁来自Dcache和Mesh的两路驱动事件",
+        "explanation": "该实例为cMutexMerge2_64b类型，接收w_delay_driveFromDcache和w_delay_driveFromMesh两路事件输入，通过互斥仲裁机制选择一路输出到w_driveToCpu，同时携带来自Dcache的64位数据载荷i_dcache_data",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -319,8 +319,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "应重点描述Dcache驱动事件经过延迟和互斥合并后到CPU的路径，以及数据负载的关联方式",
-    "explanation": "该流是数据槽模块中Dcache到CPU的关键路径，涉及延迟单元和互斥合并器。手册应强调MutexMerge的仲裁行为（如何选择Dcache与Mesh事件）、延迟单元的级数，以及数据负载i_dcache_data如何与事件耦合。同时需说明流控信号的存在但指出其具体机制需参考RTL源码。",
+    "value": "手册应重点描述从Dcache到CPU的驱动事件路径，以及MutexMerge处的仲裁行为",
+    "explanation": "该流的核心是Dcache驱动事件经过延迟和互斥合并后到达CPU，MutexMerge作为唯一仲裁点决定了事件来源的选择，手册需明确仲裁策略和延迟级数",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -332,8 +332,7 @@
       "i_driveFromDcache",
       "w_delay_driveFromDcache",
       "w_driveToCpu",
-      "o_driveToCpu",
-      "i_dcache_data"
+      "o_driveToCpu"
     ],
     "instances": [
       "delay_driveFromDcache",
@@ -355,14 +354,14 @@
         "path": "modules/data_slot.json"
       },
       {
-        "source": "interface.event_ports",
+        "source": "transparent_flows",
         "path": "modules/data_slot.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从Dcache驱动事件经过延迟和互斥合并后，最终输出到CPU的驱动流",
-        "explanation": "该流描述了从输入端口i_driveFromDcache接收的驱动事件，经过delay_driveFromDcache延迟单元后，与来自Mesh的驱动事件在MutexMerge模块中进行互斥合并，再经过两级延迟单元delay2CPU和delay2CPU2后，最终从输出端口o_driveToCpu输出。该流是数据槽模块中Dcache到CPU路径的核心驱动事件流。",
+        "value": "从Dcache驱动事件经延迟和互斥合并后，最终输出到CPU的驱动流",
+        "explanation": "该流从模块输入端口i_driveFromDcache接收Dcache驱动事件，经过delay8U透明延迟后，与来自Mesh的延迟驱动事件在cMutexMerge2_64b互斥合并器中仲裁合并，再经两级delay4U延迟后到达输出端口o_driveToCpu，形成完整的内部事件驱动路径",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -403,8 +402,8 @@
         ]
       },
       {
-        "value": "Dcache数据负载通过MutexMerge与驱动事件耦合",
-        "explanation": "输入数据信号i_dcache_data直接连接到MutexMerge的i_data1_64端口，表明当Dcache驱动事件通过MutexMerge时，该数据负载可能被选择并随事件传递。但数据负载在后续路径中如何与事件关联（例如是否通过w_driveToCpu传递）未在上下文中明确，需要进一步确认。",
+        "value": "Dcache数据载荷与驱动事件在互斥合并器中同步传递",
+        "explanation": "输入事件i_driveFromDcache携带64位数据载荷i_dcache_data，该数据在MutexMerge中与事件同步传递，但数据是否参与仲裁或仅随事件透传需RTL源码确认",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -414,8 +413,8 @@
         "doc_priority": "primary",
         "signals": [
           "i_dcache_data",
-          "w_delay_driveFromDcache",
-          "w_driveToCpu"
+          "i_driveFromDcache",
+          "w_delay_driveFromDcache"
         ],
         "instances": [],
         "related_flows": [],
@@ -428,14 +427,18 @@
         ],
         "semantic_evidence": [
           {
+            "source": "interface.data_ports",
+            "path": "modules/data_slot.json"
+          },
+          {
             "source": "component_connection",
             "path": "modules/data_slot.json"
           }
         ]
       },
       {
-        "value": "存在流控信号但具体机制未在流中体现",
-        "explanation": "接口负载契约显示i_driveFromDcache事件关联了free信号o_freeToDcache，表明存在反压或完成握手机制。然而，该流步骤中未包含任何free信号的处理，因此无法确定流控如何影响事件传播。同样，输出端o_driveToCpu关联了i_freeFromCpu，但流中未体现。",
+        "value": "输入事件i_driveFromDcache有对应的空闲信号o_freeToDcache，但流控机制未在流步骤中体现",
+        "explanation": "接口契约显示i_driveFromDcache关联空闲信号o_freeToDcache，表明存在反压或完成握手机制，但当前流步骤仅描述事件正向传播，未包含空闲信号路径，需RTL源码确认流控实现",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -444,7 +447,37 @@
         "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
-          "o_freeToDcache",
+          "i_driveFromDcache",
+          "o_freeToDcache"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
+          "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface.event_ports",
+            "path": "modules/data_slot.json"
+          }
+        ]
+      },
+      {
+        "value": "输出事件o_driveToCpu关联空闲信号i_freeFromCpu，但流控路径未在流中描述",
+        "explanation": "接口契约显示o_driveToCpu关联空闲信号i_freeFromCpu，表明CPU侧可能提供反压或完成信号，但当前流步骤未包含该信号路径，需RTL源码确认",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:completion_backpressure:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "o_driveToCpu",
           "i_freeFromCpu"
         ],
         "instances": [],

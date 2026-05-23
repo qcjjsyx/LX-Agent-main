@@ -382,8 +382,8 @@
         "w_lsuFifoToExcSplitter_1"
       ],
       "role_in_flow": {
-        "value": "作为事件流的入口缓冲，对来自执行单元的事件进行排队，防止背压直接传递到执行单元。",
-        "explanation": "lsuFifo是一个Fifo1类型的实例，它接收i_exeDriveToLsu_1事件，并将其暂存，直到下游的excSplitter准备好接收。它起到了解耦和速率匹配的作用，是流中第一个潜在的阻塞点。",
+        "value": "作为事件流的入口缓冲器，对来自执行单元的事件进行排队，防止背压直接传递。",
+        "explanation": "lsuFifo是一个FIFO缓冲器，它接收i_exeDriveToLsu_1事件，并在内部进行存储和转发。其作用是解耦执行单元和LSU内部处理逻辑，允许执行单元在LSU忙碌时继续发送事件，同时为下游提供稳定的数据流。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -399,9 +399,7 @@
           "lsuFifo"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -409,12 +407,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "connection_graph"
+            "source": "instances.connections"
           }
         ]
       },
@@ -438,8 +431,8 @@
         "w_lsuFifoToWbackSplitter_1"
       ],
       "role_in_flow": {
-        "value": "根据事件类型，将事件流分为异常路径和正常写回/状态更新路径。",
-        "explanation": "excSplitter是一个2路选择器/分配器。它接收来自lsuFifo的事件，并根据事件的控制字段（如是否为异常），将事件导向o_lsuDriveToExcp_1（异常路径）或w_lsuFifoToWbackSplitter_1（正常路径）。这是流中第一个关键的分支点。",
+        "value": "第一级分支点，将事件流分为异常路径和写回/读回路径。",
+        "explanation": "excSplitter是一个1-to-2的分发器，它根据事件类型或控制信号，将来自lsuFifo的事件导向两个方向：一个直接输出到o_lsuDriveToExcp_1（异常处理），另一个通过w_lsuFifoToWbackSplitter_1进入后续的写回/读回处理路径。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -456,9 +449,7 @@
           "excSplitter"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -466,12 +457,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "connection_graph"
+            "source": "instances.connections"
           }
         ]
       },
@@ -553,8 +539,8 @@
         "w_stateSelectorToReadGrfSelector_1"
       ],
       "role_in_flow": {
-        "value": "根据事件的状态类型（如加载、存储、无操作等），将事件分发到不同的处理子流。",
-        "explanation": "stateSelector是一个5路选择器，它接收来自wbackSplitter的事件，并根据事件的状态字段，将事件导向五个不同的下游路径：异常FIFO、多加载合并器、多存储合并器、无加载/存储选择器、以及读通用寄存器文件选择器。它实现了基于操作类型的状态机路由。",
+        "value": "第二级分支点，根据操作状态（如加载、存储、无操作等）将事件分发到不同的处理子路径。",
+        "explanation": "stateSelector是一个1-to-5的分发器，它接收来自wbackSplitter的事件，并根据事件携带的状态信息，将其分发到五个不同的子路径：异常FIFO、多加载互斥合并、多存储互斥合并、无操作路径和读通用寄存器选择器。这是实现LSU对不同类型操作（如普通加载、多加载、多存储、无操作）进行差异化处理的关键组件。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -574,9 +560,7 @@
           "stateSelector"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -584,12 +568,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "connection_graph"
+            "source": "instances.connections"
           }
         ]
       },
@@ -613,13 +592,35 @@
         "w_backSelectorOver_1"
       ],
       "role_in_flow": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer component role is available for this flow.",
-        "review_status": "needs_review"
+        "value": "写回路径的最终选择器，决定事件是写回通用寄存器文件还是被丢弃。",
+        "explanation": "wbackSelector是一个1-to-2的分发器，它接收来自wbackSplitter的事件，并根据控制信号决定是将事件输出到o_lsuDriveToWGrf_1（写回通用寄存器文件），还是通过w_backSelectorOver_1信号将事件丢弃或导向其他处理。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:005",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_wbackSplitterToWbackSelector_1",
+          "o_lsuDriveToWGrf_1",
+          "w_backSelectorOver_1"
+        ],
+        "instances": [
+          "wbackSelector"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "instances.connections"
+          }
+        ]
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -697,13 +698,35 @@
         "w_readGrfSelectorToReadGrfMutexMerge_1"
       ],
       "role_in_flow": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer component role is available for this flow.",
-        "review_status": "needs_review"
+        "value": "读回路径的最终选择器，决定事件是用于加载地址空间（LAS）还是读回通用寄存器文件。",
+        "explanation": "readGrfSelector是一个1-to-2的分发器，它接收来自stateSelector的事件，并根据控制信号决定是将事件导向LASMutexMerge（用于加载地址空间操作），还是导向readGrfMutexMerge（用于读回通用寄存器文件操作）。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:006",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_stateSelectorToReadGrfSelector_1",
+          "w_readGrfSelectorToLASMutexMerge_1",
+          "w_readGrfSelectorToReadGrfMutexMerge_1"
+        ],
+        "instances": [
+          "readGrfSelector"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "instances.connections"
+          }
+        ]
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -879,8 +902,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "最终手册应重点描述事件如何根据其负载中的控制字段（如异常标志、操作类型）在excSplitter、stateSelector等分支点被路由，以及如何在MutexMerge处与其他流的事件进行仲裁和合并。",
-    "explanation": "该流的核心复杂性在于其多级分支和合并结构。手册需要清晰地解释每个选择器的选择依据（例如，基于数据负载的哪个比特位），以及每个MutexMerge的仲裁策略（例如，固定优先级或轮询）。同时，应说明这些分支和合并点如何共同实现LSU对不同类型内存操作（加载、存储、异常、无操作）的处理。",
+    "value": "最终手册应重点描述事件从执行单元到三个终点的完整分发路径，以及各分支点和合并点的作用。",
+    "explanation": "该流的核心是一个多级分发-合并网络。手册应清晰说明：1) lsuFifo的缓冲作用；2) excSplitter和wbackSplitter的第一级分支；3) stateSelector根据操作类型进行的第二级分支；4) wbackSelector和readGrfSelector的最终选择；5) 多个MutexMerge的仲裁作用。同时，应强调数据负载（i_exeToLsuData_163）与事件的同步关系。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -892,11 +915,12 @@
       "i_exeDriveToLsu_1",
       "o_lsuDriveToExcp_1",
       "o_lsuDriveToWGrf_1",
-      "o_lsuDriveToRGrf_1",
-      "i_exeToLsuData_163"
+      "o_lsuDriveToRGrf_1"
     ],
     "instances": [
+      "lsuFifo",
       "excSplitter",
+      "wbackSplitter",
       "stateSelector",
       "wbackSelector",
       "readGrfSelector",
@@ -906,29 +930,25 @@
       "readGrfMutexMerge"
     ],
     "related_flows": [],
-    "related_assignments": [
-      "(none)"
-    ],
-    "requires_rtl_source_review": true,
-    "review_status": "needs_review",
+    "related_assignments": [],
+    "requires_rtl_source_review": false,
+    "review_status": "ready",
     "evidence_refs": [
       "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
       "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
     ],
     "semantic_evidence": [
       {
-        "source": "parser_pipeline_rtl/modules/lsu.json",
-        "path": "flow_graph"
+        "source": "instances.connections"
       },
       {
-        "source": "parser_pipeline_rtl/modules/lsu.json",
-        "path": "instances"
+        "source": "transparent_flows"
       }
     ],
     "supporting_claims": [
       {
-        "value": "执行单元向LSU发送单个事件，经FIFO缓冲后，通过一系列选择器和合并器，最终分发到异常、写通用寄存器文件和读通用寄存器文件三个出口。",
-        "explanation": "该流描述了一个从执行单元（i_exeDriveToLsu_1）发起的事件，经过lsuFifo缓冲后，由excSplitter根据事件类型分流。一路直接输出到异常处理（o_lsuDriveToExcp_1），另一路进入wbackSplitter，再根据写回或状态更新需求，通过stateSelector和wbackSelector进一步分发。stateSelector的输出经过多个MutexMerge与来自其他流（如multiLoad、multiStore）的事件合并，最终导向读通用寄存器文件（o_lsuDriveToRGrf_1）或写通用寄存器文件（o_lsuDriveToWGrf_1）。",
+        "value": "执行单元向LSU发送单个事件，经FIFO缓冲后，通过多级选择与合并，最终分发至异常处理、写回通用寄存器文件和读回通用寄存器文件三条路径。",
+        "explanation": "该流描述了从执行单元（i_exeDriveToLsu_1）发起的一个事件，经过lsuFifo缓冲，再由excSplitter和wbackSplitter进行第一级分支，随后stateSelector根据状态进行第二级分支，最终通过wbackSelector、readGrfSelector以及多个MutexMerge合并器，将事件导向o_lsuDriveToExcp_1、o_lsuDriveToWGrf_1和o_lsuDriveToRGrf_1三个终点。这是一个典型的分发-合并-分发结构，用于处理不同类型的LSU操作。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -955,9 +975,7 @@
           "readGrfMutexMerge"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -966,45 +984,97 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/lsu.json",
-            "path": "internal_event_flow"
+            "source": "instances.connections"
           },
           {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "flow_graph"
+            "source": "transparent_flows"
           }
         ]
       },
       {
-        "value": "该流存在明确的握手信号，o_lsuFreeToExe_1作为i_exeDriveToLsu_1的完成/反压信号，但当前上下文未提供其生成逻辑。",
-        "explanation": "接口负载契约表明，对于输入事件i_exeDriveToLsu_1，存在一个对应的空闲/完成信号o_lsuFreeToExe_1。然而，当前上下文并未展示该信号是如何在流内部生成的（例如，是否由lsuFifo的空满状态驱动，或由所有下游路径的完成信号聚合而成）。同样，输出事件也有对应的空闲信号（如i_lsuFreeFromExcp_1）。理解这些反压信号的生成逻辑对于描述流的完整行为至关重要。",
+        "value": "事件i_exeDriveToLsu_1携带一个163位的数据负载，该负载在流中与事件同步传播。",
+        "explanation": "接口负载契约表明，输入事件i_exeDriveToLsu_1与一个163位的数据信号i_exeToLsuData_163相关联。该数据负载将随事件一起进入lsuFifo，并在后续的分发和合并过程中被传递，最终影响输出事件（如o_lsuDriveToExcp_1、o_lsuDriveToWGrf_1、o_lsuDriveToRGrf_1）所携带的数据。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:001",
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
           "i_exeDriveToLsu_1",
-          "o_lsuFreeToExe_1",
-          "o_lsuDriveToExcp_1",
-          "i_lsuFreeFromExcp_1",
-          "o_lsuDriveToWGrf_1",
-          "i_lsuFreeFromWGrf_1",
+          "i_exeToLsuData_163"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
+          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface.event_ports"
+          },
+          {
+            "source": "interface.data_ports"
+          }
+        ]
+      },
+      {
+        "value": "读回通用寄存器文件路径的输出事件o_lsuDriveToRGrf_1携带一个8位的数据负载。",
+        "explanation": "接口负载契约表明，输出事件o_lsuDriveToRGrf_1与一个8位的数据信号o_lsuToRGrfData_8相关联。这表明该路径用于传输宽度较小的数据，例如读回通用寄存器文件的状态或结果。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:002",
+        "doc_priority": "secondary",
+        "signals": [
           "o_lsuDriveToRGrf_1",
-          "i_lsuFreeFromRGrf_1"
+          "o_lsuToRGrfData_8"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
+          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface.event_ports"
+          },
+          {
+            "source": "interface.data_ports"
+          }
+        ]
+      },
+      {
+        "value": "流中存在明确的空闲/背压信号，用于控制事件流的启停，但具体连接关系未在上下文中完全展开。",
+        "explanation": "接口负载契约中提到了空闲信号（free_signal），如o_lsuFreeToExe_1、i_lsuFreeFromExcp_1等。这些信号是握手协议的一部分，用于指示下游是否准备好接收新事件。然而，当前上下文仅列出了这些信号的存在，并未提供它们与流内部组件的具体连接关系。因此，无法断言背压是如何在lsuFifo、MutexMerge等组件间传递的。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:001",
+        "doc_priority": "secondary",
+        "signals": [
+          "o_lsuFreeToExe_1",
+          "i_lsuFreeFromExcp_1",
+          "i_lsuFreeFromRGrf_1",
+          "i_lsuFreeFromWGrf_1"
         ],
         "instances": [
           "lsuFifo",
           "excSplitter",
-          "wbackSplitter",
-          "stateSelector",
           "wbackSelector",
-          "readGrfSelector",
-          "multiLoadMutexMerge",
-          "multiStoreMutexMerge",
-          "LASMutexMerge",
           "readGrfMutexMerge"
         ],
         "related_flows": [],
@@ -1017,50 +1087,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/lsu.json",
-            "path": "interface_data_contract"
-          }
-        ]
-      },
-      {
-        "value": "事件信号i_exeDriveToLsu_1携带一个163位的数据负载i_exeToLsuData_163，该负载在流中随事件传播，并在不同分支点被解析和路由。",
-        "explanation": "事件的有效性由i_exeDriveToLsu_1信号指示，而具体的操作类型、地址、数据等信息则包含在i_exeToLsuData_163中。excSplitter、stateSelector等选择器正是基于这个数据负载中的特定字段（如异常标志、操作码）来决定事件的路由。最终，输出事件（如o_lsuDriveToExcp_1）会携带相应的数据负载（如o_lsuToDataRoutData_104）到下游模块。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_exeDriveToLsu_1",
-          "i_exeToLsuData_163",
-          "o_lsuDriveToExcp_1",
-          "o_lsuToDataRoutData_104",
-          "o_lsuToIcacheData_104",
-          "o_lsuToLaunchData_64",
-          "o_lsuDriveToRGrf_1",
-          "o_lsuToRGrfData_8"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/lsu.json",
-            "path": "interface_data_contract"
+            "source": "interface.event_ports"
           },
           {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "interface"
+            "source": "interface.data_ports"
           }
         ]
       }

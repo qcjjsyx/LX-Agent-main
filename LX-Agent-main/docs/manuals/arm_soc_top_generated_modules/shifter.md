@@ -1,8 +1,8 @@
 # 模块 `shifter`
 
-- 源文件：`rtl/rtl/Execute/shifter.v`。
-- 职责：AI 推断：该模块根据移位类型和移位量对32位操作数执行多种移位和扩展操作，并输出移位结果和进位标志。。
-- 说明：模块接收操作数(oprand)、移位量(i_shiftNumber_8)、移位类型(i_shiftType_3)和移位操作码(i_shiftOpcode_3)等控制信号，通过组合逻辑生成左移、右移、算术右移、循环左移、循环右移、带扩展右移等结果，并最终根据标志位选择输出。
+- 源文件：`rtl\rtl\Execute\shifter.v`。
+- 职责：AI 推断：移位与扩展单元，根据操作码和类型选择执行逻辑/算术移位、循环移位或位扩展，并输出移位结果和进位。。
+- 说明：模块接收32位操作数oprand和8位移位数i_shiftNumber_8，通过i_shiftType_3选择六种移位类型（LSL/LSR/ASR/ROR/RRX/ROL），通过i_shiftOpcode_3和i_xtFlag_1控制零扩展或符号扩展，最终通过i_notFlag_1决定是否取反输出。
 
 ## 1. 层级位置
 
@@ -51,10 +51,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `{w_lsrResult_32,w_lsrCarryOut_1}` | i_shiftNumber_8 == 8'b0 ? {oprand,1'b0} : {oprand >> i_shiftNumber_8,oprand[i_shiftNumber_8-1]} | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | unknown | `w_asrCarryOut_1` | i_shiftNumber_8 == 8'b0 ? 1'b0 : (oprand >> ( i_shiftNumber_8 - 1)) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | data_path | `w_asrResult_32` | oprand[31] == 1'b1 ? ((32'hffff_ffff << (32 - i_shiftNumber_8[4:0])) \| (oprand >> i_shiftNumb... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | unknown | `w_shiftActRorNumber_5` | i_shiftNumber_8 % 32 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | data_path | `w_rorResult_32` | w_shiftActRorNumber_5 == 5'b0 ? oprand : ((oprand >> w_shiftActRorNumber_5) \| (oprand << (32 ... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_7` | unknown | `w_shiftActRolNumber_5` | i_shiftNumber_8 % 32 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | data_path | `{w_lsrResult_32,w_lsrCarryOut_1}` | i_shiftNumber_8 == 8'b0 ? {oprand,1'b0} : {oprand >> i_shiftNumber_8,oprand[i_shiftNumber_8-1]} | AI 推断：逻辑右移进位，当移位数为0时进位为0，否则为移出的最低位。 |
+| `assign_2` | unknown | `w_asrCarryOut_1` | i_shiftNumber_8 == 8'b0 ? 1'b0 : (oprand >> ( i_shiftNumber_8 - 1)) | AI 推断：算术右移进位，当移位数为0时进位为0，否则为移出的最低位。 |
+| `assign_3` | data_path | `w_asrResult_32` | oprand[31] == 1'b1 ? ((32'hffff_ffff << (32 - i_shiftNumber_8[4:0])) \| (oprand >> i_shiftNumb... | AI 推断：算术右移结果，根据操作数最高位决定是否进行符号扩展。 |
+| `assign_4` | unknown | `w_shiftActRorNumber_5` | i_shiftNumber_8 % 32 | AI 推断：循环右移和循环左移结果，通过取模32后的实际移位数实现。 |
+| `assign_5` | data_path | `w_rorResult_32` | w_shiftActRorNumber_5 == 5'b0 ? oprand : ((oprand >> w_shiftActRorNumber_5) \| (oprand << (32 ... | AI 推断：循环右移和循环左移结果，通过取模32后的实际移位数实现。 |
+| `assign_7` | unknown | `w_shiftActRolNumber_5` | i_shiftNumber_8 % 32 | AI 推断：循环右移和循环左移结果，通过取模32后的实际移位数实现。 |
 | ... | ... | ... | ... | 其余 8 条 assign 省略 |

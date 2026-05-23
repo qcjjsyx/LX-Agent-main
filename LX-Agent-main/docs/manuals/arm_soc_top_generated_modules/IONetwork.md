@@ -1,8 +1,8 @@
 # 模块 `IONetwork`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/IONetwork.v`。
-- 职责：AI 推断：2x2 网格片上网络路由器，负责在四个节点（node_00、node_01、node_10、node_11）之间路由事件驱动消息和空闲信号。。
-- 说明：模块实例化了四个 nodeTop 实例，形成一个 2x2 网格。每个节点通过东、西、南、北、本地五个方向的事件驱动信号（i_drive*）和空闲信号（i_free*）与相邻节点及外部接口连接。所有 12 个输入事件驱动信号均通过 4 步内部事件流传播到所有 12 个输出事件驱动信号，表明这是一个全连接的事件路由网络。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\IONetwork.v`。
+- 职责：AI 推断：2x2片上网络路由器，负责在四个节点（node_00、node_01、node_10、node_11）之间转发驱动事件和51位消息载荷。。
+- 说明：模块实例化四个nodeTop子模块，并通过内部连线（w_drive*）形成2x2网格拓扑。每个节点有东、西、南、北、本地五个方向的事件和消息接口，模块整体负责将输入事件和消息路由到正确的输出方向。
 
 ## 1. 层级位置
 
@@ -70,7 +70,7 @@ IONetwork
 - Payload：`i_driveEast_10` -> `i_eastInMsg_51_10 [50:0]`, `i_driveEast_10` -> `i_eastInMsg_51_11 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：事件驱动信号 i_driveEast_10 与 51 位数据载荷 i_eastInMsg_51_10 相关联，表明该事件流携带数据。
+- AI 推断：最终手册应强调该流是一个从东侧输入开始的全局广播或扫描模式，而非点对点传输。
 
 ### `i_driveEast_11`
 
@@ -78,7 +78,7 @@ IONetwork
 - Payload：`i_driveEast_11` -> `i_eastInMsg_51_10 [50:0]`, `i_driveEast_11` -> `i_eastInMsg_51_11 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：最终手册应重点描述该流如何从单一输入事件 i_driveEast_11 通过 2x2 节点阵列扇出到所有输出，并强调事件信号与数据载荷之间的关联关系。
+- AI 推断：最终手册应重点描述该流如何从单一输入事件扇出到所有 12 个输出事件，并强调节点间的内部连线是实现全网格广播的关键。
 
 ### `i_driveLocal_00`
 
@@ -86,7 +86,7 @@ IONetwork
 - Payload：`i_driveLocal_00` -> `i_localInMsg_51_00 [50:0]`, `i_driveLocal_00` -> `i_localInMsg_51_01 [50:0]`, `i_driveLocal_00` -> `i_localInMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, ... +23。
 - 输出/影响：`o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：i_driveLocal_00 作为事件驱动信号，其关联的负载数据是 i_localInMsg_51_00（51位宽）。该负载数据随事件一起注入 node_00。
+- AI 推断：i_driveLocal_00 事件携带一个 51 位宽的本地输入消息 i_localInMsg_51_00 作为有效载荷。
 
 ### `i_driveLocal_01`
 
@@ -94,7 +94,7 @@ IONetwork
 - Payload：`i_driveLocal_01` -> `i_localInMsg_51_00 [50:0]`, `i_driveLocal_01` -> `i_localInMsg_51_01 [50:0]`, `i_driveLocal_01` -> `i_localInMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, ... +23。
 - 输出/影响：`o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：手册应重点描述 i_driveLocal_01 事件如何通过 2x2 节点阵列扇出到所有方向输出，并明确指出数据负载和反压信号的具体路径和逻辑需要参考 RTL 源代码。
+- AI 推断：事件 i_driveLocal_01 的驱动与 51 位本地输入消息 i_localInMsg_51_01 相关联，表明该事件携带数据负载。
 
 ### `i_driveLocal_10`
 
@@ -102,7 +102,7 @@ IONetwork
 - Payload：`i_driveLocal_10` -> `i_localInMsg_51_00 [50:0]`, `i_driveLocal_10` -> `i_localInMsg_51_01 [50:0]`, `i_driveLocal_10` -> `i_localInMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, ... +23。
 - 输出/影响：`o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：最终手册应重点描述从node_10发起的本地事件如何通过网格拓扑扇出至所有方向，并强调数据负载的伴随传递。
+- AI 推断：手册应重点描述i_driveLocal_10如何通过node_10扇出到所有四个节点，并产生12个方向性输出事件。
 
 ### `i_driveLocal_11`
 
@@ -110,7 +110,7 @@ IONetwork
 - Payload：`i_driveLocal_11` -> `i_localInMsg_51_00 [50:0]`, `i_driveLocal_11` -> `i_localInMsg_51_01 [50:0]`, `i_driveLocal_11` -> `i_localInMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, ... +23。
 - 输出/影响：`o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：最终手册应重点描述该流如何从单个输入事件通过网格网络广播到所有输出，并强调其洪泛特性。
+- AI 推断：i_driveLocal_11 事件可能携带或选通来自 i_localInMsg_51_00、i_localInMsg_51_01 和 i_localInMsg_51_10 的 51 位数据负载。
 
 ### `i_driveNorth_01`
 
@@ -118,7 +118,7 @@ IONetwork
 - Payload：`i_driveNorth_01` -> `i_northInMsg_51_01 [50:0]`, `i_driveNorth_01` -> `i_northInMsg_51_11 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：输入驱动事件 i_driveNorth_01 与一个 51 位数据载荷 i_northInMsg_51_01 相关联，该载荷可能携带事件的路由或内容信息。
+- AI 推断：事件 i_driveNorth_01 携带一个 51 位宽的输入消息载荷 i_northInMsg_51_01，该载荷随事件在阵列中传播，并最终映射到多个输出消息端口。
 
 ### `i_driveNorth_11`
 
@@ -126,7 +126,7 @@ IONetwork
 - Payload：`i_driveNorth_11` -> `i_northInMsg_51_01 [50:0]`, `i_driveNorth_11` -> `i_northInMsg_51_11 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：驱动事件 i_driveNorth_11 与两个 51 位宽的北向输入消息载荷相关联，这些载荷可能携带事件的数据内容。
+- AI 推断：事件信号 i_driveNorth_11 的断言可能指示其关联的 51 位数据载荷（i_northInMsg_51_01 和 i_northInMsg_51_11）有效，这些载荷将被路由到网格中。
 
 ### `i_driveSouth_00`
 
@@ -134,7 +134,7 @@ IONetwork
 - Payload：`i_driveSouth_00` -> `i_southInMsg_51_00 [50:0]`, `i_driveSouth_00` -> `i_southInMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：事件 i_driveSouth_00 的触发伴随着一个 51 位宽的南向输入消息 i_southInMsg_51_00，该消息可能作为事件的有效载荷被路由。
+- AI 推断：事件 i_driveSouth_00 的触发伴随着一个 51 位宽的南向输入消息 i_southInMsg_51_00 作为其数据载荷。
 
 ### `i_driveSouth_10`
 
@@ -142,7 +142,7 @@ IONetwork
 - Payload：`i_driveSouth_10` -> `i_southInMsg_51_00 [50:0]`, `i_driveSouth_10` -> `i_southInMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：输入事件 i_driveSouth_10 与一个 51 位的数据载荷 i_southInMsg_51_10 相关联。
+- AI 推断：驱动事件 i_driveSouth_10 可能携带或选通两个 51 位宽的南向输入消息（i_southInMsg_51_10 和 i_southInMsg_51_00），这些消息会随事件流被路由到各个输出端点。
 
 ### `i_driveWest_00`
 
@@ -150,7 +150,7 @@ IONetwork
 - Payload：`i_driveWest_00` -> `i_westInMsg_51_00 [50:0]`, `i_driveWest_00` -> `i_westInMsg_51_01 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：最终手册应重点描述 i_driveWest_00 事件如何通过 2x2 网格节点进行广播式分发，并强调其作为单一输入驱动所有输出的洪泛特性。
+- AI 推断：最终手册应重点描述从单一输入事件到所有输出端口的扇出路径，并强调事件与数据负载的关联性。
 
 ### `i_driveWest_01`
 
@@ -158,7 +158,7 @@ IONetwork
 - Payload：`i_driveWest_01` -> `i_westInMsg_51_00 [50:0]`, `i_driveWest_01` -> `i_westInMsg_51_01 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_10` -> `o_eastMsg_51_11 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_10 [50:0]`, `o_driveEast_11` -> `o_eastMsg_51_11 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_00 [50:0]`, `o_driveLocal_00` -> `o_localMsg_51_01 [50:0]`, ... +22。
 - 输出/影响：`o_driveLocal_01`, `o_driveNorth_01`, `o_driveWest_01`, `o_driveLocal_00`, `o_driveSouth_00`, `o_driveWest_00`, `o_driveEast_11`, `o_driveLocal_11`, `o_driveNorth_11`, `o_driveEast_10`, `o_driveLocal_10`, `o_driveSouth_10`。
 - 结构复杂度：branch=4，join=4，blocking=0。
-- AI 推断：最终手册应重点描述该驱动流从单一输入到全向输出的逐级扩散路径，并强调事件信号与关联数据消息（如 i_westInMsg_51_01）之间的绑定关系。
+- AI 推断：最终手册应重点描述 i_driveWest_01 事件如何通过 2x2 节点阵列（node_01, node_00, node_11, node_10）实现从单一输入到所有 12 个方向输出的全扇出路由。
 
 
 ## 5. 内部组件与 assign 影响

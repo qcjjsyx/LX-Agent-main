@@ -1,8 +1,8 @@
 # 模块 `SPI02NoC`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v`。
-- 职责：AI 推断：w_fire_2[0]来自cFifo1的o_fire_1，w_fire_2[1]来自cFifo2的o_fire_1。
-- 说明：第64-70行实例化cFifo1时，其o_fire_1连接到w_fire_2[0]；第76-85行实例化cFifo2时，其o_fire_1连接到w_fire_2[1]。因此w_fire_2的两个bit分别由两个FIFO的fire输出产生
+- 源文件：`rtl\rtl\IONet\SPI\SPI0\SPI02NoC.v`。
+- 职责：AI 推断：fire2SyncPluse_u 将 startRead_fire 同步转换为 startRead 脉冲。。
+- 说明：根据切片7（第170-176行），实例化 fire2SyncPluse 模块，连接 .fire(startRead_fire)、.clk(clk)、.rst(rst)、.rst_finish(rst_finish)、.rise(startRead)。输入 startRead_fire 经同步后输出 startRead 上升沿脉冲。
 
 ## 1. 层级位置
 
@@ -61,7 +61,7 @@ SPI02NoC
 - Payload：`i_driveFrmMesh` -> `i_dataFrmNoc [50:0]`。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：最终手册应重点描述两级FIFO的缓冲行为（深度、空满标志、门控条件）以及延迟单元的延迟周期数。
+- AI 推断：输入事件i_driveFrmMesh携带一个51位的数据负载i_dataFrmNoc，其中包含地址字段。
 
 
 ## 5. 内部组件与 assign 影响
@@ -77,8 +77,8 @@ SPI02NoC
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_SR` | {dataReady,w_TXE,busy,w_finish,4'b0} | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `w_data2noc` | (address[3:0] == CR) ? {24'b0,r_CR} : (address[3:0] == SR) ? {24'b0,w_SR} : (address[3:0] == ... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | unknown | `startRead_fire` | ((address[3:0] == TDR) & w_en) ? w_fire_2[1] : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_6` | unknown | `w_en_tmp` | w_en & (address == 8'h64) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | data_path | `address` | i_dataFrmNoc[49:42] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | data_path | `w_SR` | {dataReady,w_TXE,busy,w_finish,4'b0} | AI 推断：组合 SPI 状态寄存器，包含数据就绪、发送空、忙和完成标志。 |
+| `assign_2` | data_path | `w_data2noc` | (address[3:0] == CR) ? {24'b0,r_CR} : (address[3:0] == SR) ? {24'b0,w_SR} : (address[3:0] == ... | AI 推断：组合 SPI 状态寄存器，包含数据就绪、发送空、忙和完成标志。 |
+| `assign_5` | unknown | `startRead_fire` | ((address[3:0] == TDR) & w_en) ? w_fire_2[1] : 1'b0 | AI 推断：当向 TDR 寄存器写入数据时，产生启动 Flash 读操作的触发信号。 |
+| `assign_6` | unknown | `w_en_tmp` | w_en & (address == 8'h64) | AI 推断：当地址为 8'h64 且写使能有效时，产生一个临时写使能信号。 |
+| `assign_0` | data_path | `address` | i_dataFrmNoc[49:42] | AI 推断：从 NoC 输入数据包中提取地址字段，用于后续的寄存器选择和命令解析。 |

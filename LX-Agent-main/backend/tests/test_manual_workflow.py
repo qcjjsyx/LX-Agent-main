@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from backend import manual_cli
 from backend import manual_workflow as mw
@@ -394,6 +395,33 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
         mw._mark_stage_done(state, "review")
         self.assertEqual(state["force_stages"], [])
         self.assertEqual(state["restart_stage"], "")
+
+    def test_parser_stage_refreshes_artifact_paths_after_generation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            state = mw._ensure_state({
+                "project_root": str(root),
+                "rtl_inputs": "rtl",
+                "top_module": "top",
+                "stage": "parser",
+            })
+            mw._update_state_from_user_input(state, "")
+            self.assertEqual(Path(state["manual_context_dir"]), root / "manual_context" / "top")
+
+            def fake_run_parser_tool(project_root, rtl_inputs):
+                parser_dir = Path(project_root) / "rtl" / "parser_pipeline_rtl"
+                (parser_dir / "modules").mkdir(parents=True)
+                (parser_dir / "components").mkdir()
+                (parser_dir / "project_index.json").write_text("{}", encoding="utf-8")
+                (parser_dir / "build_report.json").write_text("{}", encoding="utf-8")
+                return "Parser Tool execution succeeded"
+
+            with patch.object(mw, "run_parser_tool", fake_run_parser_tool):
+                mw._run_parser_stage(state)
+
+            self.assertEqual(Path(state["parser_dir"]), root / "rtl" / "parser_pipeline_rtl")
+            self.assertEqual(Path(state["knowledge_dir"]), root / "rtl" / "knowledge_ir" / "top")
+            self.assertEqual(Path(state["manual_context_dir"]), root / "rtl" / "manual_context" / "top")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 # 模块 `satQ`
 
-- 源文件：`rtl/rtl/Execute/satQ.v`。
-- 职责：AI 推断：饱和量化运算单元，根据符号标志选择有符号或无符号饱和算法对操作数进行限幅。。
-- 说明：模块接收两个32位操作数和一个符号标志，通过组合逻辑计算有符号和无符号两种饱和结果，最终由符号标志选择输出。所有assign依赖均基于输入操作数和符号标志，无时序或状态依赖。
+- 源文件：`rtl\rtl\Execute\satQ.v`。
+- 职责：AI 推断：饱和量化单元，根据符号标志选择有符号或无符号饱和路径，将输入操作数1量化到由操作数2指定的位宽范围内。。
+- 说明：模块接收两个32位操作数，i_oprand1_32为待量化数据，i_oprand2_32的低6位指定量化位宽。i_satQSymbolFlag_1控制选择有符号饱和路径（w_saturated1_32）或无符号饱和路径（w_satuarted2_32），最终输出量化结果o_saQResult_32和饱和标志sat。
 
 ## 1. 层级位置
 
@@ -51,10 +51,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_saturated1_32` | w_maxOprand1_32 > $signed(1<<(i_oprand2_32[5:0] - 1)-1) ? $signed(1<<(i_oprand2_32[5:0] - 1)-... | AI 推断：有符号饱和上限限幅，在w_maxOprand1_32基础上进一步限制上限。 |
-| `assign_2` | data_path | `w_sat1_1` | ( i_oprand1_32 < $signed(-(1<<(i_oprand2_32[5:0]-1))) ) \|\| (i_oprand1_32 >= 1<<(i_oprand2_32[... | AI 推断：有符号饱和标志，指示i_oprand1_32是否超出有符号范围。 |
-| `assign_3` | data_path | `w_maxOprand2_32` | i_oprand1_32 > 0 ? i_oprand1_32 : 0 | AI 推断：无符号饱和下限限幅，确保i_oprand1_32不小于0。 |
-| `assign_4` | data_path | `w_satuarted2_32` | w_maxOprand2_32 > ((1<<i_oprand2_32[5:0]) - 1) ? (1<<i_oprand2_32[5:0]) - 1 : w_maxOprand2_32 | AI 推断：无符号饱和上限限幅，在w_maxOprand2_32基础上限制上限。 |
-| `assign_5` | data_path | `w_sat2_1` | (i_oprand1_32 < 0) \|\| (i_oprand1_32 >= 1<<i_oprand2_32[5:0]) | AI 推断：无符号饱和标志，指示i_oprand1_32是否超出无符号范围。 |
-| `assign_6` | control_path | `o_saQResult_32` | i_satQSymbolFlag_1 == 1'b1 ? w_saturated1_32 : w_satuarted2_32 | AI 推断：最终饱和结果输出，由i_satQSymbolFlag_1选择有符号或无符号路径。 |
+| `assign_1` | data_path | `w_saturated1_32` | w_maxOprand1_32 > $signed(1<<(i_oprand2_32[5:0] - 1)-1) ? $signed(1<<(i_oprand2_32[5:0] - 1)-... | AI 推断：有符号饱和标志，指示i_oprand1_32是否超出有符号量化范围。 |
+| `assign_2` | data_path | `w_sat1_1` | ( i_oprand1_32 < $signed(-(1<<(i_oprand2_32[5:0]-1))) ) \|\| (i_oprand1_32 >= 1<<(i_oprand2_32[... | AI 推断：有符号饱和路径的上界钳位，将w_maxOprand1_32限制在由i_oprand2_32[5:0]指定的有符号最大值之下。 |
+| `assign_3` | data_path | `w_maxOprand2_32` | i_oprand1_32 > 0 ? i_oprand1_32 : 0 | AI 推断：无符号饱和标志，指示i_oprand1_32是否超出无符号量化范围。 |
+| `assign_4` | data_path | `w_satuarted2_32` | w_maxOprand2_32 > ((1<<i_oprand2_32[5:0]) - 1) ? (1<<i_oprand2_32[5:0]) - 1 : w_maxOprand2_32 | AI 推断：无符号饱和标志，指示i_oprand1_32是否超出无符号量化范围。 |
+| `assign_5` | data_path | `w_sat2_1` | (i_oprand1_32 < 0) \|\| (i_oprand1_32 >= 1<<i_oprand2_32[5:0]) | AI 推断：无符号饱和路径的上界钳位，将w_maxOprand2_32限制在由i_oprand2_32[5:0]指定的无符号最大值之下。 |
+| `assign_6` | control_path | `o_saQResult_32` | i_satQSymbolFlag_1 == 1'b1 ? w_saturated1_32 : w_satuarted2_32 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | ... | ... | ... | ... | 其余 2 条 assign 省略 |

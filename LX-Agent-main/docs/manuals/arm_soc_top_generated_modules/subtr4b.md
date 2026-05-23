@@ -1,8 +1,8 @@
 # 模块 `subtr4b`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/subtr4b.v`。
-- 职责：AI 推断：4位二进制减法器，通过逐位异或和借位传播链实现无符号减法。
-- 说明：模块仅包含数据输入a和b、数据输出differ，无时钟或复位，通过组合逻辑实现a-b的减法运算，借位链从外部输入BORROW0开始逐位传播
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\subtr4b.v`。
+- 职责：AI 推断：4位二进制减法器，计算 a - b 并输出差值 differ 和内部借位链。
+- 说明：模块通过异或门计算逐位差，并通过组合逻辑链生成借位信号，最终输出差值。无时钟或复位，纯组合逻辑。
 
 ## 1. 层级位置
 
@@ -50,10 +50,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `w_pSub_4[1]` | a[1]^b[1] | AI 推断：生成a和b的逐位异或结果，作为减法中间差 |
-| `assign_2` | unknown | `w_pSub_4[2]` | a[2]^b[2] | AI 推断：生成a和b的逐位异或结果，作为减法中间差 |
-| `assign_3` | unknown | `w_pSub_4[3]` | a[3]^b[3] | AI 推断：生成a和b的逐位异或结果，作为减法中间差 |
-| `assign_4` | unknown | `w_borrow_5[1]` | (w_pSub_4[0]&b[0])\|(~w_pSub_4[0]&BORROW0) | AI 推断：实现借位传播链，从最低位BORROW0开始逐位计算借位 |
-| `assign_5` | unknown | `w_borrow_5[2]` | (w_pSub_4[1]&b[1])\|(~w_pSub_4[1]&w_borrow_5[1]) | AI 推断：实现借位传播链，从最低位BORROW0开始逐位计算借位 |
-| `assign_6` | unknown | `w_borrow_5[3]` | (w_pSub_4[2]&b[2])\|(~w_pSub_4[2]&w_borrow_5[2]) | AI 推断：实现借位传播链，从最低位BORROW0开始逐位计算借位 |
+| `assign_1` | unknown | `w_pSub_4[1]` | a[1]^b[1] | AI 推断：生成 a 与 b 的逐位异或结果，作为减法中间差 |
+| `assign_2` | unknown | `w_pSub_4[2]` | a[2]^b[2] | AI 推断：生成 a 与 b 的逐位异或结果，作为减法中间差 |
+| `assign_3` | unknown | `w_pSub_4[3]` | a[3]^b[3] | AI 推断：生成 a 与 b 的逐位异或结果，作为减法中间差 |
+| `assign_4` | unknown | `w_borrow_5[1]` | (w_pSub_4[0]&b[0])\|(~w_pSub_4[0]&BORROW0) | AI 推断：实现借位传播链，从低位向高位传递借位条件 |
+| `assign_5` | unknown | `w_borrow_5[2]` | (w_pSub_4[1]&b[1])\|(~w_pSub_4[1]&w_borrow_5[1]) | AI 推断：实现借位传播链，从低位向高位传递借位条件 |
+| `assign_6` | unknown | `w_borrow_5[3]` | (w_pSub_4[2]&b[2])\|(~w_pSub_4[2]&w_borrow_5[2]) | AI 推断：实现借位传播链，从低位向高位传递借位条件 |
 | ... | ... | ... | ... | 其余 5 条 assign 省略 |

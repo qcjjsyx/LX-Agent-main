@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "routeMsg",
-  "source_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
+  "source_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "路由消息分发模块，将输入消息根据方向选择分发到五个方向（东、本地、北、南、西）的发送FIFO。",
-    "explanation": "模块接收一个输入事件i_drive及其关联的51位消息i_msg_51，通过内部组件（receiveFifo、dirFork、方向延迟单元、方向SendFifo）处理后，产生五个方向的事件输出（o_driveEArb等）和对应的消息输出（o_eastMsg_51等）。方向选择逻辑由dirFork（cCondFork5）和相关的valid信号（w_eastVld, w_westVld等）控制。",
+    "value": "路由模块，将输入消息根据方向选择分发到五个输出方向（东、本地、北、南、西）。",
+    "explanation": "模块接收一个输入驱动事件和关联的51位消息负载，通过内部组件（接收FIFO、方向分叉、延迟单元、发送FIFO）处理后，生成五个方向的事件输出和对应的消息输出。方向选择由内部仲裁逻辑（基于w_eastVld、w_westVld等信号）决定。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -67,6 +67,9 @@
       },
       {
         "source": "parser_pipeline_rtl/modules/routeMsg.json"
+      },
+      {
+        "source": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v"
       }
     ]
   },
@@ -421,7 +424,7 @@
         ],
         "summary": "drive_event ports, count=6, directions=input:1, output:5",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
+          "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -480,7 +483,7 @@
         ],
         "summary": "free_backpressure ports, count=6, directions=input:5, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
+          "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -539,7 +542,7 @@
         ],
         "summary": "other_ports ports, count=6, directions=input:1, output:5",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
+          "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -556,8 +559,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_routeMsg_i_drive.json",
       "reader_takeaway": {
-        "value": "手册应重点描述事件从输入到五个方向输出的扇出路径、各FIFO的缓冲作用以及延迟单元的时序调整",
-        "explanation": "流的核心是一对多分发，涉及多个FIFO和延迟单元，手册需清晰说明事件如何被缓冲、延迟和扇出，以及各阻塞点的条件。",
+        "value": "手册应强调事件从输入到五个方向的分发路径、FIFO缓冲点和延迟单元",
+        "explanation": "流的核心是dirFork分支器和后续的FIFO缓冲，延迟单元用于时序对齐，手册需清晰描述这些组件的连接和功能。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -567,6 +570,18 @@
         "doc_priority": "primary",
         "signals": [
           "i_drive",
+          "w_driveFork",
+          "w_driveFork_delay",
+          "w_driveEFifo_t",
+          "w_driveLFifo_t",
+          "w_driveNFifo_t",
+          "w_driveSFifo_t",
+          "w_driveWFifo_t",
+          "w_driveEFifo",
+          "w_driveLFifo",
+          "w_driveNFifo",
+          "w_driveSFifo",
+          "w_driveWFifo",
           "o_driveEArb",
           "o_driveLArb",
           "o_driveNArb",
@@ -575,7 +590,13 @@
         ],
         "instances": [
           "receiveFifo",
+          "delayUart0",
           "dirFork",
+          "delayE",
+          "delayL",
+          "delayN",
+          "delayS",
+          "delayW",
           "eastSendFifo",
           "localSendFifo",
           "northSendFifo",
@@ -583,7 +604,9 @@
           "westSendFifo"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "(none)"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -600,8 +623,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "从输入事件 i_drive 到五个方向仲裁器输出事件的一对多扇出驱动流",
-            "explanation": "该流将单个输入事件通过接收FIFO、延迟单元和条件扇出器，分发到五个方向通道，每个通道再经过延迟和发送FIFO后输出到对应的仲裁器，实现事件的路由分发。",
+            "value": "从输入事件 i_drive 到五个方向仲裁器输出事件的分发与缓冲驱动流",
+            "explanation": "该流将单个输入事件通过接收FIFO、UART延迟、条件分支器，再经五个方向各自的延迟和发送FIFO，最终输出到五个方向仲裁器，实现事件的方向分发与同步缓冲。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -611,6 +634,18 @@
             "doc_priority": "primary",
             "signals": [
               "i_drive",
+              "w_driveFork",
+              "w_driveFork_delay",
+              "w_driveEFifo_t",
+              "w_driveLFifo_t",
+              "w_driveNFifo_t",
+              "w_driveSFifo_t",
+              "w_driveWFifo_t",
+              "w_driveEFifo",
+              "w_driveLFifo",
+              "w_driveNFifo",
+              "w_driveSFifo",
+              "w_driveWFifo",
               "o_driveEArb",
               "o_driveLArb",
               "o_driveNArb",
@@ -633,7 +668,9 @@
               "westSendFifo"
             ],
             "related_flows": [],
-            "related_assignments": [],
+            "related_assignments": [
+              "(none)"
+            ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -650,8 +687,8 @@
             ]
           },
           {
-            "value": "输出事件 o_drive*Arb 关联输入空闲信号 i_free*Arb，但反压机制未在流中体现",
-            "explanation": "接口契约显示每个输出事件关联一个空闲信号（如 i_freeEArb），可能用于下游仲裁器的反压，但流步骤和连接未描述这些空闲信号如何影响事件传播或FIFO行为。",
+            "value": "输出事件o_driveEArb等关联空闲信号i_freeEArb等，但流中未体现反压机制",
+            "explanation": "接口显示每个输出事件有对应空闲输入信号，但流步骤和连接中未包含这些信号，可能反压由外部仲裁器处理或通过其他路径实现。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -672,11 +709,7 @@
               "i_freeWArb"
             ],
             "instances": [
-              "eastSendFifo",
-              "localSendFifo",
-              "northSendFifo",
-              "southSendFifo",
-              "westSendFifo"
+              "(none)"
             ],
             "related_flows": [],
             "related_assignments": [],
@@ -696,8 +729,8 @@
             ]
           },
           {
-            "value": "输入事件 i_drive 携带 51 位消息负载 i_msg_51，但负载在流中的传播路径未明确",
-            "explanation": "接口契约显示 i_drive 关联负载 i_msg_51[50:0]，但流步骤和连接仅描述事件驱动信号，未提及负载如何随事件传播或是否被修改，需要RTL源码确认负载路径。",
+            "value": "输入事件i_drive携带52位消息负载，但流中未显式传递负载信号",
+            "explanation": "接口显示i_drive关联i_msg_51负载，但流步骤和连接中未出现该负载信号，可能负载在FIFO内部传递或由其他路径处理，需RTL源码确认。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -711,7 +744,9 @@
             ],
             "instances": [],
             "related_flows": [],
-            "related_assignments": [],
+            "related_assignments": [
+              "(none)"
+            ],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [
@@ -741,11 +776,11 @@
     "components": 7,
     "assignments": 21,
     "evidence_gaps": 0,
-    "review_questions": 2
+    "review_questions": 1
   },
   "source_review_context": {
     "module": "routeMsg",
-    "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
+    "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

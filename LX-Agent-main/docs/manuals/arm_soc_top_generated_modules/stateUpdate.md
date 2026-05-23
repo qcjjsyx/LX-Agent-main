@@ -1,8 +1,8 @@
 # 模块 `stateUpdate`
 
-- 源文件：`rtl/rtl/Lsu/stateUpdate.v`。
-- 职责：AI 推断：状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）并分发至对应的加载或存储FIFO，最终合并输出。。
-- 说明：模块接收一个事件驱动输入和7位数据，通过Fifo1缓冲后，由loadAndStoreSelector根据数据内容（w_isLoad_1/w_isStore_1）将请求分发至loadFifo或storeFifo，再经loadOrStoreMutexMerge合并输出。同时输出12位状态有效信号和未对齐指示。
+- 源文件：`rtl\rtl\Lsu\stateUpdate.v`。
+- 职责：AI 推断：状态更新模块，负责将来自更新分割器的请求根据负载类型（加载/存储）分发到对应的FIFO，并通过互斥合并后输出驱动信号。。
+- 说明：模块接收一个事件驱动输入和7位负载数据，通过Fifo1缓存后，由loadAndStoreSelector根据负载类型（w_isLoad_1/w_isStore_1）将请求分发到loadFifo或storeFifo，最后通过loadOrStoreMutexMerge合并为单一输出事件。同时输出12位状态有效信号。
 
 ## 1. 层级位置
 
@@ -66,7 +66,7 @@ stateUpdate
 - Payload：`i_driveFromUpdateSplitter_1` -> `i_fromUpdateSplitterData_7 [6:0]`。
 - 输出/影响：`o_driveToStateUpdateSelector_1`。
 - 结构复杂度：branch=1，join=1，blocking=4。
-- AI 推断：文档应重点描述事件从输入到输出的完整路径，包括分支、合并和阻塞点，并明确反压机制。
+- AI 推断：文档应重点描述事件如何通过loadAndStoreSelector分支，以及如何通过loadOrStoreMutexMerge互斥合并。
 
 
 ## 5. 内部组件与 assign 影响
@@ -85,8 +85,6 @@ stateUpdate
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_12` | control_path | `LoadIdleValid` | w_isLoad_1 & idle | AI 推断：下一状态计算逻辑，根据当前操作类型和有效标志确定状态机的下一个状态。 |
-| `assign_13` | control_path | `StoreIdleValid` | w_isStore_1 & idle | AI 推断：下一状态计算逻辑，根据当前操作类型和有效标志确定状态机的下一个状态。 |
-| `assign_14` | control_path | `w_nextState_4` | {4{w_isLoad_1 & LoadIdleValid}} & r_nextLoadState_4 \| {4{w_isStore_1 & StoreIdleValid}} & r_n... | AI 推断：下一状态计算逻辑，根据当前操作类型和有效标志确定状态机的下一个状态。 |
+| `assign_14` | control_path | `w_nextState_4` | {4{w_isLoad_1 & LoadIdleValid}} & r_nextLoadState_4 \| {4{w_isStore_1 & StoreIdleValid}} & r_n... | AI 推断：下一状态组合逻辑，根据当前请求类型和有效信号选择加载或存储状态机的下一状态。 |
 | `assign_17` | unknown | `o_misaligned_1` | w_misaligned_1 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_18` | control_path | `o_stateValid_12` | r_stateValid_12 | AI 推断：12位状态有效输出，反映内部状态机的当前状态。 |
+| `assign_18` | control_path | `o_stateValid_12` | r_stateValid_12 | 证据不足：No Semantic Layer assignment interpretation is available. |

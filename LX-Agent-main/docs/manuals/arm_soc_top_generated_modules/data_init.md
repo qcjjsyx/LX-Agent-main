@@ -1,8 +1,8 @@
 # 模块 `data_init`
 
-- 源文件：`rtl/rtl/memory/data_init.v`。
-- 职责：AI 推断：数据初始化模块，通过UART接口接收配置数据并驱动指令总线和数据总线的初始化写入。。
-- 说明：模块端口包含uart_rx、uart_tx、ibus_we、ibus_addr_o、ibus_data_o、dbus_we、dbus_addr_o、dbus_data_o，与解释一致。切片4显示r_ibus_we、r_ibus_addr_o、r_ibus_data_o、r_dbus_we、r_dbus_addr_o、r_dbus_data_o为内部寄存器，输出由assign驱动（assign部分未提供，但符合外部描述）。切片2第26-30行声明了ibus_addr_o、ibus_data_o等输出为32位或64位宽度，切片10第279-283行展示从rx_data提取first、number、size并分配，切片18第381-392行展示根据number值向ibus或dbus写入地址和数据，且存在地址递增（addr_i + 8或addr_d + 8）。切片18第384行data被赋值给r_ibus_data_o，第396行data被赋值给r_dbus_data_o，暗示数据有字节交换（{r_ibus_data_o[31:0], r_ibus_data_o[63:32]}）但切片中未直接看到交换。
+- 源文件：`rtl\rtl\memory\data_init.v`。
+- 职责：AI 推断：模块通过UART接收外部数据，解析后生成指令总线和数据总线的地址与数据输出。。
+- 说明：表头显示模块有输入uart_rx、输出uart_tx，以及ibus_we、ibus_addr_o、ibus_data_o、dbus_we、dbus_addr_o、dbus_data_o。内部状态机包含DATA0~DATA7等状态，在状态NUM1之后接收数据；在CRC1、CRC_START中接收CRC并比对，在SENDRSP输出ACK/NAK；最终在STACK状态输出dbus_we。assign将内部寄存器的值赋值给输出端口，且ibus_data_o和dbus_data_o做了高低32位交换。这支持模块通过UART接收数据并分别驱动指令和数据总线的输出。
 
 ## 1. 层级位置
 
@@ -61,10 +61,10 @@ data_init
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `ibus_addr_o` | r_ibus_addr_o | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `ibus_data_o` | {r_ibus_data_o[31:0], r_ibus_data_o[63:32]} | AI 推断：指令总线数据输出，内部寄存器r_ibus_data_o的高低32位交换后赋值。 |
+| `assign_2` | data_path | `ibus_data_o` | {r_ibus_data_o[31:0], r_ibus_data_o[63:32]} | AI 推断：指令总线数据输出，内部寄存器高低32位交换后输出 |
 | `assign_3` | unknown | `dbus_we` | r_dbus_we | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_4` | unknown | `dbus_addr_o` | r_dbus_addr_o | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | data_path | `dbus_data_o` | {r_dbus_data_o[31:0], r_dbus_data_o[63:32]} | AI 推断：数据总线数据输出，内部寄存器r_dbus_data_o的高低32位交换后赋值。 |
+| `assign_5` | data_path | `dbus_data_o` | {r_dbus_data_o[31:0], r_dbus_data_o[63:32]} | AI 推断：数据总线数据输出，内部寄存器高低32位交换后输出 |
 | `assign_7` | unknown | `init_sig` | r_init_1 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_8` | data_path | `d_finish` | (first[9:0] == (size-1)) & ( number == 6'h01 ) & c_state == WAITSEND & tx_data_ready | AI 推断：初始化完成标志，基于状态机、计数器、数据包编号和发送就绪信号计算。 |
+| `assign_8` | data_path | `d_finish` | (first[9:0] == (size-1)) & ( number == 6'h01 ) & c_state == WAITSEND & tx_data_ready | AI 推断：初始化完成标志，由状态机、计数器及UART发送就绪信号共同判定 |
 | `assign_0` | unknown | `ibus_we` | r_ibus_we | 证据不足：No Semantic Layer assignment interpretation is available. |

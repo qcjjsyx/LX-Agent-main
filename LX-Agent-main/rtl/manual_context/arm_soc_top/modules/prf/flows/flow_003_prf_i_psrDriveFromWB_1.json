@@ -90,8 +90,8 @@
         "w_driveTopsr"
       ],
       "role_in_flow": {
-        "value": "互斥合并器，仲裁来自写回阶段和异常阶段的两路物理寄存器驱动请求",
-        "explanation": "该实例接收i_psrDriveFromWB_1和i_psrwDriveFromExp_1两路事件驱动输入，通过互斥机制选择一路输出到w_driveTopsr，可能包含优先级或轮询仲裁逻辑",
+        "value": "互斥合并器，仲裁来自写回阶段和执行阶段的两个事件驱动路径",
+        "explanation": "该实例接收i_psrDriveFromWB_1和i_psrwDriveFromExp_1两个输入驱动，通过互斥机制选择其中一个输出到w_driveTopsr。它可能实现优先级或轮询仲裁，并可能在被选路径未就绪时阻塞事件传播。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -116,8 +116,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "instances.connections"
+          },
+          {
+            "source": "component_connection"
           }
         ]
       },
@@ -138,8 +140,8 @@
       ],
       "output_drives": [],
       "role_in_flow": {
-        "value": "末级FIFO级，缓冲合并后的物理寄存器驱动请求",
-        "explanation": "该实例作为Fifo1系列的FIFO级，接收w_driveTopsr输入，提供单级缓冲或流水线寄存功能，可能包含满标志或背压机制，但输出未连接到模块端点",
+        "value": "最后一级FIFO，缓冲合并后的写请求并可能实现背压",
+        "explanation": "该实例为cLastFifo1类型，接收w_driveTopsr作为输入驱动。作为FIFO级，它提供存储和流控功能，当FIFO满时可能阻塞上游事件传播。其输出未连接到任何模块端点，表明该流在模块内部终止或连接到未捕获的端点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -162,8 +164,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "instances.connections"
+          },
+          {
+            "source": "component_connection"
           }
         ]
       },
@@ -218,23 +222,20 @@
     }
   ],
   "semantic_meaning": {
-    "value": "手册应强调该流从输入端口经合并器到FIFO级后终止，未到达模块输出端点",
-    "explanation": "流在cLastFifo2_prf2处终止，未继续传播到模块输出端口，表明该驱动可能被内部消费或需要与其他流合并后输出，需RTL源码确认FIFO输出连接",
+    "value": "写回阶段的数据载荷与事件驱动信号相关联，但数据路径未在流中显式跟踪",
+    "explanation": "接口载荷契约显示i_psrDriveFromWB_1事件携带32位数据信号i_rdDataToPrf_32，表明该驱动流不仅传递控制事件，还传递写数据。然而当前流上下文仅跟踪事件驱动信号，未包含数据路径的传播，因此数据与控制的关系需RTL源码确认。",
     "certainty": "ai_inferred",
-    "confidence": "low",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:prf:flow_003_prf_i_psrDriveFromWB_1:documentation_focus:001",
+    "semantic_claim_id": "semantic:flow:prf:flow_003_prf_i_psrDriveFromWB_1:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
       "i_psrDriveFromWB_1",
-      "w_driveTopsr"
+      "i_rdDataToPrf_32"
     ],
-    "instances": [
-      "cMutexMerge2_8b",
-      "cLastFifo2_prf2"
-    ],
+    "instances": [],
     "related_flows": [],
     "related_assignments": [],
     "requires_rtl_source_review": true,
@@ -245,14 +246,87 @@
     ],
     "semantic_evidence": [
       {
-        "source": "transparent_flows",
-        "path": "knowledge_ir/modules/prf.json"
+        "source": "interface.event_ports"
+      },
+      {
+        "source": "interface.data_ports"
       }
     ],
     "supporting_claims": [
       {
-        "value": "写回阶段1的物理寄存器写请求驱动，经互斥合并后进入末级FIFO，但未到达模块输出端点",
-        "explanation": "该驱动流从写回阶段1的输入端口i_psrDriveFromWB_1出发，经过cMutexMerge2_8b互斥合并器与来自异常阶段的另一驱动流i_psrwDriveFromExp_1合并，输出w_driveTopsr后进入cLastFifo2_prf2 FIFO级，但流在此终止，未继续传播到模块输出端口",
+        "value": "存在空闲信号指示写回阶段可发送新请求，但背压机制未在流中显式建模",
+        "explanation": "接口载荷契约包含空闲信号o_prfFreeToWB_1，表明模块向写回阶段反馈FIFO或合并器是否可接受新事件。该信号可能由cLastFifo2_prf2或cMutexMerge2_8b产生，但当前流上下文未包含其连接或赋值，因此背压路径需RTL源码确认。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:prf:flow_003_prf_i_psrDriveFromWB_1:completion_backpressure:001",
+        "doc_priority": "primary",
+        "signals": [
+          "o_prfFreeToWB_1",
+          "i_psrDriveFromWB_1"
+        ],
+        "instances": [
+          "cLastFifo2_prf2",
+          "cMutexMerge2_8b"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:prf:flow:flow_003_prf_i_psrDriveFromWB_1",
+          "ev:prf:semantic_flow:flow_003_prf_i_psrDriveFromWB_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface.event_ports"
+          },
+          {
+            "source": "interface.data_ports"
+          }
+        ]
+      },
+      {
+        "value": "最终手册应重点描述写回阶段请求如何通过互斥合并器与执行阶段请求仲裁，以及FIFO级的缓冲和背压行为",
+        "explanation": "该流的核心语义是写回阶段写请求的路径：从模块输入经互斥合并器仲裁后进入FIFO缓冲。手册应强调合并器的仲裁策略（如优先级或轮询）、FIFO深度和满状态对上游的背压影响，以及数据载荷与事件驱动的关联。由于流未到达模块输出，需说明内部终止或后续处理。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:prf:flow_003_prf_i_psrDriveFromWB_1:documentation_focus:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_psrDriveFromWB_1",
+          "w_driveTopsr",
+          "o_prfFreeToWB_1"
+        ],
+        "instances": [
+          "cMutexMerge2_8b",
+          "cLastFifo2_prf2"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:prf:flow:flow_003_prf_i_psrDriveFromWB_1",
+          "ev:prf:semantic_flow:flow_003_prf_i_psrDriveFromWB_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "instances.connections"
+          },
+          {
+            "source": "interface.event_ports"
+          }
+        ]
+      },
+      {
+        "value": "写回阶段（WB）通过互斥合并器向最后一级FIFO发送物理寄存器写请求的事件驱动流",
+        "explanation": "该流从模块输入端口i_psrDriveFromWB_1开始，经过cMutexMerge2_8b互斥合并器与来自执行阶段的i_psrwDriveFromExp_1路径合并，输出w_driveTopsr后进入cLastFifo2_prf2 FIFO级。流在合并点可能因仲裁而阻塞，在FIFO级可能因满而阻塞，且未到达任何模块输出端点。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -278,79 +352,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "instances.connections"
           },
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/prf.json"
-          }
-        ]
-      },
-      {
-        "value": "写回阶段1的空闲信号可能反映FIFO级或合并器的背压状态",
-        "explanation": "接口载荷契约显示i_psrDriveFromWB_1关联空闲信号o_prfFreeToWB_1，但流步骤中未显示该信号如何与cMutexMerge2_8b或cLastFifo2_prf2的满/空闲状态关联，背压路径需RTL源码确认",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:prf:flow_003_prf_i_psrDriveFromWB_1:completion_backpressure:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "o_prfFreeToWB_1",
-          "i_psrDriveFromWB_1"
-        ],
-        "instances": [
-          "cMutexMerge2_8b",
-          "cLastFifo2_prf2"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:prf:flow:flow_003_prf_i_psrDriveFromWB_1",
-          "ev:prf:semantic_flow:flow_003_prf_i_psrDriveFromWB_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/prf.json"
-          }
-        ]
-      },
-      {
-        "value": "写回阶段1的驱动事件携带32位写数据载荷，经合并器后数据路径未明确跟踪",
-        "explanation": "接口载荷契约显示i_psrDriveFromWB_1关联32位写数据i_rdDataToPrf_32，但流步骤中未显示数据信号如何通过合并器和FIFO传播，数据与控制路径的耦合关系需RTL源码确认",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:prf:flow_003_prf_i_psrDriveFromWB_1:data_control_effect:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "i_psrDriveFromWB_1",
-          "i_rdDataToPrf_32"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:prf:flow:flow_003_prf_i_psrDriveFromWB_1",
-          "ev:prf:semantic_flow:flow_003_prf_i_psrDriveFromWB_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/prf.json"
-          },
-          {
-            "source": "interface.data_ports",
-            "path": "knowledge_ir/modules/prf.json"
+            "source": "transparent_flows"
           }
         ]
       }

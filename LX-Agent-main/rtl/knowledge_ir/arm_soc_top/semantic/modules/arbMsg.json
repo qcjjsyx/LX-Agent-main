@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "arbMsg",
-  "input_hash": "68ab608e80f5f7cee69d58edb8f0f46d81ce14ea2be2eb6398496104a54c3537",
+  "input_hash": "61cbc7b2cfd43dd207dd5acb4239bcfbc3b5d86bcbb9371ce02b1ce30c7a445e",
   "source_context": "ai_context/modules/arbMsg.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/IONet/IONetwork_9.24/arbMsg.v",
+      "source": "rtl\\rtl\\IONet\\IONetwork_9.24\\arbMsg.v",
       "paths": [
         "module_source"
       ]
@@ -40,18 +40,19 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/arbMsg.v",
+        "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\arbMsg.v",
         "parser_module": "modules/arbMsg.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 6,
+    "count": 8,
     "by_type": {
       "component_role": 1,
+      "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 1,
+      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -62,9 +63,9 @@
         "type": "module",
         "module": "arbMsg"
       },
-      "summary": "五路输入消息仲裁与合并模块，负责从东、本地、北、南、西五个方向中选择一路消息转发至下一级。",
+      "summary": "五路输入到一路输出的消息仲裁与合并模块，用于片上网络（IONet）的路由节点。",
       "subject": "arbMsg",
-      "explanation": "模块接收五个方向的事件驱动信号(i_driveEast等)及其对应的51位消息载荷，通过内部实例arbMerge(cArbMerge5_51b)进行仲裁，输出选中的消息(o_msg_51)和驱动事件(o_driveNext)，同时产生各输入方向的释放信号(o_freeEast等)。",
+      "explanation": "模块接收来自东、本地、北、南、西五个方向的驱动事件（i_drive*）及其对应的51位消息载荷（i_*Msg_51），通过内部实例arbMerge（cArbMerge5_51b）进行仲裁合并，输出一个驱动事件（o_driveNext）和一条合并后的消息（o_msg_51）。同时，它接收来自下一级的空闲信号（i_freeNext），并生成五个方向各自的空闲信号（o_free*），构成完整的握手机制。",
       "signals": [
         "i_driveEast",
         "i_driveLocal",
@@ -104,9 +105,6 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/arbMsg.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/arbMsg.v"
         }
       ],
       "id": "semantic:module:arbMsg:module_role:001"
@@ -117,22 +115,28 @@
         "type": "module",
         "module": "arbMsg"
       },
-      "summary": "模块将五个方向的消息输入通过单一仲裁器实例合并为一路输出，实现多路到单路的消息选择与转发。",
-      "subject": "五路消息仲裁与转发",
-      "explanation": "五个方向的事件驱动信号(i_driveEast等)和消息载荷(i_eastMsg_51等)全部连接到arbMerge实例的对应输入端口，arbMerge的输出o_driveNext和o_data直接映射到模块输出o_driveNext和o_msg_51，表明模块的核心功能是仲裁选择。",
+      "summary": "模块的核心功能是将来自五个方向的输入消息（事件+数据）仲裁合并为单一输出，并管理空闲信号的反馈。",
+      "subject": "五路消息仲裁与合并",
+      "explanation": "五个输入驱动事件（i_drive*）和对应的消息数据（i_*Msg_51）被直接连接到内部仲裁合并器arbMerge的输入端口。arbMerge根据其内部仲裁逻辑（具体算法未知）选择一个输入，将其消息数据作为输出（o_msg_51），并产生一个输出驱动事件（o_driveNext）。同时，模块接收一个全局空闲输入（i_freeNext），并通过arbMerge将其转换为五个方向各自独立的空闲输出（o_free*），用于通知上游节点可以发送新消息。",
       "signals": [
         "i_driveEast",
         "i_driveLocal",
         "i_driveNorth",
         "i_driveSouth",
         "i_driveWest",
+        "o_driveNext",
         "i_eastMsg_51",
         "i_localMsg_51",
         "i_northMsg_51",
         "i_southMsg_51",
         "i_westMsg_51",
-        "o_driveNext",
-        "o_msg_51"
+        "o_msg_51",
+        "i_freeNext",
+        "o_freeEast",
+        "o_freeLocal",
+        "o_freeNorth",
+        "o_freeSouth",
+        "o_freeWest"
       ],
       "instances": [
         "arbMerge"
@@ -163,21 +167,21 @@
         "type": "module",
         "module": "arbMsg"
       },
-      "subject": "arbMerge",
-      "summary": "核心仲裁合并器，实现五路输入事件和消息的仲裁逻辑，决定哪一路消息被转发至下一级。",
-      "explanation": "arbMerge实例类型为cArbMerge5_51b，属于ArbMerge组件族，接收五个方向的事件驱动信号和消息载荷，输出仲裁后的驱动事件和消息，同时产生各输入方向的释放信号。所有模块级输入输出均通过此实例连接。",
+      "subject": "arbMerge (cArbMerge5_51b)",
+      "summary": "核心仲裁合并器，负责从五个输入中选择一个，并将对应的消息数据传递到输出。",
+      "explanation": "arbMerge是模块中唯一的实例，其模块类型cArbMerge5_51b暗示了它是一个参数化的、可处理5个输入、51位数据宽度的仲裁合并器。所有五个输入驱动事件（i_drive*）被连接到其i_drive_5端口，五个消息数据（i_*Msg_51）被连接到其i_data0到i_data4端口。它产生一个输出驱动事件（o_driveNext）和合并后的数据（o_data）。空闲信号的处理也通过此实例完成：i_freeNext连接到其i_freeNext，其输出o_free_5被扇出到五个空闲输出（o_free*）。",
       "signals": [
         "i_driveEast",
         "i_driveLocal",
         "i_driveNorth",
         "i_driveSouth",
         "i_driveWest",
+        "o_driveNext",
         "i_eastMsg_51",
         "i_localMsg_51",
         "i_northMsg_51",
         "i_southMsg_51",
         "i_westMsg_51",
-        "o_driveNext",
         "o_msg_51",
         "i_freeNext",
         "o_freeEast",
@@ -215,9 +219,9 @@
         "type": "module",
         "module": "arbMsg"
       },
-      "summary": "每个方向的事件驱动信号(i_driveXxx)与其对应的消息载荷(i_xxxMsg_51)构成一对输入，表示该方向有消息请求转发。",
-      "subject": "方向驱动事件与消息载荷绑定",
-      "explanation": "事件-载荷绑定关系通过事件-载荷契约(event_payload_contracts)明确，每个i_driveXxx事件对应一个i_xxxMsg_51载荷，且每个方向有独立的释放信号o_freeXxx，表明模块按方向进行独立的请求-确认握手。",
+      "summary": "每个输入方向（东/本地/北/南/西）都遵循一个独立的“驱动-数据-空闲”三线握手协议。",
+      "subject": "方向性驱动-数据-空闲握手协议",
+      "explanation": "对于每个输入方向，存在一个输入驱动事件（i_drive*）、一个输入数据载荷（i_*Msg_51）和一个输出空闲信号（o_free*）。这表明上游模块通过断言i_drive*来指示有效数据，同时数据必须在i_*Msg_51上有效。下游模块（本模块）在完成处理或准备好接收新数据后，通过断言o_free*来释放该方向。这种协议是典型的点对点流控机制。",
       "signals": [
         "i_driveEast",
         "i_eastMsg_51",
@@ -244,7 +248,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/arbMsg.json"
@@ -261,21 +265,24 @@
         "type": "module",
         "module": "arbMsg"
       },
-      "summary": "所有五个方向的释放信号(o_freeEast等)均来自arbMerge的同一输出o_free_5，表明仲裁器在完成一次转发后同时释放所有输入方向。",
-      "subject": "释放信号广播机制",
-      "explanation": "关键组件连接显示arbMerge.o_free_5同时连接到o_freeEast、o_freeLocal、o_freeNorth、o_freeSouth、o_freeWest五个输出，说明仲裁器采用全局释放策略，而非按方向独立释放。",
+      "summary": "输出端使用一个驱动事件（o_driveNext）和一个数据载荷（o_msg_51）的组合，但缺少独立的空闲输入。",
+      "subject": "输出端驱动-数据协议",
+      "explanation": "输出端只有一个输出驱动事件和输出数据，没有独立的空闲信号。这表明输出协议可能是一个简化的“有效-数据”模式，或者空闲信号（i_freeNext）是全局共享的，用于所有输出方向。当前上下文显示i_freeNext是唯一的空闲输入，它可能用于指示下游模块（即下一级路由节点）已准备好接收数据。",
       "signals": [
-        "o_freeEast",
-        "o_freeLocal",
-        "o_freeNorth",
-        "o_freeSouth",
-        "o_freeWest",
+        "o_driveNext",
+        "o_msg_51",
         "i_freeNext"
+      ],
+      "related_payload": [
+        "o_msg_51"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/arbMsg.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/arbMsg.json"
         }
@@ -283,44 +290,137 @@
       "id": "semantic:module:arbMsg:interface_intent:002"
     },
     {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "arbMsg"
+      },
+      "summary": "手册应重点描述每个输入方向的独立握手协议，以及arbMerge实例的仲裁选择逻辑（如果已知）。",
+      "subject": "方向性握手协议与仲裁合并逻辑",
+      "explanation": "模块的核心价值在于其将多个独立流控通道合并为一个输出通道的能力。文档必须清晰解释每个输入方向（东/本地/北/南/西）的“驱动-数据-空闲”握手时序和依赖关系。此外，应说明arbMerge的仲裁策略（例如，固定优先级、轮询等），这决定了在多个输入同时请求时，哪个输入的消息会被转发。空闲信号（i_freeNext）的传播和扇出逻辑也应被阐明。",
+      "signals": [
+        "i_driveEast",
+        "i_driveLocal",
+        "i_driveNorth",
+        "i_driveSouth",
+        "i_driveWest",
+        "o_driveNext",
+        "i_eastMsg_51",
+        "i_localMsg_51",
+        "i_northMsg_51",
+        "i_southMsg_51",
+        "i_westMsg_51",
+        "o_msg_51",
+        "i_freeNext",
+        "o_freeEast",
+        "o_freeLocal",
+        "o_freeNorth",
+        "o_freeSouth",
+        "o_freeWest"
+      ],
+      "instances": [
+        "arbMerge"
+      ],
+      "related_flows": [
+        "flow_000_arbMsg_i_driveEast",
+        "flow_001_arbMsg_i_driveLocal",
+        "flow_002_arbMsg_i_driveNorth",
+        "flow_003_arbMsg_i_driveSouth",
+        "flow_004_arbMsg_i_driveWest"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/arbMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/arbMsg.json"
+        }
+      ],
+      "id": "semantic:module:arbMsg:documentation_focus:001"
+    },
+    {
       "claim_type": "source_review_request",
       "scope": {
         "type": "module",
         "module": "arbMsg"
       },
-      "reason": "当前上下文仅显示五个释放信号均来自同一输出o_free_5，但未提供arbMerge内部逻辑，无法确认释放信号是否在所有方向同时有效，以及i_freeNext如何影响释放行为。",
-      "subject": "释放信号广播机制",
+      "reason": "当前AI上下文仅提供了模块的接口和连接信息，但未包含arbMerge实例（cArbMerge5_51b）的内部实现细节，特别是其仲裁算法（如固定优先级、轮询、或基于其他信号）。",
+      "subject": "arbMerge内部仲裁逻辑",
       "needed_source_slice": "module declaration, always block, assign block",
       "signals": [
+        "i_driveEast",
+        "i_driveLocal",
+        "i_driveNorth",
+        "i_driveSouth",
+        "i_driveWest",
+        "o_driveNext"
+      ],
+      "instances": [
+        "arbMerge"
+      ],
+      "related_flows": [
+        "flow_000_arbMsg_i_driveEast",
+        "flow_001_arbMsg_i_driveLocal",
+        "flow_002_arbMsg_i_driveNorth",
+        "flow_003_arbMsg_i_driveSouth",
+        "flow_004_arbMsg_i_driveWest"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/arbMsg.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/arbMsg.json"
+        }
+      ],
+      "id": "semantic:module:arbMsg:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "arbMsg"
+      },
+      "reason": "当前上下文显示i_freeNext连接到arbMerge.i_freeNext，而arbMerge.o_free_5被扇出到五个o_free*输出。需要查看arbMerge的RTL源码，以理解空闲信号是如何从输入传播到五个输出的，以及是否存在任何条件或延迟。",
+      "subject": "空闲信号传播逻辑",
+      "needed_source_slice": "always block, assign block",
+      "signals": [
+        "i_freeNext",
         "o_freeEast",
         "o_freeLocal",
         "o_freeNorth",
         "o_freeSouth",
-        "o_freeWest",
-        "i_freeNext"
+        "o_freeWest"
       ],
       "instances": [
         "arbMerge"
+      ],
+      "related_flows": [
+        "flow_000_arbMsg_i_driveEast",
+        "flow_001_arbMsg_i_driveLocal",
+        "flow_002_arbMsg_i_driveNorth",
+        "flow_003_arbMsg_i_driveSouth",
+        "flow_004_arbMsg_i_driveWest"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/arbMsg.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/arbMsg.json"
         }
       ],
-      "id": "semantic:module:arbMsg:source_review_request:001"
+      "id": "semantic:module:arbMsg:source_review_request:002"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "仲裁算法",
-      "reason": "当前上下文未提供arbMerge实例的内部仲裁算法（如轮询、优先级等），无法确定消息选择的具体策略。"
-    },
-    {
-      "field": "消息格式",
-      "reason": "51位消息载荷(i_xxxMsg_51)的内部字段定义未提供，无法解释消息内容的语义。"
-    }
-  ]
+  "evidence_gaps": []
 }

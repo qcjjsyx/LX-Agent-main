@@ -1,8 +1,8 @@
 # 模块 `orrer`
 
-- 源文件：`rtl/rtl/Execute/or.v`。
-- 职责：AI 推断：执行按位逻辑或运算的组合逻辑单元。
-- 说明：模块通过组合赋值将两个32位操作数进行按位或运算，直接产生结果，不涉及时钟或状态存储。
+- 源文件：`rtl\rtl\Execute\or.v`。
+- 职责：AI 推断：按位逻辑或运算单元，执行两个32位操作数的按位或操作并输出结果。
+- 说明：模块仅包含一个赋值语句 result = oprand1 | oprand2，无其他逻辑或状态，表明其核心功能是组合逻辑的按位或运算
 
 ## 1. 层级位置
 
@@ -50,4 +50,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `result` | oprand1 \| oprand2 | AI 推断：组合赋值，直接实现按位或运算的数据通路。 |
+| `assign_0` | data_path | `result` | oprand1 \| oprand2 | AI 推断：赋值语句实现按位或运算，直接驱动模块输出 |

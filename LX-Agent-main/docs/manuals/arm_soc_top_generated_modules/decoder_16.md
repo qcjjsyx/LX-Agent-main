@@ -1,8 +1,8 @@
 # 模块 `decoder_16`
 
-- 源文件：`rtl/rtl/Decode/decoder_16.v`。
-- 职责：AI 推断：16位Thumb指令解码器，将输入的16位指令数据解码为187位内部微操作控制信号。
-- 说明：模块接收16位指令数据i_data_64（实际使用低16位），通过大量组合逻辑解码出指令类型、操作数、立即数、条件码等字段，打包成187位宽的控制字w_decoderDataToLaunch_187输出。驱动事件i_drive直接透传为o_drive1，自由信号i_free透传为o_free，表明解码过程为组合逻辑流水级。
+- 源文件：`rtl\rtl\Decode\decoder_16.v`。
+- 职责：AI 推断：16位Thumb指令解码器，将输入的64位指令数据包解码为187位的发射数据和控制信号。
+- 说明：模块接收i_drive事件驱动的64位指令数据，通过大量组合逻辑解码出指令类型、操作数、立即数、条件码等字段，打包成187位宽发射数据o_data_187，并输出异常编号o_excNum_4和NZCV写使能o_nzcvWen_4
 
 ## 1. 层级位置
 
@@ -44,7 +44,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 - Payload：`i_drive` -> `i_data_64 [63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：i_drive作为控制事件，i_data_64作为伴随数据负载，两者在模块入口处同时到达并同步处理。
+- AI 推断：最终手册应强调此流的直通特性、数据拆分结构，以及无流控、无分支、无阻塞的简单性。
 
 
 ## 5. 内部组件与 assign 影响
@@ -61,4 +61,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | --- | --- | --- | --- | --- |
 | `assign_1` | control_path | `o_free` | i_free | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_2` | data_path | `{w_pc_32, w_zero_16, w_int_16}` | i_data_64 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | control_path | `o_drive1` | i_drive | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | control_path | `o_drive1` | i_drive | AI 推断：输入事件i_drive直接透传为输出事件o_drive1，表示解码完成事件 |

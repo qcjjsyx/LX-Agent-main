@@ -1,8 +1,8 @@
 # 模块 `cpu_top_all`
 
-- 源文件：`rtl/rtl/cpu_top_1and2/cpu_top_all.v`。
-- 职责：AI 推断：RTL源码中未提供事件与释放信号之间的握手时序逻辑（如valid/ready握手或阶段驱动），仅通过模块实例之间的连线传递事件和释放信号。。
-- 说明：在切片中，事件和释放信号（如i_driveFromStart_1与o_freeToStart_1）通过实例（如BranchMerge）直接连接，没有单独的always块或assign块描述握手协议的具体时序和条件。例如，在第55-60行的cMutexMerge4_32b实例中，驱动与释放信号仅作为输入/输出连线出现，未展示握手状态机或时序逻辑。
+- 源文件：`rtl\rtl\cpu_top_1and2\cpu_top_all.v`。
+- 职责：AI 推断：顶层CPU流水线集成模块，负责指令获取、译码、执行、访存、写回及异常中断处理的完整流水线控制与数据通路汇聚。。
+- 说明：该模块集成了fetch、decoder、execute、lsu、wb、grf、prf、intAndExc等核心流水线阶段模块，并通过大量SelSplit、MutexMerge、Fifo1等控制组件实现事件驱动的流水线推进与仲裁。外部接口包含来自数据路由和启动模块的驱动事件，以及到ICache和数据路由的输出驱动，表明其作为CPU核心与外部缓存/数据路由的接口。
 
 ## 1. 层级位置
 
@@ -102,7 +102,7 @@ cpu_top_all
 - Payload：`o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`。
 - 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`。
 - 结构复杂度：branch=25，join=25，blocking=21。
-- AI 推断：文档应重点描述LSU如何将数据路由驱动事件分发给ICache、DataRout、异常、发射、写回等下游模块。
+- AI 推断：驱动事件携带105位数据负载输出到DataRout。
 
 ### `i_driveFromStart_1`
 
@@ -110,7 +110,7 @@ cpu_top_all
 - Payload：`i_driveFromStart_1` -> `i_startPc_32 [31:0]`, `o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`。
 - 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`。
 - 结构复杂度：branch=24，join=25，blocking=21。
-- AI 推断：文档应重点描述流中关键的分支和合并点，特别是BranchMerge、fetchSele1、outStackSele、launchSele等选择器的作用。
+- AI 推断：启动事件 i_driveFromStart_1 携带 32 位起始 PC 值 i_startPc_32，作为流的初始数据。
 
 ### `i_drvFICache`
 
@@ -118,7 +118,7 @@ cpu_top_all
 - Payload：`o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`。
 - 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`。
 - 结构复杂度：branch=25，join=25，blocking=21。
-- AI 推断：输出端口 o_lsuDriveToDataRout_1 携带 105 位数据负载，并受输入空闲信号 i_lsuFreeFromDataRout_1 的流控。
+- AI 推断：最终手册应重点描述该流如何从单一输入分发到 fetch 和 LSU，以及如何通过仲裁/合并单元驱动 ICache 和数据路由。
 
 
 ## 5. 内部组件与 assign 影响

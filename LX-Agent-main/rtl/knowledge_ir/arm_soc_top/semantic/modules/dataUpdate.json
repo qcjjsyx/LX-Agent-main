@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "dataUpdate",
-  "input_hash": "fa4d388da5b89e0aa3b9f9704f52816cabf1e9184a21df7d49f80437a139d5df",
+  "input_hash": "f6825c7130094bf391d37823f881e0c39ff413d61798d89c50fd7a54d7fc4196",
   "source_context": "ai_context/modules/dataUpdate.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/Lsu/dataUpate.v",
+      "source": "rtl\\rtl\\Lsu\\dataUpate.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/Lsu/dataUpate.v",
+        "rtl_file": "rtl\\rtl\\Lsu\\dataUpate.v",
         "parser_module": "modules/dataUpdate.json"
       }
     }
@@ -63,13 +63,14 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "数据更新模块，负责在 LSU 内部对加载和存储操作进行数据选择、格式转换和仲裁合并，最终驱动内存和写回通路。",
+      "summary": "数据更新模块，负责在 LSU 内部协调加载和存储操作的数据流，并驱动最终的内存访问和写回路径。",
       "subject": "dataUpdate",
-      "explanation": "模块接收来自 LSU 的加载/存储请求、内存数据和存储数据，通过选择器、FIFO 和合并器组成的流水线，将加载数据转换为写回格式，将存储数据转换为内存写入格式，并输出驱动事件。",
+      "explanation": "该模块接收来自 LSU 的加载/存储请求，通过选择器、FIFO 和合并器组成的流水线，将加载数据格式化后发送到写回阶段，并将存储数据（地址、数据、写使能）发送到内存接口。其核心作用是作为 LSU 内部数据路径的仲裁和分发中心。",
       "signals": [
         "i_lsuToDataUpdate_1",
         "i_load_1",
         "i_store_1",
+        "i_memAddr_32",
         "i_memData_64",
         "i_storeData_64",
         "o_dataUpdateDriveToMem_1",
@@ -122,16 +123,21 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "将来自内存的加载数据（64位）根据加载类型（lb, lhw, lw, ldw）和地址对齐情况，进行符号扩展、字节选择和对齐处理，生成写回数据。",
-      "subject": "load_data_formatting_and_forwarding",
-      "explanation": "通过 loadSelector 将加载请求分发到不同的加载类型通路，每个通路使用 assign 进行数据格式转换（如 w_lbGrfData_32, w_lwGrfData_32），然后通过 FIFO 和 lbMerge 合并，最终输出到写回通路。",
+      "summary": "将来自内存的原始加载数据（i_memData_64）根据加载类型（lb, lh, lw, ldw）和地址对齐情况进行符号扩展或零扩展，并通过 lbMerge 合并后驱动写回阶段。",
+      "subject": "加载数据格式化与写回驱动",
+      "explanation": "从 key_instances 和 assign_dependencies 可见，loadSelector 将输入数据分发到不同的加载类型 FIFO（如 lbFifo, lwFifo），每个 FIFO 内部或上游的 assign 块（如 w_lbGrfData_32, w_lwGrfData_32）根据地址和符号标志进行数据格式化。格式化后的数据通过 lbMerge 合并为 74 位宽的数据（o_dataUpdateToWritebackData_74）并驱动 o_dataUpdateDriveToWriteback_1 事件。",
       "signals": [
         "i_memData_64",
         "i_memAddr_32",
         "i_loadSign_1",
         "i_misaligned_1",
         "i_addrFromPeripheralFlag_1",
-        "o_dataUpdateToWritebackData_74"
+        "w_lbGrfData_32",
+        "w_lwGrfData_32",
+        "w_lhwGrfData_32",
+        "w_ldwGrfData_64",
+        "o_dataUpdateToWritebackData_74",
+        "o_dataUpdateDriveToWriteback_1"
       ],
       "instances": [
         "loadSelector",
@@ -149,6 +155,9 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
       ],
@@ -160,15 +169,21 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "将来自 LSU 的存储数据（64位）根据存储类型（sw, shw, sdw）和地址进行字节掩码生成和数据对齐，驱动内存写入。",
-      "subject": "store_data_formatting_and_memory_drive",
-      "explanation": "通过 storeSelector 将存储请求分发到不同存储类型通路，每个通路使用 assign 生成内存地址、数据和写使能（如 w_swMemAddr_32, w_swMemData_64, w_swMemWen_8），然后通过 FIFO 和 outMerge 合并，最终输出到内存接口。",
+      "summary": "将来自 LSU 的存储数据（i_storeData_64）和地址（i_memAddr_32）根据存储类型（sb, sh, sw, sdw）打包成内存接口格式，并通过 outMerge 合并后驱动内存访问。",
+      "subject": "存储数据打包与内存驱动",
+      "explanation": "从 key_instances 和 assign_dependencies 可见，storeSelector 将输入数据分发到不同的存储类型 FIFO（如 swFifo, shwFifo）。每个 FIFO 的输入数据由 assign 块（如 w_swMemData_64, w_shwMemData_64）根据地址和存储类型进行字节对齐和写使能生成。这些 FIFO 的输出通过 outMerge 合并为 104 位宽的数据（包含地址、数据和写使能），并驱动 o_dataUpdateDriveToMem_1 事件。",
       "signals": [
         "i_storeData_64",
         "i_memAddr_32",
+        "w_storeData_64",
+        "w_swMemData_64",
+        "w_shwMemData_64",
+        "w_sdwMemData_64",
+        "w_swMemWen_8",
         "o_memAddr_32",
         "o_memData_64",
-        "o_memWen_8"
+        "o_memWen_8",
+        "o_dataUpdateDriveToMem_1"
       ],
       "instances": [
         "storeSelector",
@@ -186,6 +201,9 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
       ],
@@ -198,12 +216,10 @@
         "module": "dataUpdate"
       },
       "subject": "dataUpdateSelector",
-      "summary": "加载/存储请求的入口选择器，根据 LSU 的请求类型（加载或存储）将请求分发到加载或存储处理通路。",
-      "explanation": "接收 i_lsuToDataUpdate_1 作为驱动事件，根据 i_load_1 和 i_store_1 信号选择将请求转发到 loadSelector 或 storeSelector，并输出 o_dataUpdateToLsu_1 作为反馈。",
+      "summary": "顶层选择器，根据 LSU 的请求类型（加载或存储）将输入事件（i_lsuToDataUpdate_1）路由到加载或存储数据路径。",
+      "explanation": "从 key_component_connections 可见，dataUpdateSelector 接收 i_lsuToDataUpdate_1 作为驱动事件，并输出 w_driveToLoadSelector_1 和 w_driveToStoreSelector_1 分别驱动 loadSelector 和 storeSelector。同时，它从加载和存储路径接收反馈信号（w_loadSelectorToDataUpdateSelector_1, w_storeSelectorToDataUpdateSelector_1）并输出 o_dataUpdateToLsu_1 作为完成指示。",
       "signals": [
         "i_lsuToDataUpdate_1",
-        "i_load_1",
-        "i_store_1",
         "w_driveToLoadSelector_1",
         "w_driveToStoreSelector_1",
         "o_dataUpdateToLsu_1"
@@ -220,6 +236,9 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
       ],
@@ -232,14 +251,10 @@
         "module": "dataUpdate"
       },
       "subject": "loadSelector",
-      "summary": "加载请求的八路选择器，根据加载类型（lb, lhw, lw, ldw 及其未对齐变体）将加载请求分发到对应的 FIFO 通路。",
-      "explanation": "接收来自 dataUpdateSelector 的驱动事件，根据加载类型将 i_memAddr_32, i_memData_64, i_loadSign_1, i_misaligned_1 等数据分发到八个输出通路，每个通路对应一种加载类型。",
+      "summary": "加载路径分发器，将加载请求根据加载类型（lb, lh, lw, ldw 等）分发到对应的 FIFO 流水线。",
+      "explanation": "从 key_instances 可见，loadSelector 接收来自 dataUpdateSelector 的驱动事件，并输出 8 个不同的驱动信号（如 w_lbDrive, w_lwDrive）分别连接到对应的加载类型 FIFO。同时，它将输入数据（如 i_memAddr_32, i_memData_64）分发到这些 FIFO 的输入数据端口。",
       "signals": [
         "w_driveToLoadSelector_1",
-        "i_memAddr_32",
-        "i_memData_64",
-        "i_loadSign_1",
-        "i_misaligned_1",
         "w_lIdleDrive",
         "w_lbDrive",
         "w_lwDrive",
@@ -250,7 +265,15 @@
         "w_ldwmDrive"
       ],
       "instances": [
-        "loadSelector"
+        "loadSelector",
+        "lIdleFifo",
+        "lbFifo",
+        "lwFifo",
+        "lhwFifo",
+        "ldwFifo",
+        "lwmFifo",
+        "lhwmFifo",
+        "ldwmFifo"
       ],
       "related_flows": [
         "load_data_flow"
@@ -259,6 +282,9 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
@@ -272,18 +298,21 @@
         "module": "dataUpdate"
       },
       "subject": "storeSelector",
-      "summary": "存储请求的四路选择器，根据存储类型（sw, shw, sdw, sidle）将存储请求分发到对应的 FIFO 通路。",
-      "explanation": "接收经过延迟的驱动事件，将 i_storeData_64 分发到四个输出通路，每个通路对应一种存储类型。",
+      "summary": "存储路径分发器，将存储请求根据存储类型（sb, sh, sw, sdw）分发到对应的 FIFO 流水线。",
+      "explanation": "从 key_instances 可见，storeSelector 接收来自 dataUpdateSelector 的驱动事件（经过延迟），并输出 4 个不同的驱动信号（如 w_swDrive, w_shwDrive）分别连接到对应的存储类型 FIFO。同时，它将输入数据（如 i_storeData_64）分发到这些 FIFO 的输入数据端口。",
       "signals": [
         "w_driveToStoreSelectorDelay1_1",
-        "i_storeData_64",
         "w_sIdleDrive",
         "w_swDrive",
         "w_shwDrive",
         "w_sdwDrive"
       ],
       "instances": [
-        "storeSelector"
+        "storeSelector",
+        "sidleFifo",
+        "swFifo",
+        "shwFifo",
+        "sdwFifo"
       ],
       "related_flows": [
         "store_data_flow"
@@ -292,6 +321,9 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
@@ -305,23 +337,22 @@
         "module": "dataUpdate"
       },
       "subject": "lbMerge",
-      "summary": "加载数据合并器，将来自 lb, lhw, lw, ldw 四种加载类型 FIFO 的数据合并为写回数据。",
-      "explanation": "接收来自四个 FIFO 的驱动事件和数据，将加载数据与 i_dHi_4, i_dLo_4 组合成 74 位写回数据，输出到 o_dataUpdateToWritebackData_74。",
+      "summary": "加载数据合并器，将来自不同加载类型 FIFO 的格式化数据合并为统一的写回数据。",
+      "explanation": "从 key_instances 可见，lbMerge 接收来自 lbFifo, lwFifo, lhwFifo, ldwFifo 的驱动事件和数据，并将它们合并为 74 位宽的 o_dataUpdateToWritebackData_74。它还接收 i_dHi_4 和 i_dLo_4 信号，这些信号可能用于指示数据在写回总线中的位置。",
       "signals": [
         "w_driveFlb",
-        "w_driveFlhw",
         "w_driveFlw",
+        "w_driveFlhw",
         "w_driveFldw",
-        "i_dHi_4",
-        "i_dLo_4",
-        "w_lbFifoToDataMerge_34",
-        "w_lhwFifoToDataMerge_34",
-        "w_lwFifoToDataMerge_34",
-        "w_ldwFifoToDataMerge_66",
-        "o_dataUpdateToWritebackData_74"
+        "o_dataUpdateToWritebackData_74",
+        "o_dataUpdateDriveToWriteback_1"
       ],
       "instances": [
-        "lbMerge"
+        "lbMerge",
+        "lbFifo",
+        "lwFifo",
+        "lhwFifo",
+        "ldwFifo"
       ],
       "related_flows": [
         "load_data_flow"
@@ -330,6 +361,9 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
@@ -343,19 +377,20 @@
         "module": "dataUpdate"
       },
       "subject": "outMerge",
-      "summary": "内存请求合并器，将来自加载和存储通路的最终请求合并，驱动内存接口。",
-      "explanation": "接收来自 lidleMerge（加载空闲通路）和 sidleMerge（存储空闲通路）的驱动事件和数据，输出内存地址、数据和写使能，并产生 o_dataUpdateDriveToMem_1 事件。",
+      "summary": "输出合并器，将加载和存储路径的最终请求合并为统一的内存访问请求。",
+      "explanation": "从 key_instances 可见，outMerge 接收来自 lidleMerge（加载路径）和 sidleFifo（存储路径）的驱动事件和数据，并将它们合并为 104 位宽的数据，输出到 o_memAddr_32, o_memData_64, o_memWen_8。这表明加载和存储操作最终共享同一个内存接口。",
       "signals": [
         "w_drvFlidleMerge",
         "w_drvFsidleMerge",
-        "w_storeDataAddr_104",
         "o_memAddr_32",
         "o_memData_64",
         "o_memWen_8",
         "o_dataUpdateDriveToMem_1"
       ],
       "instances": [
-        "outMerge"
+        "outMerge",
+        "lidleMerge",
+        "sidleFifo"
       ],
       "related_flows": [
         "load_data_flow",
@@ -365,6 +400,9 @@
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/dataUpdate.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/dataUpdate.json"
         }
@@ -378,8 +416,8 @@
         "module": "dataUpdate"
       },
       "subject": "w_lbGrfData_32",
-      "summary": "根据地址和外围设备标志，从 64 位内存数据中提取并符号扩展一个字节的加载数据。",
-      "explanation": "该赋值根据 i_addrFromPeripheralFlag_1 和 w_lbAddr_32[2:0] 选择正确的字节位置，并根据 w_lbLoadSign_1 进行符号扩展或零扩展，生成 32 位写回数据。",
+      "summary": "根据加载字节（lb）指令的地址和符号标志，从 64 位内存数据中提取并符号/零扩展为 32 位数据。",
+      "explanation": "该赋值（index 1）根据 i_addrFromPeripheralFlag_1 选择是否进行外设地址的特殊处理，否则根据 w_lbAddr_32[2:0] 从 w_lbData_64 的 8 个字节中选择一个，并根据 w_lbLoadSign_1 进行符号扩展或零扩展。这是加载数据格式化的核心逻辑。",
       "signals": [
         "w_lbGrfData_32",
         "i_addrFromPeripheralFlag_1",
@@ -410,8 +448,8 @@
         "module": "dataUpdate"
       },
       "subject": "w_lwGrfData_32",
-      "summary": "根据地址对齐和外围设备标志，从 64 位内存数据中提取一个字（32位）的加载数据，并处理未对齐情况。",
-      "explanation": "该赋值处理字加载的未对齐情况，通过 w_lwMisaligned_1 和 w_lwAddr_32[2:0] 选择正确的数据片段，并考虑外围设备标志。",
+      "summary": "根据加载字（lw）指令的地址和对齐情况，从 64 位内存数据中提取并组合为 32 位数据。",
+      "explanation": "该赋值（index 4）处理了 lw 指令的对齐和非对齐情况。如果 i_addrFromPeripheralFlag_1 为真，则直接取低 32 位。否则，根据 w_lwMisaligned_1 和 w_lwAddr_32[2:0] 从 w_lwData_64 和 w_lwmTemp_64 中提取正确的 32 位数据。",
       "signals": [
         "w_lwGrfData_32",
         "i_addrFromPeripheralFlag_1",
@@ -443,8 +481,8 @@
         "module": "dataUpdate"
       },
       "subject": "w_swMemWen_8",
-      "summary": "根据存储地址的低三位，生成字存储操作的字节写使能掩码。",
-      "explanation": "该赋值根据 w_swMemAddr_32[2:0] 的值，生成 8 位写使能信号，用于控制内存写入的字节范围，处理未对齐的字存储。",
+      "summary": "根据存储字（sw）指令的地址，生成对应的字节写使能信号。",
+      "explanation": "该赋值（index 12）根据 w_swMemAddr_32[2:0] 的值，生成 8 位写使能信号，用于指示内存的哪些字节需要被写入。例如，地址为 3'b101 时，只写第 1 个字节（8'b0000_0001）。",
       "signals": [
         "w_swMemWen_8",
         "w_swMemAddr_32"
@@ -455,7 +493,7 @@
       "related_flows": [
         "store_data_flow"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -471,9 +509,9 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "写回驱动事件，指示写回数据已准备好，并携带写回数据负载。",
-      "subject": "o_dataUpdateDriveToWriteback_1",
-      "explanation": "该事件由 lbMerge 产生，当加载数据合并完成后触发，其负载为 o_dataUpdateToWritebackData_74，并受 i_writebackFreeToDataUpate_1 空闲信号控制。",
+      "summary": "该事件-载荷对表示一个写回事务，其中事件信号触发写回，载荷信号携带格式化后的加载数据。",
+      "subject": "o_dataUpdateDriveToWriteback_1 事件与 o_dataUpdateToWritebackData_74 载荷",
+      "explanation": "从 event_payload_contracts 可见，o_dataUpdateDriveToWriteback_1 事件与 o_dataUpdateToWritebackData_74 载荷相关联，并且受 i_writebackFreeToDataUpate_1 空闲信号控制。这表明这是一个握手机制：当写回阶段空闲时，dataUpdate 模块可以驱动该事件和数据。",
       "signals": [
         "o_dataUpdateDriveToWriteback_1",
         "o_dataUpdateToWritebackData_74",
@@ -498,9 +536,9 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "内存驱动事件，指示内存请求（地址、数据、写使能）已准备好。",
-      "subject": "o_dataUpdateDriveToMem_1",
-      "explanation": "该事件由 outMerge 产生，当加载或存储请求合并完成后触发，其负载包括 o_memAddr_32, o_memData_64, o_memWen_8，并受 i_dataRoutFreeToDataUpate_1 空闲信号控制。",
+      "summary": "该事件-载荷对表示一个内存访问事务，其中事件信号触发内存访问，载荷信号携带地址、数据和写使能。",
+      "subject": "o_dataUpdateDriveToMem_1 事件与 o_memAddr_32, o_memData_64, o_memWen_8 载荷",
+      "explanation": "从 event_payload_contracts 可见，o_dataUpdateDriveToMem_1 事件与 o_memAddr_32, o_memData_64, o_memWen_8 载荷相关联，并且受 i_dataRoutFreeToDataUpate_1 空闲信号控制。这表明这是一个握手机制：当内存路由空闲时，dataUpdate 模块可以驱动该事件和数据。",
       "signals": [
         "o_dataUpdateDriveToMem_1",
         "o_memAddr_32",
@@ -529,15 +567,19 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "文档应重点描述加载数据的格式转换逻辑，包括字节选择、符号扩展和未对齐处理。",
-      "subject": "load_data_formatting_logic",
-      "explanation": "模块的核心功能之一是将内存返回的 64 位数据转换为不同加载类型所需的写回格式，涉及复杂的地址对齐和符号扩展逻辑，需要详细说明。",
+      "summary": "文档应重点描述不同加载类型（lb, lh, lw, ldw）的数据格式化规则，包括符号扩展、零扩展、地址对齐和外设地址特殊处理。",
+      "subject": "加载数据格式化逻辑",
+      "explanation": "从 assign_dependencies 可见，加载路径的核心逻辑在于根据加载类型和地址将 64 位内存数据转换为 32 位或 64 位的通用寄存器数据。这些规则复杂且关键，需要详细说明。",
       "signals": [
+        "i_memData_64",
+        "i_memAddr_32",
+        "i_loadSign_1",
+        "i_misaligned_1",
+        "i_addrFromPeripheralFlag_1",
         "w_lbGrfData_32",
-        "w_lhwGrfData_32",
         "w_lwGrfData_32",
-        "w_ldwGrfData_64",
-        "i_addrFromPeripheralFlag_1"
+        "w_lhwGrfData_32",
+        "w_ldwGrfData_64"
       ],
       "instances": [
         "loadSelector",
@@ -565,17 +607,17 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "文档应重点描述存储数据的格式转换逻辑，包括字节掩码生成和地址偏移计算。",
-      "subject": "store_data_formatting_logic",
-      "explanation": "模块的另一个核心功能是将存储数据转换为内存写入格式，涉及根据存储类型和地址生成写使能掩码和调整数据位置，需要详细说明。",
+      "summary": "文档应重点描述不同存储类型（sb, sh, sw, sdw）的数据打包规则，包括字节对齐、写使能生成和地址偏移。",
+      "subject": "存储数据打包逻辑",
+      "explanation": "从 assign_dependencies 可见，存储路径的核心逻辑在于根据存储类型和地址将 64 位存储数据打包成内存接口格式，并生成正确的写使能信号。这些规则复杂且关键，需要详细说明。",
       "signals": [
-        "w_swMemWen_8",
+        "i_storeData_64",
+        "i_memAddr_32",
+        "w_storeData_64",
         "w_swMemData_64",
         "w_shwMemData_64",
         "w_sdwMemData_64",
-        "w_swMemAddr_32",
-        "w_shwMemAddr_32",
-        "w_sdwMemAddr_32"
+        "w_swMemWen_8"
       ],
       "instances": [
         "storeSelector",
@@ -602,49 +644,16 @@
         "type": "module",
         "module": "dataUpdate"
       },
-      "summary": "文档应描述模块内部基于事件驱动的流水线流程，包括选择、延迟、FIFO 缓冲和合并。",
-      "subject": "event_driven_pipeline_flow",
-      "explanation": "模块内部使用事件驱动机制，通过选择器、延迟单元、FIFO 和合并器组成流水线，处理加载和存储请求，需要说明数据流和事件流的关系。",
+      "summary": "文档应说明 dataUpdate 模块如何通过空闲信号（i_dataRoutFreeToDataUpate_1, i_writebackFreeToDataUpate_1）与下游模块进行握手，以及如何通过 o_dataUpdateToLsu_1 信号向上游 LSU 反馈完成状态。",
+      "subject": "流水线握手与空闲信号",
+      "explanation": "从 interface 和 event_payload_contracts 可见，dataUpdate 模块依赖空闲信号来驱动输出事件，这表明其内部 FIFO 和合并器构成了一个背压感知的流水线。o_dataUpdateToLsu_1 信号则用于通知 LSU 当前请求已完成。",
       "signals": [
-        "w_driveToLoadSelector_1",
-        "w_driveToStoreSelector_1",
-        "w_lIdleDrive",
-        "w_lbDrive",
-        "w_swDrive",
-        "w_driveFlb",
-        "w_drvFlidleMerge",
-        "o_dataUpdateDriveToMem_1",
-        "o_dataUpdateDriveToWriteback_1"
+        "i_dataRoutFreeToDataUpate_1",
+        "i_writebackFreeToDataUpate_1",
+        "o_dataUpdateToLsu_1"
       ],
       "instances": [
-        "dataUpdateSelector",
-        "loadSelector",
-        "storeSelector",
-        "outdelay0",
-        "outdelay1",
-        "outdelay2",
-        "outdelay3",
-        "outdelay4",
-        "outdelay51",
-        "outdelay52",
-        "outdelay6",
-        "outdelay7",
-        "outdelay8",
-        "lIdleFifo",
-        "lbFifo",
-        "lwFifo",
-        "lhwFifo",
-        "ldwFifo",
-        "lwmFifo",
-        "lhwmFifo",
-        "ldwmFifo",
-        "sidleFifo",
-        "swFifo",
-        "shwFifo",
-        "sdwFifo",
-        "lidleMerge",
-        "lbMerge",
-        "outMerge"
+        "dataUpdateSelector"
       ],
       "related_flows": [
         "load_data_flow",
@@ -655,11 +664,16 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/dataUpdate.json"
+          "source": "knowledge_ir/modules/dataUpdate.json"
         }
       ],
       "id": "semantic:module:dataUpdate:documentation_focus:003"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "内部事件流（internal_event_flow_refs）",
+      "reason": "compact_context 中 internal_event_flow_refs 为空，无法推断模块内部事件驱动的详细时序和状态机逻辑。需要 RTL 源代码来理解 FIFO 和合并器之间的精确握手协议。"
+    }
+  ]
 }

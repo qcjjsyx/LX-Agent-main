@@ -1,8 +1,8 @@
 # 模块 `async2sync`
 
-- 源文件：`rtl/rtl/SoC/async2sync.v`。
-- 职责：AI 推断：该模块是一个异步复位同步释放（复位同步器）模块。
-- 说明：依据切片第2行输入`rst_async_n`、第10-18行的两级寄存器链以及第20行将`rst_s2`赋值给输出`rst_sync_n`，实现了对异步复位信号同步释放的效果。
+- 源文件：`rtl\rtl\SoC\async2sync.v`。
+- 职责：AI 推断：异步复位同步释放模块，用于将异步复位信号同步到目标时钟域。
+- 说明：模块名暗示异步到同步转换，assign依赖显示rst_sync_n由rst_s2驱动，表明复位同步功能
 
 ## 1. 层级位置
 
@@ -49,4 +49,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `rst_sync_n` | rst_s2 | AI 推断：将内部同步复位信号rst_s2直接赋值给输出复位信号rst_sync_n |
+| `assign_0` | unknown | `rst_sync_n` | rst_s2 | AI 推断：同步后的复位输出，由两级同步器第二级输出驱动 |

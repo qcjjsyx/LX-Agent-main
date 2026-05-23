@@ -1,8 +1,8 @@
 # 模块 `cpu_slot`
 
-- 源文件：`rtl/rtl/slot/cpu_slot.v`。
-- 职责：AI 推断：该模块是SoC中一个CPU槽位的顶层容器，负责将CPU核心与Mesh网络及本地存储子系统进行事件驱动的数据交互与初始化控制。。
-- 说明：模块通过事件驱动接口(i_driveFromMesh/o_driveToMesh)与Mesh网络通信，内部包含CPU核心(u_cpu_core)、数据通路复用器(data_mux)和存储槽(u_memory_slot)，并通过初始化控制链(SoCStart→delayInit→select2→event2CPU)管理启动流程。
+- 源文件：`rtl\rtl\slot\cpu_slot.v`。
+- 职责：AI 推断：该模块是SoC中一个CPU槽位的顶层容器，负责管理CPU核心与Mesh网络及本地存储之间的数据与事件交互。。
+- 说明：模块通过事件驱动接口与Mesh网络通信，内部包含CPU核心、内存槽和数据多路复用器，处理初始化序列和中断信号。
 
 ## 1. 层级位置
 
@@ -81,7 +81,7 @@ cpu_slot
 - Payload：`o_driveToMesh` -> `o_data2Mesh [50:0]`。
 - 输出/影响：`o_driveToMesh`。
 - 结构复杂度：branch=3，join=3，blocking=0。
-- AI 推断：手册应重点描述data_mux如何选择输入驱动并分发至CPU和内存，以及两者如何返回驱动信号。
+- AI 推断：最终手册应重点描述i_driveFromMesh事件如何通过data_mux在数据路径（LSU）和指令路径（ICache）之间路由，并最终输出回Mesh。
 
 
 ## 5. 内部组件与 assign 影响

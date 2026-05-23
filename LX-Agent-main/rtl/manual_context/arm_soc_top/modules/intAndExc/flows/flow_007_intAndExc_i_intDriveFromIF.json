@@ -393,8 +393,8 @@
         "w_cmpMerDrive_1"
       ],
       "role_in_flow": {
-        "value": "作为中断/异常驱动的第一级合并器，将来自不同阶段（IF、Dec、Exe、Lsu）的异常驱动和中断驱动合并为单一事件流。",
-        "explanation": "cmpMerge 是一个 cWaitMerge5_180b_int 类型的合并器，接收五个输入驱动（包括 i_intDriveFromIF），输出 w_cmpMerDrive_1。它负责仲裁和合并多个并发的事件请求，是中断/异常处理路径的入口。",
+        "value": "作为5输入等待合并器，将来自取指阶段的中断驱动流与来自译码、执行、取指和 LSU 阶段的异常驱动流进行仲裁合并。",
+        "explanation": "cmpMerge 是 cWaitMerge5_180b_int 类型的合并器，它接收包括 i_intDriveFromIF 在内的5个输入驱动，并输出一个合并后的驱动 w_cmpMerDrive_1。该组件负责在多个并发事件源之间进行仲裁，确保只有一个事件能够继续传播，是流路径上的第一个关键仲裁点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -422,7 +422,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       },
@@ -474,8 +475,8 @@
         "w_intSeleDrive_1"
       ],
       "role_in_flow": {
-        "value": "作为中断/异常选择器，根据 SR 状态决定事件流是进入中断处理路径还是异常处理路径。",
-        "explanation": "intAndExeSele 是一个 cSelector2_181b_int 类型的选择器，输入来自 SRMerge 的 SR 状态（w_SRDrive_1）和合并后的驱动（w_cmpMerDrive1_1）。输出 w_intSeleDrive_1 进入中断处理路径，w_intAndExeSeleDriveToMe 反馈回异常处理路径。该组件是中断与异常路径的分叉点。",
+        "value": "作为2输入选择器/拆分器，根据 SR 状态决定中断事件是反馈回自身还是继续向中断处理路径传播。",
+        "explanation": "intAndExeSele 是 cSelector2_181b_int 类型的选择器，它接收来自 cmpMerge 的合并驱动 w_cmpMerDrive1_1 和来自 SRMerge 的 SR 状态 w_SRDrive_1。其输出 w_intAndExeSeleDriveToMe 将事件反馈回 cmpMerge 的输入，形成循环；而 w_intSeleDrive_1 则将事件继续向中断处理路径传播。该组件实现了中断事件的条件性转发，是流路径上的关键决策点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -484,24 +485,25 @@
         "semantic_claim_id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:component_role:002",
         "doc_priority": "primary",
         "signals": [
-          "w_SRDrive_1",
           "w_cmpMerDrive1_1",
-          "w_intSeleDrive_1",
-          "w_intAndExeSeleDriveToMe"
+          "w_SRDrive_1",
+          "w_intAndExeSeleDriveToMe",
+          "w_intSeleDrive_1"
         ],
         "instances": [
           "intAndExeSele"
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:intAndExc:semantic_flow:flow_007_intAndExc_i_intDriveFromIF"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       },
@@ -579,8 +581,8 @@
         "w_vecDriveToDataRoute_1"
       ],
       "role_in_flow": {
-        "value": "作为中断处理路径的拆分器，将中断事件流拆分为写回合并路径和 PC 数据路由路径。",
-        "explanation": "preStackSpli 是一个 cSplitter2_1b 类型的拆分器，输入来自 preDelay0 延迟后的中断选择驱动（w_intSeleDrive1_1）。输出 w_preSSpliDriToWbMer_1 进入 WbMerge 用于写回操作，w_vecDriveToDataRoute_1 进入 WbtopcMerge 用于 PC 数据路由。",
+        "value": "作为1输入2输出拆分器，将中断事件拆分为写回合并路径和数据路由路径。",
+        "explanation": "preStackSpli 是 cSplitter2_1b 类型的拆分器，它将来自 preDelay0 的延迟中断驱动 w_intSeleDrive1_1 拆分为两路：w_preSSpliDriToWbMer_1 进入 WbMerge，最终导向 u_outStack 模块；w_vecDriveToDataRoute_1 进入 WbtopcMerge，最终导向 dataRoteMerge。该组件实现了中断事件的分发，使其能够同时向不同的处理目标传播。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -605,7 +607,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       },
@@ -748,8 +751,8 @@
         "w_outMerDriToDR_1"
       ],
       "role_in_flow": {
-        "value": "作为出栈模块，处理中断返回时的出栈操作，生成写通用寄存器文件和写处理器状态寄存器的驱动。",
-        "explanation": "u_outStack 是一个 intAndExc_pop 类型的模块实例，输入来自 inOutSele 的选择驱动（w_inOutDriToOutMer_1）和 DRSelector 的驱动（w_DRSeleDriToWbSpli_1）。输出 o_driveToWGRF_1 和 o_driveToWPSR_1 分别用于写回通用寄存器和处理器状态寄存器，同时输出 w_outMerDriToDR_1 到 dataRoteMerge 用于数据路由。",
+        "value": "作为 intAndExc_pop 模块实例，负责从栈中弹出中断事件，并输出到通用寄存器文件和程序状态寄存器。",
+        "explanation": "u_outStack 是 intAndExc_pop 类型的模块实例，它接收来自 inOutSele 的驱动 w_inOutDriToOutMer_1 和来自 DRSelector 的驱动 w_DRSeleDriToWbSpli_1。其输出包括 o_driveToWGRF_1 和 o_driveToWPSR_1，分别驱动通用寄存器文件和程序状态寄存器的写操作。该组件是中断事件最终写回目标的关键执行单元。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -762,6 +765,7 @@
           "w_DRSeleDriToWbSpli_1",
           "o_driveToWGRF_1",
           "o_driveToWPSR_1",
+          "w_driveFromoutStackSP",
           "w_outMerDriToDR_1"
         ],
         "instances": [
@@ -769,14 +773,15 @@
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:intAndExc:semantic_flow:flow_007_intAndExc_i_intDriveFromIF"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       },
@@ -1088,8 +1093,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "中断驱动 i_intDriveFromIF 携带两个 payload 信号：i_ifPCAndNum_36（取指 PC 和异常号）和 i_intPCAndIntNum_38（中断 PC 和中断类型）。",
-    "explanation": "根据接口 payload 契约，中断驱动输入时同时传入取指阶段的相关数据（PC 和异常号）以及中断相关的数据（PC 和类型）。这些数据在流经各组件时被处理，最终通过 o_dataRouteData_104、o_dataToWGRF_72 和 o_dataToWPSR_32 输出。",
+    "value": "中断事件 i_intDriveFromIF 携带中断 PC 和中断类型载荷，这些载荷通过赋值和组件连接在流路径中传播。",
+    "explanation": "输入端口 i_intPCAndIntNum_38 通过赋值2拆分为 w_intPC_32 和 w_intType_6，这些信号作为中断事件的载荷数据。在流路径中，这些载荷数据通过 cmpMerge、intAndExeSele 等组件传播，最终在 dataRoteMerge 和 u_outStack 处与输出载荷数据关联。输出端口 o_dataRouteData_104、o_dataToWGRF_72 和 o_dataToWPSR_32 分别携带了中断事件的相关数据。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -1098,9 +1103,9 @@
     "semantic_claim_id": "semantic:flow:intAndExc:flow_007_intAndExc_i_intDriveFromIF:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
-      "i_intDriveFromIF",
-      "i_ifPCAndNum_36",
       "i_intPCAndIntNum_38",
+      "w_intPC_32",
+      "w_intType_6",
       "o_dataRouteData_104",
       "o_dataToWGRF_72",
       "o_dataToWPSR_32"
@@ -1109,26 +1114,30 @@
     "related_flows": [],
     "related_assignments": [
       "2",
-      "3"
+      "3",
+      "13",
+      "15",
+      "17"
     ],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:intAndExc:flow:flow_007_intAndExc_i_intDriveFromIF",
       "ev:intAndExc:semantic_flow:flow_007_intAndExc_i_intDriveFromIF"
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_ports"
+        "source": "interface_data_contract",
+        "path": "knowledge_ir/modules/intAndExc.json"
       },
       {
-        "source": "interface.data_ports"
+        "source": "parser_pipeline_rtl/modules/intAndExc.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "手册应重点描述中断驱动从输入到三个输出端点的完整路径，包括各组件的作用、分支点和合并点。",
-        "explanation": "该流涉及多个合并器、选择器、延迟和拆分器，结构复杂。手册需要清晰展示中断事件如何被合并、选择、延迟、拆分，最终分发到数据路由、写回和出栈模块。",
+        "value": "最终手册应重点描述中断事件从 i_intDriveFromIF 输入到三个输出端点的完整传播路径，包括关键组件的仲裁、选择和拆分逻辑。",
+        "explanation": "该流展示了中断事件从取指阶段到最终写回目标的完整路径，涉及多个合并器、选择器、拆分器和延迟组件。手册应详细描述每个组件的角色和功能，特别是 cmpMerge 的仲裁逻辑、intAndExeSele 的条件选择逻辑、preStackSpli 的拆分逻辑以及 u_outStack 的弹出操作。同时，应说明载荷数据（如中断 PC 和中断类型）在流路径中的传播和转换。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1144,22 +1153,14 @@
         ],
         "instances": [
           "cmpMerge",
-          "Delay3",
           "intAndExeSele",
           "preStackSpli",
-          "WbMerge",
-          "WbtopcMerge",
-          "inOutSele",
-          "dataRoteMerge",
           "u_outStack"
         ],
         "related_flows": [],
         "related_assignments": [
           "2",
-          "3",
-          "13",
-          "15",
-          "17"
+          "15"
         ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
@@ -1169,16 +1170,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/intAndExc.json"
           },
           {
-            "source": "transparent_flows"
+            "source": "transparent_flows",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       },
       {
-        "value": "该驱动流将取指阶段的中断请求（i_intDriveFromIF）经过合并、选择、延迟和拆分后，最终分发至数据路由、写通用寄存器文件和写处理器状态寄存器三个输出端点。",
-        "explanation": "流从输入端口 i_intDriveFromIF 进入，首先在 cmpMerge 中与其他异常/中断驱动合并，然后经过 Delay3 延迟，在 intAndExeSele 中根据 SR 状态选择是否进入中断处理路径，再经 preStackSpli 拆分为写回合并和 PC 数据路由两条子路径，最终通过 dataRoteMerge 和 u_outStack 分别输出到 o_driveToDataRoute_1、o_driveToWGRF_1 和 o_driveToWPSR_1。",
+        "value": "该驱动流将取指阶段的中断事件从输入端口 i_intDriveFromIF 经过合并、选择、拆分和延迟后，最终分发至数据路由、通用寄存器文件和程序状态寄存器三个输出端点。",
+        "explanation": "流从 i_intDriveFromIF 进入，首先在 cmpMerge 中与多个异常驱动流合并，随后经过 Delay3 延迟，进入 intAndExeSele 选择器。该选择器根据 SR 状态决定事件是反馈回自身还是继续流向中断处理路径。在中断路径上，事件经过 preStackSpli 拆分为两路：一路经 WbMerge 和 inOutSele 进入 u_outStack 模块，最终输出到 o_driveToWGRF_1 和 o_driveToWPSR_1；另一路经 WbtopcMerge 和 dataRoteMerge 输出到 o_driveToDataRoute_1。整个流展示了中断事件从取指阶段到最终写回目标的完整路径。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1201,8 +1204,7 @@
           "WbtopcMerge",
           "inOutSele",
           "dataRoteMerge",
-          "u_outStack",
-          "SRMerge"
+          "u_outStack"
         ],
         "related_flows": [],
         "related_assignments": [
@@ -1220,18 +1222,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/intAndExc.json"
           },
           {
-            "source": "transparent_flows"
+            "source": "transparent_flows",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       },
       {
-        "value": "中断驱动 i_intDriveFromIF 的反压信号为 o_intFreeToIF，输出端点的反压信号分别为 i_freeFromDataRoute_1、i_freeFromWGRF_1 和 i_freeFromWPSR_1。",
-        "explanation": "接口契约中明确列出了这些 free 信号，表明该流使用握手协议进行流控。反压信号的存在说明各合并器（如 cmpMerge、dataRoteMerge）可能因下游未就绪而阻塞事件传播。",
+        "value": "流路径上的合并器组件可能实现反压机制，但当前上下文未提供反压信号的具体连接细节。",
+        "explanation": "流路径上的 cmpMerge、WbMerge、WbtopcMerge、dataRoteMerge 和 SRMerge 等合并器组件被标记为可能的阻塞点，表明它们可能实现反压机制。然而，当前上下文仅提供了事件驱动信号和载荷数据的连接，未提供反压信号（如 free 信号）的具体连接。接口契约中提到了 o_intFreeToIF、i_freeFromDataRoute_1、i_freeFromWGRF_1 和 i_freeFromWPSR_1 等反压信号，但它们在流路径中的具体作用尚不明确。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
@@ -1245,8 +1249,10 @@
         ],
         "instances": [
           "cmpMerge",
+          "WbMerge",
+          "WbtopcMerge",
           "dataRoteMerge",
-          "u_outStack"
+          "SRMerge"
         ],
         "related_flows": [],
         "related_assignments": [],
@@ -1258,7 +1264,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports"
+            "source": "interface.event_ports",
+            "path": "knowledge_ir/modules/intAndExc.json"
           }
         ]
       }

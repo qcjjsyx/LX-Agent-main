@@ -1,8 +1,8 @@
 # 模块 `reverse`
 
-- 源文件：`rtl/rtl/Execute/reverse.v`。
-- 职责：AI 推断：该模块根据reverseType选择四种位反转/字节交换操作之一，将输入oprand转换为输出result。。
-- 说明：模块无事件接口，仅通过组合逻辑实现数据转换。assign依赖显示w_rbitResult_32、w_revResult_32、w_rev16Result_32、w_revshResult_32四个中间结果，最终由reverseType多路选择输出。
+- 源文件：`rtl\rtl\Execute\reverse.v`。
+- 职责：AI 推断：该模块根据 reverseType 选择信号，对 32 位操作数 oprand 执行位反转、字节反转、半字反转或带符号扩展的半字反转操作，并输出结果 result。。
+- 说明：模块的输入输出接口（oprand 和 result）均为 32 位数据，控制信号 reverseType 为 2 位，用于选择四种不同的反转模式。assign 依赖关系显示，模块内部生成了四种中间结果（w_rbitResult_32, w_revResult_32, w_rev16Result_32, w_revshResult_32），并通过多路选择器输出最终结果。这符合一个数据路径处理单元的结构，用于执行 ARM 指令集中的 REV、REV16、REVSH 和 RBIT 指令。
 
 ## 1. 层级位置
 
@@ -51,10 +51,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_rbitResult_32[30]` | oprand[1] | AI 推断：对oprand进行逐位反转，bit[31]对应oprand[0]，bit[0]对应oprand[31]。 |
-| `assign_2` | data_path | `w_rbitResult_32[29]` | oprand[2] | AI 推断：对oprand进行逐位反转，bit[31]对应oprand[0]，bit[0]对应oprand[31]。 |
-| `assign_3` | data_path | `w_rbitResult_32[28]` | oprand[3] | AI 推断：对oprand进行逐位反转，bit[31]对应oprand[0]，bit[0]对应oprand[31]。 |
-| `assign_4` | data_path | `w_rbitResult_32[27]` | oprand[4] | AI 推断：对oprand进行逐位反转，bit[31]对应oprand[0]，bit[0]对应oprand[31]。 |
-| `assign_5` | data_path | `w_rbitResult_32[26]` | oprand[5] | AI 推断：对oprand进行逐位反转，bit[31]对应oprand[0]，bit[0]对应oprand[31]。 |
-| `assign_6` | data_path | `w_rbitResult_32[25]` | oprand[6] | AI 推断：对oprand进行逐位反转，bit[31]对应oprand[0]，bit[0]对应oprand[31]。 |
+| `assign_1` | data_path | `w_rbitResult_32[30]` | oprand[1] | AI 推断：该信号通过对 oprand 的每一位进行反转（bit 0 映射到 bit 31，bit 1 映射到 bit 30，以此类推）来生成位反转结果。 |
+| `assign_2` | data_path | `w_rbitResult_32[29]` | oprand[2] | AI 推断：该信号通过对 oprand 的每一位进行反转（bit 0 映射到 bit 31，bit 1 映射到 bit 30，以此类推）来生成位反转结果。 |
+| `assign_3` | data_path | `w_rbitResult_32[28]` | oprand[3] | AI 推断：该信号通过对 oprand 的每一位进行反转（bit 0 映射到 bit 31，bit 1 映射到 bit 30，以此类推）来生成位反转结果。 |
+| `assign_4` | data_path | `w_rbitResult_32[27]` | oprand[4] | AI 推断：该信号通过对 oprand 的每一位进行反转（bit 0 映射到 bit 31，bit 1 映射到 bit 30，以此类推）来生成位反转结果。 |
+| `assign_5` | data_path | `w_rbitResult_32[26]` | oprand[5] | AI 推断：该信号通过对 oprand 的每一位进行反转（bit 0 映射到 bit 31，bit 1 映射到 bit 30，以此类推）来生成位反转结果。 |
+| `assign_6` | data_path | `w_rbitResult_32[25]` | oprand[6] | AI 推断：该信号通过对 oprand 的每一位进行反转（bit 0 映射到 bit 31，bit 1 映射到 bit 30，以此类推）来生成位反转结果。 |
 | ... | ... | ... | ... | 其余 9 条 assign 省略 |

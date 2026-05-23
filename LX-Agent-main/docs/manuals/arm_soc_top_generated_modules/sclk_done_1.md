@@ -1,8 +1,8 @@
 # 模块 `sclk_done_1`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI0/sclk_done_1.v`。
-- 职责：AI 推断：该模块是一个SPI时钟周期完成检测器，用于生成串行时钟计数完成的指示信号。。
-- 说明：模块仅包含一个赋值语句，通过检测串行时钟计数信号(sclk_cnt_5)的下降沿和缓冲信号(sclk_cnt_buf)的组合逻辑，产生sclk_done脉冲，表明一个SPI时钟周期已完成。
+- 源文件：`rtl\rtl\IONet\SPI\SPI0\sclk_done_1.v`。
+- 职责：AI 推断：该模块通过组合逻辑生成SPI时钟完成标志信号。。
+- 说明：模块仅包含一个赋值语句，将sclk_done信号定义为(~sclk_cnt_5) & sclk_cnt_buf的组合逻辑结果，表明其核心功能是产生一个指示SPI时钟计数完成的脉冲信号。
 
 ## 1. 层级位置
 
@@ -49,4 +49,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `sclk_done` | (~sclk_cnt_5) & sclk_cnt_buf | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | unknown | `sclk_done` | (~sclk_cnt_5) & sclk_cnt_buf | AI 推断：该赋值生成一个高有效脉冲，指示SPI时钟计数完成。 |

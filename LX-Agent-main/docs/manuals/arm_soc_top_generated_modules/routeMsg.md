@@ -1,8 +1,8 @@
 # 模块 `routeMsg`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/routeMsg.v`。
-- 职责：AI 推断：路由消息分发模块，将输入消息根据方向选择分发到五个方向（东、本地、北、南、西）的发送FIFO。。
-- 说明：模块接收一个输入事件i_drive及其关联的51位消息i_msg_51，通过内部组件（receiveFifo、dirFork、方向延迟单元、方向SendFifo）处理后，产生五个方向的事件输出（o_driveEArb等）和对应的消息输出（o_eastMsg_51等）。方向选择逻辑由dirFork（cCondFork5）和相关的valid信号（w_eastVld, w_westVld等）控制。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\routeMsg.v`。
+- 职责：AI 推断：路由模块，将输入消息根据方向选择分发到五个输出方向（东、本地、北、南、西）。。
+- 说明：模块接收一个输入驱动事件和关联的51位消息负载，通过内部组件（接收FIFO、方向分叉、延迟单元、发送FIFO）处理后，生成五个方向的事件输出和对应的消息输出。方向选择由内部仲裁逻辑（基于w_eastVld、w_westVld等信号）决定。
 
 ## 1. 层级位置
 
@@ -78,7 +78,7 @@ routeMsg
 - Payload：`i_drive` -> `i_msg_51 [50:0]`。
 - 输出/影响：`o_driveEArb`, `o_driveLArb`, `o_driveNArb`, `o_driveSArb`, `o_driveWArb`。
 - 结构复杂度：branch=1，join=0，blocking=6。
-- AI 推断：手册应重点描述事件从输入到五个方向输出的扇出路径、各FIFO的缓冲作用以及延迟单元的时序调整
+- AI 推断：手册应强调事件从输入到五个方向的分发路径、FIFO缓冲点和延迟单元
 
 
 ## 5. 内部组件与 assign 影响
@@ -99,11 +99,11 @@ routeMsg
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_6` | control_path | `w_northVld` | w_northVldSN & ~(w_eastVld \| w_westVld) | AI 推断：方向valid信号的生成逻辑，实现方向优先级：东/西优先，然后是北/南，最后是本地。 |
-| `assign_8` | control_path | `w_southVld` | w_southVldNS & ~(w_eastVld \| w_westVld) | AI 推断：方向valid信号的生成逻辑，实现方向优先级：东/西优先，然后是北/南，最后是本地。 |
-| `assign_9` | control_path | `w_localVld` | ~(w_westVld \| w_eastVld \| w_southVld \| w_northVld) | AI 推断：方向valid信号的生成逻辑，实现方向优先级：东/西优先，然后是北/南，最后是本地。 |
-| `assign_16` | unknown | `o_westMsg_51` | r_wMsg_51 | AI 推断：消息输出直接连接到内部寄存器，表明消息数据在模块内部被寄存后输出。 |
-| `assign_17` | unknown | `o_localMsg_51` | r_lMsg_51 | AI 推断：消息输出直接连接到内部寄存器，表明消息数据在模块内部被寄存后输出。 |
-| `assign_18` | unknown | `o_eastMsg_51` | r_eMsg_51 | AI 推断：消息输出直接连接到内部寄存器，表明消息数据在模块内部被寄存后输出。 |
-| `assign_19` | unknown | `o_northMsg_51` | r_nMsg_51 | AI 推断：消息输出直接连接到内部寄存器，表明消息数据在模块内部被寄存后输出。 |
-| `assign_20` | unknown | `o_southMsg_51` | r_sMsg_51 | AI 推断：消息输出直接连接到内部寄存器，表明消息数据在模块内部被寄存后输出。 |
+| `assign_6` | unknown | `w_northVld` | w_northVldSN & ~(w_eastVld \| w_westVld) | AI 推断：方向仲裁逻辑，根据东/西方向有效信号优先级决定北、南、本地方向的有效性。 |
+| `assign_8` | unknown | `w_southVld` | w_southVldNS & ~(w_eastVld \| w_westVld) | AI 推断：方向仲裁逻辑，根据东/西方向有效信号优先级决定北、南、本地方向的有效性。 |
+| `assign_9` | unknown | `w_localVld` | ~(w_westVld \| w_eastVld \| w_southVld \| w_northVld) | AI 推断：方向仲裁逻辑，根据东/西方向有效信号优先级决定北、南、本地方向的有效性。 |
+| `assign_16` | unknown | `o_westMsg_51` | r_wMsg_51 | AI 推断：消息输出赋值，将内部寄存器信号直接连接到模块输出端口。 |
+| `assign_17` | unknown | `o_localMsg_51` | r_lMsg_51 | AI 推断：消息输出赋值，将内部寄存器信号直接连接到模块输出端口。 |
+| `assign_18` | unknown | `o_eastMsg_51` | r_eMsg_51 | AI 推断：消息输出赋值，将内部寄存器信号直接连接到模块输出端口。 |
+| `assign_19` | unknown | `o_northMsg_51` | r_nMsg_51 | AI 推断：消息输出赋值，将内部寄存器信号直接连接到模块输出端口。 |
+| `assign_20` | unknown | `o_southMsg_51` | r_sMsg_51 | AI 推断：消息输出赋值，将内部寄存器信号直接连接到模块输出端口。 |

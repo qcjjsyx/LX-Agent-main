@@ -1,8 +1,8 @@
 # 模块 `muller`
 
-- 源文件：`rtl/rtl/Execute/mul.v`。
-- 职责：AI 推断：32位有符号/无符号整数乘法器，支持结果按位取反输出。
-- 说明：模块接收两个32位操作数，根据符号标志选择有符号或无符号乘法，并支持通过取反标志对结果进行按位取反后输出64位结果
+- 源文件：`rtl\rtl\Execute\mul.v`。
+- 职责：AI 推断：32位有符号/无符号乘法器，支持符号选择与按位取反输出。
+- 说明：模块接收两个32位操作数，根据i_mulSymbolFlag_1选择有符号或无符号乘法，并根据i_notFlag_1决定是否对结果按位取反后输出64位结果
 
 ## 1. 层级位置
 
@@ -51,7 +51,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_resultUnsignedTmp_64` | (i_oprand1_32 == 32'b0 \| i_oprand2_32 == 32'b0 ) ? 64'b0 : i_oprand1_32 * i_oprand2_32 | AI 推断：无符号乘法中间结果，当任一操作数为零时输出零 |
+| `assign_1` | data_path | `w_resultUnsignedTmp_64` | (i_oprand1_32 == 32'b0 \| i_oprand2_32 == 32'b0 ) ? 64'b0 : i_oprand1_32 * i_oprand2_32 | AI 推断：无符号乘法中间结果，当任一操作数为零时直接输出零 |
 | `assign_2` | control_path | `w_resultTmp_64` | i_mulSymbolFlag_1 ==1'b1 ? w_resultUnsignedTmp_64 : w_resultSignedTmp_64 | AI 推断：根据符号标志选择有符号或无符号乘法结果 |
 | `assign_3` | control_path | `o_result_64` | i_notFlag_1 == 1'b1 ? ~w_resultTmp_64 : w_resultTmp_64 | AI 推断：最终输出，根据取反标志决定是否对乘法结果按位取反 |
-| `assign_0` | data_path | `w_resultSignedTmp_64` | (i_oprand1_32 == 32'b0 \| i_oprand2_32 == 32'b0 ) ? 64'b0 : $signed(i_oprand1_32)*$signed(i_op... | AI 推断：有符号乘法中间结果，当任一操作数为零时输出零 |
+| `assign_0` | data_path | `w_resultSignedTmp_64` | (i_oprand1_32 == 32'b0 \| i_oprand2_32 == 32'b0 ) ? 64'b0 : $signed(i_oprand1_32)*$signed(i_op... | AI 推断：有符号乘法中间结果，当任一操作数为零时直接输出零 |

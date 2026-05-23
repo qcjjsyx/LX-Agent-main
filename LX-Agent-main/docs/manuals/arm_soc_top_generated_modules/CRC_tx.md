@@ -1,8 +1,8 @@
 # 模块 `CRC_tx`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/CRC_tx.v`。
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\CRC_tx.v`。
 - 职责：AI 推断：该模块根据输入数据计算并输出CRC校验值，支持16位和8位两种CRC模式。。
-- 说明：模块接收16位数据输入datain和16位多项式poly，输出16位CRC结果CRC_out。通过assign依赖中DFF信号选择CRC16_reg或CRC8_reg，表明模块内部存在两种CRC计算路径，由DFF信号控制选择。
+- 说明：模块接收16位数据输入datain和多项式poly，输出16位CRC结果CRC_out。通过内部寄存器CRC16_reg和CRC8_reg分别存储16位和8位CRC计算结果，并由DFF信号选择输出模式。
 
 ## 1. 层级位置
 
@@ -51,5 +51,5 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `enable_rise` | (~enable_buf) & enable | AI 推断：该赋值检测enable信号的上升沿，用于触发CRC计算或更新。 |
-| `assign_0` | unknown | `CRC_out` | DFF ? CRC16_reg : {8'b0,CRC8_reg} | AI 推断：该赋值根据DFF信号选择输出16位CRC结果或8位CRC结果（高位补零），实现CRC模式选择。 |
+| `assign_1` | unknown | `enable_rise` | (~enable_buf) & enable | AI 推断：检测enable信号的上升沿，用于触发CRC计算或更新。 |
+| `assign_0` | unknown | `CRC_out` | DFF ? CRC16_reg : {8'b0,CRC8_reg} | AI 推断：根据DFF信号选择输出16位或8位CRC计算结果。 |

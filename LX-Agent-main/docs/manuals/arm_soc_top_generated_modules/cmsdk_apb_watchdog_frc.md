@@ -1,8 +1,8 @@
 # 模块 `cmsdk_apb_watchdog_frc`
 
-- 源文件：`rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog_frc.v`。
-- 职责：AI 推断：该模块是一个基于APB接口的强制看门狗定时器，用于在系统锁定或故障时生成复位或中断。。
-- 说明：模块通过APB接口接收配置和加载值，内部产生中断和复位输出。assign依赖显示写操作受frc_sel和wdog_lock信号控制，表明其强制特性。
+- 源文件：`rtl\rtl\IONet\Watchdog\cmsdk_apb_watchdog_frc.v`。
+- 职责：AI 推断：该模块是一个基于APB接口的可编程看门狗定时器，提供中断和复位输出。。
+- 说明：模块通过APB从接口接收配置和加载值，内部产生看门狗中断(WDOGINT)和复位(WDOGRES)输出。assign依赖显示控制寄存器(ARM_WDOGCONTROLA)、加载寄存器(ARM_WDOGLOADA)和清除寄存器(ARM_WDOGCLEARA)的写使能逻辑，表明其可编程特性。
 
 ## 1. 层级位置
 
@@ -51,8 +51,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_4` | control_path | `load_en` | (PADDR == `ARM_WDOGLOADA) ? (PWRITE & frc_sel & (~PENABLE) & (~wdog_lock)) : 1'b0 | AI 推断：该赋值生成看门狗加载寄存器的写使能信号，条件与wdog_ctrl_en类似，用于更新定时器加载值。 |
-| `assign_14` | control_path | `int_clr_en` | ((~int_clr_w) & PWRITE & frc_sel & (~PENABLE) & (~wdog_lock) & (PADDR == `ARM_WDOGCLEARA)) ? ... | AI 推断：该赋值生成中断清除使能信号，在写操作且中断未清除时有效，用于清除看门狗中断。 |
-| `assign_20` | unknown | `WDOGINT` | wdog_mis | AI 推断：该赋值将内部中断状态信号wdog_mis直接连接到输出端口WDOGINT。 |
-| `assign_22` | unknown | `WDOGRES` | i_wdog_res | AI 推断：该赋值将内部复位信号i_wdog_res直接连接到输出端口WDOGRES。 |
-| `assign_0` | control_path | `wdog_ctrl_en` | (PADDR == `ARM_WDOGCONTROLA) ? (PWRITE & frc_sel & (~PENABLE) & (~wdog_lock)) : 1'b0 | AI 推断：该赋值生成看门狗控制寄存器的写使能信号，仅在地址匹配、写操作、强制选中且未锁定时有效。 |
+| `assign_4` | control_path | `load_en` | (PADDR == `ARM_WDOGLOADA) ? (PWRITE & frc_sel & (~PENABLE) & (~wdog_lock)) : 1'b0 | AI 推断：该赋值生成中断清除使能信号，在写清除寄存器时产生单脉冲。 |
+| `assign_14` | control_path | `int_clr_en` | ((~int_clr_w) & PWRITE & frc_sel & (~PENABLE) & (~wdog_lock) & (PADDR == `ARM_WDOGCLEARA)) ? ... | AI 推断：该赋值生成看门狗加载寄存器的写使能信号，条件与控制寄存器相同。 |
+| `assign_20` | unknown | `WDOGINT` | wdog_mis | AI 推断：看门狗复位输出直接映射到内部复位信号i_wdog_res。 |
+| `assign_22` | unknown | `WDOGRES` | i_wdog_res | AI 推断：看门狗中断输出直接映射到内部屏蔽中断状态信号wdog_mis。 |
+| `assign_0` | control_path | `wdog_ctrl_en` | (PADDR == `ARM_WDOGCONTROLA) ? (PWRITE & frc_sel & (~PENABLE) & (~wdog_lock)) : 1'b0 | AI 推断：该赋值生成中断清除使能信号，在写清除寄存器时产生单脉冲。 |

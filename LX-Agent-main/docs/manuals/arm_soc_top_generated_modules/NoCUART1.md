@@ -1,8 +1,8 @@
 # 模块 `NoCUART1`
 
-- 源文件：`rtl/rtl/IONet/UART/NoCUART1.v`。
-- 职责：AI 推断：NoCUART1 是一个 UART 桥接模块，负责在 NoC 事件驱动接口和标准 UART 外设 (m16550s) 之间进行协议转换与数据同步。。
-- 说明：模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 与 NoC 通信，内部使用 cFifo2、cPmtFifo1 和 cFifo1 组件链对驱动事件进行缓冲、握手和延迟，最终连接到 uart_instance (m16550s) 的标准 UART 信号。这表明其核心作用是桥接 NoC 的轻量级事件协议与 UART 的并行寄存器接口。
+- 源文件：`rtl\rtl\IONet\UART\NoCUART1.v`。
+- 职责：AI 推断：切片显示delay8为64周期延迟，delay9为32周期延迟，delay10为8周期延迟，但未显示delay11。
+- 说明：切片第111-113行实例化delay64U (delay8)、delay32U (delay9)、delay8U (delay10)，分别对应64、32、8个延迟周期。delay11未出现在此切片中。
 
 ## 1. 层级位置
 
@@ -65,7 +65,7 @@ NoCUART1
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
 - 输出/影响：`o_drv2Noc`。
 - 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：应强调事件流的串行确定性传递、FIFO 缓冲和延迟链的时序调整作用，以及数据载荷的独立组合。
+- AI 推断：手册应重点描述事件从输入到输出的串行传播路径、各 FIFO 和延迟单元的时序作用，以及负载数据的并行生成。
 
 
 ## 5. 内部组件与 assign 影响
@@ -82,4 +82,4 @@ NoCUART1
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | AI 推断：输出数据由多个内部状态字段拼接而成，用于向 NoC 报告 UART 的当前状态和接收到的数据。 |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | 证据不足：No Semantic Layer assignment interpretation is available. |

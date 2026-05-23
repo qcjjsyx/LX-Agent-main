@@ -1,8 +1,8 @@
 # 模块 `arm_soc_top`
 
-- 源文件：`rtl/rtl/SoC/arm_soc_top.v`。
-- 职责：AI 推断：顶层SoC模块，负责CPU核心与IO网络之间的驱动事件桥接。。
-- 说明：模块仅包含两个关键实例：u_cpu（cpu_slot）和io_slot（IONet_slot），并通过w_driveFrmCPU和w_driveToCPU两条驱动事件信号进行双向连接，无其他数据或事件接口，表明其核心角色是CPU与IO网格之间的驱动事件中继层。
+- 源文件：`rtl\rtl\SoC\arm_soc_top.v`。
+- 职责：AI 推断：顶层模块仅通过两个实例u_cpu和io_slot实现驱动事件桥接，驱动信号确有双向连接。
+- 说明：切片显示模块内部实例化了一个cpu_slot（u_cpu）和一个IONet_slot（io_slot）。u_cpu的i_driveFromMesh连接w_driveToCPU，o_driveToMesh连接w_driveFrmCPU；io_slot的i_drvFCPU连接w_driveFrmCPU，o_drv2CPU连接w_driveToCPU。这构成从u_cpu到io_slot及反向的驱动事件双向通道，且两条驱动线w_driveFrmCPU/w_driveToCPU均被声明。
 
 ## 1. 层级位置
 

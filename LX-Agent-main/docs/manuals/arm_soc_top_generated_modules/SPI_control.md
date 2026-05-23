@@ -1,8 +1,8 @@
 # 模块 `SPI_control`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/SPI_control.v`。
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\SPI_control.v`。
 - 职责：AI 推断：SPI 主从控制器，通过 APB 接口配置寄存器，管理 SPI 协议时序、时钟分频、CRC 校验及中断生成。。
-- 说明：模块通过 reg_apb_u 实例接收 APB 总线配置，内部包含 spi_m_u（主模式）、spi_s_u（从模式）、clk_div_u（时钟分频）、CRC_rx_u/CRC_tx_u（CRC 校验）和 MODF_u/OVR_u（错误检测）子模块，共同实现 SPI 协议控制。
+- 说明：模块通过 reg_apb_u 实例接收 APB 总线配置，内部包含主模式 (spi_m_u)、从模式 (spi_s_u)、时钟分频 (clk_div_u)、CRC 校验 (CRC_rx_u/CRC_tx_u) 及错误检测 (MODF_u/OVR_u) 子模块，assign 语句实现 IO 方向控制、时钟极性选择及中断聚合。
 
 ## 1. 层级位置
 
@@ -71,11 +71,11 @@ SPI_control
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `io_ctl_sclk` | MSTR ? 1'b1 : 1'b0 | AI 推断：根据 MSTR 和双向模式配置，控制 SPI IO 方向选择。 |
-| `assign_2` | unknown | `io_ctl_miso` | MSTR ? 1'b0 : ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) | AI 推断：根据 MSTR 和双向模式配置，控制 SPI IO 方向选择。 |
-| `assign_3` | unknown | `io_ctl_mosi` | MSTR ? ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) : 1'b0 | AI 推断：根据 MSTR 和双向模式配置，控制 SPI IO 方向选择。 |
-| `assign_4` | unknown | `io_ctl_nss` | (MSTR & SSOE) ? 1'b1 : 1'b0 | AI 推断：根据 MSTR 和双向模式配置，控制 SPI IO 方向选择。 |
-| `assign_5` | unknown | `nss_reg` | SSM ? SSI : nss_in | AI 推断：软件 NSS 管理，通过 SSM 和 SSI 寄存器选择内部或外部 NSS 信号。 |
-| `assign_6` | unknown | `mosi_out` | (BIDIMODE & !BIDIOE) ? 1'b0 : tx_m | AI 推断：双向模式下控制 MOSI 输出数据，非双向模式直接输出 tx_m。 |
-| `assign_12` | unknown | `SPI_interrupt` | (RXNE & RXNEIE) \| ((MODF \| OVR \| CRCERR) & ERRIE) \| (TXE & TXEIE) \| 1'b0 | AI 推断：组合多个中断源生成 SPI 中断信号，包括接收、发送、错误状态。 |
-| `assign_0` | unknown | `sclk_out` | CPOL ? ~sclk_out_div : sclk_out_div | AI 推断：根据 CPOL 极性选择分频时钟，生成 SPI 串行时钟输出。 |
+| `assign_1` | unknown | `io_ctl_sclk` | MSTR ? 1'b1 : 1'b0 | AI 推断：根据 MSTR、BIDIMODE、BIDIOE、SSOE 控制 IO 方向使能，实现主从模式切换和双向模式门控。 |
+| `assign_2` | unknown | `io_ctl_miso` | MSTR ? 1'b0 : ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) | AI 推断：根据 MSTR、BIDIMODE、BIDIOE、SSOE 控制 IO 方向使能，实现主从模式切换和双向模式门控。 |
+| `assign_3` | unknown | `io_ctl_mosi` | MSTR ? ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) : 1'b0 | AI 推断：根据 MSTR、BIDIMODE、BIDIOE、SSOE 控制 IO 方向使能，实现主从模式切换和双向模式门控。 |
+| `assign_4` | unknown | `io_ctl_nss` | (MSTR & SSOE) ? 1'b1 : 1'b0 | AI 推断：根据 MSTR、BIDIMODE、BIDIOE、SSOE 控制 IO 方向使能，实现主从模式切换和双向模式门控。 |
+| `assign_5` | unknown | `nss_reg` | SSM ? SSI : nss_in | AI 推断：选择 NSS 信号来源：软件控制 (SSI) 或硬件输入 (nss_in)。 |
+| `assign_6` | unknown | `mosi_out` | (BIDIMODE & !BIDIOE) ? 1'b0 : tx_m | AI 推断：在双向模式下门控 MOSI 输出，防止数据冲突。 |
+| `assign_12` | unknown | `SPI_interrupt` | (RXNE & RXNEIE) \| ((MODF \| OVR \| CRCERR) & ERRIE) \| (TXE & TXEIE) \| 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | unknown | `sclk_out` | CPOL ? ~sclk_out_div : sclk_out_div | AI 推断：根据 CPOL 极性选择输出时钟，控制 SPI 时钟空闲电平。 |

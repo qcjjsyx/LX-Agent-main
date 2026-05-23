@@ -1,8 +1,8 @@
 # 模块 `fire2SyncPluse`
 
-- 源文件：`rtl/rtl/IONet/GPIO/fire2SyncPluse.v`。
-- 职责：AI 推断：该模块负责将输入的脉冲信号同步到本地时钟域，并检测其上升沿。。
-- 说明：模块名“fire2SyncPluse”暗示了脉冲同步功能。内部赋值 `rise = pluse_level_t ^ pluse_level_tt` 是一个典型的边沿检测逻辑，通过两级触发器同步后的信号异或来产生一个时钟周期的脉冲，表明其核心功能是同步并提取脉冲的上升沿。
+- 源文件：`rtl\rtl\IONet\GPIO\fire2SyncPluse.v`。
+- 职责：AI 推断：该模块用于将异步脉冲信号同步到本地时钟域，并检测其上升沿。。
+- 说明：模块名称中的“SyncPluse”暗示其核心功能是脉冲同步。上下文中的赋值依赖显示，它通过两级触发器（pluse_level_t, pluse_level_tt）对输入脉冲进行同步，然后通过异或操作（rise = pluse_level_t ^ pluse_level_tt）来检测同步后信号的上升沿，从而生成一个与本地时钟同步的单周期脉冲。
 
 ## 1. 层级位置
 

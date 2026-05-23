@@ -1,8 +1,8 @@
 # 模块 `adder`
 
-- 源文件：`rtl/rtl/Execute/adder.v`。
+- 源文件：`rtl\rtl\Execute\adder.v`。
 - 职责：AI 推断：多宽度算术加法器，根据操作类型选择32位、5位或64位加法结果。
-- 说明：模块通过i_adderType_2选择不同位宽的加法器子模块（adder32、adder5、adder64）的输出，并统一输出64位结果和进位/溢出标志。i_addSymbolFlag_1和i_carryInType_1控制所有子模块的符号模式和进位输入。
+- 说明：模块通过i_adderType_2选择不同的加法器子模块（adder32、adder5、adder64）的输出，实现不同位宽的加法运算，并输出结果、进位和溢出标志
 
 ## 1. 层级位置
 
@@ -63,10 +63,10 @@ adder
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_oprand2_32` | i_oprand2_64[31:0] | AI 推断：从64位操作数提取低32位，供adder32使用 |
-| `assign_2` | data_path | `w_oprand1_5` | i_oprand1_64[31:0] | AI 推断：从64位操作数提取低5位，供adder5使用 |
-| `assign_3` | data_path | `w_oprand2_5` | i_oprand2_64[31:0] | AI 推断：从64位操作数提取低5位，供adder5使用 |
-| `assign_4` | data_path | `o_adderResult_64` | i_adderType_2 == 2'b00 ? w_adder32Result_32 : (i_adderType_2==2'b01 ? w_adder5Result_5 :(i_ad... | AI 推断：根据i_adderType_2选择子模块结果作为最终输出 |
-| `assign_5` | unknown | `o_adderCarryOut_1` | i_adderType_2 == 2'b00 ? w_adder32CarryOut_1 : (i_adderType_2==2'b01 ? w_adder5CarryOut_1 :(i... | AI 推断：根据i_adderType_2选择子模块结果作为最终输出 |
-| `assign_6` | unknown | `o_adderOverFlow_1` | i_adderType_2 == 2'b00 ? w_adder32OverFlow_1 : (i_adderType_2==2'b01 ? w_adder5OverFlow_1 :(i... | AI 推断：根据i_adderType_2选择子模块结果作为最终输出 |
-| `assign_0` | data_path | `w_oprand1_32` | i_oprand1_64[31:0] | AI 推断：从64位操作数提取低32位，供adder32使用 |
+| `assign_1` | data_path | `w_oprand2_32` | i_oprand2_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | data_path | `w_oprand1_5` | i_oprand1_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_3` | data_path | `w_oprand2_5` | i_oprand2_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_4` | data_path | `o_adderResult_64` | i_adderType_2 == 2'b00 ? w_adder32Result_32 : (i_adderType_2==2'b01 ? w_adder5Result_5 :(i_ad... | AI 推断：根据i_adderType_2选择最终加法结果输出 |
+| `assign_5` | unknown | `o_adderCarryOut_1` | i_adderType_2 == 2'b00 ? w_adder32CarryOut_1 : (i_adderType_2==2'b01 ? w_adder5CarryOut_1 :(i... | AI 推断：根据i_adderType_2选择对应加法器的进位输出 |
+| `assign_6` | unknown | `o_adderOverFlow_1` | i_adderType_2 == 2'b00 ? w_adder32OverFlow_1 : (i_adderType_2==2'b01 ? w_adder5OverFlow_1 :(i... | AI 推断：根据i_adderType_2选择对应加法器的溢出标志 |
+| `assign_0` | data_path | `w_oprand1_32` | i_oprand1_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |

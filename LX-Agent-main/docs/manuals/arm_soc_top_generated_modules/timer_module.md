@@ -1,8 +1,8 @@
 # 模块 `timer_module`
 
-- 源文件：`rtl/rtl/IONet/Timer/timer_module.v`。
-- 职责：AI 推断：该模块是一个基于内存映射寄存器接口的定时器单元，提供可编程定时计数和软件中断功能。。
-- 说明：模块通过地址和数据总线（addr_i, data_i/data_o）暴露多个寄存器（如REG_VALUE_L/H, REG_CTRL, REG_COUNT_L/H, REG_MSIP），支持读写操作，并输出中断信号int_sig_o，表明其核心角色是CPU可编程的定时器外设。
+- 源文件：`rtl\rtl\IONet\Timer\timer_module.v`。
+- 职责：AI 推断：该模块是一个基于寄存器映射的定时器单元，提供可配置的计时、中断生成和软件中断功能。。
+- 说明：模块通过地址和数据总线接口（addr_i, data_i, data_o）暴露多个寄存器（如REG_VALUE_L/H, REG_CTRL, REG_COUNT_L/H, REG_MSIP），支持读写操作，并输出中断信号int_sig_o，表明其核心功能是软件可编程的定时器。
 
 ## 1. 层级位置
 
@@ -51,5 +51,5 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `data_o` | (addr_i[7:0] == REG_VALUE_L) ? timer_value[31:0]: (addr_i[7:0] == REG_VALUE_H) ? timer_value[... | AI 推断：该赋值实现了基于地址的寄存器读取多路选择器，是模块与CPU交互的数据路径核心。 |
-| `assign_0` | unknown | `int_sig_o` | {&msip_value[31:24],&msip_value[23:16],&msip_value[15:8],&msip_value[7:0],int_sig_r} | AI 推断：该赋值将软件中断（msip）和硬件定时器中断（int_sig_r）合并为5位中断输出。 |
+| `assign_1` | data_path | `data_o` | (addr_i[7:0] == REG_VALUE_L) ? timer_value[31:0]: (addr_i[7:0] == REG_VALUE_H) ? timer_value[... | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | unknown | `int_sig_o` | {&msip_value[31:24],&msip_value[23:16],&msip_value[15:8],&msip_value[7:0],int_sig_r} | 证据不足：No Semantic Layer assignment interpretation is available. |

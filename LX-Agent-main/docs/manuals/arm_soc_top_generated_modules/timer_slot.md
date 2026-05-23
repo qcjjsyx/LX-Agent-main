@@ -1,8 +1,8 @@
 # 模块 `timer_slot`
 
-- 源文件：`rtl/rtl/IONet/Timer/timer_slot.v`。
-- 职责：AI 推断：定时器槽位模块，作为网格驱动事件流的中继节点，将外部驱动事件转发至内部定时器外设槽，并返回驱动事件及中断信号。。
-- 说明：模块通过 i_driveFrmMesh 接收驱动事件，经实例 slot (perip_slot_timer) 处理后，通过 o_driveNextToMesh 输出驱动事件；同时，实例 timer_module 产生中断信号 int_sig_o。这表明模块是网格事件流与定时器外设之间的桥梁。
+- 源文件：`rtl\rtl\IONet\Timer\timer_slot.v`。
+- 职责：AI 推断：定时器槽位模块，作为网格驱动事件流中的定时器外围设备插槽，负责接收驱动事件并转发至下一级，同时管理定时器模块的数据交互与释放信号。。
+- 说明：模块通过 i_driveFrmMesh 接收驱动事件，经内部实例 slot (perip_slot_timer) 处理后输出 o_driveNextToMesh，形成事件流。同时，模块通过 data_from/data_to 传递有效载荷数据，并通过 i_freeNextFrmMesh/o_freeToMesh 管理释放信号。timer_module 实例处理定时器逻辑并输出中断信号 int_sig_o。
 
 ## 1. 层级位置
 
@@ -57,7 +57,7 @@ timer_slot
 - Payload：`i_driveFrmMesh` -> `data_from [50:0]`。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：最终手册应强调该流为透明事件转发，并指出有效载荷 data_from 可能未随事件转发，需 RTL 源码确认其内部处理。
+- AI 推断：最终手册应强调该流为透明直通事件路径，并指出有效载荷 data_from 未随输出事件传递的潜在设计意图。
 
 
 ## 5. 内部组件与 assign 影响

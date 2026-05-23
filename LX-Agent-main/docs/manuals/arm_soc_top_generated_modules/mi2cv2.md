@@ -1,8 +1,8 @@
 # 模块 `mi2cv2`
 
-- 源文件：`rtl/rtl/IONet/IIC/mi2cv2.v`。
-- 职责：AI 推断：mi2cv2 是 IONet IIC 子系统内的一个顶层模块，负责将 APB 总线接口（ADDRESS、WDATA、RDATA）转换为 I2C 总线协议（ISCL、ISDA、OSCL、OSDA），并管理电源隔离（CKISO、DAISO、DAGND）和驱动使能（ENDRV）。。
-- 说明：模块通过实例化 U3 (m3s003fb) 和 U4 (m3s004fb) 处理 APB 寄存器读写（ADDRESS、WDATA、RDATA），通过 U2 和 U5 处理 I2C 总线信号（ISCL、ISDA、OSCL、OSDA），并通过 U4 输出电源隔离和驱动控制信号（CKISO、DAISO、DAGND、ENDRV），表明其核心角色是 APB-to-I2C 桥接与电源域管理。
+- 源文件：`rtl\rtl\IONet\IIC\mi2cv2.v`。
+- 职责：AI 推断：mi2cv2 是 I2C 主控制器模块，负责通过 APB 类总线接口与系统总线交互，并驱动 I2C 总线协议引擎。。
+- 说明：模块通过 ADDRESS、WDATA、RDATA 等数据信号与外部交互，内部实例化 U3 (m3s003fb) 作为寄存器接口，U4 (m3s004fb) 作为控制/状态逻辑，U5 (m3s005fb) 作为 I2C 总线驱动输出级。CLOCK 和 RESETN 分发至所有子模块，表明其为同步时序设计。
 
 ## 1. 层级位置
 

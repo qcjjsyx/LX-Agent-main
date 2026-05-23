@@ -1,8 +1,8 @@
 # 模块 `flash_state`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI0/flash_state.v`。
-- 职责：AI 推断：flash_state 是 SPI 闪存协议状态控制器，负责管理 SPI 主设备与外部闪存之间的读写操作状态机。。
-- 说明：该模块通过实例化 spi_master_spi0 并连接控制信号（i_ctl、i_readflag、i_w_en）和数据信号（i_data2spi、o_dataFspi）来驱动 SPI 通信。内部状态机（r_state）控制 SPI 使能信号（w_spi_en）和片选信号（w_spi_cs_n），并输出完成标志（o_finish）。
+- 源文件：`rtl\rtl\IONet\SPI\SPI0\flash_state.v`。
+- 职责：AI 推断：flash_state 是 SPI 闪存控制器状态机模块，负责管理 SPI 主设备与外部闪存之间的读写事务序列。。
+- 说明：该模块通过实例化 spi_master_spi0 并驱动其控制信号（如 w_spi_en、i_ctl 映射到 CR）来发起 SPI 事务。内部状态机（r_state）控制读写流程，并通过 i_startRead、r_start_spi 等信号触发操作。输出 o_finish 由 w_spi_cs_n 驱动，指示事务完成。
 
 ## 1. 层级位置
 
@@ -60,5 +60,5 @@ flash_state
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | unknown | `o_finish` | w_spi_cs_n | AI 推断：o_finish 是 SPI 传输完成标志，直接由 SPI 片选信号 w_spi_cs_n 驱动。 |
-| `assign_0` | unknown | `w_spi_en` | (r_state == READ \| r_state == PAGE_PRO) ? (i_startRead \| ((~r_start_spi_buf) & r_start_spi)) ... | AI 推断：w_spi_en 是 SPI 使能信号，根据状态机状态和启动条件生成。 |
+| `assign_2` | unknown | `o_finish` | w_spi_cs_n | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | unknown | `w_spi_en` | (r_state == READ \| r_state == PAGE_PRO) ? (i_startRead \| ((~r_start_spi_buf) & r_start_spi)) ... | 证据不足：No Semantic Layer assignment interpretation is available. |
