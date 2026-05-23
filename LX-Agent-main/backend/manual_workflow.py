@@ -64,6 +64,20 @@ MANUAL_TRIGGERS = (
     "rtl",
 )
 
+MANUAL_USAGE_TRIGGERS = (
+    "代码手册生成器使用说明",
+    "代码手册生成使用说明",
+    "代码手册生成器怎么用",
+    "代码手册生成怎么用",
+    "如何生成代码手册",
+    "怎么生成代码手册",
+    "生成代码手册怎么用",
+    "手册生成器使用说明",
+    "说明代码手册生成器",
+    "manual usage",
+    "manual help",
+)
+
 CONTINUE_WORDS = (
     "继续",
     "下一步",
@@ -123,6 +137,9 @@ def should_handle_manual_workflow(user_input, state):
     if not text:
         return False
 
+    if is_manual_usage_request(text):
+        return True
+
     if state and state.get("active") and state.get("stage") != "done":
         return True
 
@@ -135,6 +152,62 @@ def should_handle_manual_workflow(user_input, state):
 def is_manual_request(text):
     lower_text = (text or "").lower()
     return any(trigger.lower() in lower_text for trigger in MANUAL_TRIGGERS)
+
+
+def is_manual_usage_request(text):
+    lower_text = (text or "").lower()
+    return any(trigger.lower() in lower_text for trigger in MANUAL_USAGE_TRIGGERS)
+
+
+def build_manual_generation_usage_reply():
+    return "\n".join([
+        "# 代码手册生成器使用说明",
+        "",
+        "这个功能用于把 RTL 源码目录生成一套可阅读的代码手册。推荐把它当成一个固定流水线使用：先解析源码，再构建 Manual Context，最后生成 Markdown 手册和审查报告。",
+        "",
+        "## 1. 最常用的启动方式",
+        "",
+        "在 Web 对话框里直接发送：",
+        "",
+        "```text",
+        "请为 project_root=E:\\arm rtl_inputs=rtl top_module=arm_soc_top 生成代码手册，自动完整跑完",
+        "```",
+        "",
+        "- `project_root`：工程根目录，也是产物写入目录。",
+        "- `rtl_inputs`：相对 `project_root` 的 RTL 源码目录，也可以是绝对路径。",
+        "- `top_module`：顶层模块名。",
+        "",
+        "如果源码在 `E:\\arm\\rtl`，并且希望产物放在 `E:\\arm` 下，就使用 `project_root=E:\\arm`、`rtl_inputs=rtl`。",
+        "",
+        "## 2. 常见产物位置",
+        "",
+        "- Parser 产物：`<project_root>/parser_pipeline_rtl/`",
+        "- Knowledge IR：`<project_root>/knowledge_ir/<top_module>/`",
+        "- Manual Context：`<project_root>/manual_context/<top_module>/`",
+        "- 代码手册：`<project_root>/docs/manuals/<top_module>_generated.md`",
+        "- 模块页目录：`<project_root>/docs/manuals/<top_module>_generated_modules/`",
+        "- 审查报告：`<project_root>/docs/manuals/<top_module>_generated_review.md`",
+        "",
+        "## 3. 重新生成某个阶段",
+        "",
+        "如果已经有产物，但你想从某个阶段强制重跑，可以这样说：",
+        "",
+        "```text",
+        "从 knowledge 阶段开始重跑，然后继续后续步骤",
+        "```",
+        "",
+        "也可以指定更靠后的阶段，例如：",
+        "",
+        "```text",
+        "从 manual 阶段开始重跑，重新生成代码手册",
+        "```",
+        "",
+        "阶段顺序是：`references -> parser -> knowledge -> evidence -> source_review -> outline -> chapter_plan -> manual -> review`。",
+        "",
+        "## 4. 如何阅读生成的手册",
+        "",
+        "先看主手册里的项目总览、顶层结构图和完整层级结构，再通过模块索引进入各个模块页。模块页更适合查看端口、实例、局部结构和关键信号流。审查报告用于检查证据不足、未解决问题和生成质量风险。",
+    ])
 
 
 def is_continue_request(text):
@@ -258,6 +331,12 @@ def _extract_enrich_modules(text):
 
 
 def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=None, event_logger=None):
+    if is_manual_usage_request(user_input):
+        usage_state = _ensure_state(state if state is not None else {"active": False})
+        if state is None:
+            usage_state["active"] = False
+        return build_manual_generation_usage_reply(), usage_state
+
     if (
         state
         and (not state.get("active") or state.get("stage") == "done")
@@ -1132,7 +1211,15 @@ def _load_manual_context_digest(state):
 
 
 def _run_source_review_stage(state, client, model, event_logger=None):
-    digest = state.get("evidence_digest") or _load_manual_context_digest(state)
+    missing_inputs_reply, loaded_digest = _ensure_evidence_digest_for_stage(
+        state,
+        event_logger,
+        "source_review",
+        "阶段5：AI 源码复核失败",
+    )
+    if missing_inputs_reply:
+        return missing_inputs_reply
+    digest = state.get("evidence_digest") or {}
     report_path = _source_review_output_path(state)
     if report_path.exists() and report_path.is_file() and not _should_force_stage(state, "source_review"):
         report = _read_json(report_path)
@@ -1727,9 +1814,18 @@ def _format_source_review_summary(report):
 
 
 def _run_outline_stage(state, event_logger=None):
+    missing_inputs_reply, loaded_digest = _ensure_evidence_digest_for_stage(
+        state,
+        event_logger,
+        "outline",
+        "阶段6：规划目录失败",
+    )
+    if missing_inputs_reply:
+        return missing_inputs_reply
     digest = state.get("evidence_digest") or {}
     outline = _build_outline(digest)
     state["outline"] = outline
+    state["chapter_plan"] = []
     _log_event(
         event_logger,
         "manual_outline_created",
@@ -1759,8 +1855,17 @@ def _run_outline_stage(state, event_logger=None):
 
 
 def _run_chapter_plan_stage(state, event_logger=None):
+    missing_inputs_reply, loaded_digest = _ensure_evidence_digest_for_stage(
+        state,
+        event_logger,
+        "chapter_plan",
+        "阶段7：章节规划失败",
+    )
+    if missing_inputs_reply:
+        return missing_inputs_reply
     digest = state.get("evidence_digest") or {}
-    outline = state.get("outline") or _build_outline(digest)
+    outline = _build_outline(digest) if loaded_digest else (state.get("outline") or _build_outline(digest))
+    state["outline"] = outline
     chapter_plan = _build_chapter_plan(outline, digest)
     state["chapter_plan"] = chapter_plan
     _log_event(
@@ -1843,7 +1948,90 @@ def _manual_file_ready(state, user_input):
         return False, output_path
 
 
+def _ensure_evidence_digest_for_stage(state, event_logger=None, stage="", title="Manual Context 证据加载失败"):
+    if state.get("evidence_digest"):
+        return "", False
+
+    try:
+        digest = _load_manual_context_digest(state)
+    except FileNotFoundError as exc:
+        missing = [item for item in str(exc).splitlines() if item]
+        state["last_error"] = "\n".join(missing)
+        _log_event(
+            event_logger,
+            "manual_evidence_missing",
+            skill=MANUAL_SKILL_NAME,
+            stage=stage,
+            missing=missing,
+        )
+        return _format_reply(
+            state,
+            title,
+            [
+                "当前会话没有已加载的 Manual Context 证据，且磁盘上的 Manual Context 关键文件不完整，因此不会生成空壳手册。",
+                "请先从 `knowledge` 或 `evidence` 阶段重跑，或者确认 `manual_context/<top_module>/` 目录存在。",
+                "",
+                "缺失文件：",
+                *[f"- `{item}`" for item in missing],
+            ],
+        ), False
+    except Exception as exc:
+        state["last_error"] = str(exc)
+        _log_event(
+            event_logger,
+            "manual_evidence_load_failed",
+            skill=MANUAL_SKILL_NAME,
+            stage=stage,
+            error=str(exc),
+        )
+        return _format_reply(
+            state,
+            title,
+            [
+                "从已有 Manual Context 重新加载证据时失败，因此不会生成空壳手册。",
+                "",
+                "```text",
+                str(exc),
+                "```",
+            ],
+        ), False
+
+    state["evidence_digest"] = digest
+    _log_event(
+        event_logger,
+        "manual_evidence_loaded",
+        skill=MANUAL_SKILL_NAME,
+        stage=stage,
+        manual_context_dir=digest.get("manual_context_dir"),
+        counts=digest.get("counts"),
+        module_count=len(digest.get("modules", [])),
+    )
+    return "", True
+
+
+def _ensure_manual_stage_inputs(state, event_logger=None):
+    missing_inputs_reply, loaded_digest = _ensure_evidence_digest_for_stage(
+        state,
+        event_logger,
+        "manual",
+        "阶段8：生成手册失败",
+    )
+    if missing_inputs_reply:
+        return missing_inputs_reply
+
+    digest = state.get("evidence_digest") or {}
+    if loaded_digest or not state.get("outline"):
+        state["outline"] = _build_outline(digest)
+    if loaded_digest or not state.get("chapter_plan"):
+        state["chapter_plan"] = _build_chapter_plan(state["outline"], digest)
+    return ""
+
+
 def _run_manual_stage(state, client, model, user_input, event_logger=None):
+    missing_inputs_reply = _ensure_manual_stage_inputs(state, event_logger)
+    if missing_inputs_reply:
+        return missing_inputs_reply
+
     ready, output_path = _manual_file_ready(state, user_input)
     state["_manual_output_stem"] = output_path.stem
     if ready and not _should_force_stage(state, "manual") and not state.get("manual_needs_regenerate"):
@@ -1979,6 +2167,15 @@ def _run_review_stage(state, client, model, event_logger=None):
                 f"期望路径：`{manual_path}`",
             ],
         )
+
+    missing_inputs_reply, loaded_digest = _ensure_evidence_digest_for_stage(
+        state,
+        event_logger,
+        "review",
+        "阶段9：审查失败",
+    )
+    if missing_inputs_reply:
+        return missing_inputs_reply
 
     state["manual_output_path"] = str(manual_path)
     review_output_path = _review_output_path(state)
@@ -2439,6 +2636,14 @@ def _render_manual_context_markdown(state):
         f"# {top_module} RTL 代码手册",
         "",
         "本手册采用“主手册 + 模块页”的结构，主手册用于快速定位系统结构，模块页用于查看具体接口和 flow 细节。",
+        "",
+        "## 如何阅读本手册",
+        "",
+        "- 先看“项目总览”和“顶层模块”两节，确认工程用途、RTL 入口和顶层直接实例化关系。",
+        "- 再看“顶层结构图”和“完整模块层级结构”，用它们定位父子模块关系。",
+        f"- 需要查看某个模块细节时，进入 `{module_dir_name}/` 下对应的模块页。",
+        "- 对 AI 推断内容保持复核意识；确定事实优先来自 Parser、Knowledge IR 和 Manual Context。",
+        f"- 如需检查生成质量，查看 `{top_module}_generated_review.md` 审查报告。",
         "",
         "## 1. 项目总览",
         "",

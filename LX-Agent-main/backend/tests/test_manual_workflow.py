@@ -34,7 +34,258 @@ class FakeClient:
         self.chat = SimpleNamespace(completions=FakeCompletions())
 
 
+def make_minimal_manual_context(root):
+    manual_context_dir = root / "manual_context" / "top"
+    (manual_context_dir / "modules" / "top").mkdir(parents=True)
+    (manual_context_dir / "modules" / "child").mkdir(parents=True)
+
+    def write_json(path, payload):
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    write_json(
+        manual_context_dir / "manifest.json",
+        {
+            "top_module": "top",
+            "counts": {"modules": 2},
+            "files": {"modules": {"top": {}, "child": {}}},
+        },
+    )
+    write_json(
+        manual_context_dir / "project_context.json",
+        {
+            "top_level": {
+                "source_file": "rtl/top.v",
+                "direct_modules": {"value": ["child"]},
+                "external_port_groups": [],
+            },
+            "project_purpose": {"value": "top integrates child", "certainty": "deterministic_fact"},
+            "major_modules": [{"module": "child"}],
+        },
+    )
+    write_json(
+        manual_context_dir / "system_topology.json",
+        {
+            "module_count": 2,
+            "hierarchy_edges": [
+                {"parent": "top", "child": "child", "relationship": "instantiates"}
+            ],
+        },
+    )
+    write_json(manual_context_dir / "interface_index.json", {"counts": {}, "interfaces": []})
+    write_json(manual_context_dir / "flow_index.json", {"counts": {}, "flows": []})
+    write_json(manual_context_dir / "evidence_index.json", {"evidence_policy": {}, "evidence": []})
+    write_json(manual_context_dir / "validation_report.json", {"status": "ok", "issues": [], "checked_files": []})
+
+    for module_name in ("top", "child"):
+        module_dir = manual_context_dir / "modules" / module_name
+        write_json(
+            module_dir / "module_context.json",
+            {
+                "module_identity": {
+                    "module_name": module_name,
+                    "source_files": [f"rtl/{module_name}.v"],
+                },
+                "system_position": {
+                    "parents": {"value": [] if module_name == "top" else ["top"]},
+                    "children": {"value": ["child"] if module_name == "top" else []},
+                    "component_children": {"value": []},
+                },
+                "module_responsibility": {
+                    "short_summary": {
+                        "value": f"{module_name} responsibility",
+                        "certainty": "deterministic_fact",
+                    }
+                },
+                "interface_summary": {},
+                "internal_components": [],
+                "assignment_impact_summary": [],
+            },
+        )
+        write_json(module_dir / "module_doc_card.json", {"page_policy": {"detail_level": "standard"}})
+        write_json(module_dir / "interfaces.json", {"interfaces": []})
+        write_json(module_dir / "gaps.json", {"gaps": []})
+
+    return manual_context_dir
+
+
+def make_context_state(root, stage):
+    manual_context_dir = make_minimal_manual_context(root)
+    return {
+        "active": True,
+        "stage": stage,
+        "project_root": str(root),
+        "rtl_inputs": "rtl",
+        "top_module": "top",
+        "manual_context_dir": str(manual_context_dir),
+        "knowledge_dir": str(root / "knowledge_ir" / "top"),
+        "evidence_digest": {},
+        "outline": [],
+        "chapter_plan": [],
+        "force_stages": [stage],
+    }
+
+
 class ManualWorkflowRenderingTest(unittest.TestCase):
+    def test_manual_usage_request_returns_help_without_starting_workflow(self):
+        text = "请说明代码手册生成器的使用方式"
+
+        self.assertTrue(mw.should_handle_manual_workflow(text, None))
+        reply, state = mw.handle_manual_workflow(
+            text,
+            None,
+            Path("."),
+            client=None,
+            model=None,
+        )
+
+        self.assertIn("代码手册生成器使用说明", reply)
+        self.assertIn("project_root", reply)
+        self.assertIn("从 knowledge 阶段开始重跑", reply)
+        self.assertFalse(state.get("active"))
+        self.assertEqual(state.get("stage"), "collect_params")
+
+    def test_manual_stage_reloads_existing_context_when_state_lacks_digest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manual_context_dir = root / "manual_context" / "top"
+            (manual_context_dir / "modules" / "top").mkdir(parents=True)
+            (manual_context_dir / "modules" / "child").mkdir(parents=True)
+
+            def write_json(path, payload):
+                path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            write_json(
+                manual_context_dir / "manifest.json",
+                {
+                    "top_module": "top",
+                    "counts": {"modules": 2},
+                    "files": {"modules": {"top": {}, "child": {}}},
+                },
+            )
+            write_json(
+                manual_context_dir / "project_context.json",
+                {
+                    "top_level": {
+                        "source_file": "rtl/top.v",
+                        "direct_modules": {"value": ["child"]},
+                        "external_port_groups": [],
+                    },
+                    "project_purpose": {"value": "top integrates child", "certainty": "deterministic_fact"},
+                    "major_modules": [{"module": "child"}],
+                },
+            )
+            write_json(
+                manual_context_dir / "system_topology.json",
+                {
+                    "module_count": 2,
+                    "hierarchy_edges": [
+                        {"parent": "top", "child": "child", "relationship": "instantiates"}
+                    ],
+                },
+            )
+            write_json(manual_context_dir / "interface_index.json", {"counts": {}, "interfaces": []})
+            write_json(manual_context_dir / "flow_index.json", {"counts": {}, "flows": []})
+            write_json(manual_context_dir / "evidence_index.json", {"evidence_policy": {}, "evidence": []})
+            write_json(manual_context_dir / "validation_report.json", {"status": "ok", "issues": [], "checked_files": []})
+
+            for module_name in ("top", "child"):
+                module_dir = manual_context_dir / "modules" / module_name
+                write_json(
+                    module_dir / "module_context.json",
+                    {
+                        "module_identity": {
+                            "module_name": module_name,
+                            "source_files": [f"rtl/{module_name}.v"],
+                        },
+                        "system_position": {
+                            "parents": {"value": [] if module_name == "top" else ["top"]},
+                            "children": {"value": ["child"] if module_name == "top" else []},
+                            "component_children": {"value": []},
+                        },
+                        "module_responsibility": {
+                            "short_summary": {
+                                "value": f"{module_name} responsibility",
+                                "certainty": "deterministic_fact",
+                            }
+                        },
+                        "interface_summary": {},
+                        "internal_components": [],
+                        "assignment_impact_summary": [],
+                    },
+                )
+                write_json(module_dir / "module_doc_card.json", {"page_policy": {"detail_level": "standard"}})
+                write_json(module_dir / "interfaces.json", {"interfaces": []})
+                write_json(module_dir / "gaps.json", {"gaps": []})
+
+            state = {
+                "active": True,
+                "stage": "manual",
+                "project_root": str(root),
+                "rtl_inputs": "rtl",
+                "top_module": "top",
+                "manual_context_dir": str(manual_context_dir),
+                "knowledge_dir": str(root / "knowledge_ir" / "top"),
+                "evidence_digest": {},
+                "outline": [],
+                "chapter_plan": [],
+                "force_stages": ["manual"],
+            }
+
+            reply = mw._run_manual_stage(state, client=None, model=None, user_input="")
+
+            self.assertIn("top", state["evidence_digest"]["known_modules"])
+            self.assertGreaterEqual(state["manual_module_page_count"], 2)
+            self.assertTrue((root / "docs" / "manuals" / "top_generated.md").exists())
+            self.assertTrue((root / "docs" / "manuals" / "top_generated_modules" / "child.md").exists())
+            self.assertIn("阶段8", reply)
+
+    def test_outline_stage_reloads_existing_context_when_state_lacks_digest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            state = make_context_state(root, "outline")
+
+            reply = mw._run_outline_stage(state)
+
+            self.assertIn("child", state["evidence_digest"]["known_modules"])
+            self.assertTrue(state["outline"])
+            self.assertEqual(state["chapter_plan"], [])
+            self.assertEqual(state["stage"], "chapter_plan")
+            self.assertIn("阶段6", reply)
+
+    def test_chapter_plan_stage_reloads_existing_context_when_state_lacks_digest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            state = make_context_state(root, "chapter_plan")
+            state["outline"] = [{"title": "stale", "evidence": []}]
+
+            reply = mw._run_chapter_plan_stage(state)
+
+            self.assertIn("child", state["evidence_digest"]["known_modules"])
+            self.assertTrue(state["outline"])
+            self.assertNotEqual(state["outline"][0]["title"], "stale")
+            self.assertTrue(state["chapter_plan"])
+            self.assertEqual(state["stage"], "manual")
+            self.assertIn("阶段7", reply)
+
+    def test_source_review_stage_reports_missing_context_without_exception(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            state = {
+                "active": True,
+                "stage": "source_review",
+                "project_root": str(root),
+                "rtl_inputs": "rtl",
+                "top_module": "top",
+                "manual_context_dir": str(root / "manual_context" / "top"),
+                "evidence_digest": {},
+            }
+
+            reply = mw._run_source_review_stage(state, client=None, model=None)
+
+            self.assertIn("Manual Context", reply)
+            self.assertTrue(state["last_error"])
+            self.assertEqual(state["stage"], "source_review")
+
     def test_public_manual_filters_internal_metadata(self):
         digest = {
             "top_module": "top",
@@ -203,6 +454,7 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
 
         manual = mw._render_manual_context_markdown(state)
 
+        self.assertIn("## 如何阅读本手册", manual)
         self.assertIn("### 2.3 顶层结构图", manual)
         self.assertIn("```mermaid", manual)
         self.assertIn('top["top"] --> child["child"]', manual)
