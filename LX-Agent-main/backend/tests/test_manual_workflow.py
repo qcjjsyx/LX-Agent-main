@@ -634,6 +634,29 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
         stage = mw._extract_restart_stage("只重新生成 manual 和 review，不要重跑 parser 和 knowledge")
         self.assertEqual(stage, "manual")
 
+    def test_restart_stage_prefers_stage_near_rerun_word(self):
+        text = (
+            "Please generate the RTL code manual.\n"
+            "project_root=.\n"
+            "rtl_inputs=rtl\n"
+            "top_module=arm_soc_top\n\n"
+            "From references stage, rerun all stages and continue."
+        )
+
+        stage = mw._extract_restart_stage(text)
+
+        self.assertEqual(stage, "references")
+
+    def test_restart_stage_does_not_choose_manual_from_task_intro(self):
+        text = (
+            "Please generate the RTL manual.\n"
+            "From source_review stage, rerun and continue."
+        )
+
+        stage = mw._extract_restart_stage(text)
+
+        self.assertEqual(stage, "source_review")
+
     def test_force_stage_is_cleared_when_stage_completes(self):
         state = mw._ensure_state({"force_stages": ["manual", "review"], "restart_stage": "manual"})
 

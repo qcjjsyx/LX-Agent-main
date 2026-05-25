@@ -1,13 +1,13 @@
 # LX-Agent
 
-LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工具，并为 RTL 项目生成结构化代码手册。当前项目的核心能力是 RTL 手册生成流程：从 RTL 源码解析开始，经过 Parser Artifacts、Knowledge IR、AI Context、Semantic Layer、Manual Context、Source Review，最后渲染为 Markdown 手册。
+LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工具，并为 RTL 项目生成结构化代码手册。当前核心能力是 RTL 手册生成流程：从 RTL 源码解析开始，经过 Parser Artifacts、Knowledge IR、AI Context、Semantic Layer、Manual Context、Source Review，最后渲染为 Markdown 手册。
 
 项目主要包含：
 
 - Flask Web UI：聊天、文件上传、路径导入、会话管理、日志查看。
-- 命令行入口：用于调试 Agent 和手册生成流程。
-- Skill 系统：根据用户输入确定性选择合适 skill 和工具。
-- RTL 手册生成 workflow：固定阶段、支持从指定阶段重跑、支持继续执行。
+- 命令行入口：用于调试 Agent 和手册生成 workflow。
+- Skill 系统：根据用户输入确定性选择合适的 skill 和工具。
+- RTL 手册生成 workflow：固定阶段、支持继续执行、支持从指定阶段重跑。
 - 本地持久化：会话、日志、Parser 输出、Knowledge 输出、Manual Context、最终手册均保存为本地文件。
 
 ## 项目结构
@@ -19,7 +19,7 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 |   |-- agent_runner.py                # Web 和 CLI 共享的 Agent 执行核心
 |   |-- agent_core.py                  # 简单交互式 CLI Agent
 |   |-- manual_workflow.py             # RTL 手册生成 workflow
-|   |-- manual_cli.py                  # 手册 workflow 命令行调试入口
+|   |-- manual_cli.py                  # 手册 workflow 命令行入口
 |   |-- tools.py                       # 工具注册和脚本封装
 |   |-- context_manager.py             # 对话上下文压缩
 |   |-- event_logger.py                # JSONL 事件日志
@@ -36,7 +36,7 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 |                   |-- parser/
 |                   `-- knowledge/
 |-- frontend/
-|   |-- templates/index.html           # Web 页面
+|   |-- templates/index.html
 |   `-- static/style.css
 |-- rtl/
 |   |-- rtl/                           # RTL 源码输入目录
@@ -50,7 +50,7 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 |   |-- logs/                          # Agent 事件日志
 |   |-- imports/                       # 上传或导入的文件
 |   `-- backups/                       # 备份目录
-|-- main.py                            # 简单菜单入口
+|-- main.py
 |-- requirements.txt
 `-- .env
 ```
@@ -64,10 +64,10 @@ flowchart TD
     Selector --> GeneralTools["通用工具"]
     Selector --> ManualWorkflow["manual_workflow"]
     ManualWorkflow --> Parser["Parser Tool"]
-    Parser --> ParserArtifacts["rtl/parser_pipeline_rtl"]
+    Parser --> ParserArtifacts["parser_pipeline_rtl"]
     ManualWorkflow --> Knowledge["Knowledge Tool"]
-    Knowledge --> KnowledgeIR["rtl/knowledge_ir/<top_module>"]
-    Knowledge --> ManualContext["rtl/manual_context/<top_module>"]
+    Knowledge --> KnowledgeIR["knowledge_ir/<top_module>"]
+    Knowledge --> ManualContext["manual_context/<top_module>"]
     ManualWorkflow --> SourceReview["Source Review"]
     ManualWorkflow --> Render["Markdown Renderer"]
     Render --> Manual["docs/manuals/<top_module>_generated.md"]
@@ -109,7 +109,8 @@ DEEPSEEK_API_KEY=your_api_key_here
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
-
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
 
 RTL_MANUAL_SEMANTIC_WORKERS=4
 RTL_MANUAL_PARSER_TIMEOUT=220
@@ -117,28 +118,26 @@ RTL_MANUAL_KNOWLEDGE_TIMEOUT=10800
 RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT=10920
 ```
 
-也支持 OpenAI-compatible 环境变量：
+常用变量：
 
-```env
-
-```
-
-常用变量说明：
-
-| 变量                                     |                                                                 默认值 | 说明                                                            |
-| ---------------------------------------- | ---------------------------------------------------------------------: | --------------------------------------------------------------- |
-| `PORT`                                 |                                                               `5000` | Flask Web 服务端口。                                            |
-| `DEEPSEEK_API_KEY`                     |                                                                     空 | Web/CLI 默认模型 API key。                                      |
-| `DEEPSEEK_BASE_URL`                    |                                           `https://api.deepseek.com` | DeepSeek 兼容接口地址。                                         |
-| `DEEPSEEK_MODEL`                       | Web 默认 `deepseek-chat`；`agent_core.py` 默认 `deepseek-v4-pro` | 模型名称。                                                      |
-| `RTL_MANUAL_PARSER_TIMEOUT`            |                                                                `220` | Parser Tool 超时时间，单位秒。                                  |
-| `RTL_MANUAL_KNOWLEDGE_TIMEOUT`         |                                                               `3600` | Knowledge pipeline 内层超时时间，单位秒。                       |
-| `RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT` |                                            `knowledge_timeout + 120` | Knowledge Tool 外层 wrapper 超时时间。                          |
-| `RTL_MANUAL_SEMANTIC_WORKERS`          |                                                                  `4` | Semantic Layer 并发 LLM 请求数。遇到限流可降到 `2` 或 `1`。 |
+| 变量 | 默认值 | 说明 |
+| --- | ---: | --- |
+| `PORT` | `5000` | Flask Web 服务端口。 |
+| `DEEPSEEK_API_KEY` | 空 | Web/CLI 默认模型 API key。 |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 兼容接口地址。 |
+| `DEEPSEEK_MODEL` | `deepseek-chat` | Web 默认模型名称。 |
+| `RTL_MANUAL_PARSER_TIMEOUT` | `220` | Parser Tool 超时时间，单位秒。 |
+| `RTL_MANUAL_KNOWLEDGE_TIMEOUT` | `3600` | Knowledge pipeline 内层超时时间，单位秒。 |
+| `RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT` | `knowledge_timeout + 120` | Knowledge Tool 外层 wrapper 超时时间。 |
+| `RTL_MANUAL_SEMANTIC_WORKERS` | `4` | Semantic Layer 并发 LLM 请求数。遇到限流可降到 `2` 或 `1`。 |
 
 不要把真实 API key 提交到版本库。
 
-## 启动 Web 服务
+## 使用方法
+
+本项目最常用的能力是“把 RTL 源码生成 Markdown 代码手册”。推荐先用 Web UI 跑通一次；需要复现实验、自动化或长时间运行时，再使用 CLI。
+
+### 1. 启动 Web UI
 
 在项目根目录运行：
 
@@ -146,135 +145,25 @@ RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT=10920
 python -m backend.run_web
 ```
 
-浏览器打开：
+打开浏览器：
 
 ```text
 http://127.0.0.1:5000
 ```
 
-如果要换端口：
+如果需要换端口：
 
 ```powershell
 $env:PORT = "5001"
 python -m backend.run_web
 ```
 
-## Web API
+### 2. 生成本仓库示例 RTL 手册
 
-### Chat
-
-```http
-POST /chat
-Content-Type: application/json
-```
-
-请求示例：
-
-```json
-{
-  "conversation_id": "chat_20260522_100450_cc608f",
-  "message": "继续"
-}
-```
-
-`conversation_id` 可选。如果不传，会使用当前会话或创建新会话。
-
-### 文件上传
-
-```http
-POST /upload
-```
-
-支持常见文本、代码文件和 zip 包。上传文件会保存到 `data/imports/`。
-
-### 本地路径导入
-
-```http
-POST /import_path
-Content-Type: application/json
-```
-
-用于导入本地文件或目录。
-
-### 会话和日志
+当前仓库内置示例 RTL 源码在 `rtl/rtl/`。因为工具会自动识别 `rtl` 目录下的嵌套 RTL 项目，所以 Web UI 中可以直接发送：
 
 ```text
-GET    /conversations
-GET    /conversation/<conversation_id>
-DELETE /conversation/<conversation_id>
-POST   /conversation/<conversation_id>/rename
-GET    /logs/current
-GET    /logs/<conversation_id>
-POST   /new_chat
-POST   /reset
-```
-
-## 命令行 Agent
-
-简单菜单入口：
-
-```powershell
-python main.py
-```
-
-直接运行 Agent Core：
-
-```powershell
-python -m backend.agent_core
-```
-
-这两个入口适合简单的一次性 Agent 测试。调试 RTL 手册生成时，建议使用 `backend.manual_cli`。
-
-## RTL 手册生成 Workflow
-
-手册 workflow 是固定阶段表，定义在 `backend/manual_workflow.py`。
-
-阶段顺序：
-
-```text
-references
-parser
-knowledge
-evidence
-source_review
-outline
-chapter_plan
-manual
-review
-```
-
-每个阶段的职责：
-
-1. `references`：读取 skill 规则和参考文档。
-2. `parser`：运行 Parser Tool，生成 `rtl/parser_pipeline_rtl/`。
-3. `knowledge`：运行 Knowledge Tool，生成 `rtl/knowledge_ir/<top_module>/` 和 `rtl/manual_context/<top_module>/`。
-4. `evidence`：从 Manual Context 建立主证据索引。
-5. `source_review`：对需要源码复核的项做受控 AI review，并写回 Manual Context。
-6. `outline`：生成手册目录。
-7. `chapter_plan`：生成章节写作计划。
-8. `manual`：渲染主手册和模块页。
-9. `review`：检查最终手册。
-
-最终输出：
-
-```text
-docs/manuals/<top_module>_generated.md
-docs/manuals/<top_module>_generated_modules/
-docs/manuals/<top_module>_generated_review.md
-```
-
-当前示例 RTL 顶层模块：
-
-```text
-top_module=arm_soc_top
-```
-
-## 通过 Web UI 全量生成手册
-
-启动 Flask 后端并打开 Web 页面，然后发送：
-
-```text
-请为 rtl 目录全量重新生成 RTL 代码手册。
+请为当前项目生成 RTL 代码手册。
 project_root=.
 rtl_inputs=rtl
 top_module=arm_soc_top
@@ -283,23 +172,35 @@ top_module=arm_soc_top
 语义增强开启，模块语义和 flow 语义都全量生成。
 ```
 
-## 为外部源码目录生成手册
-
-如果源码不在 LX-Agent 项目目录下，也不需要改代码。关键是正确设置 `project_root` 和 `rtl_inputs`。
-
-例如源码目录是：
+运行完成后重点查看：
 
 ```text
-E:\arm\rtl
+docs/manuals/arm_soc_top_generated.md
+docs/manuals/arm_soc_top_generated_modules/
+docs/manuals/arm_soc_top_generated_review.md
 ```
 
-你希望所有产物都放在源码父目录：
+### 3. 为外部 RTL 项目生成手册
+
+外部项目只需要传对三个参数：
 
 ```text
-E:\arm
+project_root=<RTL 项目根目录>
+rtl_inputs=<相对 project_root 的 RTL 源码目录>
+top_module=<顶层模块名>
 ```
 
-那么应该传：
+路径关系如下：
+
+```text
+实际读取源码目录 = project_root / rtl_inputs
+Parser 产物       = project_root / parser_pipeline_rtl
+Knowledge 产物    = project_root / knowledge_ir/<top_module>
+Manual Context   = project_root / manual_context/<top_module>
+最终手册          = project_root / docs/manuals/<top_module>_generated.md
+```
+
+例如源码目录是 `E:\arm\rtl`，希望产物写到 `E:\arm` 下，应传：
 
 ```text
 project_root=E:\arm
@@ -314,28 +215,7 @@ project_root=E:\arm\rtl
 rtl_inputs=.
 ```
 
-因为 workflow 的路径规则是：
-
-```text
-实际读取源码目录 = project_root / rtl_inputs
-Parser 产物       = project_root / parser_pipeline_rtl
-Knowledge 产物    = project_root / knowledge_ir/<top_module>
-Manual Context   = project_root / manual_context/<top_module>
-最终手册          = project_root / docs/manuals/<top_module>_generated.md
-```
-
-因此，对于 `E:\arm\rtl`，正确运行后产物会生成到：
-
-```text
-E:\arm\parser_pipeline_rtl
-E:\arm\knowledge_ir\arm_soc_top
-E:\arm\manual_context\arm_soc_top
-E:\arm\docs\manuals\arm_soc_top_generated.md
-E:\arm\docs\manuals\arm_soc_top_generated_modules
-E:\arm\docs\manuals\arm_soc_top_generated_review.md
-```
-
-Web UI 输入示例：
+对应 Web UI 输入示例：
 
 ```text
 请为 E:\arm\rtl 下的 RTL 源码生成代码手册。
@@ -347,31 +227,21 @@ top_module=arm_soc_top
 语义增强开启，模块语义和 flow 语义都全量生成。
 ```
 
-CLI 输入示例：
+### 4. 继续执行和阶段重跑
 
-```powershell
-python -m backend.manual_cli `
-  --project-root E:\arm `
-  --rtl-inputs rtl `
-  --top-module arm_soc_top `
-  --force `
-  --knowledge-timeout 10800 `
-  --log-events
-```
-
-如果已有会话停在某个阶段，想继续：
+如果一个会话已经进入 workflow，中途停止或浏览器等待超时后，可以在同一个会话继续发送：
 
 ```text
 继续
 ```
 
-如果要从指定阶段重跑：
+如果只想从某个阶段开始重跑，直接说明阶段名：
 
 ```text
 从 knowledge 阶段开始重跑，然后继续后续步骤。
 ```
 
-支持的阶段包括：
+支持的阶段：
 
 ```text
 references
@@ -385,7 +255,7 @@ manual
 review
 ```
 
-示例：
+常用重跑指令：
 
 ```text
 从 parser 阶段开始重跑
@@ -394,13 +264,25 @@ review
 强制重新生成 manual 和 review
 ```
 
-## 通过 CLI 运行手册 Workflow
+### 5. 使用 CLI 运行 workflow
 
-适合本地调试和复现实验：
+CLI 更适合本地调试、复现、计时和自动化：
 
 ```powershell
 python -m backend.manual_cli `
   --project-root . `
+  --rtl-inputs rtl `
+  --top-module arm_soc_top `
+  --force `
+  --knowledge-timeout 10800 `
+  --log-events
+```
+
+外部项目示例：
+
+```powershell
+python -m backend.manual_cli `
+  --project-root E:\arm `
   --rtl-inputs rtl `
   --top-module arm_soc_top `
   --force `
@@ -430,6 +312,62 @@ python -m backend.manual_cli `
 --verbose                   输出完整阶段回复。
 ```
 
+### 6. Web API
+
+Web UI 背后主要调用 `/chat`：
+
+```http
+POST /chat
+Content-Type: application/json
+```
+
+请求示例：
+
+```json
+{
+  "conversation_id": "chat_20260522_100450_cc608f",
+  "message": "继续"
+}
+```
+
+`conversation_id` 可选。不传时会使用当前会话或创建新会话；多人使用时建议前端始终带上自己的 `conversation_id`。
+
+其他接口：
+
+```text
+POST   /upload
+POST   /import_path
+GET    /conversations
+GET    /conversation/<conversation_id>
+DELETE /conversation/<conversation_id>
+POST   /conversation/<conversation_id>/rename
+GET    /logs/current
+GET    /logs/<conversation_id>
+POST   /new_chat
+POST   /reset
+```
+
+### 7. Workflow 阶段说明
+
+手册 workflow 是固定阶段表，定义在 `backend/manual_workflow.py`：
+
+1. `references`：读取 skill 规则和参考文档。
+2. `parser`：运行 Parser Tool，生成 `parser_pipeline_rtl/`。
+3. `knowledge`：运行 Knowledge Tool，生成 `knowledge_ir/<top_module>/` 和 `manual_context/<top_module>/`。
+4. `evidence`：从 Manual Context 建立主证据索引。
+5. `source_review`：对需要源码复核的项做受控 AI review，并写回 Manual Context。
+6. `outline`：生成手册目录。
+7. `chapter_plan`：生成章节写作计划。
+8. `manual`：渲染主手册和模块页。
+9. `review`：检查最终手册。
+
+简单 Agent 调试入口仍然保留：
+
+```powershell
+python main.py
+python -m backend.agent_core
+```
+
 ## 统计全量运行时间
 
 PowerShell 计时示例：
@@ -447,8 +385,6 @@ top_module=arm_soc_top
 "@
 } | ConvertTo-Json
 
-$start = Get-Date
-
 $elapsed = Measure-Command {
   $resp = Invoke-RestMethod `
     -Uri "http://127.0.0.1:5000/chat" `
@@ -457,13 +393,7 @@ $elapsed = Measure-Command {
     -Body $body
 }
 
-$end = Get-Date
-
-"Start: $start"
-"End:   $end"
-"Elapsed seconds: $($elapsed.TotalSeconds)"
-"Elapsed minutes: $($elapsed.TotalMinutes)"
-
+$elapsed
 $resp.reply | Out-File -Encoding utf8 full_run_reply.txt
 ```
 
@@ -486,7 +416,7 @@ $elapsed = Measure-Command {
 $elapsed
 ```
 
-注意：`Measure-Command` 会一直等待 `/chat` 返回。全量流程运行多久，PowerShell 就会等待多久。
+`Measure-Command` 会一直等待 `/chat` 返回；全量流程运行多久，PowerShell 就会等待多久。
 
 ## 产物和备份
 
@@ -519,7 +449,7 @@ rtl/rtl/
 
 全量 Semantic Layer 会比较慢，因为它可能对每个模块和每条 flow 调用一次 LLM。
 
-以 `arm_soc_top` 为例，全量语义增强包含：
+以 `arm_soc_top` 为例，全量语义增强可能包含：
 
 ```text
 106 个 module semantic card
@@ -582,9 +512,7 @@ Test-Path docs\manuals\arm_soc_top_generated_review.md
 
 ### `/chat` 返回 HTTP 200，但没有生成手册
 
-HTTP 200 只表示 Flask 接口返回了响应，不代表 workflow 成功完成。需要看助手回复和事件日志。
-
-查看日志：
+HTTP 200 只表示 Flask 接口返回了响应，不代表 workflow 成功完成。需要看助手回复和事件日志：
 
 ```powershell
 Get-Content data\logs\agent_events_20260522.jsonl -Tail 80
@@ -616,7 +544,7 @@ flows = all
 RTL_MANUAL_SEMANTIC_WORKERS=4
 ```
 
-如果模型服务限流，降低为：
+如果模型服务限流，降为：
 
 ```env
 RTL_MANUAL_SEMANTIC_WORKERS=2
@@ -679,11 +607,11 @@ python -B -m unittest `
 
 当前测试覆盖：
 
-- manual workflow 阶段顺序和重跑逻辑；
-- parser 生成后 artifact 路径刷新；
-- skill selector 确定性打分；
-- conversation 级别的 manual workflow 状态隔离；
-- tool timeout 参数传递；
+- manual workflow 阶段顺序和重跑逻辑。
+- parser 生成后 artifact 路径刷新。
+- skill selector 确定性打分。
+- conversation 级别的 manual workflow 状态隔离。
+- tool timeout 参数传递。
 - Semantic Layer 缓存复用和并发 workers。
 
 ## 设计说明
@@ -705,9 +633,8 @@ RTL 手册生成使用固定 workflow，而不是完全依赖提示词驱动，�
 ## 当前限制
 
 - Web UI 当前等待 `/chat` 返回，长耗时阶段还没有实时进度条。
-- 旧代码和历史 JSON 中有部分中文乱码，原因是早期编码不统一。
 - 大型 RTL 项目的全量 Semantic Layer 仍可能耗时较长。
-- 当前项目定位为本地开发工具，没有生产环境鉴权和部署加固。
+- 当前项目定位为本地开发工具，不是生产环境部署方案。
 
 ## 安全注意事项
 

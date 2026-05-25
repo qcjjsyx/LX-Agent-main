@@ -243,7 +243,8 @@ def _wants_regenerate(text):
 def _extract_restart_stage(text):
     raw_text = text or ""
     lower_text = raw_text.lower()
-    if not any(word.lower() in lower_text for word in RESTART_WORDS):
+    restart_positions = _restart_word_positions(lower_text)
+    if not restart_positions:
         return ""
 
     matches = []
@@ -252,15 +253,43 @@ def _extract_restart_stage(text):
             alias_text = alias.lower()
             start = lower_text.find(alias_text)
             while start >= 0:
-                if not _stage_mention_is_negated(lower_text, start):
-                    matches.append((start, stage))
+                if (
+                    _stage_alias_has_boundary(lower_text, start, alias_text)
+                    and not _stage_mention_is_negated(lower_text, start)
+                ):
+                    distance = min(abs(start - position) for position in restart_positions)
+                    if distance <= 80:
+                        matches.append((distance, start, stage))
                 start = lower_text.find(alias_text, start + len(alias_text))
 
     if not matches:
         return ""
 
-    matches.sort(key=lambda item: item[0])
-    return matches[0][1]
+    matches.sort(key=lambda item: (item[0], item[1]))
+    return matches[0][2]
+
+
+def _restart_word_positions(lower_text):
+    positions = []
+    for word in RESTART_WORDS:
+        word_text = word.lower()
+        start = lower_text.find(word_text)
+        while start >= 0:
+            positions.append(start)
+            start = lower_text.find(word_text, start + len(word_text))
+    return positions
+
+
+def _stage_alias_has_boundary(lower_text, start, alias_text):
+    if not re.fullmatch(r"[a-z0-9_ ]+", alias_text):
+        return True
+
+    end = start + len(alias_text)
+    if start > 0 and re.match(r"[a-z0-9_]", lower_text[start - 1]):
+        return False
+    if end < len(lower_text) and re.match(r"[a-z0-9_]", lower_text[end]):
+        return False
+    return True
 
 
 def _stage_mention_is_negated(lower_text, start_index):

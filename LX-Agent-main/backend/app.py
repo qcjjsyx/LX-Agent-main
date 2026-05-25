@@ -1,6 +1,8 @@
 # backend/app.py
 import os
 import json
+import re
+import threading
 import uuid
 import zipfile
 import shutil
@@ -124,6 +126,9 @@ SYSTEM_MESSAGE = {
 current_conversation_id = None
 messages = [SYSTEM_MESSAGE]
 manual_workflow_state = None
+CONVERSATION_ID_RE = re.compile(r"^chat_\d{8}_\d{6}_[0-9a-f]{6}$")
+STATE_LOCK = threading.RLock()
+CONVERSATION_LOCKS = {}
 agent_runner = AgentRunner(
     client=client,
     model=MODEL,
@@ -142,8 +147,33 @@ def make_conversation_id():
     return "chat_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
 
 
+def validate_conversation_id(conversation_id):
+    if not isinstance(conversation_id, str) or not CONVERSATION_ID_RE.fullmatch(conversation_id):
+        raise ValueError("Invalid conversation_id.")
+    return conversation_id
+
+
 def conversation_path(conversation_id):
-    return CONVERSATION_DIR / f"{conversation_id}.json"
+    conversation_id = validate_conversation_id(conversation_id)
+    path = (CONVERSATION_DIR / f"{conversation_id}.json").resolve()
+    base_dir = CONVERSATION_DIR.resolve()
+
+    try:
+        path.relative_to(base_dir)
+    except ValueError as exc:
+        raise ValueError("Invalid conversation_id path.") from exc
+
+    return path
+
+
+def get_conversation_lock(conversation_id):
+    conversation_id = validate_conversation_id(conversation_id)
+    with STATE_LOCK:
+        lock = CONVERSATION_LOCKS.get(conversation_id)
+        if lock is None:
+            lock = threading.RLock()
+            CONVERSATION_LOCKS[conversation_id] = lock
+        return lock
 
 
 def message_to_dict(message):
@@ -240,12 +270,13 @@ def get_title_from_messages(raw_messages):
 def create_new_conversation():
     global current_conversation_id, messages, manual_workflow_state
 
-    previous_conversation_id = current_conversation_id
-    current_conversation_id = make_conversation_id()
-    messages = [SYSTEM_MESSAGE]
-    manual_workflow_state = None
+    with STATE_LOCK:
+        previous_conversation_id = current_conversation_id
+        current_conversation_id = make_conversation_id()
+        messages = [SYSTEM_MESSAGE]
+        manual_workflow_state = None
 
-    save_current_conversation()
+    save_conversation_state(current_conversation_id, messages, manual_workflow_state)
     log_event(
         current_conversation_id,
         "conversation_created",
@@ -255,17 +286,11 @@ def create_new_conversation():
     return current_conversation_id
 
 
-def save_current_conversation():
-    global current_conversation_id, messages, manual_workflow_state
-
-    if current_conversation_id is None:
-        create_new_conversation()
-        return
-
-    path = conversation_path(current_conversation_id)
-
+def save_conversation_state(conversation_id, conversation_messages, workflow_state):
+    conversation_id = validate_conversation_id(conversation_id)
+    path = conversation_path(conversation_id)
     created_at = now_text()
-    title = get_title_from_messages(messages)
+    title = get_title_from_messages(conversation_messages)
     manual_title = False
 
     if path.exists():
@@ -280,16 +305,16 @@ def save_current_conversation():
         except Exception:
             pass
 
-    safe_messages = sanitize_messages_for_api(messages)
+    safe_messages = sanitize_messages_for_api(conversation_messages)
 
     data = {
-        "id": current_conversation_id,
+        "id": conversation_id,
         "title": title,
         "manual_title": manual_title,
         "created_at": created_at,
         "updated_at": now_text(),
         "messages": [message_to_dict(m) for m in safe_messages],
-        "manual_workflow_state": manual_workflow_state
+        "manual_workflow_state": workflow_state
     }
 
     path.write_text(
@@ -298,27 +323,56 @@ def save_current_conversation():
     )
 
 
-def load_conversation(conversation_id):
-    global current_conversation_id, messages, manual_workflow_state
-
+def load_conversation_state(conversation_id):
+    conversation_id = validate_conversation_id(conversation_id)
     path = conversation_path(conversation_id)
 
     if not path.exists():
-        return False
+        return None
 
     data = json.loads(path.read_text(encoding="utf-8"))
 
-    current_conversation_id = conversation_id
-    manual_workflow_state = data.get("manual_workflow_state")
+    workflow_state = data.get("manual_workflow_state")
     loaded_messages = data.get("messages", [])
 
     if not loaded_messages:
-        messages = [SYSTEM_MESSAGE]
+        loaded_messages = [SYSTEM_MESSAGE]
     else:
-        messages = sanitize_messages_for_api(loaded_messages)
+        loaded_messages = sanitize_messages_for_api(loaded_messages)
 
-        if not messages or messages[0].get("role") != "system":
-            messages.insert(0, SYSTEM_MESSAGE)
+        if not loaded_messages or loaded_messages[0].get("role") != "system":
+            loaded_messages.insert(0, SYSTEM_MESSAGE)
+
+    return loaded_messages, workflow_state
+
+
+def save_current_conversation():
+    global current_conversation_id, messages, manual_workflow_state
+
+    with STATE_LOCK:
+        if current_conversation_id is None:
+            create_new_conversation()
+            return
+        conversation_id = current_conversation_id
+        conversation_messages = list(messages)
+        workflow_state = manual_workflow_state
+
+    save_conversation_state(conversation_id, conversation_messages, workflow_state)
+
+
+def load_conversation(conversation_id):
+    global current_conversation_id, messages, manual_workflow_state
+
+    with get_conversation_lock(conversation_id):
+        loaded = load_conversation_state(conversation_id)
+        if loaded is None:
+            return False
+        loaded_messages, workflow_state = loaded
+
+    with STATE_LOCK:
+        current_conversation_id = validate_conversation_id(conversation_id)
+        messages = loaded_messages
+        manual_workflow_state = workflow_state
 
     log_event(
         current_conversation_id,
@@ -838,40 +892,58 @@ def _legacy_run_agent_once(user_input):
 def activate_conversation(conversation_id=None):
     global current_conversation_id
 
-    if conversation_id and conversation_path(conversation_id).exists():
-        load_conversation(conversation_id)
-        return current_conversation_id
+    if conversation_id:
+        conversation_id = validate_conversation_id(conversation_id)
+        if conversation_path(conversation_id).exists():
+            load_conversation(conversation_id)
+            return conversation_id
 
-    if current_conversation_id is None:
-        create_new_conversation()
+    with STATE_LOCK:
+        active_id = current_conversation_id
 
-    return current_conversation_id
+    if active_id is None:
+        active_id = create_new_conversation()
+
+    return active_id
 
 
 def run_agent_once(user_input, conversation_id=None):
-    global messages, manual_workflow_state
+    global current_conversation_id, messages, manual_workflow_state
 
-    activate_conversation(conversation_id)
+    active_id = activate_conversation(conversation_id)
 
-    session = AgentSession(
-        messages=messages,
-        manual_workflow_state=manual_workflow_state,
-    )
+    with get_conversation_lock(active_id):
+        loaded = load_conversation_state(active_id)
+        if loaded is None:
+            loaded_messages = [SYSTEM_MESSAGE]
+            loaded_workflow_state = None
+            save_conversation_state(active_id, loaded_messages, loaded_workflow_state)
+        else:
+            loaded_messages, loaded_workflow_state = loaded
 
-    result = agent_runner.run(
-        user_input=user_input,
-        session=session,
-        conversation_id=current_conversation_id,
-        event_logger=lambda event_type, **payload: log_event(
-            current_conversation_id,
-            event_type,
-            **payload
-        ),
-    )
+        session = AgentSession(
+            messages=loaded_messages,
+            manual_workflow_state=loaded_workflow_state,
+        )
 
-    messages = result.messages
-    manual_workflow_state = result.manual_workflow_state
-    save_current_conversation()
+        result = agent_runner.run(
+            user_input=user_input,
+            session=session,
+            conversation_id=active_id,
+            event_logger=lambda event_type, **payload: log_event(
+                active_id,
+                event_type,
+                **payload
+            ),
+        )
+
+        save_conversation_state(active_id, result.messages, result.manual_workflow_state)
+
+    with STATE_LOCK:
+        current_conversation_id = active_id
+        messages = result.messages
+        manual_workflow_state = result.manual_workflow_state
+
     return result.reply
 
 
@@ -899,6 +971,12 @@ def chat():
             "conversation_id": current_conversation_id,
             "conversations": list_conversations()
         })
+
+    except ValueError as e:
+        return jsonify({
+            "reply": str(e),
+            "error": str(e)
+        }), 400
 
     except Exception as e:
         log_event(
@@ -1258,6 +1336,11 @@ def get_current_logs():
 
 @app.route("/logs/<conversation_id>", methods=["GET"])
 def get_logs(conversation_id):
+    try:
+        conversation_id = validate_conversation_id(conversation_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     limit = int(request.args.get("limit", 200))
     return jsonify({
         "conversation_id": conversation_id,
@@ -1267,7 +1350,10 @@ def get_logs(conversation_id):
 
 @app.route("/conversation/<conversation_id>", methods=["GET"])
 def get_conversation(conversation_id):
-    ok = load_conversation(conversation_id)
+    try:
+        ok = load_conversation(conversation_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     if not ok:
         return jsonify({
@@ -1285,7 +1371,11 @@ def get_conversation(conversation_id):
 def delete_conversation(conversation_id):
     global current_conversation_id, messages, manual_workflow_state
 
-    path = conversation_path(conversation_id)
+    try:
+        conversation_id = validate_conversation_id(conversation_id)
+        path = conversation_path(conversation_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     if not path.exists():
         return jsonify({
@@ -1300,7 +1390,10 @@ def delete_conversation(conversation_id):
             deleted_conversation_id=conversation_id,
         )
 
-        if current_conversation_id == conversation_id:
+        with STATE_LOCK:
+            deleting_current = current_conversation_id == conversation_id
+
+        if deleting_current:
             manual_workflow_state = None
             create_new_conversation()
 
@@ -1327,7 +1420,11 @@ def rename_conversation(conversation_id):
             "error": "标题不能为空"
         }), 400
 
-    path = conversation_path(conversation_id)
+    try:
+        conversation_id = validate_conversation_id(conversation_id)
+        path = conversation_path(conversation_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
     if not path.exists():
         return jsonify({
