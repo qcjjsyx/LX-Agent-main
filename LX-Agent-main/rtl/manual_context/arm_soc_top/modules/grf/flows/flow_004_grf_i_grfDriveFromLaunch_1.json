@@ -156,10 +156,10 @@
         "w_fire_6[0]"
       ],
       "role_in_flow": {
-        "value": "FIFO缓冲级，负责事件驱动信号的缓冲和可能的门控",
-        "explanation": "作为Fifo1系列的实例，该组件接收输入驱动信号i_grfDriveFromLaunch_1，输出w_fire_6[0]，可能根据FIFO状态对事件传播进行门控或缓冲",
+        "value": "事件缓冲级，负责接收输入事件并可能因FIFO满而阻塞事件传播",
+        "explanation": "作为Fifo1家族的实例，cFifo1_1接收i_grfDriveFromLaunch_1事件，并在内部缓冲后输出w_fire_6[0]。该级是流中唯一的阻塞点，可能因FIFO满而暂停事件传递，实现背压机制。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -174,14 +174,17 @@
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:grf:semantic_flow:flow_004_grf_i_grfDriveFromLaunch_1"
         ],
         "semantic_evidence": [
           {
             "source": "instances.connections"
+          },
+          {
+            "source": "flow.blocking_points"
           }
         ]
       },
@@ -306,8 +309,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "文档应强调事件从输入到输出的单向传播路径，包括FIFO缓冲和两级延迟的时序特性",
-    "explanation": "该流的核心是事件信号的传播，FIFO可能引入可变延迟，而两级delay8U引入固定延迟，文档应说明这些延迟对事件时序的影响",
+    "value": "手册应强调事件路径（FIFO+延迟）与数据路径（MutexMerge+寄存器拼接）的独立性和时序关系",
+    "explanation": "当前流仅描述事件传递，数据选择由cMutexMerge3_end_74b处理，数据输出由赋值2拼接。手册需说明事件何时有效（经过FIFO和延迟后），以及数据何时与事件对齐，避免混淆事件流和数据流的依赖关系。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -317,7 +320,8 @@
     "doc_priority": "primary",
     "signals": [
       "i_grfDriveFromLaunch_1",
-      "o_grfDriveToLaunch_1"
+      "o_grfDriveToLaunch_1",
+      "o_grfDataToLaunch_64"
     ],
     "instances": [
       "cFifo1_1",
@@ -325,7 +329,9 @@
       "cFifo1_1Delay1"
     ],
     "related_flows": [],
-    "related_assignments": [],
+    "related_assignments": [
+      "2"
+    ],
     "requires_rtl_source_review": false,
     "review_status": "ready",
     "evidence_refs": [
@@ -334,18 +340,18 @@
     ],
     "semantic_evidence": [
       {
-        "source": "instances.connections"
+        "source": "flow.steps"
       },
       {
-        "source": "transparent_flows"
+        "source": "interface_payload_contracts"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从发射级到写回级的驱动事件流，经过FIFO缓冲和两级透明延迟后输出",
-        "explanation": "该流将来自发射级的驱动事件通过FIFO进行缓冲，再经过两级延迟单元后输出到写回级，形成从输入到输出的单向事件传播路径",
+        "value": "从发射级接收驱动事件，经FIFO缓冲和两级透明延迟后，输出到发射级，构成一个单向、可阻塞的事件传递通道",
+        "explanation": "该流从输入事件i_grfDriveFromLaunch_1开始，经过cFifo1_1（FIFO缓冲级）和两个delay8U实例（cFifo1_1Delay0、cFifo1_1Delay1）的透明延迟，最终到达输出事件o_grfDriveToLaunch_1。FIFO级是唯一的阻塞点，延迟级仅增加固定延迟而不改变事件语义。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -380,15 +386,15 @@
         ]
       },
       {
-        "value": "驱动事件流与数据载荷通过接口协议关联，但数据路径独立于事件传播路径",
-        "explanation": "输入事件i_grfDriveFromLaunch_1关联三个数据输入(i_expDataToGrf_64, i_lsuDataToGrf_64, i_wbDataToGrf_64)，输出事件o_grfDriveToLaunch_1关联数据输出o_grfDataToLaunch_64，但数据路径经过cMutexMerge3_end_74b合并后独立于事件传播路径",
+        "value": "输入事件携带三个64位数据源（i_expDataToGrf_64、i_lsuDataToGrf_64、i_wbDataToGrf_64），输出事件携带一个64位数据o_grfDataToLaunch_64，数据选择逻辑在流外完成",
+        "explanation": "输入事件i_grfDriveFromLaunch_1关联三个数据输入，但数据选择由cMutexMerge3_end_74b实例处理，不在本流内。输出事件o_grfDriveToLaunch_1关联o_grfDataToLaunch_64，该数据来自r_rsValue_32的拼接。事件流与数据流在FIFO级后分离，数据路径独立于事件延迟链。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_004_grf_i_grfDriveFromLaunch_1:data_control_effect:001",
-        "doc_priority": "secondary",
+        "doc_priority": "primary",
         "signals": [
           "i_grfDriveFromLaunch_1",
           "o_grfDriveToLaunch_1",
@@ -402,31 +408,31 @@
         "related_assignments": [
           "2"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:grf:flow:flow_004_grf_i_grfDriveFromLaunch_1",
           "ev:grf:semantic_flow:flow_004_grf_i_grfDriveFromLaunch_1"
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports"
+            "source": "interface_payload_contracts"
           },
           {
-            "source": "interface.data_ports"
+            "source": "related_component_connections"
           }
         ]
       },
       {
-        "value": "输入事件关联o_grfFreeToLaunch_1，输出事件关联i_grfFreeFromLaunch_1，但反压机制未在流步骤中体现",
-        "explanation": "接口协议定义了输入事件的反压信号o_grfFreeToLaunch_1和输出事件的反压信号i_grfFreeFromLaunch_1，但当前流步骤中未包含这些反压信号的传播路径，无法确定FIFO是否使用反压进行门控",
+        "value": "输入事件关联o_grfFreeToLaunch_1，输出事件关联i_grfFreeFromLaunch_1，但背压路径未在流步骤中体现",
+        "explanation": "接口契约显示输入事件有free信号o_grfFreeToLaunch_1，输出事件有free信号i_grfFreeFromLaunch_1，表明存在背压机制。但流步骤仅描述正向事件路径，未包含free信号的连接或传播，因此背压的具体实现（如FIFO满时如何反向传播）无法从当前上下文确定。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_004_grf_i_grfDriveFromLaunch_1:completion_backpressure:001",
-        "doc_priority": "reference",
+        "doc_priority": "secondary",
         "signals": [
           "o_grfFreeToLaunch_1",
           "i_grfFreeFromLaunch_1"
@@ -444,7 +450,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports"
+            "source": "interface_payload_contracts"
           }
         ]
       }

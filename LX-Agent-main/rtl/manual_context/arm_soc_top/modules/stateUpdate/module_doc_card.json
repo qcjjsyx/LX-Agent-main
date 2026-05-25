@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "stateUpdate",
-  "source_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+  "source_file": "rtl/rtl/Lsu/stateUpdate.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "状态更新模块，负责将来自更新分割器的请求根据负载类型（加载/存储）分发到对应的FIFO，并通过互斥合并后输出驱动信号。",
-    "explanation": "模块接收一个事件驱动输入和7位负载数据，通过Fifo1缓存后，由loadAndStoreSelector根据负载类型（w_isLoad_1/w_isStore_1）将请求分发到loadFifo或storeFifo，最后通过loadOrStoreMutexMerge合并为单一输出事件。同时输出12位状态有效信号。",
+    "value": "状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）、状态机转换，并通过互斥合并后输出到状态更新选择器。",
+    "explanation": "模块接收一个事件驱动输入 i_driveFromUpdateSplitter_1 及其关联的7位数据，经过Fifo1缓冲后，由loadAndStoreSelector根据数据内容区分加载或存储操作，分别送入loadFifo和storeFifo，再通过loadOrStoreMutexMerge互斥合并后输出事件 o_driveToStateUpdateSelector_1。同时，模块内部维护状态机（由assign依赖中的w_nextState_4等信号体现），并输出12位状态有效信号 o_stateValid_12。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -33,7 +33,9 @@
       "i_driveFromUpdateSplitter_1",
       "i_fromUpdateSplitterData_7",
       "o_driveToStateUpdateSelector_1",
-      "o_stateValid_12"
+      "o_stateValid_12",
+      "o_freeToUpdateSplitter_1",
+      "i_freeFromStateUpdateSelector_1"
     ],
     "instances": [
       "Fifo1",
@@ -57,6 +59,9 @@
       },
       {
         "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+      },
+      {
+        "source": "rtl/rtl/Lsu/stateUpdate.v"
       }
     ]
   },
@@ -242,7 +247,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+          "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -277,7 +282,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+          "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -318,7 +323,7 @@
         ],
         "summary": "other_ports ports, count=3, directions=input:1, output:2",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+          "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -335,8 +340,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_stateUpdate_i_driveFromUpdateSplitter_1.json",
       "reader_takeaway": {
-        "value": "文档应重点描述事件如何通过loadAndStoreSelector分支，以及如何通过loadOrStoreMutexMerge互斥合并。",
-        "explanation": "该流的核心语义是事件的分发和汇聚。loadAndStoreSelector的分支逻辑和loadOrStoreMutexMerge的互斥仲裁机制是理解流行为的关键。文档应解释分支条件（如基于事件类型）和合并仲裁策略（如优先级或轮询），但当前上下文未提供这些细节。",
+        "value": "最终手册应重点描述事件如何通过loadAndStoreSelector分流，以及loadOrStoreMutexMerge如何互斥合并两路事件。",
+        "explanation": "该流的核心语义是事件的分发与有序合并，分流和合并节点的行为是理解流的关键。FIFO的缓冲作用次之。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -348,7 +353,8 @@
           "w_loadAndStoreSelectorToLoadFifo_1",
           "w_loadAndStoreSelectorToStoreFifo_1",
           "w_loadFifoDrive_1",
-          "w_storeFifoDrive_1"
+          "w_storeFifoDrive_1",
+          "o_driveToStateUpdateSelector_1"
         ],
         "instances": [
           "loadAndStoreSelector",
@@ -358,22 +364,21 @@
         "related_assignments": [
           "16"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:stateUpdate:flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
           "ev:stateUpdate:semantic_flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-            "path": "flow_graph.assignment_dependencies"
+            "source": "knowledge_ir/modules/stateUpdate.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "从更新拆分器接收的单个事件驱动，经过FIFO缓冲、负载/存储选择器分支、独立FIFO路径，最终由互斥合并器合并后输出到状态更新选择器。",
-            "explanation": "该流描述了一个从输入端口i_driveFromUpdateSplitter_1进入的事件，经过Fifo1缓冲后，由loadAndStoreSelector根据事件类型（负载或存储）分叉到两个独立的FIFO路径（loadFifo和storeFifo），最后通过loadOrStoreMutexMerge互斥合并器合并为单一输出o_driveToStateUpdateSelector_1。该流是模块stateUpdate内部的核心事件传播路径，用于将更新事件分发并重新汇聚。",
+            "value": "该驱动流将来自更新分配器的事件，经过一级FIFO缓冲、负载/存储选择器分流、两路独立FIFO缓存，最终通过互斥合并器输出到状态更新选择器。",
+            "explanation": "流从输入端口i_driveFromUpdateSplitter_1进入，首先由Fifo1缓冲，然后由loadAndStoreSelector根据事件类型分流至loadFifo或storeFifo，两路FIFO输出经loadOrStoreMutexMerge互斥合并后，从o_driveToStateUpdateSelector_1输出。该流实现了事件的分发与有序合并。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -409,18 +414,16 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/stateUpdate.json",
-                "path": "internal_event_flow"
+                "source": "knowledge_ir/modules/stateUpdate.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "parser_pipeline_rtl/modules/stateUpdate.json"
               }
             ]
           },
           {
-            "value": "输入事件有自由信号o_freeToUpdateSplitter_1，输出事件有自由信号i_freeFromStateUpdateSelector_1，表明存在背压机制。",
-            "explanation": "输入端口i_driveFromUpdateSplitter_1关联自由信号o_freeToUpdateSplitter_1，输出端口o_driveToStateUpdateSelector_1关联自由信号i_freeFromStateUpdateSelector_1。这表明流中的FIFO和合并器可能通过自由信号实现背压控制，但具体实现细节（如自由信号如何与内部组件交互）未在上下文中明确。",
+            "value": "流中多个FIFO和合并器可能引入背压，但具体完成或空闲信号未在上下文中明确。",
+            "explanation": "输入端口有o_freeToUpdateSplitter_1作为空闲信号，输出端口有i_freeFromStateUpdateSelector_1作为空闲信号，但内部组件的背压信号（如FIFO的满/空标志）未提供。因此，背压传播路径不明确。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -448,14 +451,13 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/stateUpdate.json",
-                "path": "interface"
+                "source": "knowledge_ir/modules/stateUpdate.json"
               }
             ]
           },
           {
-            "value": "7位数据负载与事件驱动信号i_driveFromUpdateSplitter_1关联，随事件流经整个路径。",
-            "explanation": "输入数据i_fromUpdateSplitterData_7通过Fifo1的i_data_7端口进入，与事件驱动信号同步。该数据负载可能包含更新信息（如地址或操作码），并随事件经过分支和合并路径，最终输出到o_driveToStateUpdateSelector_1。但输出端口的payloads列表为空，表明数据负载可能在路径中被消耗或转换。",
+            "value": "输入数据i_fromUpdateSplitterData_7与事件i_driveFromUpdateSplitter_1关联，随事件流经Fifo1，但后续路径中数据信号未明确连接。",
+            "explanation": "数据信号i_fromUpdateSplitterData_7仅连接到Fifo1的输入数据端口，后续组件（loadAndStoreSelector、loadFifo、storeFifo、loadOrStoreMutexMerge）的数据连接未在上下文中提供。因此，数据是否随事件传递至输出端不确定。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -478,12 +480,7 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/stateUpdate.json",
-                "path": "interface_data_contract"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-                "path": "connection_graph"
+                "source": "knowledge_ir/modules/stateUpdate.json"
               }
             ]
           }
@@ -501,11 +498,11 @@
     "components": 5,
     "assignments": 19,
     "evidence_gaps": 0,
-    "review_questions": 2
+    "review_questions": 1
   },
   "source_review_context": {
     "module": "stateUpdate",
-    "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+    "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "cpu_slot",
-  "input_hash": "98fe10a5051c2a48f82e44732b5d444da4156b6bfb1231023fda885b86b6d705",
+  "input_hash": "f7c3efb63efb624891a835420ae828dfaee75f7ee577edc206adfb6c61b27213",
   "source_context": "ai_context/modules/cpu_slot.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\slot\\cpu_slot.v",
+      "source": "rtl/rtl/slot/cpu_slot.v",
       "paths": [
         "module_source"
       ]
@@ -40,20 +40,20 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\slot\\cpu_slot.v",
+        "rtl_file": "rtl/rtl/slot/cpu_slot.v",
         "parser_module": "modules/cpu_slot.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 15,
+    "count": 13,
     "by_type": {
-      "assignment_interpretation": 1,
-      "component_role": 8,
+      "component_role": 3,
       "documentation_focus": 2,
       "interface_intent": 2,
       "module_role": 1,
-      "structural_responsibility": 1
+      "source_review_request": 3,
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -63,26 +63,24 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "summary": "该模块是SoC中一个CPU槽位的顶层容器，负责管理CPU核心与Mesh网络及本地存储之间的数据与事件交互。",
+      "summary": "cpu_slot 是 SoC 拓扑中一个 CPU 核心的完整槽位，负责将 CPU 核心与片上网络 (Mesh) 及本地内存子系统进行桥接和事件驱动交互。",
       "subject": "cpu_slot",
-      "explanation": "模块通过事件驱动接口与Mesh网络通信，内部包含CPU核心、内存槽和数据多路复用器，处理初始化序列和中断信号。",
+      "explanation": "该模块通过事件驱动接口 (i_driveFromMesh/o_driveToMesh) 与 Mesh 通信，内部包含 CPU 核心 (u_cpu_core)、内存槽 (u_memory_slot) 和数据多路选择器 (data_mux)，并拥有独立的初始化事件链 (SoCStart, select2, event2CPU)，表明其是一个自包含的 CPU 子系统槽位。",
       "signals": [
         "i_driveFromMesh",
         "o_driveToMesh",
-        "i_IntSig",
         "i_dataFMesh",
         "o_data2Mesh",
         "i_freeFMesh",
-        "o_free2Mesh",
-        "initMode"
+        "o_free2Mesh"
       ],
       "instances": [
-        "data_mux",
         "u_cpu_core",
         "u_memory_slot",
-        "cfifo0",
-        "event2CPU",
+        "data_mux",
         "select2",
+        "event2CPU",
+        "cfifo0",
         "SoCStart",
         "UARTInitStart"
       ],
@@ -108,14 +106,16 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "summary": "模块通过data_mux实例在Mesh网络、CPU核心和内存槽之间路由数据，并处理事件驱动的数据流。",
-      "subject": "数据路径路由与仲裁",
-      "explanation": "data_mux接收来自Mesh、CPU LSU和Dcache的事件，并输出到Mesh、CPU和Dcache，实现数据路径的多路复用。",
+      "summary": "cpu_slot 通过 data_mux 实例，在来自 Mesh、本地 Dcache 和 CPU LSU 的三个事件驱动源之间进行数据路径仲裁，并将结果转发至 Mesh 或本地内存。",
+      "subject": "事件驱动的数据路径仲裁与转发",
+      "explanation": "data_mux 接收三个输入事件 (i_driveFromMesh, w_driveDcache2Mux, w_lsuDriveToDataRout_1) 并产生三个输出事件 (o_driveToMesh, w_dataRoutDriveToLsu_1, w_driveMux2Dcache)，表明其核心功能是仲裁来自不同源的数据请求并路由到正确的目标。",
       "signals": [
-        "i_dataFMesh",
-        "o_data2Mesh",
-        "w_lsuToDataRoutData_105",
-        "w_dcacheData_64"
+        "i_driveFromMesh",
+        "w_driveDcache2Mux",
+        "w_lsuDriveToDataRout_1",
+        "o_driveToMesh",
+        "w_dataRoutDriveToLsu_1",
+        "w_driveMux2Dcache"
       ],
       "instances": [
         "data_mux"
@@ -137,21 +137,65 @@
       "id": "semantic:module:cpu_slot:structural_responsibility:001"
     },
     {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "cpu_slot"
+      },
+      "summary": "cpu_slot 包含一个由 SoCStart 和 UARTInitStart 事件源驱动的初始化序列，通过 select2 选择器将初始化事件分发至内部 (cfifo0/delayInnerInit) 和外部 (event2CPU) 路径，最终启动 CPU 核心。",
+      "subject": "CPU 核心初始化与启动序列",
+      "explanation": "SoCStart 产生 w_drv2initMode 事件，经 delayInit 延迟后驱动 select2，select2 将事件分发给 cfifo0 (内部初始化) 和 event2CPU (外部/IO网络初始化)。event2CPU 合并来自 select2 和 UARTInitStart 的事件后，产生 w_driveFromStart_1 事件驱动 u_cpu_core。这表明存在一个可控的、分阶段的 CPU 启动流程。",
+      "signals": [
+        "initMode",
+        "w_drv2initMode",
+        "w_drv2initMode_delay",
+        "w_drv2IONetInit",
+        "w_drv2InnerInit",
+        "w_driveFromStart_1"
+      ],
+      "instances": [
+        "SoCStart",
+        "UARTInitStart",
+        "delayInit",
+        "select2",
+        "event2CPU",
+        "cfifo0",
+        "u_cpu_core"
+      ],
+      "related_flows": [
+        "flow_000_cpu_slot_i_driveFromMesh"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
+        }
+      ],
+      "id": "semantic:module:cpu_slot:structural_responsibility:002"
+    },
+    {
       "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "cpu_slot"
       },
-      "subject": "data_mux",
-      "summary": "数据多路复用器，作为CPU核心、Mesh网络和内存槽之间的数据交换中心。",
-      "explanation": "它接收来自Mesh、Dcache和CPU LSU的事件，并路由数据到Mesh、CPU和Dcache，实现数据路径的集中管理。",
+      "subject": "data_mux (data_slot)",
+      "summary": "data_mux 是 cpu_slot 的数据路径核心仲裁器，负责在 Mesh 请求、Dcache 回传和 CPU LSU 请求之间进行选择，并路由数据。",
+      "explanation": "data_mux 连接了三个事件驱动源和三个数据目标，其输入/输出事件和数据端口清晰地表明它执行数据路径的交叉开关或多路选择功能，是模块内数据流的关键节点。",
       "signals": [
         "i_driveFromMesh",
         "w_driveDcache2Mux",
         "w_lsuDriveToDataRout_1",
         "o_driveToMesh",
         "w_dataRoutDriveToLsu_1",
-        "w_driveMux2Dcache"
+        "w_driveMux2Dcache",
+        "i_dataFMesh",
+        "o_data2Mesh"
       ],
       "instances": [
         "data_mux"
@@ -178,80 +222,12 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "subject": "u_cpu_core",
-      "summary": "CPU核心模块，执行指令并生成对内存和I/O的访问请求。",
-      "explanation": "它接收来自数据路径和初始化事件的事件，并输出指令缓存和LSU驱动事件，是模块的计算核心。",
-      "signals": [
-        "w_dataRoutDriveToLsu_1",
-        "w_driveFromStart_1",
-        "w_drvIcache2CPU",
-        "w_drvCpu2Icache",
-        "w_lsuDriveToDataRout_1"
-      ],
-      "instances": [
-        "u_cpu_core"
-      ],
-      "related_flows": [
-        "flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
-        }
-      ],
-      "id": "semantic:module:cpu_slot:component_role:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_slot"
-      },
-      "subject": "u_memory_slot",
-      "summary": "内存槽模块，管理CPU核心的指令和数据缓存访问。",
-      "explanation": "它接收来自数据路径和CPU核心的事件，并返回缓存数据，是模块的存储子系统。",
-      "signals": [
-        "w_driveMux2Dcache",
-        "w_drvCpu2Icache",
-        "w_driveDcache2Mux",
-        "w_drvIcache2CPU"
-      ],
-      "instances": [
-        "u_memory_slot"
-      ],
-      "related_flows": [
-        "flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
-        }
-      ],
-      "id": "semantic:module:cpu_slot:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_slot"
-      },
-      "subject": "select2",
-      "summary": "初始化路径选择器，根据initMode信号将初始化事件路由到内部或I/O网络。",
-      "explanation": "它接收延迟后的initMode事件，并输出到cfifo0和event2CPU，决定初始化序列的走向。",
+      "subject": "select2 (cSelector2_1b)",
+      "summary": "select2 是一个基于 initMode 信号的选择器，用于将初始化事件路由到内部 (cfifo0) 或外部 (event2CPU) 路径，实现初始化模式选择。",
+      "explanation": "select2 接收延迟后的 initMode 事件 (w_drv2initMode_delay) 和 initMode 信号作为数据选择，输出两个事件分别驱动内部初始化 (cfifo0) 和 IO网络初始化 (event2CPU)。这表明它根据 initMode 的值决定 CPU 的初始化策略。",
       "signals": [
         "w_drv2initMode_delay",
+        "initMode",
         "w_drv2IONetInit",
         "w_drv2InnerInit"
       ],
@@ -272,7 +248,7 @@
           "source": "parser_pipeline_rtl/modules/cpu_slot.json"
         }
       ],
-      "id": "semantic:module:cpu_slot:component_role:004"
+      "id": "semantic:module:cpu_slot:component_role:002"
     },
     {
       "claim_type": "component_role",
@@ -280,16 +256,17 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "subject": "event2CPU",
-      "summary": "事件合并器，将来自I/O网络和UART初始化的事件合并后发送给CPU核心。",
-      "explanation": "它接收w_drv2IONetInit和w_drv2MemUARTRoad事件，并输出w_driveFromStart_1，作为CPU核心的启动信号。",
+      "subject": "event2CPU (cMutexMerge2_1b)",
+      "summary": "event2CPU 是一个互斥合并器，将来自 select2 (IO网络初始化) 和 UARTInitStart (UART初始化) 的初始化事件合并为单个启动事件驱动 CPU 核心。",
+      "explanation": "event2CPU 接收两个输入事件 (w_drv2IONetInit, w_drv2MemUARTRoad&UART_INIT_SEL) 并产生一个输出事件 (w_driveFromStart_1) 连接到 u_cpu_core。这表明 CPU 核心的启动可以由 IO网络初始化完成或 UART 初始化完成，两者是互斥的。",
       "signals": [
         "w_drv2IONetInit",
         "w_drv2MemUARTRoad",
         "w_driveFromStart_1"
       ],
       "instances": [
-        "event2CPU"
+        "event2CPU",
+        "u_cpu_core"
       ],
       "related_flows": [
         "flow_000_cpu_slot_i_driveFromMesh"
@@ -305,134 +282,7 @@
           "source": "parser_pipeline_rtl/modules/cpu_slot.json"
         }
       ],
-      "id": "semantic:module:cpu_slot:component_role:005"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_slot"
-      },
-      "subject": "SoCStart",
-      "summary": "SoC启动事件源，生成初始化序列的起始事件。",
-      "explanation": "它输出w_drv2initMode事件，触发整个初始化流程。",
-      "signals": [
-        "w_drv2initMode"
-      ],
-      "instances": [
-        "SoCStart"
-      ],
-      "related_flows": [
-        "flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
-        }
-      ],
-      "id": "semantic:module:cpu_slot:component_role:006"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_slot"
-      },
-      "subject": "UARTInitStart",
-      "summary": "UART初始化事件源，生成UART初始化路径的起始事件。",
-      "explanation": "它输出w_drv2MemUARTRoad事件，用于UART相关的初始化序列。",
-      "signals": [
-        "w_drv2MemUARTRoad"
-      ],
-      "instances": [
-        "UARTInitStart"
-      ],
-      "related_flows": [
-        "flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
-        }
-      ],
-      "id": "semantic:module:cpu_slot:component_role:007"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "cpu_slot"
-      },
-      "subject": "cfifo0",
-      "summary": "内部初始化FIFO，用于缓冲内部初始化事件。",
-      "explanation": "它接收来自select2的w_drv2InnerInit事件，但输出事件未在上下文中明确，可能用于内部同步。",
-      "signals": [
-        "w_drv2InnerInit"
-      ],
-      "instances": [
-        "cfifo0"
-      ],
-      "related_flows": [
-        "flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
-        }
-      ],
-      "id": "semantic:module:cpu_slot:component_role:008"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "cpu_slot"
-      },
-      "subject": "w_cpuToIcache_105",
-      "summary": "将CPU核心的取指地址、数据和写使能打包成105位宽的总线信号，用于指令缓存访问。",
-      "explanation": "该赋值将w_fetchAddr_33、w_fetchData_64和w_fetchWen_8拼接成w_cpuToIcache_105，是CPU到指令缓存的数据路径。",
-      "signals": [
-        "w_cpuToIcache_105",
-        "w_fetchAddr_33",
-        "w_fetchData_64",
-        "w_fetchWen_8"
-      ],
-      "related_assignments": [
-        "0"
-      ],
-      "related_flows": [
-        "flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_slot.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
-        }
-      ],
-      "id": "semantic:module:cpu_slot:assignment_interpretation:001"
+      "id": "semantic:module:cpu_slot:component_role:003"
     },
     {
       "claim_type": "interface_intent",
@@ -440,9 +290,9 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "summary": "模块通过事件驱动接口与Mesh网络进行数据交换，使用i_driveFromMesh/o_driveToMesh事件和i_dataFMesh/o_data2Mesh数据。",
-      "subject": "Mesh网络接口",
-      "explanation": "事件驱动信号控制数据流，free信号用于流控制，表明这是一个基于握手的通信协议。",
+      "summary": "cpu_slot 与 Mesh 的接口采用事件-数据-释放 (event-data-free) 协议，事件驱动数据交换，释放信号用于流控。",
+      "subject": "Mesh 接口 (i_driveFromMesh / o_driveToMesh)",
+      "explanation": "接口包含成对的事件 (i_driveFromMesh/o_driveToMesh)、数据 (i_dataFMesh/o_data2Mesh) 和释放信号 (i_freeFMesh/o_free2Mesh)。事件触发数据传输，释放信号可能用于指示数据已被消费或通道空闲，形成完整的握手协议。",
       "signals": [
         "i_driveFromMesh",
         "o_driveToMesh",
@@ -457,7 +307,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/cpu_slot.json"
@@ -474,16 +324,16 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "summary": "模块接收6位中断信号i_IntSig，直接传递给CPU核心，用于外部中断处理。",
-      "subject": "中断接口",
-      "explanation": "该信号直接连接到u_cpu_core，表明是CPU核心的中断输入。",
+      "summary": "u_cpu_core 通过独立的事件驱动接口与指令缓存 (ICache) 和数据路径 (LSU) 交互，表明其内部具有分离的取指和加载/存储单元。",
+      "subject": "CPU 核心接口 (u_cpu_core)",
+      "explanation": "u_cpu_core 拥有独立的 ICache 事件接口 (w_drvCpu2Icache/w_drvIcache2CPU) 和 LSU 数据路径接口 (w_lsuDriveToDataRout_1/w_dataRoutDriveToLsu_1)，这符合经典哈佛架构或分离的指令/数据缓存设计。",
       "signals": [
-        "i_IntSig"
+        "w_drvCpu2Icache",
+        "w_drvIcache2CPU",
+        "w_lsuDriveToDataRout_1",
+        "w_dataRoutDriveToLsu_1"
       ],
-      "related_payload": [
-        "i_IntSig"
-      ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -502,9 +352,9 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "summary": "文档应重点描述模块的初始化流程，包括SoCStart、select2、event2CPU和cfifo0的交互。",
-      "subject": "初始化序列",
-      "explanation": "初始化序列涉及多个组件，从SoCStart事件源开始，经过select2路由，最终到达CPU核心或内部FIFO，是模块的关键控制路径。",
+      "summary": "文档应重点描述 cpu_slot 的初始化流程，包括 SoCStart/UARTInitStart 事件源、select2 的模式选择、event2CPU 的合并逻辑以及最终如何启动 CPU 核心。",
+      "subject": "初始化序列与模式选择",
+      "explanation": "初始化序列是模块的关键控制路径，涉及多个组件和模式选择 (initMode)。理解此流程对于正确配置和使用 CPU 槽位至关重要。",
       "signals": [
         "initMode",
         "w_drv2initMode",
@@ -515,6 +365,8 @@
       ],
       "instances": [
         "SoCStart",
+        "UARTInitStart",
+        "delayInit",
         "select2",
         "event2CPU",
         "cfifo0"
@@ -541,14 +393,18 @@
         "type": "module",
         "module": "cpu_slot"
       },
-      "summary": "文档应详细说明data_mux如何在不同数据源之间进行路由和仲裁。",
-      "subject": "数据路径路由",
-      "explanation": "data_mux是数据路径的核心，连接Mesh、CPU和内存槽，其路由逻辑直接影响模块性能。",
+      "summary": "文档应详细说明 data_mux 如何仲裁来自 Mesh、Dcache 和 CPU LSU 的数据请求，以及释放信号 (free) 在流控中的作用。",
+      "subject": "数据路径仲裁与流控",
+      "explanation": "data_mux 是数据路径的核心，其仲裁策略直接影响性能。同时，Mesh 接口的释放信号 (i_freeFMesh/o_free2Mesh) 是理解端到端流控的关键，需要明确其语义。",
       "signals": [
-        "i_dataFMesh",
-        "o_data2Mesh",
-        "w_lsuToDataRoutData_105",
-        "w_dcacheData_64"
+        "i_driveFromMesh",
+        "w_driveDcache2Mux",
+        "w_lsuDriveToDataRout_1",
+        "o_driveToMesh",
+        "w_dataRoutDriveToLsu_1",
+        "w_driveMux2Dcache",
+        "i_freeFMesh",
+        "o_free2Mesh"
       ],
       "instances": [
         "data_mux"
@@ -558,7 +414,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/cpu_slot.json"
@@ -568,16 +424,105 @@
         }
       ],
       "id": "semantic:module:cpu_slot:documentation_focus:002"
-    }
-  ],
-  "evidence_gaps": [
-    {
-      "field": "cfifo0输出事件",
-      "reason": "上下文中未明确cfifo0的输出事件，需要RTL源码确认其连接和功能。"
     },
     {
-      "field": "初始化序列详细时序",
-      "reason": "上下文中未提供初始化事件的时序关系，需要RTL源码或波形确认。"
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "cpu_slot"
+      },
+      "reason": "当前上下文仅表明释放信号是事件 (event_free)，但其精确的握手协议 (例如，是表示数据已接收、通道空闲还是反压信号) 不明确，需要查看 RTL 源中的赋值或状态机逻辑。",
+      "subject": "释放信号 (free) 的精确语义",
+      "needed_source_slice": "assign block, always block",
+      "signals": [
+        "i_freeFMesh",
+        "o_free2Mesh"
+      ],
+      "instances": [
+        "data_mux"
+      ],
+      "related_flows": [
+        "flow_000_cpu_slot_i_driveFromMesh"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
+        }
+      ],
+      "id": "semantic:module:cpu_slot:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "cpu_slot"
+      },
+      "reason": "当前上下文仅显示 data_mux 的输入/输出连接，但其内部仲裁逻辑 (例如，固定优先级、轮询或基于某种条件) 未知，需要查看 RTL 源以确定其行为。",
+      "subject": "data_mux 的仲裁策略",
+      "needed_source_slice": "always block, assign block",
+      "signals": [
+        "i_driveFromMesh",
+        "w_driveDcache2Mux",
+        "w_lsuDriveToDataRout_1"
+      ],
+      "instances": [
+        "data_mux"
+      ],
+      "related_flows": [
+        "flow_000_cpu_slot_i_driveFromMesh"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
+        }
+      ],
+      "id": "semantic:module:cpu_slot:source_review_request:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "cpu_slot"
+      },
+      "reason": "当前上下文表明 event2CPU 是互斥合并器，但未说明当两个输入事件同时到达时的处理方式 (例如，是忽略一个、排队还是产生错误)，需要查看 RTL 源。",
+      "subject": "event2CPU 的互斥合并逻辑",
+      "needed_source_slice": "always block, assign block",
+      "signals": [
+        "w_drv2IONetInit",
+        "w_drv2MemUARTRoad",
+        "w_driveFromStart_1"
+      ],
+      "instances": [
+        "event2CPU"
+      ],
+      "related_flows": [
+        "flow_000_cpu_slot_i_driveFromMesh"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_slot.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_slot.json"
+        }
+      ],
+      "id": "semantic:module:cpu_slot:source_review_request:003"
     }
-  ]
+  ],
+  "evidence_gaps": []
 }

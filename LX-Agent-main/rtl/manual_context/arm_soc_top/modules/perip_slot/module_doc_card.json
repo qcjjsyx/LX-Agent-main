@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "perip_slot",
-  "source_file": "rtl\\rtl\\IONet\\GPIO\\perip_slot.v",
+  "source_file": "rtl/rtl/IONet/GPIO/perip_slot.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -17,13 +17,13 @@
       "internal_components_and_assignments",
       "evidence_gaps"
     ],
-    "review_needed": false
+    "review_needed": true
   },
   "purpose": {
-    "value": "外围设备插槽模块，负责在Mesh网络与外围设备之间进行事件驱动的数据转发与同步。",
-    "explanation": "模块通过事件驱动信号（i_driveFrmMesh/o_driveNextToMesh）和空闲信号（i_freeNextFrmMesh/o_freeToMesh）与Mesh网络交互，内部使用两个Fifo1实例（cFifo_1和cFifo_2）和延迟链（delay0/delay1）实现事件流的分级传递与同步，数据路径通过data_from/data_to（51位）和data_i/data_o/addr_i（32位）接口实现。",
+    "value": "外围设备插槽模块，负责在Mesh网络与外围设备之间进行驱动事件和释放事件的流水线缓冲与延迟同步。",
+    "explanation": "模块通过两个cFifo1实例（cFifo_1和cFifo_2）以及两级延迟单元（delay0、delay1）构成驱动事件链，将来自Mesh的输入驱动事件（i_driveFrmMesh）经过缓冲和延迟后输出到Mesh（o_driveNextToMesh）。释放事件路径则直接通过cFifo_1和cFifo_2的释放端口（o_freeToMesh、i_freeNextFrmMesh）实现。数据路径（data_from、data_to、addr_i、data_i、data_o）表明模块同时承担数据转发功能，但事件与数据的精确耦合关系尚不明确。",
     "certainty": "ai_inferred",
-    "confidence": "high",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
@@ -36,44 +36,32 @@
       "o_freeToMesh",
       "data_from",
       "data_to",
+      "addr_i",
       "data_i",
-      "data_o",
-      "addr_i"
+      "data_o"
     ],
     "instances": [
       "cFifo_1",
-      "cFifo_2",
-      "delay0",
-      "delay1",
-      "f2p_we"
+      "cFifo_2"
     ],
     "related_flows": [
       "flow_000_perip_slot_i_driveFrmMesh"
     ],
     "related_assignments": [],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:perip_slot:semantic_module"
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_inputs"
+        "source": "knowledge_ir/modules/perip_slot.json"
       },
       {
-        "source": "interface.event_outputs"
+        "source": "parser_pipeline_rtl/modules/perip_slot.json"
       },
       {
-        "source": "interface.free_inputs"
-      },
-      {
-        "source": "interface.free_outputs"
-      },
-      {
-        "source": "key_component_connections"
-      },
-      {
-        "source": "internal_event_flow_refs"
+        "source": "rtl/rtl/IONet/GPIO/perip_slot.v"
       }
     ]
   },
@@ -328,7 +316,7 @@
         ],
         "summary": "clock_reset_init ports, count=2, directions=input:2",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\GPIO\\perip_slot.v",
+          "rtl_file": "rtl/rtl/IONet/GPIO/perip_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -363,7 +351,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\GPIO\\perip_slot.v",
+          "rtl_file": "rtl/rtl/IONet/GPIO/perip_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -398,7 +386,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\GPIO\\perip_slot.v",
+          "rtl_file": "rtl/rtl/IONet/GPIO/perip_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -457,7 +445,7 @@
         ],
         "summary": "other_ports ports, count=6, directions=input:2, output:4",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\GPIO\\perip_slot.v",
+          "rtl_file": "rtl/rtl/IONet/GPIO/perip_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -474,23 +462,31 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_perip_slot_i_driveFrmMesh.json",
       "reader_takeaway": {
-        "value": "该流仅传输事件驱动信号，不携带任何数据载荷。",
-        "explanation": "根据接口载荷契约，输入事件i_driveFrmMesh和输出事件o_driveNextToMesh均无关联的载荷信号。流中所有步骤仅传递事件驱动信号，无数据选择或条件控制。",
+        "value": "手册应重点描述该流作为单向事件管道的拓扑结构、延迟单元的作用以及FIFO的潜在阻塞行为。",
+        "explanation": "该流结构清晰，由FIFO和延迟单元串联而成。延迟单元（delay0和delay1）的延迟周期数（64和32）是手册中应明确的关键参数。FIFO的流控行为需基于RTL源码补充。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:perip_slot:flow_000_perip_slot_i_driveFrmMesh:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:perip_slot:flow_000_perip_slot_i_driveFrmMesh:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
           "i_driveFrmMesh",
+          "w_drv2Fifo2",
+          "w_drv2Fifo2_delay1",
+          "w_drv2Fifo2_delay2",
           "o_driveNextToMesh"
         ],
-        "instances": [],
+        "instances": [
+          "cFifo_1",
+          "delay0",
+          "delay1",
+          "cFifo_2"
+        ],
         "related_flows": [],
         "related_assignments": [
-          "(无)"
+          "(none)"
         ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
@@ -500,62 +496,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "parser_module"
+            "source": "instances.connections",
+            "path": "parser_pipeline_rtl/modules/perip_slot.json"
           },
           {
-            "source": "interface.data_ports",
-            "path": "parser_module"
+            "source": "transparent_flows",
+            "path": "parser_pipeline_rtl/modules/perip_slot.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "应重点描述事件驱动信号在两级FIFO和两级延迟单元间的串联传播路径，并强调FIFO作为潜在阻塞点的作用。",
-            "explanation": "该流结构简单，无分支或数据载荷。手册应清晰说明信号从输入到输出的完整路径，并解释FIFO可能引入的等待或背压机制。延迟单元的作用（固定周期延迟）也应明确。",
-            "certainty": "ai_inferred",
-            "confidence": "high",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:perip_slot:flow_000_perip_slot_i_driveFrmMesh:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFrmMesh",
-              "w_drv2Fifo2",
-              "w_drv2Fifo2_delay1",
-              "w_drv2Fifo2_delay2",
-              "o_driveNextToMesh"
-            ],
-            "instances": [
-              "cFifo_1",
-              "delay0",
-              "delay1",
-              "cFifo_2"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:perip_slot:flow:flow_000_perip_slot_i_driveFrmMesh",
-              "ev:perip_slot:semantic_flow:flow_000_perip_slot_i_driveFrmMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "flow.steps",
-                "path": "compact_context"
-              },
-              {
-                "source": "flow.blocking_points",
-                "path": "compact_context"
-              }
-            ]
-          },
-          {
-            "value": "从外部网格接收事件驱动信号，经过两级FIFO缓冲和两级延迟单元后，输出驱动信号返回网格。",
-            "explanation": "该流是一个单向的、无分支的事件驱动路径，从输入端口i_driveFrmMesh开始，依次经过cFifo_1、delay0、delay1和cFifo_2，最终从输出端口o_driveNextToMesh输出。流中不存在分支或汇合点，所有步骤均为串联。",
+            "value": "从Mesh侧输入的驱动事件经过两级FIFO和两级延迟后输出至Mesh侧，构成一个单向、可阻塞的事件传输管道。",
+            "explanation": "该流从输入端口i_driveFrmMesh开始，依次经过cFifo_1、delay0、delay1、cFifo_2，最终从输出端口o_driveNextToMesh送出。流中无分支或合并点，两个FIFO实例是唯一的阻塞点，延迟单元为透明直通。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -578,7 +530,7 @@
             ],
             "related_flows": [],
             "related_assignments": [
-              "(无)"
+              "(none)"
             ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
@@ -589,24 +541,24 @@
             "semantic_evidence": [
               {
                 "source": "instances.connections",
-                "path": "parser_module"
+                "path": "parser_pipeline_rtl/modules/perip_slot.json"
               },
               {
                 "source": "transparent_flows",
-                "path": "parser_module"
+                "path": "parser_pipeline_rtl/modules/perip_slot.json"
               }
             ]
           },
           {
-            "value": "该流存在关联的空闲信号，但当前上下文未提供其与事件驱动信号的直接耦合关系。",
-            "explanation": "接口载荷契约指出，输入事件i_driveFrmMesh关联空闲信号o_freeToMesh，输出事件o_driveNextToMesh关联空闲信号i_freeNextFrmMesh。然而，当前流步骤和连接中未包含这些空闲信号，因此无法确定它们如何与FIFO的满/空状态交互。",
+            "value": "流中两个FIFO实例是潜在的阻塞点，但具体流控机制（如反压信号）未在提供的上下文中明确。",
+            "explanation": "流步骤中标记cFifo_1和cFifo_2为阻塞点，但无相关赋值依赖或显式反压路径。接口中的o_freeToMesh和i_freeNextFrmMesh可能承载流控信息，但置信度低，需RTL源码确认。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:perip_slot:flow_000_perip_slot_i_driveFrmMesh:completion_backpressure:001",
-            "doc_priority": "reference",
+            "doc_priority": "secondary",
             "signals": [
               "o_freeToMesh",
               "i_freeNextFrmMesh"
@@ -626,11 +578,45 @@
             "semantic_evidence": [
               {
                 "source": "interface.event_ports",
-                "path": "parser_module"
+                "path": "knowledge_ir/modules/perip_slot.json"
+              }
+            ]
+          },
+          {
+            "value": "该流为纯事件驱动流，无显式数据载荷，流控通过FIFO的满/空状态隐式实现。",
+            "explanation": "接口载荷契约显示i_driveFrmMesh和o_driveNextToMesh均无关联数据载荷信号。流控信号o_freeToMesh和i_freeNextFrmMesh存在但置信度低，表明流控机制可能由FIFO内部状态驱动，而非通过显式赋值依赖。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:perip_slot:flow_000_perip_slot_i_driveFrmMesh:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_driveFrmMesh",
+              "o_driveNextToMesh",
+              "o_freeToMesh",
+              "i_freeNextFrmMesh"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "(none)"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:perip_slot:flow:flow_000_perip_slot_i_driveFrmMesh",
+              "ev:perip_slot:semantic_flow:flow_000_perip_slot_i_driveFrmMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports",
+                "path": "knowledge_ir/modules/perip_slot.json"
               },
               {
                 "source": "interface.data_ports",
-                "path": "parser_module"
+                "path": "knowledge_ir/modules/perip_slot.json"
               }
             ]
           }
@@ -652,7 +638,7 @@
   },
   "source_review_context": {
     "module": "perip_slot",
-    "rtl_file": "rtl\\rtl\\IONet\\GPIO\\perip_slot.v",
+    "rtl_file": "rtl/rtl/IONet/GPIO/perip_slot.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

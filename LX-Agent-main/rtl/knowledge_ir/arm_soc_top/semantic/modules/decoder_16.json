@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "decoder_16",
-  "input_hash": "fc4b8878121747019efe187189b53f82a8a11df59177eac408d5dbb2c7528d87",
+  "input_hash": "6da94549a0af8d2494f3c308098289a2cb199f60c9292efe6eb4f1f8c26d4d78",
   "source_context": "ai_context/modules/decoder_16.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\Decode\\decoder_16.v",
+      "source": "rtl/rtl/Decode/decoder_16.v",
       "paths": [
         "module_source"
       ]
@@ -40,18 +40,20 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\Decode\\decoder_16.v",
+        "rtl_file": "rtl/rtl/Decode/decoder_16.v",
         "parser_module": "modules/decoder_16.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 14,
     "by_type": {
-      "assignment_interpretation": 8,
+      "assignment_interpretation": 3,
+      "documentation_focus": 2,
+      "interface_intent": 3,
       "module_role": 1,
-      "source_review_request": 1,
-      "structural_responsibility": 1
+      "source_review_request": 2,
+      "structural_responsibility": 3
     }
   },
   "claims": [
@@ -61,9 +63,9 @@
         "type": "module",
         "module": "decoder_16"
       },
-      "summary": "16位Thumb指令解码器，将输入的64位指令数据包解码为187位的发射数据和控制信号",
+      "summary": "16位Thumb指令解码器，将输入的16位指令字解码为187位内部微操作控制字，并生成异常编号和条件标志写使能。",
       "subject": "decoder_16",
-      "explanation": "模块接收i_drive事件驱动的64位指令数据，通过大量组合逻辑解码出指令类型、操作数、立即数、条件码等字段，打包成187位宽发射数据o_data_187，并输出异常编号o_excNum_4和NZCV写使能o_nzcvWen_4",
+      "explanation": "模块接收64位数据输入（包含32位PC、16位零扩展和16位指令），通过大量组合逻辑解码出指令类型、操作数、立即数、标志控制等字段，最终打包成187位的解码数据发送至发射阶段。同时根据指令类型和中断状态生成异常编号，并根据标志更新条件生成NZCV写使能信号。",
       "signals": [
         "i_data_64",
         "o_data_187",
@@ -78,10 +80,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_16.json"
+          "source": "modules/decoder_16.json"
         }
       ],
       "id": "semantic:module:decoder_16:module_role:001"
@@ -92,9 +94,9 @@
         "type": "module",
         "module": "decoder_16"
       },
-      "summary": "将输入的64位指令数据解码为187位发射数据包，包含指令类型、操作数、立即数、条件码、标志位控制等所有执行所需信息",
-      "subject": "指令解码与发射数据打包",
-      "explanation": "通过assign_dependencies中大量组合逻辑，将i_data_64拆分为w_pc_32、w_zero_16、w_int_16，再通过w_int_16[15:0]解码出各类指令标识（如w_andR_1、w_addSubR_1等），最终组合成w_decoderDataToLaunch_187输出",
+      "summary": "将16位Thumb指令解码为完整的执行控制信息，包括操作数、立即数、标志控制、加载/存储属性等，打包为187位宽的控制字。",
+      "subject": "指令解码与微操作生成",
+      "explanation": "从i_data_64中提取16位指令字段，通过assign_dependencies中大量指令类型识别信号（如w_andR_1, w_addSubR_1等）和字段提取信号（如w_rn_4, w_rd_4, w_rmOp2等），最终组合成w_decoderDataToLaunch_187并驱动o_data_187。该过程覆盖Thumb指令集的多种指令格式。",
       "signals": [
         "i_data_64",
         "o_data_187",
@@ -108,13 +110,73 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_16.json"
+          "source": "modules/decoder_16.json"
         }
       ],
       "id": "semantic:module:decoder_16:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "decoder_16"
+      },
+      "summary": "根据中断状态和分支指令类型生成4位异常编号，用于异常处理流程。",
+      "subject": "异常编号生成",
+      "explanation": "assign 226显示o_excNum_4由i_isInInt和w_bx_1决定：当处于中断且为BX指令时输出4'b0010，否则输出4'b1111。这表明模块在解码阶段初步判断异常类型。",
+      "signals": [
+        "o_excNum_4",
+        "i_isInInt",
+        "w_bx_1"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
+        }
+      ],
+      "id": "semantic:module:decoder_16:structural_responsibility:002"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "decoder_16"
+      },
+      "summary": "根据指令是否更新标志位，生成4位NZCV写使能信号，控制后续执行单元对条件标志的更新。",
+      "subject": "条件标志写使能控制",
+      "explanation": "assign 223显示o_nzcvWen_4由w_notUpdateV_1和w_notUpdatCandV_1组合控制：当不更新V时使能为4'b1110，当不更新C和V时使能为4'b1100，否则全使能4'b1111。这反映了不同指令对标志位更新的不同需求。",
+      "signals": [
+        "o_nzcvWen_4",
+        "w_notUpdateV_1",
+        "w_notUpdatCandV_1"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
+        }
+      ],
+      "id": "semantic:module:decoder_16:structural_responsibility:003"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -122,25 +184,29 @@
         "type": "module",
         "module": "decoder_16"
       },
-      "subject": "o_drive1",
-      "summary": "输入事件i_drive直接透传为输出事件o_drive1，表示解码完成事件",
-      "explanation": "assign_dependencies[0]显示o_drive1直接等于i_drive，表明解码器在同一个时钟周期内完成解码，输出事件与输入事件同步",
+      "subject": "w_decoderDataToLaunch_187",
+      "summary": "187位解码数据打包，将指令解码后的所有控制字段拼接为单一宽位向量，供后续发射阶段使用。",
+      "explanation": "assign 224将约60个解码信号按位拼接成187位向量，包括指令类型、操作数、立即数、标志控制、加载/存储属性等。这是解码器的核心输出，集中体现了指令解码的完整语义。",
       "signals": [
-        "i_drive",
-        "o_drive1"
+        "w_decoderDataToLaunch_187",
+        "o_data_187"
       ],
       "related_assignments": [
-        "0"
+        "224",
+        "225"
       ],
       "related_flows": [
         "flow_000_decoder_16_i_drive"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
         }
       ],
       "id": "semantic:module:decoder_16:assignment_interpretation:001"
@@ -151,23 +217,30 @@
         "type": "module",
         "module": "decoder_16"
       },
-      "subject": "o_excNum_4",
-      "summary": "异常编号输出，在中断且为bx指令时输出异常编号2，否则输出15",
-      "explanation": "assign_dependencies[226]显示o_excNum_4 = i_isInInt & w_bx_1 ? 4'b0010 : 4'b1111，表明仅在中断处理中的bx指令时产生特定异常编号",
+      "subject": "w_isSportInt",
+      "summary": "综合指令类型识别信号，标记是否为支持中断的指令类型。",
+      "explanation": "assign 116将21种指令类型信号（如w_cB_1, w_dataProcessingR_1等）进行或运算，生成w_isSportInt。该信号可能用于中断处理或指令分类。",
       "signals": [
-        "o_excNum_4",
-        "i_isInInt",
-        "w_bx_1"
+        "w_isSportInt",
+        "w_cB_1",
+        "w_dataProcessingR_1",
+        "w_addSubR_1"
       ],
       "related_assignments": [
-        "226"
+        "116"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
         }
       ],
       "id": "semantic:module:decoder_16:assignment_interpretation:002"
@@ -178,88 +251,9 @@
         "type": "module",
         "module": "decoder_16"
       },
-      "subject": "o_nzcvWen_4",
-      "summary": "NZCV标志写使能，根据指令是否更新标志位进行条件控制",
-      "explanation": "assign_dependencies[223]显示o_nzcvWen_4由w_notUpdateV_1和w_notUpdatCandV_1组合控制，支持部分标志位更新（仅NZ或全部更新）",
-      "signals": [
-        "o_nzcvWen_4",
-        "w_notUpdateV_1",
-        "w_notUpdatCandV_1"
-      ],
-      "related_assignments": [
-        "223"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/decoder_16.json"
-        }
-      ],
-      "id": "semantic:module:decoder_16:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "decoder_16"
-      },
-      "subject": "w_decoderDataToLaunch_187",
-      "summary": "187位发射数据包，包含所有解码后的指令执行所需信息",
-      "explanation": "assign_dependencies[224]显示该信号由约60个解码后的子信号拼接而成，包括指令类型、操作数寄存器号、立即数、移位量、条件码、标志控制等，是解码器的核心输出",
-      "signals": [
-        "w_decoderDataToLaunch_187",
-        "o_data_187"
-      ],
-      "related_assignments": [
-        "224",
-        "225"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/decoder_16.json"
-        }
-      ],
-      "id": "semantic:module:decoder_16:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "decoder_16"
-      },
-      "subject": "w_isSportInt",
-      "summary": "综合指令类型标识，用于判断是否为支持中断的指令",
-      "explanation": "assign_dependencies[116]显示w_isSportInt由21种指令类型标识的OR组合而成，覆盖了大部分Thumb指令类别",
-      "signals": [
-        "w_isSportInt"
-      ],
-      "related_assignments": [
-        "116"
-      ],
-      "doc_priority": "reference",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/decoder_16.json"
-        }
-      ],
-      "id": "semantic:module:decoder_16:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "decoder_16"
-      },
-      "subject": "w_rn_4和w_rd_4",
-      "summary": "操作数寄存器号解码，根据指令类型从w_int_16的不同位域提取",
-      "explanation": "assign_dependencies[144][146]显示w_rn_4和w_rd_4根据指令类型（如w_rn2to0_1、w_rd2to0_1等）从w_int_16的不同位域提取寄存器号，支持SP（13）和PC（15）的特殊编码",
+      "subject": "w_rn_4, w_rd_4",
+      "summary": "根据指令类型从16位指令字中提取源操作数寄存器号和目的寄存器号。",
+      "explanation": "assign 144和146显示w_rn_4和w_rd_4通过多路选择器从指令的不同位域（如[2:0]、[5:3]、[10:8]）提取，并针对特殊指令（如SP操作、特殊数据处理）进行特殊编码。这反映了Thumb指令中寄存器字段位置的可变性。",
       "signals": [
         "w_rn_4",
         "w_rd_4",
@@ -269,67 +263,165 @@
         "144",
         "146"
       ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
+      ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
         }
       ],
-      "id": "semantic:module:decoder_16:assignment_interpretation:006"
+      "id": "semantic:module:decoder_16:assignment_interpretation:003"
     },
     {
-      "claim_type": "assignment_interpretation",
+      "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "decoder_16"
       },
-      "subject": "w_rnOp1和w_rmOp2",
-      "summary": "操作数有效标识，指示哪些指令使用Rn和Rm操作数",
-      "explanation": "assign_dependencies[150][152]显示w_rnOp1和w_rmOp2由多种指令类型OR组合而成，用于控制后续执行阶段的操作数选择",
+      "summary": "i_drive事件触发解码操作，i_data_64作为载荷提供64位输入数据（包含PC、零扩展和指令）。",
+      "subject": "i_drive事件与i_data_64载荷",
+      "explanation": "event_payload_contracts显示i_drive与i_data_64关联，assign 2将i_data_64拆分为w_pc_32、w_zero_16和w_int_16。这表明解码器在i_drive事件驱动下处理输入数据。",
       "signals": [
-        "w_rnOp1",
-        "w_rmOp2"
+        "i_drive",
+        "i_data_64",
+        "w_pc_32",
+        "w_int_16"
       ],
-      "related_assignments": [
-        "150",
-        "152"
+      "related_payload": [
+        "i_data_64"
       ],
-      "doc_priority": "reference",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
         }
       ],
-      "id": "semantic:module:decoder_16:assignment_interpretation:007"
+      "id": "semantic:module:decoder_16:interface_intent:001"
     },
     {
-      "claim_type": "assignment_interpretation",
+      "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "decoder_16"
       },
-      "subject": "w_add_1",
-      "summary": "加法操作标识，覆盖多种需要加法运算的指令",
-      "explanation": "assign_dependencies[157]显示w_add_1由13种指令类型OR组合而成，包括加载存储、算术运算、栈操作等",
+      "summary": "o_drive1作为输出事件，直接传递i_drive的驱动信号，可能用于流水线握手或下一级触发。",
+      "subject": "o_drive1输出事件",
+      "explanation": "assign 0显示o_drive1直接等于i_drive，表明解码器不改变驱动事件的时序或条件，仅透传。",
       "signals": [
-        "w_add_1"
+        "o_drive1",
+        "i_drive"
       ],
-      "related_assignments": [
-        "157"
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
+        }
+      ],
+      "id": "semantic:module:decoder_16:interface_intent:002"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "decoder_16"
+      },
+      "summary": "自由信号透传，可能用于流控或握手协议中的就绪/完成指示。",
+      "subject": "o_free与i_free自由信号",
+      "explanation": "assign 1显示o_free直接等于i_free，表明解码器不修改自由信号。",
+      "signals": [
+        "o_free",
+        "i_free"
       ],
       "doc_priority": "reference",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
+        }
+      ],
+      "id": "semantic:module:decoder_16:interface_intent:003"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "decoder_16"
+      },
+      "summary": "文档应重点描述16位Thumb指令的解码过程，包括指令类型识别、操作数提取、立即数扩展和标志控制。",
+      "subject": "指令解码逻辑",
+      "explanation": "从assign_dependencies可见大量指令类型识别信号（如w_andR_1, w_addSubR_1等）和字段提取信号，这是解码器的核心功能。文档应解释不同指令格式的解码规则和信号含义。",
+      "signals": [
+        "w_int_16",
+        "w_dataProcessingR_1",
+        "w_rn_4",
+        "w_rd_4",
+        "w_immToLaunch_16"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
         }
       ],
-      "id": "semantic:module:decoder_16:assignment_interpretation:008"
+      "id": "semantic:module:decoder_16:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "decoder_16"
+      },
+      "summary": "文档应详细说明187位解码数据w_decoderDataToLaunch_187的位域布局和每个字段的语义。",
+      "subject": "解码数据输出格式",
+      "explanation": "assign 224展示了约60个字段的拼接顺序，但位宽和偏移需从RTL源码确认。文档应提供位域映射表，便于后续模块理解解码结果。",
+      "signals": [
+        "w_decoderDataToLaunch_187",
+        "o_data_187"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
+        }
+      ],
+      "id": "semantic:module:decoder_16:documentation_focus:002"
     },
     {
       "claim_type": "source_review_request",
@@ -337,55 +429,72 @@
         "type": "module",
         "module": "decoder_16"
       },
-      "reason": "需要查看RTL源码中w_int_16[15:0]到各指令标识（如w_andR_1、w_addSubR_1等）的解码逻辑，当前上下文仅提供OR组合结果",
-      "subject": "指令类型解码逻辑",
-      "needed_source_slice": "assign block",
+      "reason": "紧凑上下文仅提供assign依赖关系，未包含指令类型识别信号的生成逻辑（如w_andR_1, w_addSubR_1等），无法确定具体解码规则。",
+      "subject": "指令类型识别逻辑",
+      "needed_source_slice": "always block或assign block",
       "signals": [
-        "w_int_16",
         "w_andR_1",
-        "w_addSubR_1",
         "w_eorR_1",
-        "w_lslR_1",
-        "w_lsrR_1",
-        "w_asrR_1",
-        "w_adcR_1",
-        "w_sbcR_1",
-        "w_rorR_1",
-        "w_tstR_1",
-        "w_rsbI_1",
-        "w_cmpR_1",
-        "w_cmnR_1",
-        "w_orrR_1",
-        "w_mul_1",
-        "w_bicR_1",
-        "w_mvnR_1"
+        "w_addSubR_1",
+        "w_int_16"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_16.json"
+          "source": "rtl/rtl/Decode/decoder_16.v"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_16.json"
+          "source": "modules/decoder_16.json"
         }
       ],
       "id": "semantic:module:decoder_16:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "decoder_16"
+      },
+      "reason": "assign 224仅列出字段顺序，未提供每个字段的位宽和起始位，无法生成准确的位域映射。",
+      "subject": "187位解码数据位域布局",
+      "needed_source_slice": "assign block",
+      "signals": [
+        "w_decoderDataToLaunch_187"
+      ],
+      "related_flows": [
+        "flow_000_decoder_16_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Decode/decoder_16.v"
+        },
+        {
+          "source": "modules/decoder_16.json"
+        }
+      ],
+      "id": "semantic:module:decoder_16:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_drive",
-      "reason": "未提供从i_drive到内部信号的详细事件流路径，无法确定解码器内部组合逻辑的时序关系"
+      "reason": "未提供从i_drive到内部信号或输出事件的完整事件流路径，无法确定解码操作的时序和触发条件。"
     },
     {
       "field": "key_component_connections",
-      "reason": "未提供关键组件连接信息，无法确定解码器与其他模块的交互关系"
+      "reason": "未提供任何关键组件连接信息，无法分析模块内部子模块的交互关系。"
     },
     {
       "field": "key_instances",
-      "reason": "未提供实例化信息，无法确定解码器内部是否包含子模块"
+      "reason": "未提供任何实例信息，无法分析模块内部子模块的层次结构。"
     }
   ]
 }

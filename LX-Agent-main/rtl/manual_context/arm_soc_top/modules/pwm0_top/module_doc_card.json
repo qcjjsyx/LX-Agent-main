@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "pwm0_top",
-  "source_file": "rtl\\rtl\\IONet\\PWM\\pwm0_top.v",
+  "source_file": "rtl/rtl/IONet/PWM/pwm0_top.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "该模块是PWM子系统的事件驱动型顶层模块，负责通过两级FIFO流水线传递驱动事件和关联消息，并输出PWM波形。",
-    "explanation": "模块通过i_drive事件输入和i_msg消息输入接收驱动请求，内部通过pwm_fifo1和pwm_fifo2两级FIFO流水线处理，最终由pwm_module生成pwm_out波形输出。o_drive和o_msg作为输出事件和消息，表明模块完成一次PWM驱动操作后向上游反馈。",
+    "value": "该模块是PWM子系统的事件驱动型顶层，负责将输入事件通过两级FIFO流水线转发至PWM核心，并输出处理后的驱动事件。",
+    "explanation": "模块通过i_drive事件输入接收驱动请求，经pwm_fifo1和pwm_fifo2两级FIFO流水线处理后，由o_drive输出驱动事件；同时存在独立的i_free/o_free自由事件路径，以及pwm_out输出信号，表明其作为PWM控制链路的入口/出口。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -31,9 +31,9 @@
     "doc_priority": "primary",
     "signals": [
       "i_drive",
-      "i_msg",
       "o_drive",
-      "o_msg",
+      "i_free",
+      "o_free",
       "pwm_out"
     ],
     "instances": [
@@ -52,22 +52,10 @@
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_inputs"
+        "source": "knowledge_ir/modules/pwm0_top.json"
       },
       {
-        "source": "interface.data_inputs"
-      },
-      {
-        "source": "interface.event_outputs"
-      },
-      {
-        "source": "interface.data_outputs"
-      },
-      {
-        "source": "key_component_connections"
-      },
-      {
-        "source": "internal_event_flow_refs"
+        "source": "parser_pipeline_rtl/modules/pwm0_top.json"
       }
     ]
   },
@@ -283,7 +271,7 @@
         ],
         "summary": "clock_reset_init ports, count=2, directions=input:2",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\PWM\\pwm0_top.v",
+          "rtl_file": "rtl/rtl/IONet/PWM/pwm0_top.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -318,7 +306,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\PWM\\pwm0_top.v",
+          "rtl_file": "rtl/rtl/IONet/PWM/pwm0_top.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -353,7 +341,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\PWM\\pwm0_top.v",
+          "rtl_file": "rtl/rtl/IONet/PWM/pwm0_top.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -394,7 +382,7 @@
         ],
         "summary": "other_ports ports, count=3, directions=input:1, output:2",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\PWM\\pwm0_top.v",
+          "rtl_file": "rtl/rtl/IONet/PWM/pwm0_top.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -411,8 +399,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_pwm0_top_i_drive.json",
       "reader_takeaway": {
-        "value": "手册应重点描述 i_drive 到 o_drive 的两级 FIFO 缓冲路径，包括可能的阻塞点和载荷传递。",
-        "explanation": "该流的核心是串联的 FIFO 实例，它们可能引入延迟或反压，手册需明确其行为（如满/空状态）对事件传播的影响。",
+        "value": "手册应重点描述i_drive到o_drive的FIFO缓冲链，包括每个FIFO实例的缓冲行为、可能引入的延迟或阻塞。",
+        "explanation": "流的核心结构是两级FIFO串联，每个FIFO都可能门控事件传播，手册需解释其缓冲机制和对流的影响。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -441,16 +429,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "knowledge_ir/modules/pwm0_top.json",
+            "path": "internal_event_flow"
           },
           {
-            "source": "transparent_flows"
+            "source": "parser_pipeline_rtl/modules/pwm0_top.json",
+            "path": "instances"
           }
         ],
         "supporting_claims": [
           {
-            "value": "该驱动流将输入事件 i_drive 通过两级 FIFO 缓冲后，输出为 o_drive 事件。",
-            "explanation": "流经两个串联的 FIFO 实例（pwm_fifo1 和 pwm_fifo2），每个实例都可能因内部状态而阻塞事件传播，形成流水线式的缓冲与转发。",
+            "value": "该驱动流将输入事件i_drive通过两级FIFO缓冲后，输出为o_drive事件。",
+            "explanation": "流从顶层输入端口i_drive开始，依次经过pwm_fifo1和pwm_fifo2两个FIFO实例，最终从顶层输出端口o_drive输出。每个FIFO实例都可能对事件进行缓冲或门控。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -479,16 +469,54 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections"
+                "source": "knowledge_ir/modules/pwm0_top.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows"
+                "source": "parser_pipeline_rtl/modules/pwm0_top.json",
+                "path": "flow_graph.assignment_dependencies"
               }
             ]
           },
           {
-            "value": "输入事件 i_drive 携带载荷 i_msg，输出事件 o_drive 携带载荷 o_msg，两者通过 FIFO 链间接关联。",
-            "explanation": "载荷信号 i_msg 和 o_msg 分别与事件 i_drive 和 o_drive 绑定，但当前上下文未显示它们之间的直接赋值关系，仅通过 FIFO 实例的内部逻辑可能实现传递。",
+            "value": "上下文中未提供任何完成或反压信号，无法推断流是否具有握手机制。",
+            "explanation": "接口有效载荷合同中free_signal字段为空，且驱动流步骤未提及反压或完成信号，表明该流可能为纯事件驱动，无显式流控。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:pwm0_top:flow_000_pwm0_top_i_drive:completion_backpressure:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "(none)"
+            ],
+            "instances": [
+              "pwm_fifo1",
+              "pwm_fifo2"
+            ],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:pwm0_top:flow:flow_000_pwm0_top_i_drive",
+              "ev:pwm0_top:semantic_flow:flow_000_pwm0_top_i_drive"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/pwm0_top.json",
+                "path": "internal_event_flow"
+              },
+              {
+                "source": "knowledge_ir/modules/pwm0_top.json",
+                "path": "interface_data_contract"
+              }
+            ]
+          },
+          {
+            "value": "输入事件i_drive携带有效载荷i_msg，输出事件o_drive携带有效载荷o_msg，但两者之间的数据路径未在上下文中明确。",
+            "explanation": "接口有效载荷合同显示i_drive和o_drive分别关联i_msg和o_msg，但驱动流步骤和赋值依赖未展示数据如何从i_msg传递到o_msg，可能存在内部数据路径。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -513,45 +541,12 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports"
+                "source": "knowledge_ir/modules/pwm0_top.json",
+                "path": "interface_data_contract"
               },
               {
-                "source": "interface.data_ports"
-              }
-            ]
-          },
-          {
-            "value": "当前上下文未提供明确的完成或反压信号，但 FIFO 实例可能通过内部状态隐式实现反压。",
-            "explanation": "由于 FIFO 实例可能因满状态而阻塞输入，这本质上是一种反压机制，但缺少 free_signal 或 backpressure 信号的具体信息，无法进一步断言。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:pwm0_top:flow_000_pwm0_top_i_drive:completion_backpressure:001",
-            "doc_priority": "reference",
-            "signals": [
-              "i_drive",
-              "o_drive"
-            ],
-            "instances": [
-              "pwm_fifo1",
-              "pwm_fifo2"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:pwm0_top:flow:flow_000_pwm0_top_i_drive",
-              "ev:pwm0_top:semantic_flow:flow_000_pwm0_top_i_drive"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "instances.connections"
-              },
-              {
-                "source": "transparent_flows"
+                "source": "parser_pipeline_rtl/modules/pwm0_top.json",
+                "path": "interface"
               }
             ]
           }
@@ -569,11 +564,11 @@
     "components": 2,
     "assignments": 1,
     "evidence_gaps": 0,
-    "review_questions": 0
+    "review_questions": 1
   },
   "source_review_context": {
     "module": "pwm0_top",
-    "rtl_file": "rtl\\rtl\\IONet\\PWM\\pwm0_top.v",
+    "rtl_file": "rtl/rtl/IONet/PWM/pwm0_top.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

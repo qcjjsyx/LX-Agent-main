@@ -5,6 +5,26 @@ from backend import tools
 
 
 class ToolsTimeoutTest(unittest.TestCase):
+    def test_parser_tool_passes_timeout_to_script(self):
+        captured = {}
+
+        def fake_run_skill_script(script_name, args, timeout):
+            captured["script_name"] = script_name
+            captured["args"] = args
+            captured["timeout"] = timeout
+            return "ok"
+
+        with patch.dict(tools.os.environ, {"RTL_MANUAL_PARSER_TIMEOUT": "300"}, clear=False):
+            with patch.object(tools, "run_skill_script", fake_run_skill_script):
+                result = tools.run_parser_tool(project_root=".", rtl_inputs="rtl")
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(captured["script_name"], "run_parser_tool.py")
+        self.assertEqual(captured["timeout"], 330)
+        self.assertIn("--timeout", captured["args"])
+        timeout_index = captured["args"].index("--timeout")
+        self.assertEqual(captured["args"][timeout_index + 1], "300")
+
     def test_knowledge_tool_passes_timeout_to_script(self):
         captured = {}
 

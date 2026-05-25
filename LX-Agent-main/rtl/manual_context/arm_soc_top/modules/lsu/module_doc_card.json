@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "lsu",
-  "source_file": "rtl\\rtl\\Lsu\\lsu.v",
+  "source_file": "rtl/rtl/Lsu/lsu.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "加载存储单元，负责仲裁和执行来自执行单元、通用寄存器文件和缓存的数据加载/存储操作，并管理写回、异常和状态更新。",
-    "explanation": "模块接收来自执行单元 (i_exeDriveToLsu_1)、通用寄存器文件 (i_grfDriveToLsu_1)、数据路由 (i_dataRoutDriveToLsu_1) 和指令缓存 (i_icacheDriveToLsu_1) 的驱动事件，并通过内部组件网络（如FIFO、MutexMerge、SelSplit）处理后，分发到写回、异常、数据路由、指令缓存、发射和通用寄存器文件等多个目标。其核心功能是协调多周期加载/存储操作，包括地址计算、数据对齐、多加载/存储拆分和状态更新。",
+    "value": "加载存储单元，负责仲裁来自执行单元、通用寄存器文件、数据路由和指令缓存的访存请求，并分发至写回、异常、发射等下游模块。",
+    "explanation": "模块接收来自执行单元、通用寄存器文件、数据路由和指令缓存的驱动事件，通过内部Fifo、MutexMerge、SelSplit等组件进行仲裁和分发，最终输出到写回、异常、发射、通用寄存器文件、数据路由和指令缓存等多个下游模块，并管理对应的释放信号。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -36,23 +36,22 @@
       "i_icacheDriveToLsu_1",
       "o_lsuDriveToWriteBack_1",
       "o_lsuDriveToExcp_1",
-      "o_lsuDriveToDataRout_1",
-      "o_lsuDriveToIcache_1",
       "o_lsuDriveToLaunch_1",
       "o_lsuDriveToRGrf_1",
-      "o_lsuDriveToWGrf_1"
+      "o_lsuDriveToWGrf_1",
+      "o_lsuDriveToDataRout_1",
+      "o_lsuDriveToIcache_1"
     ],
     "instances": [
       "lsuFifo",
-      "dataRoutMutexMerge",
       "icacheOrDataRoutMutexMerge",
+      "grfSelector",
+      "excSplitter",
+      "wbackSelector",
       "launchMutexMerge",
-      "wbackMutexMerge",
+      "readGrfMutexMerge",
       "IcacheSelector",
       "dataRoutSelector",
-      "excSplitter",
-      "grfSelector",
-      "wbackSelector",
       "dataUpdate",
       "multiLoadDataUpate",
       "multiStoreDataUpate",
@@ -70,7 +69,16 @@
       "updateSplitter",
       "wbackSplitter",
       "updateWaitMerge",
-      "executeTap"
+      "executeTap",
+      "dataRoutMutexMerge",
+      "LASMutexMerge",
+      "multiStoreMutexMerge",
+      "stateSelector",
+      "bitOpSelector",
+      "outdelay9",
+      "outdelay10",
+      "outdelay17",
+      "excSplitterDelay"
     ],
     "related_flows": [
       "flow_000_lsu_i_exeDriveToLsu_1",
@@ -90,6 +98,9 @@
       },
       {
         "source": "parser_pipeline_rtl/modules/lsu.json"
+      },
+      {
+        "source": "rtl/rtl/Lsu/lsu.v"
       }
     ]
   },
@@ -718,7 +729,7 @@
         ],
         "summary": "clock_reset_init ports, count=1, directions=output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\lsu.v",
+          "rtl_file": "rtl/rtl/Lsu/lsu.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -813,7 +824,7 @@
         ],
         "summary": "drive_event ports, count=12, directions=input:4, output:8",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\lsu.v",
+          "rtl_file": "rtl/rtl/Lsu/lsu.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -902,7 +913,7 @@
         ],
         "summary": "free_backpressure ports, count=11, directions=input:7, output:4",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\lsu.v",
+          "rtl_file": "rtl/rtl/Lsu/lsu.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -1015,7 +1026,7 @@
         ],
         "summary": "other_ports ports, count=15, directions=input:5, output:10",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\Lsu\\lsu.v",
+          "rtl_file": "rtl/rtl/Lsu/lsu.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -1032,30 +1043,25 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_002_lsu_i_dataRoutDriveToLsu_1.json",
       "reader_takeaway": {
-        "value": "文档应重点描述数据路由事件从入口到出口的完整路径，包括各分支点和合并点的作用。",
-        "explanation": "该流包含多个分支点（dataRoutSelector、multiStoreSelector、updateFinalSelector、updateSplitter）和合并点（icacheOrDataRoutMutexMerge、updateWaitMerge、multiStoreMutexMerge、launchMutexMerge、lsuMutexMerge），文档需清晰说明每个节点的选择/合并逻辑及其对事件流的影响。",
+        "value": "数据路由事件携带执行单元和通用寄存器文件的数据负载，驱动后续处理。",
+        "explanation": "接口负载契约显示，i_dataRoutDriveToLsu_1事件伴随i_exeToLsuData_163（163位）和i_grfToLsuData_64（64位）数据输入。这些数据负载在流中经过选择、合并和分支，最终影响发射数据和内部状态更新。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
           "i_dataRoutDriveToLsu_1",
-          "o_lsuDriveToLaunch_1"
+          "i_exeToLsuData_163",
+          "i_grfToLsuData_64"
         ],
-        "instances": [
-          "icacheOrDataRoutMutexMerge",
-          "dataRoutSelector",
-          "updateWaitMerge",
-          "updateFinalSelector",
-          "launchMutexMerge",
-          "lsuMutexMerge",
-          "updateSplitter"
-        ],
+        "instances": [],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "8"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -1064,18 +1070,87 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "interface.event_ports"
           },
           {
-            "source": "transparent_flows"
+            "source": "interface.data_ports"
           }
         ],
         "supporting_claims": [
           {
-            "value": "数据路由请求从外部进入LSU后，经过仲裁、延迟、分发、合并与状态更新，最终驱动到发射单元和内部更新路径的完整事件流。",
-            "explanation": "该流以外部输入i_dataRoutDriveToLsu_1为起点，通过MutexMerge与icache请求仲裁，经延迟单元后由dataRoutSelector分发给多负载、多存储和更新等待路径，后续经过多级合并与选择，最终通过launchMutexMerge输出到o_lsuDriveToLaunch_1，同时通过lsuMutexMerge和updateSplitter进入状态更新模块，形成闭环。",
+            "value": "发射通路输出事件携带64位数据负载，用于后续发射处理。",
+            "explanation": "接口负载契约显示，o_lsuDriveToLaunch_1事件伴随o_lsuToLaunchData_64（64位）数据输出。该数据是经过数据路由流处理后，最终通过launchMutexMerge输出的结果。",
             "certainty": "ai_inferred",
-            "confidence": "high",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:data_control_effect:002",
+            "doc_priority": "primary",
+            "signals": [
+              "o_lsuDriveToLaunch_1",
+              "o_lsuToLaunchData_64"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_002_lsu_i_dataRoutDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_002_lsu_i_dataRoutDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports"
+              },
+              {
+                "source": "interface.data_ports"
+              }
+            ]
+          },
+          {
+            "value": "最终手册应重点描述数据路由事件如何通过多个选择器和合并器，分叉到加载、存储、更新和发射等多个子通路，并最终汇聚。",
+            "explanation": "该流包含多个分支点（dataRoutSelector、multiStoreSelector、updateFinalSelector、updateSplitter）和合并点（icacheOrDataRoutMutexMerge、updateWaitMerge、multiStoreMutexMerge、launchMutexMerge、lsuMutexMerge），形成复杂的树状结构。手册应清晰说明每个分支和合并的意图、条件（如需要RTL源码确认）以及数据路径。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_dataRoutDriveToLsu_1",
+              "o_lsuDriveToLaunch_1"
+            ],
+            "instances": [
+              "dataRoutSelector",
+              "updateFinalSelector",
+              "icacheOrDataRoutMutexMerge",
+              "launchMutexMerge"
+            ],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_002_lsu_i_dataRoutDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_002_lsu_i_dataRoutDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "instances.connections"
+              },
+              {
+                "source": "transparent_flows"
+              }
+            ]
+          },
+          {
+            "value": "数据路由请求从外部进入LSU后，经过互斥合并、延迟、选择与分支，最终分别导向发射通路和内部状态/数据更新通路的结构性驱动流。",
+            "explanation": "该流从外部输入i_dataRoutDriveToLsu_1开始，首先与icache请求在icacheOrDataRoutMutexMerge中互斥合并，经过outdelay10延迟后，由dataRoutSelector分三路输出，分别用于多加载数据更新、多存储选择器和更新等待合并。后续经过multiStoreSelector、updateWaitMerge、multiStoreMutexMerge、updateFinalSelector等组件，最终通过launchMutexMerge输出到o_lsuDriveToLaunch_1，同时通过lsuMutexMerge和updateSplitter进入stateUpdate和dataUpdate，形成完整的驱动与反馈路径。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
@@ -1119,21 +1194,23 @@
             ]
           },
           {
-            "value": "数据路由事件携带执行单元数据，数据宽度为163位。",
-            "explanation": "接口契约显示i_dataRoutDriveToLsu_1事件伴随i_exeToLsuData_163[162:0]数据，该数据在流中经过各组件传递，最终通过o_lsuToLaunchData_64[63:0]输出，表明数据宽度在流中可能被截断或重组。",
+            "value": "数据路由输入和发射输出分别有对应的反压/空闲信号，但流内部的反压机制未在上下文中明确。",
+            "explanation": "接口负载契约提供了输入事件i_dataRoutDriveToLsu_1的空闲信号o_lsuFreeToDataRout_1，以及输出事件o_lsuDriveToLaunch_1的空闲信号i_lsuFreeFromLaunch_1。然而，流内部各合并器（如icacheOrDataRoutMutexMerge、launchMutexMerge）的反压或握手机制未在提供的上下文中描述，需要RTL源码确认。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:data_control_effect:001",
-            "doc_priority": "primary",
+            "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:completion_backpressure:001",
+            "doc_priority": "secondary",
             "signals": [
-              "i_dataRoutDriveToLsu_1",
-              "i_exeToLsuData_163",
-              "o_lsuToLaunchData_64"
+              "o_lsuFreeToDataRout_1",
+              "i_lsuFreeFromLaunch_1"
             ],
-            "instances": [],
+            "instances": [
+              "icacheOrDataRoutMutexMerge",
+              "launchMutexMerge"
+            ],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -1148,35 +1225,6 @@
               },
               {
                 "source": "interface.data_ports"
-              }
-            ]
-          },
-          {
-            "value": "流入口和出口存在反压信号，但反压机制在流内部的具体实现未明确。",
-            "explanation": "接口契约显示i_dataRoutDriveToLsu_1有对应的反压信号o_lsuFreeToDataRout_1，o_lsuDriveToLaunch_1有对应的反压信号i_lsuFreeFromLaunch_1，但流内部各合并器、选择器的反压传递关系未在上下文中体现。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:completion_backpressure:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "o_lsuFreeToDataRout_1",
-              "i_lsuFreeFromLaunch_1"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:lsu:flow:flow_002_lsu_i_dataRoutDriveToLsu_1",
-              "ev:lsu:semantic_flow:flow_002_lsu_i_dataRoutDriveToLsu_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports"
               }
             ]
           }
@@ -1195,8 +1243,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_lsu_i_exeDriveToLsu_1.json",
       "reader_takeaway": {
-        "value": "最终手册应重点描述事件从执行单元到三个终点的完整分发路径，以及各分支点和合并点的作用。",
-        "explanation": "该流的核心是一个多级分发-合并网络。手册应清晰说明：1) lsuFifo的缓冲作用；2) excSplitter和wbackSplitter的第一级分支；3) stateSelector根据操作类型进行的第二级分支；4) wbackSelector和readGrfSelector的最终选择；5) 多个MutexMerge的仲裁作用。同时，应强调数据负载（i_exeToLsuData_163）与事件的同步关系。",
+        "value": "手册应重点描述执行事件在LSU内部的扇出分发结构，包括各选择器/分离器的选择逻辑和互斥合并器的仲裁机制。",
+        "explanation": "该流的核心特征是事件从单一入口经过多级选择器/分离器分发至三个输出端点。手册应详细说明每个选择器/分离器的选择条件（如事件类型、状态等），以及互斥合并器的仲裁策略。同时，应强调数据载荷与事件控制信号的关联关系。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1223,7 +1271,9 @@
           "readGrfMutexMerge"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "(无)"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -1232,16 +1282,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "knowledge_ir/modules/lsu.json",
+            "path": "internal_event_flow"
           },
           {
-            "source": "transparent_flows"
+            "source": "parser_pipeline_rtl/modules/lsu.json",
+            "path": "flow_graph"
           }
         ],
         "supporting_claims": [
           {
-            "value": "执行单元向LSU发送单个事件，经FIFO缓冲后，通过多级选择与合并，最终分发至异常处理、写回通用寄存器文件和读回通用寄存器文件三条路径。",
-            "explanation": "该流描述了从执行单元（i_exeDriveToLsu_1）发起的一个事件，经过lsuFifo缓冲，再由excSplitter和wbackSplitter进行第一级分支，随后stateSelector根据状态进行第二级分支，最终通过wbackSelector、readGrfSelector以及多个MutexMerge合并器，将事件导向o_lsuDriveToExcp_1、o_lsuDriveToWGrf_1和o_lsuDriveToRGrf_1三个终点。这是一个典型的分发-合并-分发结构，用于处理不同类型的LSU操作。",
+            "value": "执行单元向LSU发送单个事件，经FIFO缓冲后，通过多级选择器/分离器分发至异常、写通用寄存器文件和读通用寄存器文件三条路径。",
+            "explanation": "该流从i_exeDriveToLsu_1输入，经lsuFifo缓冲后，由excSplitter分离出异常路径(o_lsuDriveToExcp_1)和写回路径。写回路径再经wbackSplitter分离出状态选择路径和写寄存器选择路径。状态选择路径通过stateSelector进一步分发至多个合并器，最终到达读通用寄存器文件(o_lsuDriveToRGrf_1)。写寄存器选择路径通过wbackSelector直接输出到写通用寄存器文件(o_lsuDriveToWGrf_1)。整个流体现了执行单元事件在LSU内部的扇出分发结构。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -1261,14 +1313,12 @@
               "wbackSplitter",
               "stateSelector",
               "wbackSelector",
-              "readGrfSelector",
-              "multiLoadMutexMerge",
-              "multiStoreMutexMerge",
-              "LASMutexMerge",
-              "readGrfMutexMerge"
+              "readGrfSelector"
             ],
             "related_flows": [],
-            "related_assignments": [],
+            "related_assignments": [
+              "(无)"
+            ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -1277,16 +1327,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections"
+                "source": "knowledge_ir/modules/lsu.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows"
+                "source": "parser_pipeline_rtl/modules/lsu.json",
+                "path": "flow_graph"
               }
             ]
           },
           {
-            "value": "事件i_exeDriveToLsu_1携带一个163位的数据负载，该负载在流中与事件同步传播。",
-            "explanation": "接口负载契约表明，输入事件i_exeDriveToLsu_1与一个163位的数据信号i_exeToLsuData_163相关联。该数据负载将随事件一起进入lsuFifo，并在后续的分发和合并过程中被传递，最终影响输出事件（如o_lsuDriveToExcp_1、o_lsuDriveToWGrf_1、o_lsuDriveToRGrf_1）所携带的数据。",
+            "value": "执行事件携带163位数据载荷进入LSU。",
+            "explanation": "i_exeDriveToLsu_1作为事件控制信号，i_exeToLsuData_163作为其数据载荷，共同输入到lsuFifo。数据载荷在流中随事件传播，但具体如何被各组件解析和转发需要RTL源码确认。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -1300,78 +1352,9 @@
             ],
             "instances": [],
             "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
-              "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+            "related_assignments": [
+              "(无)"
             ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports"
-              },
-              {
-                "source": "interface.data_ports"
-              }
-            ]
-          },
-          {
-            "value": "读回通用寄存器文件路径的输出事件o_lsuDriveToRGrf_1携带一个8位的数据负载。",
-            "explanation": "接口负载契约表明，输出事件o_lsuDriveToRGrf_1与一个8位的数据信号o_lsuToRGrfData_8相关联。这表明该路径用于传输宽度较小的数据，例如读回通用寄存器文件的状态或结果。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:002",
-            "doc_priority": "secondary",
-            "signals": [
-              "o_lsuDriveToRGrf_1",
-              "o_lsuToRGrfData_8"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
-              "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports"
-              },
-              {
-                "source": "interface.data_ports"
-              }
-            ]
-          },
-          {
-            "value": "流中存在明确的空闲/背压信号，用于控制事件流的启停，但具体连接关系未在上下文中完全展开。",
-            "explanation": "接口负载契约中提到了空闲信号（free_signal），如o_lsuFreeToExe_1、i_lsuFreeFromExcp_1等。这些信号是握手协议的一部分，用于指示下游是否准备好接收新事件。然而，当前上下文仅列出了这些信号的存在，并未提供它们与流内部组件的具体连接关系。因此，无法断言背压是如何在lsuFifo、MutexMerge等组件间传递的。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "o_lsuFreeToExe_1",
-              "i_lsuFreeFromExcp_1",
-              "i_lsuFreeFromRGrf_1",
-              "i_lsuFreeFromWGrf_1"
-            ],
-            "instances": [
-              "lsuFifo",
-              "excSplitter",
-              "wbackSelector",
-              "readGrfMutexMerge"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [
@@ -1380,10 +1363,124 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports"
+                "source": "knowledge_ir/modules/lsu.json",
+                "path": "interface_data_contract"
               },
               {
-                "source": "interface.data_ports"
+                "source": "parser_pipeline_rtl/modules/lsu.json",
+                "path": "connection_graph"
+              }
+            ]
+          },
+          {
+            "value": "异常路径输出携带多个数据载荷。",
+            "explanation": "o_lsuDriveToExcp_1作为事件控制信号，同时携带o_lsuToDataRoutData_104、o_lsuToIcacheData_104和o_lsuToLaunchData_64三个数据载荷。这表明异常路径可能同时向多个目标发送数据。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:002",
+            "doc_priority": "primary",
+            "signals": [
+              "o_lsuDriveToExcp_1",
+              "o_lsuToDataRoutData_104",
+              "o_lsuToIcacheData_104",
+              "o_lsuToLaunchData_64"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "(无)"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/lsu.json",
+                "path": "interface_data_contract"
+              },
+              {
+                "source": "parser_pipeline_rtl/modules/lsu.json",
+                "path": "connection_graph"
+              }
+            ]
+          },
+          {
+            "value": "读通用寄存器路径输出携带8位数据载荷。",
+            "explanation": "o_lsuDriveToRGrf_1作为事件控制信号，o_lsuToRGrfData_8作为其数据载荷，共同输出到读通用寄存器模块。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:003",
+            "doc_priority": "primary",
+            "signals": [
+              "o_lsuDriveToRGrf_1",
+              "o_lsuToRGrfData_8"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "(无)"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/lsu.json",
+                "path": "interface_data_contract"
+              },
+              {
+                "source": "parser_pipeline_rtl/modules/lsu.json",
+                "path": "connection_graph"
+              }
+            ]
+          },
+          {
+            "value": "写通用寄存器路径输出携带多个数据载荷。",
+            "explanation": "o_lsuDriveToWGrf_1作为事件控制信号，同时携带o_lsuToDataRoutData_104、o_lsuToIcacheData_104和o_lsuToLaunchData_64三个数据载荷。这表明写回路径可能同时向多个目标发送数据。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:004",
+            "doc_priority": "primary",
+            "signals": [
+              "o_lsuDriveToWGrf_1",
+              "o_lsuToDataRoutData_104",
+              "o_lsuToIcacheData_104",
+              "o_lsuToLaunchData_64"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "(无)"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/lsu.json",
+                "path": "interface_data_contract"
+              },
+              {
+                "source": "parser_pipeline_rtl/modules/lsu.json",
+                "path": "connection_graph"
               }
             ]
           }
@@ -1402,22 +1499,27 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_lsu_i_grfDriveToLsu_1.json",
       "reader_takeaway": {
-        "value": "数据负载在流入口处经过条件转换，影响后续所有数据路径。",
-        "explanation": "输入数据 i_grfToLsuData_64 通过赋值8转换为 w_grfToLsuData_64，该转换受 w_isMultiLS_1 和 i_wen_2 控制。转换后的数据将作为 grfSelector 的输入，并最终影响 dataRoutMutexMerge 和 IcacheSelector 的输出数据负载。",
+        "value": "最终手册应重点描述 GRF 驱动事件如何通过 grfSelector 分叉，以及后续的合并和最终分发逻辑。",
+        "explanation": "该流的核心结构是 grfSelector 分叉、LASMutexMerge 和 dataRoutMutexMerge 合并、IcacheSelector 最终分发。手册应解释这些组件的选择/仲裁条件，以及它们如何影响事件的传播路径。同时，应说明 outdelay9 的延迟作用，但无需深入其内部实现。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_grfToLsuData_64",
-          "w_grfToLsuData_64",
-          "w_isMultiLS_1",
-          "i_wen_2"
+          "i_grfDriveToLsu_1",
+          "o_lsuDriveToDataRout_1",
+          "o_lsuDriveToIcache_1"
         ],
-        "instances": [],
+        "instances": [
+          "grfSelector",
+          "LASMutexMerge",
+          "dataRoutMutexMerge",
+          "outdelay9",
+          "IcacheSelector"
+        ],
         "related_flows": [],
         "related_assignments": [
           "8"
@@ -1430,63 +1532,19 @@
         ],
         "semantic_evidence": [
           {
-            "source": "module_facts",
-            "path": "knowledge_ir/modules/lsu.json"
+            "source": "flow.steps"
           },
           {
-            "source": "parser_module",
-            "path": "parser_pipeline_rtl/modules/lsu.json"
+            "source": "flow.branch_points"
+          },
+          {
+            "source": "flow.join_points"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述数据从GRF到两个输出端口的路径，包括拆分、合并和延迟的时序与条件。",
-            "explanation": "该流的核心是数据从输入到输出的转换与分发，涉及 grfSelector 的拆分、dataRoutMutexMerge 的合并、outdelay9 的延迟以及 IcacheSelector 的最终拆分。手册应强调这些组件的角色、选择条件（如多加载标志）以及数据负载的宽度变化（64位到104位）。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_grfDriveToLsu_1",
-              "o_lsuDriveToDataRout_1",
-              "o_lsuDriveToIcache_1",
-              "i_grfToLsuData_64",
-              "o_lsuToDataRoutData_104",
-              "o_lsuToIcacheData_104"
-            ],
-            "instances": [
-              "grfSelector",
-              "dataRoutMutexMerge",
-              "outdelay9",
-              "IcacheSelector"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "8"
-            ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:lsu:flow:flow_001_lsu_i_grfDriveToLsu_1",
-              "ev:lsu:semantic_flow:flow_001_lsu_i_grfDriveToLsu_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/lsu.json"
-              },
-              {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/lsu.json"
-              }
-            ]
-          },
-          {
-            "value": "来自通用寄存器文件的驱动事件，经拆分、合并与延迟后，最终分发给数据路由和指令缓存两个下游模块。",
-            "explanation": "该流从输入端口 i_grfDriveToLsu_1 进入，首先由 grfSelector 拆分为两条路径，一条经 LASMutexMerge 合并后可能参与地址计算或控制，另一条经 dataRoutMutexMerge 合并后，再通过 outdelay9 延迟，最后由 IcacheSelector 拆分输出到 o_lsuDriveToDataRout_1 和 o_lsuDriveToIcache_1。",
+            "value": "来自通用寄存器文件的驱动事件，经选择、合并、延迟后，最终分发至数据路由或指令缓存。",
+            "explanation": "该流从外部输入 i_grfDriveToLsu_1 开始，经过 grfSelector 分叉，一路经 LASMutexMerge 合并后进入 dataRoutMutexMerge，另一路直接进入 dataRoutMutexMerge；合并后的数据经 outdelay9 延迟后，由 IcacheSelector 最终选择输出到 o_lsuDriveToDataRout_1 或 o_lsuDriveToIcache_1。流的核心意图是将 GRF 发起的驱动事件，根据后续选择逻辑，导向两个不同的下游模块。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -1518,18 +1576,57 @@
             ],
             "semantic_evidence": [
               {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/lsu.json"
+                "source": "instances.connections"
               },
               {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/lsu.json"
+                "source": "transparent_flows"
+              },
+              {
+                "source": "interface.event_ports"
               }
             ]
           },
           {
-            "value": "流包含输入反压信号 o_grfFreeFromLsu_1 和输出反压信号 i_lsuFreeFromDataRout_1、i_lsuFreeFromIcache_1，但内部反压机制未在上下文中明确。",
-            "explanation": "接口合同显示了每个事件端口对应的反压信号，表明该流支持握手协议。然而，内部组件（如 grfSelector、LASMutexMerge、dataRoutMutexMerge）的反压传播路径未在提供的上下文中描述，因此无法断言内部反压如何工作。",
+            "value": "输入 64 位数据经预处理和流路径后，扩展为 104 位输出数据。",
+            "explanation": "输入数据 i_grfToLsuData_64 经过 assign 8 的字节交换后，通过流路径（grfSelector -> dataRoutMutexMerge -> outdelay9 -> IcacheSelector），最终以 104 位数据输出。数据宽度从 64 位扩展到 104 位，表明在流路径中可能进行了数据拼接或扩展，但具体扩展逻辑未在上下文中体现。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_001_lsu_i_grfDriveToLsu_1:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_grfToLsuData_64",
+              "o_lsuToDataRoutData_104",
+              "o_lsuToIcacheData_104"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "8"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_001_lsu_i_grfDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_001_lsu_i_grfDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports"
+              },
+              {
+                "source": "interface.data_ports"
+              },
+              {
+                "source": "related_assign_dependencies"
+              }
+            ]
+          },
+          {
+            "value": "流包含输入反压信号 o_grfFreeFromLsu_1 和输出反压信号 i_lsuFreeFromDataRout_1、i_lsuFreeFromIcache_1，但反压机制未在上下文中体现。",
+            "explanation": "接口契约中定义了输入事件 i_grfDriveToLsu_1 的反压信号 o_grfFreeFromLsu_1，以及输出事件的反压信号 i_lsuFreeFromDataRout_1 和 i_lsuFreeFromIcache_1。然而，上下文中未提供这些反压信号在流路径中的连接或使用方式，因此无法确定反压如何影响流中的组件（如互斥合并器或延迟单元）。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1559,12 +1656,10 @@
             ],
             "semantic_evidence": [
               {
-                "source": "module_facts",
-                "path": "knowledge_ir/modules/lsu.json"
+                "source": "interface.event_ports"
               },
               {
-                "source": "parser_module",
-                "path": "parser_pipeline_rtl/modules/lsu.json"
+                "source": "interface.data_ports"
               }
             ]
           }
@@ -1583,19 +1678,18 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_003_lsu_i_icacheDriveToLsu_1.json",
       "reader_takeaway": {
-        "value": "icache数据信号i_icacheData_64作为payload，与事件信号i_icacheDriveToLsu_1同步进入流中。",
-        "explanation": "接口合约显示i_icacheData_64[63:0]与i_icacheDriveToLsu_1关联，且连接到icacheOrDataRoutMutexMerge.i_data1_64。该数据在流中经过各组件传递，最终可能作为o_lsuToLaunchData_64输出。",
+        "value": "o_lsuFreeToIcache_1是i_icacheDriveToLsu_1事件的空闲/反压信号。",
+        "explanation": "接口契约表明o_lsuFreeToIcache_1是输出空闲信号，用于向I-Cache指示LSU可以接收新的驱动事件，构成反压机制。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:completion_backpressure:001",
         "doc_priority": "primary",
         "signals": [
-          "i_icacheData_64",
-          "i_icacheDriveToLsu_1",
-          "o_lsuToLaunchData_64"
+          "o_lsuFreeToIcache_1",
+          "i_icacheDriveToLsu_1"
         ],
         "instances": [],
         "related_flows": [],
@@ -1609,18 +1703,105 @@
         "semantic_evidence": [
           {
             "source": "interface.event_ports"
-          },
-          {
-            "source": "interface.data_ports"
-          },
-          {
-            "source": "component_connection"
           }
         ],
         "supporting_claims": [
           {
-            "value": "文档应重点描述icache事件从入口到launch输出的完整路径，以及内部的分发、合并和状态更新分支。",
-            "explanation": "该流包含多个分支点和合并点，涉及互斥仲裁、延迟、分发、等待合并、状态更新等操作。文档应清晰说明各组件的作用、事件路由逻辑以及数据payload的传递关系。",
+            "value": "i_lsuFreeFromLaunch_1是o_lsuDriveToLaunch_1事件的空闲/反压信号。",
+            "explanation": "接口契约表明i_lsuFreeFromLaunch_1是输入空闲信号，用于从发射单元接收反压，指示发射单元是否可以接收新的驱动事件。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:completion_backpressure:002",
+            "doc_priority": "primary",
+            "signals": [
+              "i_lsuFreeFromLaunch_1",
+              "o_lsuDriveToLaunch_1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_003_lsu_i_icacheDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_003_lsu_i_icacheDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports"
+              }
+            ]
+          },
+          {
+            "value": "i_icacheData_64是伴随i_icacheDriveToLsu_1事件的有效载荷数据。",
+            "explanation": "接口契约表明i_icacheData_64是64位数据总线，与i_icacheDriveToLsu_1事件驱动信号相关联，共同构成I-Cache到LSU的数据传输。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:data_control_effect:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_icacheData_64",
+              "i_icacheDriveToLsu_1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_003_lsu_i_icacheDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_003_lsu_i_icacheDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports"
+              },
+              {
+                "source": "interface.data_ports"
+              }
+            ]
+          },
+          {
+            "value": "o_lsuToLaunchData_64是伴随o_lsuDriveToLaunch_1事件的有效载荷数据。",
+            "explanation": "接口契约表明o_lsuToLaunchData_64是64位数据总线，与o_lsuDriveToLaunch_1事件驱动信号相关联，共同构成LSU到发射单元的数据传输。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:data_control_effect:002",
+            "doc_priority": "primary",
+            "signals": [
+              "o_lsuToLaunchData_64",
+              "o_lsuDriveToLaunch_1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:lsu:flow:flow_003_lsu_i_icacheDriveToLsu_1",
+              "ev:lsu:semantic_flow:flow_003_lsu_i_icacheDriveToLsu_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports"
+              },
+              {
+                "source": "interface.data_ports"
+              }
+            ]
+          },
+          {
+            "value": "文档应重点描述I-Cache数据请求在LSU内部的完整处理路径，包括仲裁、分发、等待合并和最终分发。",
+            "explanation": "该流是LSU处理I-Cache请求的核心路径，涉及多个MutexMerge和Selector实例，文档应清晰说明每个组件的角色和事件流的分支与合并点。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -1630,22 +1811,18 @@
             "doc_priority": "primary",
             "signals": [
               "i_icacheDriveToLsu_1",
-              "o_lsuDriveToLaunch_1",
-              "i_icacheData_64",
-              "o_lsuToLaunchData_64"
+              "o_lsuDriveToLaunch_1"
             ],
             "instances": [
               "icacheOrDataRoutMutexMerge",
+              "outdelay10",
               "dataRoutSelector",
+              "updateWaitMerge",
               "updateFinalSelector",
-              "launchMutexMerge",
-              "stateUpdate"
+              "launchMutexMerge"
             ],
             "related_flows": [],
-            "related_assignments": [
-              "8",
-              "20"
-            ],
+            "related_assignments": [],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -1658,15 +1835,12 @@
               },
               {
                 "source": "transparent_flows"
-              },
-              {
-                "source": "interface.event_ports"
               }
             ]
           },
           {
-            "value": "该驱动流将icache发出的请求事件，经过仲裁、延迟、分发、合并与状态更新后，最终输出到launch通路，并同时产生内部状态更新与数据更新分支。",
-            "explanation": "流从i_icacheDriveToLsu_1进入，首先在icacheOrDataRoutMutexMerge与dataRout通路进行互斥仲裁，随后经过outdelay10延迟，由dataRoutSelector分发给多个下游（多加载、多存储、更新等待合并）。后续经过multiStoreSelector、updateWaitMerge、multiStoreMutexMerge、updateFinalSelector等组件，最终在launchMutexMerge与另一路bitOpSelector合并后输出o_lsuDriveToLaunch_1。同时，流还通过lsuMutexMerge、updateSplitter进入stateUpdate，形成状态更新反馈。",
+            "value": "该驱动流描述了从i_icacheDriveToLsu_1输入事件开始，经过仲裁、延迟、分发、等待合并和最终选择，最终到达o_lsuDriveToLaunch_1输出事件的完整路径。",
+            "explanation": "该流是LSU模块内部处理来自I-Cache的数据请求的核心路径。它通过MutexMerge进行输入仲裁，经过透明延迟后，由Selector进行多路分发，一部分数据进入存储选择路径，另一部分进入等待合并路径，最终与状态更新路径合并后，通过FinalSelector分发给发射和LSU内部更新路径。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -1682,14 +1856,9 @@
               "icacheOrDataRoutMutexMerge",
               "outdelay10",
               "dataRoutSelector",
-              "multiStoreSelector",
               "updateWaitMerge",
-              "multiStoreMutexMerge",
               "updateFinalSelector",
-              "launchMutexMerge",
-              "lsuMutexMerge",
-              "updateSplitter",
-              "stateUpdate"
+              "launchMutexMerge"
             ],
             "related_flows": [],
             "related_assignments": [
@@ -1711,74 +1880,6 @@
               },
               {
                 "source": "interface.event_ports"
-              }
-            ]
-          },
-          {
-            "value": "存在free信号o_lsuFreeToIcache_1，表明icache通路具有反压机制，但具体反压逻辑未在流步骤中体现。",
-            "explanation": "接口合约显示i_icacheDriveToLsu_1的free信号为o_lsuFreeToIcache_1，但流步骤中未包含该信号的处理。反压可能由icacheOrDataRoutMutexMerge或其他组件内部实现，需要RTL源码确认。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:completion_backpressure:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "o_lsuFreeToIcache_1",
-              "i_icacheDriveToLsu_1"
-            ],
-            "instances": [
-              "icacheOrDataRoutMutexMerge"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:lsu:flow:flow_003_lsu_i_icacheDriveToLsu_1",
-              "ev:lsu:semantic_flow:flow_003_lsu_i_icacheDriveToLsu_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports"
-              },
-              {
-                "source": "interface.data_ports"
-              }
-            ]
-          },
-          {
-            "value": "存在free信号i_lsuFreeFromLaunch_1，表明launch通路具有反压机制，但具体反压逻辑未在流步骤中体现。",
-            "explanation": "接口合约显示o_lsuDriveToLaunch_1的free信号为i_lsuFreeFromLaunch_1，但流步骤中未包含该信号的处理。反压可能由launchMutexMerge或其他组件内部实现，需要RTL源码确认。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:lsu:flow_003_lsu_i_icacheDriveToLsu_1:completion_backpressure:002",
-            "doc_priority": "secondary",
-            "signals": [
-              "i_lsuFreeFromLaunch_1",
-              "o_lsuDriveToLaunch_1"
-            ],
-            "instances": [
-              "launchMutexMerge"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:lsu:flow:flow_003_lsu_i_icacheDriveToLsu_1",
-              "ev:lsu:semantic_flow:flow_003_lsu_i_icacheDriveToLsu_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports"
-              },
-              {
-                "source": "interface.data_ports"
               }
             ]
           }
@@ -1800,7 +1901,7 @@
   },
   "source_review_context": {
     "module": "lsu",
-    "rtl_file": "rtl\\rtl\\Lsu\\lsu.v",
+    "rtl_file": "rtl/rtl/Lsu/lsu.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

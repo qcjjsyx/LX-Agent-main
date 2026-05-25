@@ -119,8 +119,8 @@
         "w_drvMutexRead2select1"
       ],
       "role_in_flow": {
-        "value": "作为事件合并器，对来自两个 NoC 通道的驱动事件进行互斥仲裁。",
-        "explanation": "mutexRead 实例化自 cMutexMerge2_51b，其角色是合并两个输入事件驱动（i_drvFNoCChannel0 和 i_drvFNoCChannel1）并输出一个仲裁后的驱动信号。它可能根据内部优先级或握手协议决定哪个通道的事件被传递，从而避免冲突。",
+        "value": "作为互斥合并器，将两个输入事件驱动通道（i_drvFNoCChannel0 和 i_drvFNoCChannel1）合并为单一输出。",
+        "explanation": "mutexRead 实例（cMutexMerge2_51b）接收两个事件驱动输入，并输出 w_drvMutexRead2select1。它可能根据仲裁或互斥逻辑选择其中一个输入传递，但当前上下文未提供选择条件。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -145,8 +145,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/CPU2NoC.json"
+            "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+            "path": "instances"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+            "path": "connection_graph"
           }
         ]
       },
@@ -284,10 +288,10 @@
     }
   ],
   "semantic_meaning": {
-    "value": "输入数据信号 i_dataFNoCChannel1_51 作为事件驱动 i_drvFNoCChannel1 的伴随载荷，被送入合并器。",
-    "explanation": "数据信号 i_dataFNoCChannel1_51 与驱动信号 i_drvFNoCChannel1 同时进入 mutexRead 实例。这表明驱动事件携带了 51 位宽的载荷数据，该数据在合并器中与来自通道0的数据进行仲裁，并随事件流向下游传递。",
+    "value": "输入数据信号 i_dataFNoCChannel1_51 与事件驱动信号 i_drvFNoCChannel1 关联，作为该通道的负载。",
+    "explanation": "接口负载契约显示 i_dataFNoCChannel1_51（51 位宽）与 i_drvFNoCChannel1 配对，并连接到 mutexRead 的数据输入。这表明事件驱动信号携带数据负载，但流中未显示数据如何传递到输出。",
     "certainty": "ai_inferred",
-    "confidence": "high",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
@@ -300,24 +304,28 @@
     "instances": [],
     "related_flows": [],
     "related_assignments": [],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:CPU2NoC:flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
       "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1"
     ],
     "semantic_evidence": [
       {
-        "source": "interface_data_contract",
-        "path": "knowledge_ir/modules/CPU2NoC.json"
+        "source": "knowledge_ir/modules/CPU2NoC.json",
+        "path": "interface_data_contract"
+      },
+      {
+        "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+        "path": "connection_graph"
       }
     ],
     "supporting_claims": [
       {
-        "value": "手册应重点描述事件从 NoC 通道到 CPU 的单向传递路径，以及合并器与 FIFO 的流水线作用。",
-        "explanation": "该流结构清晰，无分支。重点在于解释 mutexRead 如何仲裁两个通道的事件，以及两级 FIFO 如何提供缓冲。同时需说明载荷数据与驱动事件的绑定关系。背压机制因证据不足应谨慎描述。",
+        "value": "最终手册应强调从 i_drvFNoCChannel1 到 o_drv2CPU 的单一路径，以及数据负载 i_dataFNoCChannel1_51 的关联，但避免过度解释合并逻辑或背压。",
+        "explanation": "当前上下文仅支持流路径描述和数据耦合，合并器 mutexRead 的选择条件和 FIFO 内部行为需 RTL 源确认。手册应聚焦于事件驱动流的顺序和负载传递。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -326,8 +334,7 @@
         "signals": [
           "i_drvFNoCChannel1",
           "i_dataFNoCChannel1_51",
-          "o_drv2CPU",
-          "o_free2CPU"
+          "o_drv2CPU"
         ],
         "instances": [
           "mutexRead",
@@ -346,16 +353,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/CPU2NoC.json"
+            "source": "knowledge_ir/modules/CPU2NoC.json",
+            "path": "internal_event_flow"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+            "path": "flow_graph.assignment_dependencies"
           }
         ]
       },
       {
-        "value": "从输入事件驱动端口 i_drvFNoCChannel1 出发，经过互斥合并与两级 FIFO 缓冲，最终到达输出端口 o_drv2CPU 的单一路径事件流。",
-        "explanation": "该流描述了来自 NoC 通道1的事件驱动信号如何通过 MutexMerge 实例 mutexRead 与通道0进行仲裁合并，然后依次经过两个 cFifo1 实例 cfifo1 和 cfifoOut 进行流水线缓冲，最终作为驱动信号输出到 CPU 端。流中不存在分支，所有步骤均为顺序执行。",
+        "value": "从输入事件驱动端口 i_drvFNoCChannel1 到输出事件驱动端口 o_drv2CPU 的单一路径数据驱动流，经过互斥合并和两级 FIFO 缓冲。",
+        "explanation": "该流仅使用 i_drvFNoCChannel1 作为起点，经过 mutexRead 实例（与 i_drvFNoCChannel0 合并）、cfifo1 和 cfifoOut 两级 FIFO，最终到达 o_drv2CPU。流中无分支，所有步骤均为顺序事件驱动。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -384,18 +395,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/CPU2NoC.json"
+            "source": "knowledge_ir/modules/CPU2NoC.json",
+            "path": "internal_event_flow"
           },
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/CPU2NoC.json"
+            "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+            "path": "flow_graph.assignment_dependencies"
           }
         ]
       },
       {
-        "value": "当前上下文未提供明确的背压或完成信号，但 FIFO 实例的存在暗示了隐式的流控机制。",
-        "explanation": "虽然接口中未列出 free 信号，且赋值 o_free2CPU 仅与驱动信号相关，但 cFifo1 实例通常包含内部握手逻辑（如 valid/ready）。因此，该流可能通过 FIFO 的满/空状态实现背压，但具体机制需要 RTL 源码确认。",
+        "value": "当前上下文未提供明确的空闲或背压信号，但 o_free2CPU 赋值暗示了空闲状态与事件驱动输出的耦合。",
+        "explanation": "流中无 free_signal 定义，且 o_free2CPU 仅通过赋值与 o_drv2CPU 关联。无法确定背压机制，但 FIFO 实例可能隐含背压逻辑。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -404,7 +415,8 @@
         "semantic_claim_id": "semantic:flow:CPU2NoC:flow_002_CPU2NoC_i_drvFNoCChannel1:completion_backpressure:001",
         "doc_priority": "reference",
         "signals": [
-          "o_free2CPU"
+          "o_free2CPU",
+          "o_drv2CPU"
         ],
         "instances": [
           "cfifo1",
@@ -420,8 +432,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/CPU2NoC.json"
+            "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+            "path": "assignments"
           }
         ]
       }

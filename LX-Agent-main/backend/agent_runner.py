@@ -136,6 +136,12 @@ class AgentRunner:
         return clean_messages
 
     def call_model(self, active_messages, active_tools):
+        if self.client is None:
+            raise RuntimeError(
+                "模型客户端不可用：请安装 openai 依赖并配置 DEEPSEEK_API_KEY，"
+                "或使用不需要模型调用的手册 workflow 阶段。"
+            )
+
         safe_messages = sanitize_messages_for_api(active_messages)
         params = {
             "model": self.model,

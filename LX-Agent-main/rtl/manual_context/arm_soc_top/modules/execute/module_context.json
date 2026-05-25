@@ -6,10 +6,10 @@
     "module_name": "execute",
     "module_role": "submodule",
     "source_files": [
-      "rtl\\rtl\\Execute\\execute.v"
+      "rtl/rtl/Execute/execute.v"
     ],
     "source": {
-      "rtl_file": "rtl\\rtl\\Execute\\execute.v",
+      "rtl_file": "rtl/rtl/Execute/execute.v",
       "parser_module": "modules/execute.json"
     },
     "certainty": "deterministic_fact",
@@ -134,8 +134,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "执行模块是处理器流水线的执行阶段核心，负责接收来自发射（Launch）、通用寄存器堆（GRF）和加载存储单元（LSU）的指令与数据，完成算术逻辑运算、移位、饱和、乘法、除法等操作，并将结果写回GRF、发送给LSU或触发异常。",
-      "explanation": "模块通过多个事件驱动输入（i_launchDriveToExecute_1, i_grfDriveToExecute_1, i_LsuDriveToExe_1）接收不同来源的请求，内部通过大量选择器、合并器、FIFO和运算单元（adder, shifter, muller, satQ等）构成复杂的运算数据路径，最终通过事件驱动输出（o_executeDriveToGrf_1, o_executeDriveToLsu_1, o_exeDriveToExcp_1）分发结果。",
+      "value": "执行模块是处理器流水线的执行阶段，负责接收来自发射阶段（Launch）的指令，从通用寄存器组（GRF）和加载存储单元（LSU）获取操作数，执行算术逻辑运算，并将结果写回或转发。",
+      "explanation": "模块通过事件驱动接口接收来自发射、GRF和LSU的驱动信号，并输出驱动信号到发射、异常处理、GRF和LSU。内部包含大量用于操作数选择、运算执行和结果合并的组件，符合执行阶段的功能定位。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -147,21 +147,20 @@
         "i_launchDriveToExecute_1",
         "i_grfDriveToExecute_1",
         "i_LsuDriveToExe_1",
+        "o_exeByPathDriveToLaunch_1",
+        "o_exeDriveToExcp_1",
         "o_executeDriveToGrf_1",
-        "o_executeDriveToLsu_1",
-        "o_exeDriveToExcp_1"
+        "o_executeDriveToLsu_1"
       ],
       "instances": [
         "exeFifo2",
         "executeSplitter",
         "exeSelector",
         "adder",
-        "shifter",
         "muller",
-        "satQ",
+        "shifter",
         "resMutexMerge",
-        "ExcSplitter",
-        "grfSplitter"
+        "finalWaitMerge"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1",
@@ -185,8 +184,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "执行模块是处理器流水线的执行阶段核心，负责接收来自发射（Launch）、通用寄存器堆（GRF）和加载存储单元（LSU）的指令与数据，完成算术逻辑运算、移位、饱和、乘法、除法等操作，并将结果写回GRF、发送给LSU或触发异常。",
-        "explanation": "模块通过多个事件驱动输入（i_launchDriveToExecute_1, i_grfDriveToExecute_1, i_LsuDriveToExe_1）接收不同来源的请求，内部通过大量选择器、合并器、FIFO和运算单元（adder, shifter, muller, satQ等）构成复杂的运算数据路径，最终通过事件驱动输出（o_executeDriveToGrf_1, o_executeDriveToLsu_1, o_exeDriveToExcp_1）分发结果。",
+        "value": "执行模块是处理器流水线的执行阶段，负责接收来自发射阶段（Launch）的指令，从通用寄存器组（GRF）和加载存储单元（LSU）获取操作数，执行算术逻辑运算，并将结果写回或转发。",
+        "explanation": "模块通过事件驱动接口接收来自发射、GRF和LSU的驱动信号，并输出驱动信号到发射、异常处理、GRF和LSU。内部包含大量用于操作数选择、运算执行和结果合并的组件，符合执行阶段的功能定位。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -198,21 +197,20 @@
           "i_launchDriveToExecute_1",
           "i_grfDriveToExecute_1",
           "i_LsuDriveToExe_1",
+          "o_exeByPathDriveToLaunch_1",
+          "o_exeDriveToExcp_1",
           "o_executeDriveToGrf_1",
-          "o_executeDriveToLsu_1",
-          "o_exeDriveToExcp_1"
+          "o_executeDriveToLsu_1"
         ],
         "instances": [
           "exeFifo2",
           "executeSplitter",
           "exeSelector",
           "adder",
-          "shifter",
           "muller",
-          "satQ",
+          "shifter",
           "resMutexMerge",
-          "ExcSplitter",
-          "grfSplitter"
+          "finalWaitMerge"
         ],
         "related_flows": [
           "flow_000_execute_i_launchDriveToExecute_1",
@@ -235,8 +233,8 @@
         ]
       },
       {
-        "value": "模块将发射的指令解码出的操作数（op1, op2, op3）通过多级选择器分发到对应的运算单元，运算结果经FIFO和合并器汇聚后，根据路径码（pathCode）分发到GRF、LSU或异常处理单元。",
-        "explanation": "从assign依赖可见，i_launchDataToExe_207被拆解为大量控制与数据字段（如w_op1_32, w_op2_32, w_op3_32, w_pathCode_8等），这些字段通过exeSelector、secondExeSelector等选择器导向不同运算单元（adder, shifter, muller, satQ等），运算结果经resMutexMerge汇聚后，通过ExcSplitter和grfSplitter分发到输出。",
+        "value": "模块接收来自发射阶段的指令数据，解析出操作码、操作数和路径信息，通过多级选择器和运算单元执行，最终将结果合并并分发到目标单元。",
+        "explanation": "从i_launchDataToExe_207解析出大量控制信号和操作数（w_op1_32, w_op2_32, w_op3_32等），通过executeSplitter和exeSelector分发到不同的运算单元（adder, muller, shifter等），运算结果通过resMutexMerge汇总，再通过finalWaitMerge和ExcSplitter等分发到LSU、异常处理单元和发射阶段。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -246,21 +244,16 @@
         "doc_priority": "primary",
         "signals": [
           "i_launchDataToExe_207",
-          "w_op1_32",
-          "w_op2_32",
-          "w_op3_32",
-          "w_pathCode_8",
           "o_exeToLaunchData_96",
           "o_executeDataToLsu_163",
-          "o_executeToGrfData_8",
-          "o_exeToExcpData_36"
+          "o_exeToExcpData_36",
+          "o_executeToGrfData_8"
         ],
         "instances": [
+          "executeSplitter",
           "exeSelector",
-          "secondExeSelector",
-          "op3Selector",
-          "op3NormalSelector",
           "resMutexMerge",
+          "finalWaitMerge",
           "ExcSplitter",
           "grfSplitter"
         ],
@@ -285,8 +278,8 @@
     ],
     "documentation_focus": [
       {
-        "value": "手册应重点描述从发射请求解码到运算结果汇聚的完整数据路径，包括选择器、FIFO、合并器和运算单元的连接关系。",
-        "explanation": "模块包含大量选择器（exeSelector, secondExeSelector, op3Selector等）、FIFO（addFifo, andFifo等）和合并器（resMutexMerge, addMutexMerge等），构成了复杂的运算数据路径，是理解模块功能的核心。",
+        "value": "手册应重点描述从指令输入到结果输出的完整数据流路径，特别是操作数准备网络（rele*）和结果合并网络（MutexMerge）的交互逻辑。",
+        "explanation": "模块内部组件众多，且通过事件驱动和握手信号紧密耦合。理解数据如何从发射接口流入，经过操作数选择、运算单元、结果合并，最终分发到各个输出接口，是理解模块行为的关键。rele*网络和MutexMerge网络是数据流的核心仲裁点。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -296,73 +289,18 @@
         "doc_priority": "primary",
         "signals": [
           "i_launchDataToExe_207",
-          "w_op1_32",
-          "w_op2_32",
-          "w_op3_32",
-          "w_pathCode_8",
-          "w_resMutexMergeToFinalWaitMergeData_64"
-        ],
-        "instances": [
-          "exeSelector",
-          "secondExeSelector",
-          "op3Selector",
-          "resMutexMerge",
-          "addMutexMerge",
-          "adder",
-          "shifter",
-          "muller",
-          "satQ"
-        ],
-        "related_flows": [
-          "flow_000_execute_i_launchDriveToExecute_1"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:execute:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/execute.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/execute.json"
-          }
-        ]
-      },
-      {
-        "value": "手册应说明LSU和GRF结果如何通过释放路径（rele路径）更新寄存器值，并与发射路径的操作数合并。",
-        "explanation": "该路径涉及多个Merge和Selector组件，处理来自LSU和GRF的写回数据，最终通过rs1Merge/rs2Merge与发射路径的操作数合并，是理解数据依赖和转发机制的关键。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:execute:documentation_focus:002",
-        "doc_priority": "primary",
-        "signals": [
-          "i_LsuDriveToExe_1",
-          "i_grfDriveToExecute_1",
-          "i_lsuToExeData_64",
-          "i_grfToExecuteData_64",
           "w_lastRs1Data_32",
-          "w_lastRs2Data_32"
+          "w_resMutexMergeToFinalWaitMergeData_64",
+          "o_executeDataToLsu_163"
         ],
         "instances": [
-          "rele0Merge",
-          "rele1Merge",
-          "rele2Merge",
-          "rele3Merge",
           "rele0Selector",
-          "rele1Selector",
-          "rele2Selector",
-          "rele3Selector",
           "rs1Merge",
-          "rs2Merge",
-          "regMerge"
+          "resMutexMerge",
+          "finalWaitMerge"
         ],
         "related_flows": [
+          "flow_000_execute_i_launchDriveToExecute_1",
           "flow_001_execute_i_grfDriveToExecute_1",
           "flow_002_execute_i_LsuDriveToExe_1"
         ],
@@ -730,10 +668,10 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_002_execute_i_LsuDriveToExe_1.json",
       "reader_takeaway": {
-        "value": "文档应强调该流在regMerge处终止，未到达模块输出，且数据路径与事件控制路径分离。",
-        "explanation": "该流从LSU输入开始，经过多层合并和选择后终止于regMerge，未连接到模块输出端点。同时，数据载荷通过独立的赋值路径处理，与事件控制流解耦。文档应说明这种分离设计，并指出需要RTL源码确认流的最终去向。",
+        "value": "文档应强调LSU驱动事件如何通过延迟、合并、选择路径最终到达寄存器合并，以及64位数据如何被拆分为32位寄存器数据。",
+        "explanation": "该流展示了从LSU到寄存器读取的完整内部路径，包括多个合并/选择点。数据分解（assign 38/39）是理解负载如何与路径对应的关键。由于流未到达模块输出，文档应说明其作为内部事件传播路径的角色。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -741,9 +679,19 @@
         "doc_priority": "primary",
         "signals": [
           "i_LsuDriveToExe_1",
-          "w_regSelectorFreeToRegMerge_1"
+          "i_lsuToExeData_64",
+          "w_lsuR1Data_32",
+          "w_lsuR2Data_32"
         ],
         "instances": [
+          "lsuDelay0",
+          "lsuMerge",
+          "rele0Merge",
+          "rele2Merge",
+          "rele0Selector",
+          "rele2Selector",
+          "rs1Merge",
+          "rs2Merge",
           "regMerge"
         ],
         "related_flows": [],
@@ -759,18 +707,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "transparent_flows",
-            "path": "modules/execute.json"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/execute.json"
           },
           {
             "source": "assignment_facts",
-            "path": "modules/execute.json"
+            "path": "knowledge_ir/modules/execute.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "来自LSU的驱动事件通过延迟、合并、选择与再合并路径，最终汇聚到寄存器合并阶段，但未到达模块输出端点。",
-            "explanation": "该流从LSU输入事件i_LsuDriveToExe_1开始，经过lsuDelay0透明延迟后，在lsuMerge与另一路径合并，然后分两路分别经过rele0Merge和rele2Merge与来自rele4Splitter的事件合并，再通过rele0Selector和rele2Selector选择器分支，最终通过rs1Merge和rs2Merge合并后进入regMerge，但流在此终止，未连接到模块输出端点。",
+            "value": "来自LSU的驱动事件通过延迟、合并与选择路径，最终汇聚到寄存器合并单元，但未到达模块输出端点。",
+            "explanation": "该流从顶层输入i_LsuDriveToExe_1开始，经过lsuDelay0透明延迟后，在lsuMerge与另一路w_driveToLsuMer合并，随后分发给rele0Merge和rele2Merge，分别与rele4Splitter的驱动合并。合并后的信号进入rele0Selector和rele2Selector进行选择/分支，输出分别导向rs1Merge和rs2Merge，最终在regMerge处合并为w_regSelectorFreeToRegMerge_1。流未到达模块输出端点，表明该流是内部事件传播路径。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -815,17 +763,17 @@
             "semantic_evidence": [
               {
                 "source": "instances.connections",
-                "path": "modules/execute.json"
+                "path": "knowledge_ir/modules/execute.json"
               },
               {
                 "source": "transparent_flows",
-                "path": "modules/execute.json"
+                "path": "knowledge_ir/modules/execute.json"
               }
             ]
           },
           {
-            "value": "LSU数据载荷与事件流并行传输，但事件流本身不包含数据选择或处理逻辑。",
-            "explanation": "接口契约显示i_LsuDriveToExe_1事件携带64位数据载荷i_lsuToExeData_64，但事件流中的组件（延迟、合并、选择器）仅处理事件控制信号，不直接操作数据。数据通过独立的赋值路径（assign 38和39）被选择到w_lsuR1Data_32和w_lsuR2Data_32。",
+            "value": "64位LSU数据作为流事件的负载，通过地址选择拆分为两个32位寄存器数据。",
+            "explanation": "流事件i_LsuDriveToExe_1携带64位数据i_lsuToExeData_64。assign 38和39根据地址选择高32位或低32位，分别赋给w_lsuR1Data_32和w_lsuR2Data_32。这表明流事件的数据负载在寄存器读取阶段被分解，与rs1Merge和rs2Merge路径对应。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -844,8 +792,8 @@
               "38",
               "39"
             ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
             "evidence_refs": [
               "ev:execute:flow:flow_002_execute_i_LsuDriveToExe_1",
               "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
@@ -853,17 +801,17 @@
             "semantic_evidence": [
               {
                 "source": "interface.event_ports",
-                "path": "modules/execute.json"
+                "path": "knowledge_ir/modules/execute.json"
               },
               {
-                "source": "interface.data_ports",
-                "path": "modules/execute.json"
+                "source": "assignment_facts",
+                "path": "knowledge_ir/modules/execute.json"
               }
             ]
           },
           {
-            "value": "存在自由信号o_lsuFreeFromExecute_1，但事件流中未显示其与内部组件的连接关系。",
-            "explanation": "接口契约显示i_LsuDriveToExe_1事件有对应的自由信号o_lsuFreeFromExecute_1，但提供的组件连接中未包含该信号与内部组件的连接，因此无法确定背压机制如何实现。",
+            "value": "流未到达模块输出端点，完成信号o_lsuFreeFromExecute_1可能由其他路径产生。",
+            "explanation": "流最终输出w_regSelectorFreeToRegMerge_1进入regMergeDelay1，但未连接到模块输出。接口合同显示存在o_lsuFreeFromExecute_1作为自由信号，但该流中未体现其生成逻辑。反压机制可能由合并器内部的等待/互斥逻辑隐式实现。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -872,9 +820,13 @@
             "semantic_claim_id": "semantic:flow:execute:flow_002_execute_i_LsuDriveToExe_1:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
+              "w_regSelectorFreeToRegMerge_1",
               "o_lsuFreeFromExecute_1"
             ],
-            "instances": [],
+            "instances": [
+              "regMerge",
+              "regMergeDelay1"
+            ],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -886,7 +838,7 @@
             "semantic_evidence": [
               {
                 "source": "interface.event_ports",
-                "path": "modules/execute.json"
+                "path": "knowledge_ir/modules/execute.json"
               }
             ]
           }
@@ -905,8 +857,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_execute_i_grfDriveToExecute_1.json",
       "reader_takeaway": {
-        "value": "64位数据信号 i_grfToExecuteData_64 作为驱动事件 i_grfDriveToExecute_1 的伴随载荷，通过 grfResSplitter 传递。",
-        "explanation": "接口载荷契约表明 i_grfToExecuteData_64 是 i_grfDriveToExecute_1 的关联数据，宽度为 [63:0]。该数据信号连接到 grfResSplitter.i_data_64，因此载荷随事件流经拆分器，但后续路径中未明确显示数据信号的连接，需要 RTL 源码确认数据是否随事件传递至下游。",
+        "value": "64 位数据信号 i_grfToExecuteData_64 作为 GRF 驱动事件的伴随载荷，与事件同步进入 grfResSplitter。",
+        "explanation": "根据接口载荷契约，i_grfDriveToExecute_1 事件伴随 64 位数据信号 i_grfToExecuteData_64，该数据信号连接到 grfResSplitter 的数据输入，表明事件驱动时携带数据，但数据在后续分裂-合并-选择网络中的传播路径未在上下文中明确。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -915,8 +867,8 @@
         "semantic_claim_id": "semantic:flow:execute:flow_001_execute_i_grfDriveToExecute_1:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_grfDriveToExecute_1",
-          "i_grfToExecuteData_64"
+          "i_grfToExecuteData_64",
+          "i_grfDriveToExecute_1"
         ],
         "instances": [],
         "related_flows": [],
@@ -936,13 +888,13 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/execute.json",
-            "path": "connection_graph"
+            "path": "interface"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述该流作为通用寄存器文件结果驱动的内部事件路径，强调其拆分、合并、选择结构，并明确指出该流不产生模块级输出。",
-            "explanation": "该流是一个典型的内部驱动流，从输入端口开始，经过多层组件处理后汇聚到 regMerge，但未到达模块输出。手册应解释每个组件的角色（拆分、等待合并、选择、互斥合并），并说明数据信号 i_grfToExecuteData_64 的伴随关系。同时需警告该流未完成到模块输出，可能与其他流（如 rele4Splitter 相关流）协同工作。",
+            "value": "最终手册应强调该流为内部事件传播路径，未到达模块输出，并说明其可能用于内部状态更新或延迟处理。",
+            "explanation": "该流从模块输入开始，经过分裂-合并-选择网络，最终在 regMerge 处终止，未连接到模块输出，表明其作用可能是将 GRF 事件分发到内部单元（如寄存器文件）进行更新，而非直接驱动外部接口。手册应避免声称该流有外部输出，并指出需要 RTL 源码确认其最终目的。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -952,7 +904,6 @@
             "doc_priority": "primary",
             "signals": [
               "i_grfDriveToExecute_1",
-              "i_grfToExecuteData_64",
               "w_regSelectorFreeToRegMerge_1"
             ],
             "instances": [
@@ -987,8 +938,8 @@
             ]
           },
           {
-            "value": "通用寄存器文件结果驱动事件从模块输入端口经拆分、合并、选择后最终汇聚至寄存器合并单元，但未到达模块输出端点。",
-            "explanation": "该流仅描述了从输入端口 i_grfDriveToExecute_1 出发，经过 grfResSplitter 拆分、rele1Merge/rele3Merge 合并、rele1Selector/rele3Selector 选择、rs1Merge/rs2Merge 互斥合并，最终到达 regMerge 的路径。上下文明确警告“未从 i_grfDriveToExecute_1 到达模块事件输出”，因此该流是一个内部驱动流，不产生模块级输出事件。",
+            "value": "来自通用寄存器堆（GRF）的驱动事件通过分裂-合并-选择网络，最终汇聚到寄存器合并单元，但未到达模块输出端点。",
+            "explanation": "该流从顶层输入端口 i_grfDriveToExecute_1 进入，经过 grfResSplitter 分裂为两路，分别与来自 rele4Splitter 的事件在 rele1Merge 和 rele3Merge 中合并，再经 rele1Selector 和 rele3Selector 选择后，分别通过 rs1Merge 和 rs2Merge 互斥合并，最终在 regMerge 中合并为 w_regSelectorFreeToRegMerge_1，但该信号仅连接到 regMergeDelay1 的输入，未继续传播到模块输出，表明该流在模块内部终止或用于内部状态更新。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1040,8 +991,8 @@
             ]
           },
           {
-            "value": "存在一个自由信号 o_executeFreeToGrf_1 与输入驱动事件关联，但该流内部未显示其连接或使用。",
-            "explanation": "接口载荷契约指出 o_executeFreeToGrf_1 是 i_grfDriveToExecute_1 的自由信号，但上下文中的组件连接和步骤列表均未包含该信号。这表明自由/反压机制可能由模块顶层或其他未提供的逻辑处理，该流内部不涉及。",
+            "value": "存在自由信号 o_executeFreeToGrf_1 作为 GRF 驱动事件的背压指示，但该信号与流内组件的连接关系未在上下文中提供。",
+            "explanation": "接口载荷契约中提及自由信号 o_executeFreeToGrf_1，表明 GRF 驱动事件可能受背压控制，但该信号在流步骤和组件连接中未出现，无法确定其与流内组件的具体交互，需要 RTL 源码确认。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1086,8 +1037,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_execute_i_launchDriveToExecute_1.json",
       "reader_takeaway": {
-        "value": "输入数据总线i_launchDataToExe_207作为伴随载荷，与驱动事件i_launchDriveToExecute_1同步到达，为流中所有组件提供指令解码和运算所需的数据。",
-        "explanation": "根据接口契约，i_launchDriveToExecute_1事件伴随207位数据总线i_launchDataToExe_207。该数据总线通过赋值1分解为多个控制/数据字段，这些字段被流中的选择器（如exeSelector、op3Selector）用于决定事件分发路径，并被运算单元用于执行。数据路径与驱动路径并行传播，但具体同步机制（如是否通过FIFO同时缓冲）需要RTL源码确认。",
+        "value": "驱动事件与数据载荷并行到达，数据解包为后续运算提供控制信号和操作数",
+        "explanation": "接口契约表明i_launchDriveToExecute_1事件伴随207位数据载荷i_launchDataToExe_207。赋值1将该数据解包为运算类型控制信号（如w_addtype1_3、w_shift_3、w_revType_2等）和操作数（w_op1_32、w_op2_32、w_op3_32）。这些信号驱动exeSelector和op3Selector等选择器的路由决策，实现了控制流与数据流的耦合。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1098,11 +1049,12 @@
         "signals": [
           "i_launchDriveToExecute_1",
           "i_launchDataToExe_207",
-          "w_c_1",
           "w_addtype1_3",
-          "w_op3_32",
+          "w_shift_3",
+          "w_revType_2",
+          "w_op1_32",
           "w_op2_32",
-          "w_op1_32"
+          "w_op3_32"
         ],
         "instances": [],
         "related_flows": [],
@@ -1117,20 +1069,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/execute.json",
-            "path": "interface_data_contract"
+            "source": "knowledge_ir/modules/execute.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/execute.json",
-            "path": "assignments"
+            "source": "parser_pipeline_rtl/modules/execute.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述该流如何从单一输入事件通过多级选择/拆分和等待合并，最终汇聚到寄存器文件写回路径。",
-            "explanation": "该流的核心特征是事件的分发与汇聚：从i_launchDriveToExecute_1出发，经executeSplitter拆分为三条路径，再经exeSelector和op3Selector进一步分发到多个运算单元和等待合并器，最后通过rele0Merge/rele2Merge、rele0Selector/rele2Selector、rs1Merge/rs2Merge和regMerge汇聚到寄存器文件写回路径。手册应强调这些分发和汇聚点的作用，以及它们如何基于指令类型和操作数进行选择。",
+            "value": "手册应重点描述从单一驱动起点到多运算通路和寄存器读取路径的事件分发、同步和仲裁机制",
+            "explanation": "该流展示了从i_launchDriveToExecute_1到多个运算单元MutexMerge和寄存器读取路径的复杂分发网络。关键节点包括executeSplitter的三路分发、exeSelector的11路运算选择、op3Selector的操作数路径分离、WaitMerge的操作数同步、MutexMerge的互斥仲裁，以及lsuMerge的LSU同步。手册应强调这些节点的角色和交互，以及数据载荷如何通过赋值1解包后驱动路由决策。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
@@ -1142,23 +1092,25 @@
               "w_executeSplitterToExeSelector_1",
               "w_executeSplitterToOp3Selector_1",
               "w_executeSplitterToResWaitMerge_1",
-              "w_regSelectorFreeToRegMerge_1"
+              "i_launchDataToExe_207"
             ],
             "instances": [
               "exeFifo2",
               "executeSplitter",
               "exeSelector",
               "op3Selector",
+              "lsuSele1",
               "op3NormalSelector",
-              "addMutexMerge",
-              "andMutexMerge",
-              "eorMutexMerge",
-              "orMutexMerge",
+              "lsuMerge",
               "AddWaitMerge",
               "AndWaitMerge",
               "EorWaitMerge",
               "OrWaitMerge",
               "SatQWaitMerge",
+              "addMutexMerge",
+              "andMutexMerge",
+              "eorMutexMerge",
+              "orMutexMerge",
               "rele0Merge",
               "rele2Merge",
               "rele0Selector",
@@ -1179,18 +1131,16 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/execute.json",
-                "path": "internal_event_flow"
+                "source": "knowledge_ir/modules/execute.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/execute.json",
-                "path": "connection_graph"
+                "source": "parser_pipeline_rtl/modules/execute.json"
               }
             ]
           },
           {
-            "value": "从顶层输入启动信号i_launchDriveToExecute_1出发，经过FIFO缓冲、多级选择/拆分和等待合并，最终汇聚到寄存器文件写回路径的驱动流。",
-            "explanation": "该流以单个驱动事件i_launchDriveToExecute_1为起点，经exeFifo2缓冲后由executeSplitter拆分为三条路径，分别进入exeSelector（运算单元选择）、op3Selector（操作数3选择）和resWaitMerge（结果等待合并）。exeSelector进一步分发到多个运算单元（加法、与、或、异或、移位等），op3Selector则通过op3NormalSelector分发到各运算单元的等待合并器。同时，来自LSU的驱动信号i_LsuDriveToExe1_1通过lsuMerge与流内路径合并，最终通过rele0Merge/rele2Merge、rele0Selector/rele2Selector、rs1Merge/rs2Merge和regMerge汇聚到寄存器文件写回路径。该流未到达模块输出端点，属于内部事件分发与汇聚流。",
+            "value": "从发射单元到执行模块内部各运算通路及寄存器读取路径的驱动事件分发与同步流",
+            "explanation": "该流以i_launchDriveToExecute_1为单一驱动起点，经exeFifo2缓冲后由executeSplitter分为三条路径：一条经exeSelector分发至各运算单元（加法、与、或、异或等）的MutexMerge，一条经op3Selector和op3NormalSelector为运算单元提供第三操作数（op3）并进入WaitMerge，另一条经lsuSele1和lsuMerge与外部LSU驱动汇合后进入寄存器读取路径（rele0Merge/rele2Merge、rele0Selector/rele2Selector、rs1Merge/rs2Merge、regMerge）。流中无明确终点，表明该流为内部事件分发骨架，最终输出由各运算单元和寄存器读取路径的后续流完成。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1203,61 +1153,16 @@
               "w_launchDriveToExecute_1",
               "w_executeSplitterToExeSelector_1",
               "w_executeSplitterToOp3Selector_1",
-              "w_executeSplitterToResWaitMerge_1",
-              "w_exeSelectorToAddMutexMerge_1",
-              "w_exeSelectorToAndMutexMerge_1",
-              "w_exeSelectorToEorMutexMerge_1",
-              "w_exeSelectorToOrMutexMerge_1",
-              "w_exeSelectorToDiv_1",
-              "w_exeSelectorToHsb_1",
-              "w_exeSelectorToMul_1",
-              "w_exeSelectorToResMutexMerge_1",
-              "w_exeSelectorToRev_1",
-              "w_exeSelectorToShift_1",
-              "w_op3SelectorToGrfSpliter_1",
-              "w_op3SelectorToOp3NormalSelector_1",
-              "w_Op3SelectorSank_1",
-              "w_op3SpliterToAddWaitMerge_1",
-              "w_op3SpliterToAndWaitMerge_1",
-              "w_op3SpliterToEorWaitMerge_1",
-              "w_op3SpliterToOrWaitMerge_1",
-              "w_op3SpliterToSatQWaitMerge_1",
-              "w_shiftWaitMergeToAddMutexMerge_1",
-              "w_shiftWaitMergeToAndMutexMerge_1",
-              "w_shiftWaitMergeToEorMutexMerge_1",
-              "w_shiftWaitMergeToOrMutexMerge_1",
-              "w_satQWaitMergeToSatQ_1",
-              "w_driveToLsuMer",
-              "w_rele1driveToMe_1",
-              "w_rele1driveToMe1_1",
-              "w_LsuDriveToExe_1",
-              "w_rele4SplitterDriveToRelo0Merge_1",
-              "w_rele4SplitterDriveToRelo2Merge_1",
-              "w_rele0MergeDriveToRele0Selector_1",
-              "w_rele2MergeDriveToRele2Selector_1",
-              "w_rele0SelectorDriveToMe_1",
-              "w_rele2SelectorDriveToMe_1",
-              "w_rele0SelectorDriveToRs1Merge_1",
-              "w_rele2SelectorDriveToRs2Merge_1",
-              "w_rele1SelectorDriveToRs1Merge_1",
-              "w_rele3SelectorDriveToRs2Merge_1",
-              "w_rs1MergeDriveToRegMerge_1",
-              "w_rs2MergeDriveToRegMerge_1",
-              "w_regSelectorFreeToRegMerge_1"
+              "w_executeSplitterToResWaitMerge_1"
             ],
             "instances": [
               "exeFifo2",
               "executeSplitter",
               "exeSelector",
               "op3Selector",
-              "op3NormalSelector",
-              "addMutexMerge",
-              "andMutexMerge",
-              "eorMutexMerge",
-              "orMutexMerge",
               "lsuSele1",
+              "op3NormalSelector",
               "lsuMerge",
-              "isOneSeleDelay1",
               "AddWaitMerge",
               "AndWaitMerge",
               "EorWaitMerge",
@@ -1283,18 +1188,16 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/execute.json",
-                "path": "internal_event_flow"
+                "source": "knowledge_ir/modules/execute.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/execute.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "parser_pipeline_rtl/modules/execute.json"
               }
             ]
           },
           {
-            "value": "接口存在自由信号o_executeFreeToLaunch_1，可能用于背压控制，但当前流上下文未提供其与内部组件的连接关系。",
-            "explanation": "接口契约显示i_launchDriveToExecute_1事件有对应的自由信号o_executeFreeToLaunch_1，表明该流可能支持背压。然而，当前流上下文未提供该自由信号与内部组件（如exeFifo2）的连接关系，因此无法确定背压如何实现。需要RTL源码确认。",
+            "value": "存在自由/背压信号，但当前上下文未提供其与流中节点的具体连接关系",
+            "explanation": "接口契约中列出了自由信号o_executeFreeToLaunch_1，表明该流支持背压机制。然而，当前上下文未提供该信号与流中任何节点（如exeFifo2、各Merge）的连接信息，无法确定背压的具体实现方式和传播路径。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1305,7 +1208,24 @@
             "signals": [
               "o_executeFreeToLaunch_1"
             ],
-            "instances": [],
+            "instances": [
+              "exeFifo2",
+              "addMutexMerge",
+              "andMutexMerge",
+              "eorMutexMerge",
+              "orMutexMerge",
+              "lsuMerge",
+              "AddWaitMerge",
+              "AndWaitMerge",
+              "EorWaitMerge",
+              "OrWaitMerge",
+              "SatQWaitMerge",
+              "rele0Merge",
+              "rele2Merge",
+              "rs1Merge",
+              "rs2Merge",
+              "regMerge"
+            ],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -1316,8 +1236,7 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/execute.json",
-                "path": "interface_data_contract"
+                "source": "knowledge_ir/modules/execute.json"
               }
             ]
           }
@@ -1336,26 +1255,30 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_003_execute_i_launchDrive_1.json",
       "reader_takeaway": {
-        "value": "手册应重点描述 i_launchDataToExe_207 的位域定义及其到内部线网的映射关系，这是理解执行单元数据路径的基础。",
-        "explanation": "当前流的核心证据是赋值 1，它定义了从输入载荷到内部信号的完整映射。手册应列出每个内部线网对应的位域范围及其语义（如 w_op1_32 为第一操作数），并说明该映射如何支持后续的 ALU、移位、加载/存储等操作。",
+        "value": "207位输入载荷包含执行单元所需的全部控制字段和数据操作数，解包后分别驱动指令类型判断和运算执行。",
+        "explanation": "解包后的信号中，w_op1_32、w_op2_32、w_op3_32为数据操作数，w_c_1、w_S_1、w_grfFlag_1为条件标志，w_addtype1_3、w_bfi_1、w_bfc_1等为指令类型控制，w_load_1、w_loadStoreWidth_2、w_loadSign_1为加载存储控制，w_shift_3、w_shiftC_1等为移位控制，w_satqS_1、w_mulDivS_1为饱和乘除控制。这些信号共同构成执行单元后续运算的输入。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
           "i_launchDataToExe_207",
           "w_op1_32",
           "w_op2_32",
           "w_op3_32",
+          "w_c_1",
+          "w_S_1",
+          "w_grfFlag_1",
+          "w_addtype1_3",
           "w_load_1",
-          "w_shift_3"
+          "w_shift_3",
+          "w_mulDivS_1",
+          "w_satqS_1"
         ],
-        "instances": [
-          "i_launchDrive_1"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [
           "1"
@@ -1368,14 +1291,61 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/execute.json",
-            "path": "assignments"
+            "source": "modules/execute.json",
+            "path": "assignment_facts"
           }
         ],
         "supporting_claims": [
           {
-            "value": "该驱动流将发射阶段传入的指令数据包（i_launchDataToExe_207）解包并分发至执行模块内部各功能子单元的控制与数据路径。",
-            "explanation": "流起点为输入事件 i_launchDrive_1，其携带的 207 位宽载荷 i_launchDataToExe_207 通过赋值依赖（assign 1）被拆解为多个内部线网，包括操作码、操作数、移位控制、加载/存储属性、标志位等，表明该流是执行阶段指令数据注入的核心入口。",
+            "value": "文档应重点描述i_launchDrive_1事件如何触发i_launchDataToExe_207的207位载荷解包为35个独立信号，并列出各信号的功能分类。",
+            "explanation": "该流是执行模块的输入数据准备阶段，无后续模块事件输出，因此文档应聚焦于载荷解包过程。需说明i_launchDataToExe_207的位宽分配（如哪些位对应w_op1_32、w_op2_32等），以及解包后信号如何分类（控制、数据、标志等）。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_launchDrive_1",
+              "i_launchDataToExe_207",
+              "w_c_1",
+              "w_op1_32",
+              "w_op2_32",
+              "w_op3_32",
+              "w_load_1",
+              "w_isLS_1",
+              "w_shift_3",
+              "w_mulDivS_1",
+              "w_satqS_1"
+            ],
+            "instances": [
+              "execute"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "1"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:execute:flow:flow_003_execute_i_launchDrive_1",
+              "ev:execute:semantic_flow:flow_003_execute_i_launchDrive_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "modules/execute.json",
+                "path": "assignment_facts"
+              },
+              {
+                "source": "modules/execute.json",
+                "path": "interface.event_ports"
+              }
+            ]
+          },
+          {
+            "value": "该驱动流从输入事件i_launchDrive_1接收启动信号，将i_launchDataToExe_207的207位宽载荷解包为执行单元所需的全部控制与数据字段。",
+            "explanation": "流仅包含一个输入事件i_launchDrive_1，无后续模块事件输出，表明该流是执行模块内部的数据准备阶段。assign 1将i_launchDataToExe_207的207位宽信号解包为w_c_1、w_op1_32等35个独立信号，覆盖指令类型、操作数、标志位等，构成执行单元的核心输入。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -1388,7 +1358,7 @@
               "i_launchDataToExe_207"
             ],
             "instances": [
-              "i_launchDrive_1"
+              "execute"
             ],
             "related_flows": [],
             "related_assignments": [
@@ -1402,65 +1372,31 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/execute.json",
-                "path": "interface"
+                "source": "modules/execute.json",
+                "path": "interface.event_ports"
               },
               {
-                "source": "parser_pipeline_rtl/modules/execute.json",
-                "path": "assignments"
+                "source": "modules/execute.json",
+                "path": "assignment_facts"
               }
             ]
           },
           {
-            "value": "该流通过单一赋值将指令包中的控制字段（如 w_c_1、w_load_1）与数据字段（如 w_op1_32、w_op2_32）同时分发，控制与数据在此流中紧密耦合。",
-            "explanation": "赋值 1 的左侧包含控制信号（如 w_c_1 条件码、w_load_1 加载使能）和数据信号（如 w_op1_32 操作数），表明该流在注入阶段即完成了控制与数据的分离，但两者均源自同一载荷，因此控制流与数据流在此点合并。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:data_control_effect:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "i_launchDataToExe_207",
-              "w_c_1",
-              "w_op1_32",
-              "w_load_1"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [
-              "1"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:execute:flow:flow_003_execute_i_launchDrive_1",
-              "ev:execute:semantic_flow:flow_003_execute_i_launchDrive_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "parser_pipeline_rtl/modules/execute.json",
-                "path": "assignments"
-              }
-            ]
-          },
-          {
-            "value": "存在反压信号 o_executeFreeToLaunch_1，表明该流支持发射阶段的背压控制，但当前上下文未提供其与 i_launchDrive_1 的直接时序关系。",
-            "explanation": "接口载荷契约中记录了 o_executeFreeToLaunch_1 作为 free 信号，但流步骤中未包含该信号，因此无法确认其是否直接由 i_launchDrive_1 触发或独立于该流。手册应避免过度声明反压机制。",
+            "value": "存在o_executeFreeToLaunch_1作为空闲信号，但当前上下文未提供其与i_launchDrive_1的直接连接或时序关系。",
+            "explanation": "接口载荷契约显示o_executeFreeToLaunch_1为i_launchDrive_1的free_signal，表明存在握手机制。但当前流上下文未包含o_executeFreeToLaunch_1的赋值或连接信息，无法确定其如何影响i_launchDrive_1的驱动条件。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:completion_backpressure:001",
-            "doc_priority": "reference",
+            "doc_priority": "secondary",
             "signals": [
               "o_executeFreeToLaunch_1",
               "i_launchDrive_1"
             ],
             "instances": [
-              "i_launchDrive_1"
+              "execute"
             ],
             "related_flows": [],
             "related_assignments": [],
@@ -1472,7 +1408,7 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/execute.json",
+                "source": "modules/execute.json",
                 "path": "interface_data_contract"
               }
             ]
@@ -2008,38 +1944,13 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "汇聚所有运算单元（加法、移位、乘法、除法、逻辑运算等）的结果，作为最终结果仲裁与合并的中心节点。",
-        "explanation": "resMutexMerge接收来自addFifo、andFifo、eorFifo、orFifo、divFifo、mulSelector、revFifo、satQFifo、exeSelector、secondExeSelector等10路数据，输出w_resMutexMergeToFinalWaitMergeData_64，是结果汇聚的关键互斥合并器。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:execute:component_role:003",
-        "doc_priority": "primary",
-        "signals": [
-          "w_resMutexMergeToFinalWaitMergeData_64"
-        ],
-        "instances": [
-          "resMutexMerge"
-        ],
-        "related_flows": [
-          "flow_000_execute_i_launchDriveToExecute_1"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:execute:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/execute.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/execute.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No component role claim is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:execute:key_instances"
@@ -2193,40 +2104,13 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "将发射请求拆分为三条并行路径：操作数选择路径、操作数3选择路径和结果分发路径。",
-        "explanation": "executeSplitter接收w_launchDriveToExecute_1事件，输出三路数据（cSplitter3_169_41_4_132b_exeData1_4, Data2_41, Data3_132），分别导向exeSelector、op3Selector和后续路径，是执行阶段数据路径分发的起点。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:execute:component_role:002",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_launchDriveToExecute_1",
-          "w_executeSplitterToExeSelector_1",
-          "w_executeSplitterToOp3Selector_1"
-        ],
-        "instances": [
-          "executeSplitter"
-        ],
-        "related_flows": [
-          "flow_000_execute_i_launchDriveToExecute_1"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:execute:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/execute.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/execute.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No component role claim is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:execute:key_instances"
@@ -2640,39 +2524,13 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "作为发射请求的输入FIFO，缓冲来自发射阶段的指令驱动事件，确保执行模块在忙时不会丢失请求。",
-        "explanation": "exeFifo2接收i_launchDriveToExecute_1事件，输出w_launchDriveToExecute_1事件给executeSplitter，是发射路径上的第一个同步点。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:execute:component_role:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "i_launchDriveToExecute_1",
-          "w_launchDriveToExecute_1"
-        ],
-        "instances": [
-          "exeFifo2"
-        ],
-        "related_flows": [
-          "flow_000_execute_i_launchDriveToExecute_1"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:execute:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/execute.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/execute.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No component role claim is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:execute:key_instances"
@@ -3034,17 +2892,50 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将207位宽的发射数据包解析为多个独立的控制信号和操作数，用于后续的指令执行流程。",
+        "explanation": "该赋值将发射阶段传入的宽数据包拆解为操作码、操作数、路径选择、标志位等细粒度信号，是执行阶段指令解码和操作数准备的基础。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:execute:assignment_interpretation:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_launchDataToExe_207",
+          "w_op1_32",
+          "w_op2_32",
+          "w_op3_32",
+          "w_pathCode_8",
+          "w_pc_32",
+          "w_load_1",
+          "w_writeRd_1"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_execute_i_launchDriveToExecute_1"
+        ],
+        "related_assignments": [
+          "1"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:execute:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/execute.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/execute.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:execute:assignments"
@@ -3159,8 +3050,8 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "将最终运算结果（64位）与条件标志位（nzcv）拼接，形成96位数据返回给发射阶段，用于更新流水线状态。",
-        "explanation": "assign 53显示o_exeToLaunchData_96由w_nzcv_4和r_resMutexMergeToFinalWaitMergeData_64拼接而成，表明执行结果和条件码一起回传给发射阶段。",
+        "value": "将执行结果（64位）和条件标志（nzcv）打包成96位数据，通过旁路路径（ByPath）返回给发射阶段。",
+        "explanation": "该赋值将最终的执行结果r_resMutexMergeToFinalWaitMergeData_64和条件标志w_nzcv_4组合，形成反馈给发射阶段的数据，用于支持数据旁路和条件码更新。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -3170,8 +3061,8 @@
         "doc_priority": "secondary",
         "signals": [
           "o_exeToLaunchData_96",
-          "w_nzcv_4",
-          "r_resMutexMergeToFinalWaitMergeData_64"
+          "r_resMutexMergeToFinalWaitMergeData_64",
+          "w_nzcv_4"
         ],
         "instances": [],
         "related_flows": [
@@ -3249,8 +3140,8 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "将当前PC值与异常编号拼接，形成36位异常数据输出，用于触发异常处理。",
-        "explanation": "assign 58显示o_exeToExcpData_36由w_pc_32和w_excNum_4拼接而成，表明异常发生时，执行模块将PC和异常类型打包发送给异常处理单元。",
+        "value": "将当前PC值和异常编号打包，发送给异常处理单元。",
+        "explanation": "该赋值将w_pc_32和w_excNum_4组合成36位数据，用于向异常处理单元报告指令地址和异常类型。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -3307,44 +3198,17 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "写使能信号直通，将输入的写使能直接传递到输出，用于控制后续模块的写操作。",
-        "explanation": "assign 0显示o_wen_2直接等于i_wen_2，属于接口直通，不涉及内部逻辑。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:execute:assignment_interpretation:001",
-        "doc_priority": "reference",
-        "signals": [
-          "o_wen_2",
-          "i_wen_2"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_execute_i_launchDriveToExecute_1"
-        ],
-        "related_assignments": [
-          "0"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:execute:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/execute.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/execute.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:execute:assignments"
@@ -4919,10 +4783,43 @@
   ],
   "important_internal_signals": [
     {
+      "signal": "i_launchDataToExe_207",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:interface",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_launchDriveToExecute_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:interface",
+        "ev:execute:knowledge_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
       "signal": "i_grfDriveToExecute_1",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 22,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -4939,7 +4836,7 @@
       "signal": "i_LsuDriveToExe_1",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 22,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -4953,24 +4850,7 @@
       ]
     },
     {
-      "signal": "i_launchDriveToExecute_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:interface",
-        "ev:execute:knowledge_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_launchDataToExe_207",
+      "signal": "o_executeDataToLsu_163",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 14,
@@ -5034,6 +4914,22 @@
       ]
     },
     {
+      "signal": "o_executeDriveToLsu_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:interface",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
       "signal": "w_rele0SelectorDriveToRs1Merge_1",
       "kind": "wire",
       "width_text": "1",
@@ -5063,70 +4959,6 @@
       "evidence_refs": [
         "ev:execute:parser_module",
         "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_op1_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_op2_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_op3_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_pathCode_8",
-      "kind": "wire",
-      "width_text": "[7:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:semantic_module"
       ]
     },
     {
@@ -5162,40 +4994,6 @@
       ]
     },
     {
-      "signal": "w_launchDriveToExecute_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_resMutexMergeToFinalWaitMergeData_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
       "signal": "w_lastRs1Data_32",
       "kind": "wire",
       "width_text": "[31:0]",
@@ -5212,34 +5010,18 @@
       ]
     },
     {
-      "signal": "i_lsuToExeData_64",
-      "kind": "interface_or_inferred",
-      "width_text": "",
+      "signal": "w_resMutexMergeToFinalWaitMergeData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
       "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
+        "parse",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:execute:interface",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_grfToExecuteData_64",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:interface",
+        "ev:execute:parser_module",
         "ev:execute:semantic_module"
       ]
     },
@@ -5340,23 +5122,7 @@
       ]
     },
     {
-      "signal": "o_executeDriveToGrf_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:interface",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_executeDriveToLsu_1",
+      "signal": "o_exeByPathDriveToLaunch_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 6,
@@ -5388,7 +5154,7 @@
       ]
     },
     {
-      "signal": "o_executeDataToLsu_163",
+      "signal": "o_executeDriveToGrf_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 6,
@@ -5420,38 +5186,82 @@
       ]
     },
     {
-      "signal": "w_executeSplitterToExeSelector_1",
-      "kind": "wire",
-      "width_text": "1",
+      "signal": "i_grfToExecuteData_64",
+      "kind": "interface_or_inferred",
+      "width_text": "",
       "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "parse",
         "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module",
+        "ev:execute:interface",
         "ev:execute:semantic_module"
       ]
     },
     {
-      "signal": "w_executeSplitterToOp3Selector_1",
+      "signal": "i_lsuToExeData_64",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:interface",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_pc_32",
       "kind": "wire",
-      "width_text": "1",
+      "width_text": "[31:0]",
       "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
         "parse",
-        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
         "ev:execute:parser_module",
-        "ev:execute:knowledge_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_executeFreeToLaunch_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:interface",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_executeFreeFromLsu_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:interface",
         "ev:execute:semantic_module"
       ]
     },
@@ -5519,22 +5329,6 @@
       ]
     },
     {
-      "signal": "w_lsuRs1Data_32",
-      "kind": "wire",
-      "width_text": "[31:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:semantic_module"
-      ]
-    },
-    {
       "signal": "w_grfRs1Data_32",
       "kind": "wire",
       "width_text": "[31:0]",
@@ -5551,9 +5345,169 @@
       ]
     },
     {
-      "signal": "w_lastRs2Data_32",
+      "signal": "w_lsuRs1Data_32",
       "kind": "wire",
       "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_exeSelectorToAddData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_exeSelectorToMulData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_exeSelectorToShiftData_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_addMutexMergeToAddData_128",
+      "kind": "wire",
+      "width_text": "[127:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_op1_32",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_op2_32",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_op3_32",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_pathCode_8",
+      "kind": "wire",
+      "width_text": "[7:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_load_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_writeRd_1",
+      "kind": "wire",
+      "width_text": "1",
       "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -5695,6 +5649,54 @@
       ]
     },
     {
+      "signal": "w_launchDriveToExecute_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:knowledge_module"
+      ]
+    },
+    {
+      "signal": "w_executeSplitterToExeSelector_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:knowledge_module"
+      ]
+    },
+    {
+      "signal": "w_executeSplitterToOp3Selector_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:execute:parser_module",
+        "ev:execute:knowledge_module"
+      ]
+    },
+    {
       "signal": "w_exeSelectorToAddMutexMerge_1",
       "kind": "wire",
       "width_text": "1",
@@ -5728,150 +5730,6 @@
     },
     {
       "signal": "w_exeSelectorToEorMutexMerge_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_exeSelectorToOrMutexMerge_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_op3SelectorToGrfSpliter_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_op3SelectorToOp3NormalSelector_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_shiftWaitMergeToAddMutexMerge_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_shiftWaitMergeToAndMutexMerge_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_shiftWaitMergeToEorMutexMerge_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_shiftWaitMergeToOrMutexMerge_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_rele1driveToMe1_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:execute:parser_module",
-        "ev:execute:knowledge_module"
-      ]
-    },
-    {
-      "signal": "w_rele1driveToMe_1",
       "kind": "wire",
       "width_text": "1",
       "importance_score": 4,
@@ -6615,7 +6473,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "execute",
-    "source_file": "rtl\\rtl\\Execute\\execute.v",
+    "source_file": "rtl/rtl/Execute/execute.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -6632,8 +6490,8 @@
       "review_needed": true
     },
     "purpose": {
-      "value": "执行模块是处理器流水线的执行阶段核心，负责接收来自发射（Launch）、通用寄存器堆（GRF）和加载存储单元（LSU）的指令与数据，完成算术逻辑运算、移位、饱和、乘法、除法等操作，并将结果写回GRF、发送给LSU或触发异常。",
-      "explanation": "模块通过多个事件驱动输入（i_launchDriveToExecute_1, i_grfDriveToExecute_1, i_LsuDriveToExe_1）接收不同来源的请求，内部通过大量选择器、合并器、FIFO和运算单元（adder, shifter, muller, satQ等）构成复杂的运算数据路径，最终通过事件驱动输出（o_executeDriveToGrf_1, o_executeDriveToLsu_1, o_exeDriveToExcp_1）分发结果。",
+      "value": "执行模块是处理器流水线的执行阶段，负责接收来自发射阶段（Launch）的指令，从通用寄存器组（GRF）和加载存储单元（LSU）获取操作数，执行算术逻辑运算，并将结果写回或转发。",
+      "explanation": "模块通过事件驱动接口接收来自发射、GRF和LSU的驱动信号，并输出驱动信号到发射、异常处理、GRF和LSU。内部包含大量用于操作数选择、运算执行和结果合并的组件，符合执行阶段的功能定位。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -6645,21 +6503,20 @@
         "i_launchDriveToExecute_1",
         "i_grfDriveToExecute_1",
         "i_LsuDriveToExe_1",
+        "o_exeByPathDriveToLaunch_1",
+        "o_exeDriveToExcp_1",
         "o_executeDriveToGrf_1",
-        "o_executeDriveToLsu_1",
-        "o_exeDriveToExcp_1"
+        "o_executeDriveToLsu_1"
       ],
       "instances": [
         "exeFifo2",
         "executeSplitter",
         "exeSelector",
         "adder",
-        "shifter",
         "muller",
-        "satQ",
+        "shifter",
         "resMutexMerge",
-        "ExcSplitter",
-        "grfSplitter"
+        "finalWaitMerge"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1",
@@ -7186,7 +7043,7 @@
           ],
           "summary": "drive_event ports, count=8, directions=input:4, output:4",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\Execute\\execute.v",
+            "rtl_file": "rtl/rtl/Execute/execute.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -7251,7 +7108,7 @@
           ],
           "summary": "free_backpressure ports, count=7, directions=input:4, output:3",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\Execute\\execute.v",
+            "rtl_file": "rtl/rtl/Execute/execute.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -7340,7 +7197,7 @@
           ],
           "summary": "other_ports ports, count=11, directions=input:4, output:7",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\Execute\\execute.v",
+            "rtl_file": "rtl/rtl/Execute/execute.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -7357,10 +7214,10 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_002_execute_i_LsuDriveToExe_1.json",
         "reader_takeaway": {
-          "value": "文档应强调该流在regMerge处终止，未到达模块输出，且数据路径与事件控制路径分离。",
-          "explanation": "该流从LSU输入开始，经过多层合并和选择后终止于regMerge，未连接到模块输出端点。同时，数据载荷通过独立的赋值路径处理，与事件控制流解耦。文档应说明这种分离设计，并指出需要RTL源码确认流的最终去向。",
+          "value": "文档应强调LSU驱动事件如何通过延迟、合并、选择路径最终到达寄存器合并，以及64位数据如何被拆分为32位寄存器数据。",
+          "explanation": "该流展示了从LSU到寄存器读取的完整内部路径，包括多个合并/选择点。数据分解（assign 38/39）是理解负载如何与路径对应的关键。由于流未到达模块输出，文档应说明其作为内部事件传播路径的角色。",
           "certainty": "ai_inferred",
-          "confidence": "low",
+          "confidence": "medium",
           "source_layers": [
             "semantic_layer"
           ],
@@ -7368,9 +7225,19 @@
           "doc_priority": "primary",
           "signals": [
             "i_LsuDriveToExe_1",
-            "w_regSelectorFreeToRegMerge_1"
+            "i_lsuToExeData_64",
+            "w_lsuR1Data_32",
+            "w_lsuR2Data_32"
           ],
           "instances": [
+            "lsuDelay0",
+            "lsuMerge",
+            "rele0Merge",
+            "rele2Merge",
+            "rele0Selector",
+            "rele2Selector",
+            "rs1Merge",
+            "rs2Merge",
             "regMerge"
           ],
           "related_flows": [],
@@ -7386,18 +7253,18 @@
           ],
           "semantic_evidence": [
             {
-              "source": "transparent_flows",
-              "path": "modules/execute.json"
+              "source": "instances.connections",
+              "path": "knowledge_ir/modules/execute.json"
             },
             {
               "source": "assignment_facts",
-              "path": "modules/execute.json"
+              "path": "knowledge_ir/modules/execute.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "来自LSU的驱动事件通过延迟、合并、选择与再合并路径，最终汇聚到寄存器合并阶段，但未到达模块输出端点。",
-              "explanation": "该流从LSU输入事件i_LsuDriveToExe_1开始，经过lsuDelay0透明延迟后，在lsuMerge与另一路径合并，然后分两路分别经过rele0Merge和rele2Merge与来自rele4Splitter的事件合并，再通过rele0Selector和rele2Selector选择器分支，最终通过rs1Merge和rs2Merge合并后进入regMerge，但流在此终止，未连接到模块输出端点。",
+              "value": "来自LSU的驱动事件通过延迟、合并与选择路径，最终汇聚到寄存器合并单元，但未到达模块输出端点。",
+              "explanation": "该流从顶层输入i_LsuDriveToExe_1开始，经过lsuDelay0透明延迟后，在lsuMerge与另一路w_driveToLsuMer合并，随后分发给rele0Merge和rele2Merge，分别与rele4Splitter的驱动合并。合并后的信号进入rele0Selector和rele2Selector进行选择/分支，输出分别导向rs1Merge和rs2Merge，最终在regMerge处合并为w_regSelectorFreeToRegMerge_1。流未到达模块输出端点，表明该流是内部事件传播路径。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7442,17 +7309,17 @@
               "semantic_evidence": [
                 {
                   "source": "instances.connections",
-                  "path": "modules/execute.json"
+                  "path": "knowledge_ir/modules/execute.json"
                 },
                 {
                   "source": "transparent_flows",
-                  "path": "modules/execute.json"
+                  "path": "knowledge_ir/modules/execute.json"
                 }
               ]
             },
             {
-              "value": "LSU数据载荷与事件流并行传输，但事件流本身不包含数据选择或处理逻辑。",
-              "explanation": "接口契约显示i_LsuDriveToExe_1事件携带64位数据载荷i_lsuToExeData_64，但事件流中的组件（延迟、合并、选择器）仅处理事件控制信号，不直接操作数据。数据通过独立的赋值路径（assign 38和39）被选择到w_lsuR1Data_32和w_lsuR2Data_32。",
+              "value": "64位LSU数据作为流事件的负载，通过地址选择拆分为两个32位寄存器数据。",
+              "explanation": "流事件i_LsuDriveToExe_1携带64位数据i_lsuToExeData_64。assign 38和39根据地址选择高32位或低32位，分别赋给w_lsuR1Data_32和w_lsuR2Data_32。这表明流事件的数据负载在寄存器读取阶段被分解，与rs1Merge和rs2Merge路径对应。",
               "certainty": "ai_inferred",
               "confidence": "medium",
               "source_layers": [
@@ -7471,8 +7338,8 @@
                 "38",
                 "39"
               ],
-              "requires_rtl_source_review": false,
-              "review_status": "ready",
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
               "evidence_refs": [
                 "ev:execute:flow:flow_002_execute_i_LsuDriveToExe_1",
                 "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
@@ -7480,17 +7347,17 @@
               "semantic_evidence": [
                 {
                   "source": "interface.event_ports",
-                  "path": "modules/execute.json"
+                  "path": "knowledge_ir/modules/execute.json"
                 },
                 {
-                  "source": "interface.data_ports",
-                  "path": "modules/execute.json"
+                  "source": "assignment_facts",
+                  "path": "knowledge_ir/modules/execute.json"
                 }
               ]
             },
             {
-              "value": "存在自由信号o_lsuFreeFromExecute_1，但事件流中未显示其与内部组件的连接关系。",
-              "explanation": "接口契约显示i_LsuDriveToExe_1事件有对应的自由信号o_lsuFreeFromExecute_1，但提供的组件连接中未包含该信号与内部组件的连接，因此无法确定背压机制如何实现。",
+              "value": "流未到达模块输出端点，完成信号o_lsuFreeFromExecute_1可能由其他路径产生。",
+              "explanation": "流最终输出w_regSelectorFreeToRegMerge_1进入regMergeDelay1，但未连接到模块输出。接口合同显示存在o_lsuFreeFromExecute_1作为自由信号，但该流中未体现其生成逻辑。反压机制可能由合并器内部的等待/互斥逻辑隐式实现。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7499,9 +7366,13 @@
               "semantic_claim_id": "semantic:flow:execute:flow_002_execute_i_LsuDriveToExe_1:completion_backpressure:001",
               "doc_priority": "secondary",
               "signals": [
+                "w_regSelectorFreeToRegMerge_1",
                 "o_lsuFreeFromExecute_1"
               ],
-              "instances": [],
+              "instances": [
+                "regMerge",
+                "regMergeDelay1"
+              ],
               "related_flows": [],
               "related_assignments": [],
               "requires_rtl_source_review": true,
@@ -7513,7 +7384,7 @@
               "semantic_evidence": [
                 {
                   "source": "interface.event_ports",
-                  "path": "modules/execute.json"
+                  "path": "knowledge_ir/modules/execute.json"
                 }
               ]
             }
@@ -7532,8 +7403,8 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_001_execute_i_grfDriveToExecute_1.json",
         "reader_takeaway": {
-          "value": "64位数据信号 i_grfToExecuteData_64 作为驱动事件 i_grfDriveToExecute_1 的伴随载荷，通过 grfResSplitter 传递。",
-          "explanation": "接口载荷契约表明 i_grfToExecuteData_64 是 i_grfDriveToExecute_1 的关联数据，宽度为 [63:0]。该数据信号连接到 grfResSplitter.i_data_64，因此载荷随事件流经拆分器，但后续路径中未明确显示数据信号的连接，需要 RTL 源码确认数据是否随事件传递至下游。",
+          "value": "64 位数据信号 i_grfToExecuteData_64 作为 GRF 驱动事件的伴随载荷，与事件同步进入 grfResSplitter。",
+          "explanation": "根据接口载荷契约，i_grfDriveToExecute_1 事件伴随 64 位数据信号 i_grfToExecuteData_64，该数据信号连接到 grfResSplitter 的数据输入，表明事件驱动时携带数据，但数据在后续分裂-合并-选择网络中的传播路径未在上下文中明确。",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
@@ -7542,8 +7413,8 @@
           "semantic_claim_id": "semantic:flow:execute:flow_001_execute_i_grfDriveToExecute_1:data_control_effect:001",
           "doc_priority": "primary",
           "signals": [
-            "i_grfDriveToExecute_1",
-            "i_grfToExecuteData_64"
+            "i_grfToExecuteData_64",
+            "i_grfDriveToExecute_1"
           ],
           "instances": [],
           "related_flows": [],
@@ -7563,13 +7434,13 @@
             },
             {
               "source": "parser_pipeline_rtl/modules/execute.json",
-              "path": "connection_graph"
+              "path": "interface"
             }
           ],
           "supporting_claims": [
             {
-              "value": "最终手册应重点描述该流作为通用寄存器文件结果驱动的内部事件路径，强调其拆分、合并、选择结构，并明确指出该流不产生模块级输出。",
-              "explanation": "该流是一个典型的内部驱动流，从输入端口开始，经过多层组件处理后汇聚到 regMerge，但未到达模块输出。手册应解释每个组件的角色（拆分、等待合并、选择、互斥合并），并说明数据信号 i_grfToExecuteData_64 的伴随关系。同时需警告该流未完成到模块输出，可能与其他流（如 rele4Splitter 相关流）协同工作。",
+              "value": "最终手册应强调该流为内部事件传播路径，未到达模块输出，并说明其可能用于内部状态更新或延迟处理。",
+              "explanation": "该流从模块输入开始，经过分裂-合并-选择网络，最终在 regMerge 处终止，未连接到模块输出，表明其作用可能是将 GRF 事件分发到内部单元（如寄存器文件）进行更新，而非直接驱动外部接口。手册应避免声称该流有外部输出，并指出需要 RTL 源码确认其最终目的。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7579,7 +7450,6 @@
               "doc_priority": "primary",
               "signals": [
                 "i_grfDriveToExecute_1",
-                "i_grfToExecuteData_64",
                 "w_regSelectorFreeToRegMerge_1"
               ],
               "instances": [
@@ -7614,8 +7484,8 @@
               ]
             },
             {
-              "value": "通用寄存器文件结果驱动事件从模块输入端口经拆分、合并、选择后最终汇聚至寄存器合并单元，但未到达模块输出端点。",
-              "explanation": "该流仅描述了从输入端口 i_grfDriveToExecute_1 出发，经过 grfResSplitter 拆分、rele1Merge/rele3Merge 合并、rele1Selector/rele3Selector 选择、rs1Merge/rs2Merge 互斥合并，最终到达 regMerge 的路径。上下文明确警告“未从 i_grfDriveToExecute_1 到达模块事件输出”，因此该流是一个内部驱动流，不产生模块级输出事件。",
+              "value": "来自通用寄存器堆（GRF）的驱动事件通过分裂-合并-选择网络，最终汇聚到寄存器合并单元，但未到达模块输出端点。",
+              "explanation": "该流从顶层输入端口 i_grfDriveToExecute_1 进入，经过 grfResSplitter 分裂为两路，分别与来自 rele4Splitter 的事件在 rele1Merge 和 rele3Merge 中合并，再经 rele1Selector 和 rele3Selector 选择后，分别通过 rs1Merge 和 rs2Merge 互斥合并，最终在 regMerge 中合并为 w_regSelectorFreeToRegMerge_1，但该信号仅连接到 regMergeDelay1 的输入，未继续传播到模块输出，表明该流在模块内部终止或用于内部状态更新。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7667,8 +7537,8 @@
               ]
             },
             {
-              "value": "存在一个自由信号 o_executeFreeToGrf_1 与输入驱动事件关联，但该流内部未显示其连接或使用。",
-              "explanation": "接口载荷契约指出 o_executeFreeToGrf_1 是 i_grfDriveToExecute_1 的自由信号，但上下文中的组件连接和步骤列表均未包含该信号。这表明自由/反压机制可能由模块顶层或其他未提供的逻辑处理，该流内部不涉及。",
+              "value": "存在自由信号 o_executeFreeToGrf_1 作为 GRF 驱动事件的背压指示，但该信号与流内组件的连接关系未在上下文中提供。",
+              "explanation": "接口载荷契约中提及自由信号 o_executeFreeToGrf_1，表明 GRF 驱动事件可能受背压控制，但该信号在流步骤和组件连接中未出现，无法确定其与流内组件的具体交互，需要 RTL 源码确认。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7713,8 +7583,8 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_execute_i_launchDriveToExecute_1.json",
         "reader_takeaway": {
-          "value": "输入数据总线i_launchDataToExe_207作为伴随载荷，与驱动事件i_launchDriveToExecute_1同步到达，为流中所有组件提供指令解码和运算所需的数据。",
-          "explanation": "根据接口契约，i_launchDriveToExecute_1事件伴随207位数据总线i_launchDataToExe_207。该数据总线通过赋值1分解为多个控制/数据字段，这些字段被流中的选择器（如exeSelector、op3Selector）用于决定事件分发路径，并被运算单元用于执行。数据路径与驱动路径并行传播，但具体同步机制（如是否通过FIFO同时缓冲）需要RTL源码确认。",
+          "value": "驱动事件与数据载荷并行到达，数据解包为后续运算提供控制信号和操作数",
+          "explanation": "接口契约表明i_launchDriveToExecute_1事件伴随207位数据载荷i_launchDataToExe_207。赋值1将该数据解包为运算类型控制信号（如w_addtype1_3、w_shift_3、w_revType_2等）和操作数（w_op1_32、w_op2_32、w_op3_32）。这些信号驱动exeSelector和op3Selector等选择器的路由决策，实现了控制流与数据流的耦合。",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
@@ -7725,11 +7595,12 @@
           "signals": [
             "i_launchDriveToExecute_1",
             "i_launchDataToExe_207",
-            "w_c_1",
             "w_addtype1_3",
-            "w_op3_32",
+            "w_shift_3",
+            "w_revType_2",
+            "w_op1_32",
             "w_op2_32",
-            "w_op1_32"
+            "w_op3_32"
           ],
           "instances": [],
           "related_flows": [],
@@ -7744,20 +7615,18 @@
           ],
           "semantic_evidence": [
             {
-              "source": "knowledge_ir/modules/execute.json",
-              "path": "interface_data_contract"
+              "source": "knowledge_ir/modules/execute.json"
             },
             {
-              "source": "parser_pipeline_rtl/modules/execute.json",
-              "path": "assignments"
+              "source": "parser_pipeline_rtl/modules/execute.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "最终手册应重点描述该流如何从单一输入事件通过多级选择/拆分和等待合并，最终汇聚到寄存器文件写回路径。",
-              "explanation": "该流的核心特征是事件的分发与汇聚：从i_launchDriveToExecute_1出发，经executeSplitter拆分为三条路径，再经exeSelector和op3Selector进一步分发到多个运算单元和等待合并器，最后通过rele0Merge/rele2Merge、rele0Selector/rele2Selector、rs1Merge/rs2Merge和regMerge汇聚到寄存器文件写回路径。手册应强调这些分发和汇聚点的作用，以及它们如何基于指令类型和操作数进行选择。",
+              "value": "手册应重点描述从单一驱动起点到多运算通路和寄存器读取路径的事件分发、同步和仲裁机制",
+              "explanation": "该流展示了从i_launchDriveToExecute_1到多个运算单元MutexMerge和寄存器读取路径的复杂分发网络。关键节点包括executeSplitter的三路分发、exeSelector的11路运算选择、op3Selector的操作数路径分离、WaitMerge的操作数同步、MutexMerge的互斥仲裁，以及lsuMerge的LSU同步。手册应强调这些节点的角色和交互，以及数据载荷如何通过赋值1解包后驱动路由决策。",
               "certainty": "ai_inferred",
-              "confidence": "medium",
+              "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
@@ -7769,23 +7638,25 @@
                 "w_executeSplitterToExeSelector_1",
                 "w_executeSplitterToOp3Selector_1",
                 "w_executeSplitterToResWaitMerge_1",
-                "w_regSelectorFreeToRegMerge_1"
+                "i_launchDataToExe_207"
               ],
               "instances": [
                 "exeFifo2",
                 "executeSplitter",
                 "exeSelector",
                 "op3Selector",
+                "lsuSele1",
                 "op3NormalSelector",
-                "addMutexMerge",
-                "andMutexMerge",
-                "eorMutexMerge",
-                "orMutexMerge",
+                "lsuMerge",
                 "AddWaitMerge",
                 "AndWaitMerge",
                 "EorWaitMerge",
                 "OrWaitMerge",
                 "SatQWaitMerge",
+                "addMutexMerge",
+                "andMutexMerge",
+                "eorMutexMerge",
+                "orMutexMerge",
                 "rele0Merge",
                 "rele2Merge",
                 "rele0Selector",
@@ -7806,18 +7677,16 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/execute.json",
-                  "path": "internal_event_flow"
+                  "source": "knowledge_ir/modules/execute.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/execute.json",
-                  "path": "connection_graph"
+                  "source": "parser_pipeline_rtl/modules/execute.json"
                 }
               ]
             },
             {
-              "value": "从顶层输入启动信号i_launchDriveToExecute_1出发，经过FIFO缓冲、多级选择/拆分和等待合并，最终汇聚到寄存器文件写回路径的驱动流。",
-              "explanation": "该流以单个驱动事件i_launchDriveToExecute_1为起点，经exeFifo2缓冲后由executeSplitter拆分为三条路径，分别进入exeSelector（运算单元选择）、op3Selector（操作数3选择）和resWaitMerge（结果等待合并）。exeSelector进一步分发到多个运算单元（加法、与、或、异或、移位等），op3Selector则通过op3NormalSelector分发到各运算单元的等待合并器。同时，来自LSU的驱动信号i_LsuDriveToExe1_1通过lsuMerge与流内路径合并，最终通过rele0Merge/rele2Merge、rele0Selector/rele2Selector、rs1Merge/rs2Merge和regMerge汇聚到寄存器文件写回路径。该流未到达模块输出端点，属于内部事件分发与汇聚流。",
+              "value": "从发射单元到执行模块内部各运算通路及寄存器读取路径的驱动事件分发与同步流",
+              "explanation": "该流以i_launchDriveToExecute_1为单一驱动起点，经exeFifo2缓冲后由executeSplitter分为三条路径：一条经exeSelector分发至各运算单元（加法、与、或、异或等）的MutexMerge，一条经op3Selector和op3NormalSelector为运算单元提供第三操作数（op3）并进入WaitMerge，另一条经lsuSele1和lsuMerge与外部LSU驱动汇合后进入寄存器读取路径（rele0Merge/rele2Merge、rele0Selector/rele2Selector、rs1Merge/rs2Merge、regMerge）。流中无明确终点，表明该流为内部事件分发骨架，最终输出由各运算单元和寄存器读取路径的后续流完成。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7830,61 +7699,16 @@
                 "w_launchDriveToExecute_1",
                 "w_executeSplitterToExeSelector_1",
                 "w_executeSplitterToOp3Selector_1",
-                "w_executeSplitterToResWaitMerge_1",
-                "w_exeSelectorToAddMutexMerge_1",
-                "w_exeSelectorToAndMutexMerge_1",
-                "w_exeSelectorToEorMutexMerge_1",
-                "w_exeSelectorToOrMutexMerge_1",
-                "w_exeSelectorToDiv_1",
-                "w_exeSelectorToHsb_1",
-                "w_exeSelectorToMul_1",
-                "w_exeSelectorToResMutexMerge_1",
-                "w_exeSelectorToRev_1",
-                "w_exeSelectorToShift_1",
-                "w_op3SelectorToGrfSpliter_1",
-                "w_op3SelectorToOp3NormalSelector_1",
-                "w_Op3SelectorSank_1",
-                "w_op3SpliterToAddWaitMerge_1",
-                "w_op3SpliterToAndWaitMerge_1",
-                "w_op3SpliterToEorWaitMerge_1",
-                "w_op3SpliterToOrWaitMerge_1",
-                "w_op3SpliterToSatQWaitMerge_1",
-                "w_shiftWaitMergeToAddMutexMerge_1",
-                "w_shiftWaitMergeToAndMutexMerge_1",
-                "w_shiftWaitMergeToEorMutexMerge_1",
-                "w_shiftWaitMergeToOrMutexMerge_1",
-                "w_satQWaitMergeToSatQ_1",
-                "w_driveToLsuMer",
-                "w_rele1driveToMe_1",
-                "w_rele1driveToMe1_1",
-                "w_LsuDriveToExe_1",
-                "w_rele4SplitterDriveToRelo0Merge_1",
-                "w_rele4SplitterDriveToRelo2Merge_1",
-                "w_rele0MergeDriveToRele0Selector_1",
-                "w_rele2MergeDriveToRele2Selector_1",
-                "w_rele0SelectorDriveToMe_1",
-                "w_rele2SelectorDriveToMe_1",
-                "w_rele0SelectorDriveToRs1Merge_1",
-                "w_rele2SelectorDriveToRs2Merge_1",
-                "w_rele1SelectorDriveToRs1Merge_1",
-                "w_rele3SelectorDriveToRs2Merge_1",
-                "w_rs1MergeDriveToRegMerge_1",
-                "w_rs2MergeDriveToRegMerge_1",
-                "w_regSelectorFreeToRegMerge_1"
+                "w_executeSplitterToResWaitMerge_1"
               ],
               "instances": [
                 "exeFifo2",
                 "executeSplitter",
                 "exeSelector",
                 "op3Selector",
-                "op3NormalSelector",
-                "addMutexMerge",
-                "andMutexMerge",
-                "eorMutexMerge",
-                "orMutexMerge",
                 "lsuSele1",
+                "op3NormalSelector",
                 "lsuMerge",
-                "isOneSeleDelay1",
                 "AddWaitMerge",
                 "AndWaitMerge",
                 "EorWaitMerge",
@@ -7910,18 +7734,16 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/execute.json",
-                  "path": "internal_event_flow"
+                  "source": "knowledge_ir/modules/execute.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/execute.json",
-                  "path": "flow_graph.assignment_dependencies"
+                  "source": "parser_pipeline_rtl/modules/execute.json"
                 }
               ]
             },
             {
-              "value": "接口存在自由信号o_executeFreeToLaunch_1，可能用于背压控制，但当前流上下文未提供其与内部组件的连接关系。",
-              "explanation": "接口契约显示i_launchDriveToExecute_1事件有对应的自由信号o_executeFreeToLaunch_1，表明该流可能支持背压。然而，当前流上下文未提供该自由信号与内部组件（如exeFifo2）的连接关系，因此无法确定背压如何实现。需要RTL源码确认。",
+              "value": "存在自由/背压信号，但当前上下文未提供其与流中节点的具体连接关系",
+              "explanation": "接口契约中列出了自由信号o_executeFreeToLaunch_1，表明该流支持背压机制。然而，当前上下文未提供该信号与流中任何节点（如exeFifo2、各Merge）的连接信息，无法确定背压的具体实现方式和传播路径。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -7932,7 +7754,24 @@
               "signals": [
                 "o_executeFreeToLaunch_1"
               ],
-              "instances": [],
+              "instances": [
+                "exeFifo2",
+                "addMutexMerge",
+                "andMutexMerge",
+                "eorMutexMerge",
+                "orMutexMerge",
+                "lsuMerge",
+                "AddWaitMerge",
+                "AndWaitMerge",
+                "EorWaitMerge",
+                "OrWaitMerge",
+                "SatQWaitMerge",
+                "rele0Merge",
+                "rele2Merge",
+                "rs1Merge",
+                "rs2Merge",
+                "regMerge"
+              ],
               "related_flows": [],
               "related_assignments": [],
               "requires_rtl_source_review": true,
@@ -7943,8 +7782,7 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/execute.json",
-                  "path": "interface_data_contract"
+                  "source": "knowledge_ir/modules/execute.json"
                 }
               ]
             }
@@ -7963,26 +7801,30 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_003_execute_i_launchDrive_1.json",
         "reader_takeaway": {
-          "value": "手册应重点描述 i_launchDataToExe_207 的位域定义及其到内部线网的映射关系，这是理解执行单元数据路径的基础。",
-          "explanation": "当前流的核心证据是赋值 1，它定义了从输入载荷到内部信号的完整映射。手册应列出每个内部线网对应的位域范围及其语义（如 w_op1_32 为第一操作数），并说明该映射如何支持后续的 ALU、移位、加载/存储等操作。",
+          "value": "207位输入载荷包含执行单元所需的全部控制字段和数据操作数，解包后分别驱动指令类型判断和运算执行。",
+          "explanation": "解包后的信号中，w_op1_32、w_op2_32、w_op3_32为数据操作数，w_c_1、w_S_1、w_grfFlag_1为条件标志，w_addtype1_3、w_bfi_1、w_bfc_1等为指令类型控制，w_load_1、w_loadStoreWidth_2、w_loadSign_1为加载存储控制，w_shift_3、w_shiftC_1等为移位控制，w_satqS_1、w_mulDivS_1为饱和乘除控制。这些信号共同构成执行单元后续运算的输入。",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:documentation_focus:001",
+          "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:data_control_effect:001",
           "doc_priority": "primary",
           "signals": [
             "i_launchDataToExe_207",
             "w_op1_32",
             "w_op2_32",
             "w_op3_32",
+            "w_c_1",
+            "w_S_1",
+            "w_grfFlag_1",
+            "w_addtype1_3",
             "w_load_1",
-            "w_shift_3"
+            "w_shift_3",
+            "w_mulDivS_1",
+            "w_satqS_1"
           ],
-          "instances": [
-            "i_launchDrive_1"
-          ],
+          "instances": [],
           "related_flows": [],
           "related_assignments": [
             "1"
@@ -7995,14 +7837,61 @@
           ],
           "semantic_evidence": [
             {
-              "source": "parser_pipeline_rtl/modules/execute.json",
-              "path": "assignments"
+              "source": "modules/execute.json",
+              "path": "assignment_facts"
             }
           ],
           "supporting_claims": [
             {
-              "value": "该驱动流将发射阶段传入的指令数据包（i_launchDataToExe_207）解包并分发至执行模块内部各功能子单元的控制与数据路径。",
-              "explanation": "流起点为输入事件 i_launchDrive_1，其携带的 207 位宽载荷 i_launchDataToExe_207 通过赋值依赖（assign 1）被拆解为多个内部线网，包括操作码、操作数、移位控制、加载/存储属性、标志位等，表明该流是执行阶段指令数据注入的核心入口。",
+              "value": "文档应重点描述i_launchDrive_1事件如何触发i_launchDataToExe_207的207位载荷解包为35个独立信号，并列出各信号的功能分类。",
+              "explanation": "该流是执行模块的输入数据准备阶段，无后续模块事件输出，因此文档应聚焦于载荷解包过程。需说明i_launchDataToExe_207的位宽分配（如哪些位对应w_op1_32、w_op2_32等），以及解包后信号如何分类（控制、数据、标志等）。",
+              "certainty": "ai_inferred",
+              "confidence": "medium",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:documentation_focus:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_launchDrive_1",
+                "i_launchDataToExe_207",
+                "w_c_1",
+                "w_op1_32",
+                "w_op2_32",
+                "w_op3_32",
+                "w_load_1",
+                "w_isLS_1",
+                "w_shift_3",
+                "w_mulDivS_1",
+                "w_satqS_1"
+              ],
+              "instances": [
+                "execute"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "1"
+              ],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:execute:flow:flow_003_execute_i_launchDrive_1",
+                "ev:execute:semantic_flow:flow_003_execute_i_launchDrive_1"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "modules/execute.json",
+                  "path": "assignment_facts"
+                },
+                {
+                  "source": "modules/execute.json",
+                  "path": "interface.event_ports"
+                }
+              ]
+            },
+            {
+              "value": "该驱动流从输入事件i_launchDrive_1接收启动信号，将i_launchDataToExe_207的207位宽载荷解包为执行单元所需的全部控制与数据字段。",
+              "explanation": "流仅包含一个输入事件i_launchDrive_1，无后续模块事件输出，表明该流是执行模块内部的数据准备阶段。assign 1将i_launchDataToExe_207的207位宽信号解包为w_c_1、w_op1_32等35个独立信号，覆盖指令类型、操作数、标志位等，构成执行单元的核心输入。",
               "certainty": "ai_inferred",
               "confidence": "medium",
               "source_layers": [
@@ -8015,7 +7904,7 @@
                 "i_launchDataToExe_207"
               ],
               "instances": [
-                "i_launchDrive_1"
+                "execute"
               ],
               "related_flows": [],
               "related_assignments": [
@@ -8029,65 +7918,31 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/execute.json",
-                  "path": "interface"
+                  "source": "modules/execute.json",
+                  "path": "interface.event_ports"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/execute.json",
-                  "path": "assignments"
+                  "source": "modules/execute.json",
+                  "path": "assignment_facts"
                 }
               ]
             },
             {
-              "value": "该流通过单一赋值将指令包中的控制字段（如 w_c_1、w_load_1）与数据字段（如 w_op1_32、w_op2_32）同时分发，控制与数据在此流中紧密耦合。",
-              "explanation": "赋值 1 的左侧包含控制信号（如 w_c_1 条件码、w_load_1 加载使能）和数据信号（如 w_op1_32 操作数），表明该流在注入阶段即完成了控制与数据的分离，但两者均源自同一载荷，因此控制流与数据流在此点合并。",
-              "certainty": "ai_inferred",
-              "confidence": "medium",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:data_control_effect:001",
-              "doc_priority": "secondary",
-              "signals": [
-                "i_launchDataToExe_207",
-                "w_c_1",
-                "w_op1_32",
-                "w_load_1"
-              ],
-              "instances": [],
-              "related_flows": [],
-              "related_assignments": [
-                "1"
-              ],
-              "requires_rtl_source_review": true,
-              "review_status": "needs_review",
-              "evidence_refs": [
-                "ev:execute:flow:flow_003_execute_i_launchDrive_1",
-                "ev:execute:semantic_flow:flow_003_execute_i_launchDrive_1"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "parser_pipeline_rtl/modules/execute.json",
-                  "path": "assignments"
-                }
-              ]
-            },
-            {
-              "value": "存在反压信号 o_executeFreeToLaunch_1，表明该流支持发射阶段的背压控制，但当前上下文未提供其与 i_launchDrive_1 的直接时序关系。",
-              "explanation": "接口载荷契约中记录了 o_executeFreeToLaunch_1 作为 free 信号，但流步骤中未包含该信号，因此无法确认其是否直接由 i_launchDrive_1 触发或独立于该流。手册应避免过度声明反压机制。",
+              "value": "存在o_executeFreeToLaunch_1作为空闲信号，但当前上下文未提供其与i_launchDrive_1的直接连接或时序关系。",
+              "explanation": "接口载荷契约显示o_executeFreeToLaunch_1为i_launchDrive_1的free_signal，表明存在握手机制。但当前流上下文未包含o_executeFreeToLaunch_1的赋值或连接信息，无法确定其如何影响i_launchDrive_1的驱动条件。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
               "semantic_claim_id": "semantic:flow:execute:flow_003_execute_i_launchDrive_1:completion_backpressure:001",
-              "doc_priority": "reference",
+              "doc_priority": "secondary",
               "signals": [
                 "o_executeFreeToLaunch_1",
                 "i_launchDrive_1"
               ],
               "instances": [
-                "i_launchDrive_1"
+                "execute"
               ],
               "related_flows": [],
               "related_assignments": [],
@@ -8099,7 +7954,7 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/execute.json",
+                  "source": "modules/execute.json",
                   "path": "interface_data_contract"
                 }
               ]
@@ -8122,7 +7977,7 @@
     },
     "source_review_context": {
       "module": "execute",
-      "rtl_file": "rtl\\rtl\\Execute\\execute.v",
+      "rtl_file": "rtl/rtl/Execute/execute.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",
@@ -8148,9 +8003,9 @@
   },
   "source_review_claims": [
     {
-      "subject": "i_LsuDriveToExe_1",
-      "summary": "在 execute 模块中，i_LsuDriveToExe_1 经过 4 周期延迟后作为 cMutexMerge2_1b lsuMerge 的输入，未连接到任何模块事件输出。",
-      "explanation": "切片第 1011-1013 行显示 i_LsuDriveToExe_1 通过 delay4U lsuDelay0 延迟后生成 i_LsuDriveToExe1_1，然后接入 lsuMerge 的 i_drive0 端口，其输出 o_free0 连接到 o_lsuFreeFromExecute_1，但未通过任何子模块的 o_drive 或 event 输出驱动后续模块的内部事件路径。因此无法形成从该输入到模块事件输出的完整 flow。",
+      "subject": "internal_event_flow.i_LsuDriveToExe_1",
+      "summary": "RTL中i_LsuDriveToExe_1信号仅直接传递至子模块输入，未触发模块级事件输出。",
+      "explanation": "切片15第1011行显示i_LsuDriveToExe_1进入delay4U实例lsuDelay0后产生i_LsuDriveToExe1_1，再直接输入cMutexMerge2_1b实例lsuMerge；切片16未见由其驱动的事件输出信号。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8168,8 +8023,8 @@
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
-          "line_start": 1011,
+          "file": "rtl/rtl/Execute/execute.v",
+          "line_start": 1009,
           "line_end": 1013
         }
       ],
@@ -8183,9 +8038,9 @@
       "review_status": "needs_review"
     },
     {
-      "subject": "i_grfDriveToExecute_1",
-      "summary": "在 execute 模块中，i_grfDriveToExecute_1 直接连接到 cSplitter2_64b_exe grfResSplitter 的输入，其输出用于分解 GRF 数据，但未连接到任何模块事件输出。",
-      "explanation": "切片第 989-991 行显示 i_grfDriveToExecute_1 直接作为 cSplitter2_64b_exe 实例 grfResSplitter 的 i_drive 输入，该实例输出 o_free 连接到 o_executeFreeToGrf_1，但该信号是 free 信号，而非模块事件输出（如 o_drive 或 event 端口）。因此 i_grfDriveToExecute_1 无法到达任何模块事件输出。",
+      "subject": "internal_event_flow.i_grfDriveToExecute_1",
+      "summary": "RTL中i_grfDriveToExecute_1仅作为cSplitter2_64b_exe实例grfResSplitter的驱动输入，未到达模块事件输出。",
+      "explanation": "切片14第989行将i_grfDriveToExecute_1连接到grfResSplitter的.i_drive端口；切片16未见其直接驱动模块级事件输出信号。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8194,14 +8049,18 @@
       ],
       "signals": [
         "i_grfDriveToExecute_1",
-        "o_executeFreeToGrf_1"
+        "o_executeFreeToGrf_1",
+        "w_grfResSplitterDriveToRelo1Merge_1",
+        "w_rele1MergeFreeToGrfResSplitter_1",
+        "w_rs1Grf_64",
+        "w_rs2Grf_64"
       ],
       "instances": [
         "grfResSplitter"
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
+          "file": "rtl/rtl/Execute/execute.v",
           "line_start": 989,
           "line_end": 991
         }
@@ -8216,9 +8075,9 @@
       "review_status": "needs_review"
     },
     {
-      "subject": "i_launchDriveToExecute_1",
-      "summary": "在 execute 模块中，i_launchDriveToExecute_1 通过 cFifo1 exeFifo2 延迟后生成 w_launchDriveToExecute_1，然后进入 executeSplitter，其所有输出均连接到内部子模块（如 op3Selector、exeSelector、resWaitMerge），但未连接到任何模块事件输出。",
-      "explanation": "切片第 137-149 行显示 i_launchDriveToExecute_1 通过 cFifo1 实例 exeFifo2 处理后得到 w_launchDriveToExecute_1，然后驱动 cSplitter3_169_41_4_132b_exe executeSplitter。该 splitter 的三个输出分别连接到 op3Selector、exeSelector 和 resWaitMerge 的输入，而这些子模块的进一步输出均未返回模块事件输出（如 o_exeDriveToExcp_1 等）。因此 i_launchDriveToExecute_1 无法到达任何模块事件输出。",
+      "subject": "internal_event_flow.i_launchDriveToExecute_1",
+      "summary": "RTL中i_launchDriveToExecute_1经FIFO后驱动模块内部流水线，未形成模块级事件输出。",
+      "explanation": "切片6第139-140行i_launchDriveToExecute_1直接连接至cFifo1实例exeFifo2的.i_drive，其输出w_launchDriveToExecute_1驱动cSplitter3_169_41_4_132b_exe实例executeSplitter（第144-149行），但切片6-16未显示该路径产生模块事件输出信号。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8228,6 +8087,7 @@
       "signals": [
         "i_launchDriveToExecute_1",
         "w_launchDriveToExecute_1",
+        "w_executeFreeToLaunch_1",
         "w_executeSplitterToOp3Selector_1",
         "w_executeSplitterToExeSelector_1",
         "w_executeSplitterToResWaitMerge_1"
@@ -8238,7 +8098,7 @@
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
+          "file": "rtl/rtl/Execute/execute.v",
           "line_start": 137,
           "line_end": 149
         }
@@ -8253,9 +8113,9 @@
       "review_status": "needs_review"
     },
     {
-      "subject": "i_launchDrive_1",
-      "summary": "在 execute 模块中，i_launchDrive_1 仅在端口声明中出现，未在 RTL 切片中作为任何实例或组合逻辑的输入，且未连接到任何模块事件输出。",
-      "explanation": "切片第 60 行声明了 input i_launchDrive_1，但在所给的 RTL 切片（第 1-1138 行）中，i_launchDrive_1 未被任何实例的输入端口或 assign 语句引用。因此无法形成从该输入到模块事件输出的任何路径。",
+      "subject": "internal_event_flow.i_launchDrive_1",
+      "summary": "RTL中i_launchDrive_1在模块中仅被声明为输入端口，切片内未见其连接至任何内部逻辑或事件输出。",
+      "explanation": "切片1第17行声明了i_launchDrive_1输入，切片2第60行再次列出，但切片3-16未出现该信号的赋值或实例连接，未触发模块级事件输出。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8268,7 +8128,12 @@
       "instances": [],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
+          "file": "rtl/rtl/Execute/execute.v",
+          "line_start": 17,
+          "line_end": 17
+        },
+        {
+          "file": "rtl/rtl/Execute/execute.v",
           "line_start": 60,
           "line_end": 60
         }
@@ -8284,8 +8149,8 @@
     },
     {
       "subject": "semantic_flow.i_LsuDriveToExe_1",
-      "summary": "语义流 i_LsuDriveToExe_1 在 RTL 中仅通过 lsuMerge 连接到 o_lsuFreeFromExecute_1，未形成模块事件输出路径。",
-      "explanation": "基于上述对 i_LsuDriveToExe_1 的 evidence_gap 结论，该语义流在 RTL 中缺乏达到模块事件输出的连接。",
+      "summary": "RTL中i_LsuDriveToExe_1经延迟单元后进入互斥合并，其输出o_lsuFreeFromExecute_1和w_lsuMerFree均为握手信号，未发现由该数据流驱动的其他语义流水线。",
+      "explanation": "切片15第1011-1013行显示i_LsuDriveToExe_1经过delay4U产生i_LsuDriveToExe1_1，然后输入cMutexMerge2_1b的.i_drive0，输出o_lsuFreeFromExecute_1；切片未见该路径连接到其他组合数据通路。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8294,15 +8159,18 @@
       ],
       "signals": [
         "i_LsuDriveToExe_1",
-        "o_lsuFreeFromExecute_1"
+        "i_LsuDriveToExe1_1",
+        "o_lsuFreeFromExecute_1",
+        "w_lsuMerFree"
       ],
       "instances": [
+        "lsuDelay0",
         "lsuMerge"
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
-          "line_start": 1011,
+          "file": "rtl/rtl/Execute/execute.v",
+          "line_start": 1009,
           "line_end": 1013
         }
       ],
@@ -8317,8 +8185,8 @@
     },
     {
       "subject": "semantic_flow.i_grfDriveToExecute_1",
-      "summary": "语义流 i_grfDriveToExecute_1 在 RTL 中仅通过 grfResSplitter 连接到 o_executeFreeToGrf_1，未形成模块事件输出路径。",
-      "explanation": "基于上述对 i_grfDriveToExecute_1 的 evidence_gap 结论，该语义流在 RTL 中缺乏达到模块事件输出的连接。",
+      "summary": "RTL中i_grfDriveToExecute_1驱动一个64位分离器，产生两路数据流，但切片内未见该数据流最终合并出模块输出。",
+      "explanation": "切片14第989-991行i_grfDriveToExecute_1驱动grfResSplitter，分支出w_rs1Grf_64和w_rs2Grf_64两路并各自关联握手信号；切片16未见后续模块输出与此数据流直接连接。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8327,14 +8195,18 @@
       ],
       "signals": [
         "i_grfDriveToExecute_1",
-        "o_executeFreeToGrf_1"
+        "o_executeFreeToGrf_1",
+        "w_grfResSplitterDriveToRelo1Merge_1",
+        "w_rele1MergeFreeToGrfResSplitter_1",
+        "w_rs1Grf_64",
+        "w_rs2Grf_64"
       ],
       "instances": [
         "grfResSplitter"
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
+          "file": "rtl/rtl/Execute/execute.v",
           "line_start": 989,
           "line_end": 991
         }
@@ -8350,8 +8222,8 @@
     },
     {
       "subject": "semantic_flow.i_launchDriveToExecute_1",
-      "summary": "语义流 i_launchDriveToExecute_1 在 RTL 中通过 executeSplitter 分散到内部子模块，但未到达任何模块事件输出。",
-      "explanation": "基于上述对 i_launchDriveToExecute_1 的 evidence_gap 结论，该语义流在 RTL 中缺乏达到模块事件输出的连接。",
+      "summary": "RTL中i_launchDriveToExecute_1经FIFO后驱动主分离器，分离出三条流水线支路，但切片内未显示任何支路最终汇聚为完整的模块输出语义流。",
+      "explanation": "切片6第139-149行i_launchDriveToExecute_1经exeFifo2产生w_launchDriveToExecute_1，驱动executeSplitter后产生三路驱动信号；后续切片显示各支路分别进入exeSelector、op3Selector、resWaitMerge等子模块，但无证据表明这些分支形成统一的模块输出数据流。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8371,7 +8243,7 @@
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
+          "file": "rtl/rtl/Execute/execute.v",
           "line_start": 137,
           "line_end": 149
         }
@@ -8387,8 +8259,8 @@
     },
     {
       "subject": "semantic_flow.i_launchDrive_1",
-      "summary": "语义流 i_launchDrive_1 在 RTL 中未使用，未参与任何连接。",
-      "explanation": "基于上述对 i_launchDrive_1 的 evidence_gap 结论，该语义流在 RTL 中无任何连接。",
+      "summary": "RTL中i_launchDrive_1仅作为输入端口声明，未出现在任何内部组合逻辑或实例连接中。",
+      "explanation": "切片1第17行声明了i_launchDrive_1，切片2第60行重复列出，但切片3-16未发现该信号被赋值、连接或用于任何语义数据通路。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -8401,7 +8273,12 @@
       "instances": [],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\Execute\\execute.v",
+          "file": "rtl/rtl/Execute/execute.v",
+          "line_start": 17,
+          "line_end": 17
+        },
+        {
+          "file": "rtl/rtl/Execute/execute.v",
           "line_start": 60,
           "line_end": 60
         }
@@ -8419,8 +8296,8 @@
   "source_review_report": {
     "status": "reviewed",
     "claim_count": 8,
-    "open_question_count": 1,
-    "source_file": "rtl\\rtl\\Execute\\execute.v",
+    "open_question_count": 2,
+    "source_file": "rtl/rtl/Execute/execute.v",
     "report_file": "source_review_report.json"
   }
 }

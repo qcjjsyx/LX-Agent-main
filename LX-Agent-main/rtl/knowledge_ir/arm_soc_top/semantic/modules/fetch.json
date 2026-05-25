@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "fetch",
-  "input_hash": "bf38e4c4938180b46340db009164a50907cc3e7ee28e1f959d85903b165a1130",
+  "input_hash": "30fad34a9c21141c561f1fdcd36eaa25d8dca5f6bcb8cbfca55571b26f396853",
   "source_context": "ai_context/modules/fetch.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\IF\\fetch.v",
+      "source": "rtl/rtl/IF/fetch.v",
       "paths": [
         "module_source"
       ]
@@ -40,21 +40,21 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\IF\\fetch.v",
+        "rtl_file": "rtl/rtl/IF/fetch.v",
         "parser_module": "modules/fetch.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 16,
+    "count": 17,
     "by_type": {
-      "assignment_interpretation": 3,
-      "component_role": 5,
+      "assignment_interpretation": 4,
+      "component_role": 3,
       "documentation_focus": 2,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 2,
-      "structural_responsibility": 1
+      "source_review_request": 3,
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -64,9 +64,9 @@
         "type": "module",
         "module": "fetch"
       },
-      "summary": "指令获取与预解码核心，负责接收来自ICache、Top和Dispatch的驱动事件，将原始指令数据与PC组合，并分发至解码、异常、中断和ICache下游。",
+      "summary": "取指模块，负责接收来自ICache、Top和Dispatch的驱动事件，经过内部流水线处理后，向译码、异常、中断和ICache输出驱动事件。",
       "subject": "fetch",
-      "explanation": "模块接收三个外部驱动事件（i_drvFICache, i_drvFTop, i_drvFdispatch），通过内部Fifo、Selector、Splitter和MutexMerge组件网络进行流水线化处理，最终产生五个输出驱动事件（o_drv2Dec, o_drv2Excp, o_drv2Excp_2, o_drv2ICache, o_drv2Int）。数据输出包括组合后的指令与PC（o_instAndPC_66）、获取地址（o_fetchAddr_32）和异常/中断状态。内部组件网络表明这是一个多源、多目的地的复杂指令获取与分发结构。",
+      "explanation": "模块有三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch），分别对应ICache、顶层和Dispatch的请求。内部通过大量Fifo、MutexMerge、SelSplit等组件进行事件路由、合并和拆分，最终输出五个驱动事件（o_drv2Dec、o_drv2Excp、o_drv2Excp_2、o_drv2ICache、o_drv2Int），分别指向译码、异常、ICache和中断。同时，模块处理指令数据（i_inst_64）和PC值（i_pcFTop_32、i_pcFdispatch_32），输出取指地址（o_fetchAddr_32）和指令+PC组合（o_instAndPC_66）。",
       "signals": [
         "i_drvFICache",
         "i_drvFTop",
@@ -76,11 +76,11 @@
         "o_drv2Excp_2",
         "o_drv2ICache",
         "o_drv2Int",
-        "o_instAndPC_66",
+        "i_inst_64",
+        "i_pcFTop_32",
+        "i_pcFdispatch_32",
         "o_fetchAddr_32",
-        "o_exceptionF_4",
-        "o_exceptionF_2_4",
-        "o_InterruptF_6"
+        "o_instAndPC_66"
       ],
       "instances": [
         "instSplit_inst",
@@ -133,6 +133,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:module_role:001"
@@ -143,36 +146,22 @@
         "type": "module",
         "module": "fetch"
       },
-      "summary": "将来自ICache、Top和Dispatch的驱动事件，通过Fifo缓冲、Selector/Splitter路由和MutexMerge仲裁，最终生成解码、异常、中断和ICache的驱动事件及数据输出。",
-      "subject": "指令获取与预解码流水线",
-      "explanation": "三个输入驱动事件分别通过pmtLock（i_drvFdispatch, i_drvFTop）和instSplit_inst（i_drvFICache）进入内部网络。i_drvFdispatch和i_drvFTop经过Fifo缓冲后，通过Selector/Splitter网络进行路由和复制，最终通过MutexMerge组件合并，产生输出驱动事件。i_drvFICache通过instSplit_inst进行指令拆分，其输出进入cfifo1，然后通过Selector/Splitter网络。assign依赖显示，输出数据（o_instAndPC_66, o_fetchAddr_32, o_exceptionF_4等）由内部寄存器（r_instAndPC_66, r_fetchAddr, r_PCErr等）驱动，表明存在一个内部状态机或流水线寄存器。",
+      "summary": "将三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch）通过内部流水线（Fifo、MutexMerge、SelSplit）进行路由、拆分和合并，最终生成五个输出驱动事件。",
+      "subject": "事件驱动路由与合并",
+      "explanation": "输入事件首先经过pmtLock或instSplit_inst进行初步处理，然后通过cfifo系列Fifo进行缓冲，再经过spliter和select组件进行拆分，最后通过merge组件合并，形成输出事件。例如，i_drvFdispatch事件经过pmtLock、cfifo6、spliter2、select0等组件后，一部分进入cfifo0路径，另一部分进入mergeErr路径，最终生成o_drv2Excp和o_drv2Dec等事件。",
       "signals": [
         "i_drvFICache",
         "i_drvFTop",
         "i_drvFdispatch",
-        "w_drvFdispatch",
-        "w_drvFTop",
-        "w_drv2cfifo1",
-        "w_drv2Dec",
-        "w_drv2ICache",
-        "w_drv2MergeInt",
-        "w_drv2Excp",
-        "w_drv2Excp_2",
         "o_drv2Dec",
         "o_drv2Excp",
         "o_drv2Excp_2",
         "o_drv2ICache",
-        "o_drv2Int",
-        "o_instAndPC_66",
-        "o_fetchAddr_32",
-        "o_exceptionF_4",
-        "o_exceptionF_2_4",
-        "o_InterruptF_6"
+        "o_drv2Int"
       ],
       "instances": [
         "pmtLock",
         "pmtLock_top",
-        "instSplit_inst",
         "cfifo0",
         "cfifo0_save",
         "cfifo1",
@@ -180,12 +169,6 @@
         "cfifo7",
         "cfifo8",
         "cfifo8_saveMerge1Data",
-        "cfifo9",
-        "cfifo10",
-        "cfifo11",
-        "cfifo2",
-        "cfifo4",
-        "cfifo5",
         "cfifo_lock",
         "merge0",
         "merge1",
@@ -220,9 +203,55 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "fetch"
+      },
+      "summary": "接收外部指令数据（i_inst_64）和PC值（i_pcFTop_32、i_pcFdispatch_32），经过内部处理后，输出取指地址（o_fetchAddr_32）和指令+PC组合（o_instAndPC_66）。",
+      "subject": "指令与PC数据处理",
+      "explanation": "i_inst_64直接连接到instSplit_inst实例，可能用于指令拆分。i_pcFdispatch_32连接到merge0实例，参与PC数据的合并。o_fetchAddr_32和o_instAndPC_66分别由内部寄存器r_fetchAddr和r_instAndPC_66驱动，表明这些输出是经过内部流水线处理后的结果。assign依赖显示o_instAndPC_66的生成依赖于r_curNum、r_PCErr和多个指令PC寄存器，表明模块内部维护了多条指令的PC和指令数据。",
+      "signals": [
+        "i_inst_64",
+        "i_pcFTop_32",
+        "i_pcFdispatch_32",
+        "o_fetchAddr_32",
+        "o_instAndPC_66"
+      ],
+      "instances": [
+        "instSplit_inst",
+        "merge0",
+        "merge1",
+        "merge2"
+      ],
+      "related_flows": [
+        "flow_000_fetch_i_drvFdispatch",
+        "flow_001_fetch_i_drvFICache",
+        "flow_002_fetch_i_drvFTop"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/fetch.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
+        }
+      ],
+      "id": "semantic:module:fetch:structural_responsibility:002"
     },
     {
       "claim_type": "component_role",
@@ -230,9 +259,9 @@
         "type": "module",
         "module": "fetch"
       },
-      "subject": "pmtLock, pmtLock_top",
-      "summary": "输入驱动事件的权限控制与缓冲单元，用于i_drvFdispatch和i_drvFTop。",
-      "explanation": "这两个实例的模块类型为cPmtFifo1，位于输入驱动事件i_drvFdispatch和i_drvFTop之后，其输出分别连接到cfifo6和cfifo7。这表明它们可能用于控制事件流的权限或进行一级缓冲，防止下游组件被过快驱动。",
+      "subject": "pmtLock/pmtLock_top",
+      "summary": "输入驱动事件的权限控制与缓冲组件，用于管理i_drvFdispatch和i_drvFTop事件的传递。",
+      "explanation": "pmtLock和pmtLock_top均为cPmtFifo1类型，分别接收i_drvFdispatch和i_drvFTop事件，并输出w_drvFdispatch和w_drvFTop。它们位于输入事件路径的起始位置，可能用于事件权限检查或流量控制，确保事件在合适的时机进入内部流水线。",
       "signals": [
         "i_drvFdispatch",
         "i_drvFTop",
@@ -256,6 +285,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:component_role:001"
@@ -267,8 +299,8 @@
         "module": "fetch"
       },
       "subject": "instSplit_inst",
-      "summary": "指令拆分单元，将输入的64位指令（i_inst_64）拆分为更小的指令单元。",
-      "explanation": "该实例的模块类型为instSplit，接收i_drvFICache作为输入驱动事件，并输出w_drv2cfifo1。其输入数据为i_inst_64，表明它负责将来自ICache的64位指令包拆分为后续流水线可处理的指令单元。",
+      "summary": "指令拆分组件，负责将输入的64位指令（i_inst_64）拆分为更小的指令单元，并驱动后续处理。",
+      "explanation": "instSplit_inst接收i_drvFICache事件和i_inst_64数据，输出w_drv2cfifo1事件。这表明当ICache驱动事件到来时，instSplit_inst会处理指令数据，并将处理结果通过事件驱动传递给cfifo1，进入后续流水线。",
       "signals": [
         "i_drvFICache",
         "i_inst_64",
@@ -280,7 +312,7 @@
       "related_flows": [
         "flow_001_fetch_i_drvFICache"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -289,6 +321,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:component_role:002"
@@ -299,178 +334,20 @@
         "type": "module",
         "module": "fetch"
       },
-      "subject": "merge0, merge1, merge2, mergeErr, mergeInt",
-      "summary": "多源事件仲裁与数据合并单元，用于合并来自不同路径的驱动事件及其关联数据。",
-      "explanation": "这些实例属于MutexMerge或ArbMerge家族。merge0合并来自cfifo11和cfifo2的事件；merge1合并来自merge0、cfifo9和spliter5的事件；merge2合并来自spliter0和cfifo5的事件；mergeErr合并来自select0和spliter4的事件；mergeInt合并来自spliter5和spliter2的事件。它们确保在多个事件源竞争时，只有一个事件被传递，并合并相关的数据负载。",
+      "subject": "mergeInt",
+      "summary": "中断事件合并组件，将来自不同路径的中断驱动事件合并后输出。",
+      "explanation": "mergeInt是一个cArbMerge2_105b_cpu类型的仲裁合并器，接收w_drv2MergeInt和w_spliter2Drv2MergeInt两个输入事件，输出o_drv2Int。这表明中断事件可能来自多个源（例如来自i_drvFdispatch和i_drvFTop路径），需要在此合并后统一输出。",
       "signals": [
-        "w_drv2merge0",
-        "w_drvSplit02Merge0",
-        "w_drvMerge02Merge1",
-        "w_drvCfifo92merge1",
-        "w_drvfifo32merge1",
-        "w_drv2merge2",
-        "w_drvcfifo52merge2",
-        "w_drvDisp2Err",
-        "w_drvSpliter42Excp",
         "w_drv2MergeInt",
         "w_spliter2Drv2MergeInt",
-        "w_drvMerge12cfifo8",
-        "w_drvMerge22Merge3",
-        "o_drv2Excp",
         "o_drv2Int"
       ],
       "instances": [
-        "merge0",
-        "merge1",
-        "merge2",
-        "mergeErr",
         "mergeInt"
       ],
       "related_flows": [
         "flow_000_fetch_i_drvFdispatch",
-        "flow_001_fetch_i_drvFICache",
         "flow_002_fetch_i_drvFTop"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/fetch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
-        }
-      ],
-      "id": "semantic:module:fetch:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "fetch"
-      },
-      "subject": "select0, select1, select2, select3, select4, select5",
-      "summary": "事件选择与分发单元，根据内部状态将输入事件路由到不同的下游路径。",
-      "explanation": "这些实例属于SelSplit家族。它们接收一个输入驱动事件，并根据内部选择逻辑将其分发到两个输出路径之一。例如，select0将事件分发到cfifo0或mergeErr；select1分发到cfifo11或spliter0。这表明它们用于实现条件分支或优先级选择。",
-      "signals": [
-        "w_drvSpliter22Select0",
-        "w_drv2select1_dalay2",
-        "w_drv2select2",
-        "w_drv2select3",
-        "w_drv2select4",
-        "w_drvCfifo82Select5",
-        "w_drvDisp2cfifo0",
-        "w_drvDisp2Err",
-        "w_drv2fifo11",
-        "w_drv2split0",
-        "w_drv2Spliter4",
-        "w_drvselect22cfifo2",
-        "w_drvselect32cfifo4",
-        "w_drvselect32mcfifo5",
-        "w_drv2spliter1",
-        "w_drvselect42cfifo9",
-        "w_drv2ICache",
-        "w_drvSelect52Merge3"
-      ],
-      "instances": [
-        "select0",
-        "select1",
-        "select2",
-        "select3",
-        "select4",
-        "select5"
-      ],
-      "related_flows": [
-        "flow_000_fetch_i_drvFdispatch",
-        "flow_001_fetch_i_drvFICache",
-        "flow_002_fetch_i_drvFTop"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/fetch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
-        }
-      ],
-      "id": "semantic:module:fetch:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "fetch"
-      },
-      "subject": "spliter0, spliter1, spliter2, spliter4, spliter5, spliter_err_2",
-      "summary": "事件复制与分发单元，将输入事件复制并分发到多个下游路径。",
-      "explanation": "这些实例属于SelSplit家族。它们接收一个输入驱动事件，并将其复制到两个输出路径。例如，spliter0将事件分发到merge2和select2；spliter_err_2将事件分发到o_drv2Dec和o_drv2Excp_2。这表明它们用于实现事件广播或并行处理。",
-      "signals": [
-        "w_drv2split0",
-        "w_drv2spliter1",
-        "w_drv2selc0",
-        "w_drv2Spliter4",
-        "w_drvCfifo72Spliter5",
-        "w_drv2Dec",
-        "w_drv2merge2",
-        "w_drv2select2",
-        "w_drv2fifo10",
-        "w_drvSpliter22Select0",
-        "w_drvSpliter42Excp",
-        "w_drv2MergeInt",
-        "w_drvfifo32merge1",
-        "o_drv2Dec",
-        "o_drv2Excp_2"
-      ],
-      "instances": [
-        "spliter0",
-        "spliter1",
-        "spliter2",
-        "spliter4",
-        "spliter5",
-        "spliter_err_2"
-      ],
-      "related_flows": [
-        "flow_000_fetch_i_drvFdispatch",
-        "flow_001_fetch_i_drvFICache",
-        "flow_002_fetch_i_drvFTop"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/fetch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
-        }
-      ],
-      "id": "semantic:module:fetch:component_role:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "fetch"
-      },
-      "subject": "o_exceptionF_4",
-      "summary": "输出PC错误异常码，当r_PCErr有效时输出FetchErrCode，否则输出4'b1111。",
-      "explanation": "该赋值直接驱动输出端口o_exceptionF_4，其值取决于内部寄存器r_PCErr。这表明当检测到PC错误时，会向异常处理单元报告特定的错误码。",
-      "signals": [
-        "o_exceptionF_4",
-        "r_PCErr",
-        "FetchErrCode"
-      ],
-      "related_assignments": [
-        "assign 1"
-      ],
-      "related_flows": [
-        "flow_000_fetch_i_drvFdispatch",
-        "flow_001_fetch_i_drvFICache"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -481,6 +358,45 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
+        }
+      ],
+      "id": "semantic:module:fetch:component_role:003"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "fetch"
+      },
+      "subject": "o_exceptionF_4",
+      "summary": "异常代码输出，当PC错误时输出FetchErrCode，否则输出4'b1111。",
+      "explanation": "该赋值根据内部寄存器r_PCErr的值选择输出异常代码。当r_PCErr为真时，输出预定义的FetchErrCode；否则输出4'b1111，表示无异常。这表明模块内部维护了PC错误状态，并据此生成异常信息。",
+      "signals": [
+        "o_exceptionF_4",
+        "r_PCErr"
+      ],
+      "related_assignments": [
+        "1"
+      ],
+      "related_flows": [
+        "flow_000_fetch_i_drvFdispatch",
+        "flow_001_fetch_i_drvFICache"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/fetch.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:assignment_interpretation:001"
@@ -492,18 +408,17 @@
         "module": "fetch"
       },
       "subject": "o_exceptionF_2_4",
-      "summary": "输出中断内指令异常码，当处于中断状态且指令非BX且BX计数为0时输出FetchErrCode_2。",
-      "explanation": "该赋值驱动o_exceptionF_2_4，其条件涉及i_isInInt、o_instAndPC_66[32]、w_bx和w_bxCount_10。这表明在中断处理期间，如果获取到的指令不是预期的BX指令，会报告一个特定的异常码。",
+      "summary": "第二异常代码输出，在中断处理且指令未完成时，根据w_bx和w_bxCount_10条件输出FetchErrCode_2。",
+      "explanation": "该赋值在i_isInInt为真且o_instAndPC_66[32]为0时，检查w_bx和w_bxCount_10条件。如果满足，则输出FetchErrCode_2，否则输出4'b1111。这表明模块在中断处理过程中，会检测特定指令（可能为bx指令）的执行情况，并据此生成异常。",
       "signals": [
         "o_exceptionF_2_4",
         "i_isInInt",
         "o_instAndPC_66",
         "w_bx",
-        "w_bxCount_10",
-        "FetchErrCode_2"
+        "w_bxCount_10"
       ],
       "related_assignments": [
-        "assign 2"
+        "2"
       ],
       "related_flows": [
         "flow_000_fetch_i_drvFdispatch",
@@ -518,6 +433,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:assignment_interpretation:002"
@@ -528,9 +446,46 @@
         "type": "module",
         "module": "fetch"
       },
+      "subject": "w_intFire_1",
+      "summary": "中断触发信号，由两个中断驱动事件合并而成。",
+      "explanation": "该赋值将w_drv2MergeInt和w_spliter2Drv2MergeInt两个信号进行或运算，生成w_intFire_1。这表明中断触发信号由两个不同路径的事件共同决定，用于后续的中断处理逻辑。",
+      "signals": [
+        "w_intFire_1",
+        "w_drv2MergeInt",
+        "w_spliter2Drv2MergeInt"
+      ],
+      "related_assignments": [
+        "3"
+      ],
+      "related_flows": [
+        "flow_000_fetch_i_drvFdispatch",
+        "flow_002_fetch_i_drvFTop"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/fetch.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
+        }
+      ],
+      "id": "semantic:module:fetch:assignment_interpretation:003"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "fetch"
+      },
       "subject": "w_instAndPC_66",
-      "summary": "根据当前指令数量（r_curNum）从四个预解码指令中选择一个，组合成最终的指令与PC数据。",
-      "explanation": "该赋值是内部数据路径的关键，它根据r_curNum的值（1-4），从w_inst0PC_32/w_inst0_33到w_inst3PC_32/w_inst3_33中选择一组，并与r_PCErr组合成66位数据。这表明模块内部支持最多4条指令的并行预解码和选择。",
+      "summary": "指令与PC组合信号，根据当前指令数量（r_curNum）选择对应的指令和PC数据。",
+      "explanation": "该赋值根据r_curNum的值（1-4），从四个指令PC寄存器（w_inst0PC_32等）和四个指令数据寄存器（w_inst0_33等）中选择一组，并与r_PCErr组合成66位信号。这表明模块内部可以同时处理最多4条指令，并根据当前处理进度选择输出。",
       "signals": [
         "w_instAndPC_66",
         "r_curNum",
@@ -545,52 +500,11 @@
         "w_inst3_33"
       ],
       "related_assignments": [
-        "assign 7"
+        "7"
       ],
       "related_flows": [
         "flow_000_fetch_i_drvFdispatch",
         "flow_001_fetch_i_drvFICache"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/fetch.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/fetch.json"
-        }
-      ],
-      "id": "semantic:module:fetch:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "fetch"
-      },
-      "summary": "每个输出驱动事件（o_drv2*）都有一个对应的输入自由信号（i_freeF*），用于下游模块释放资源。",
-      "subject": "驱动事件与自由信号配对",
-      "explanation": "输出驱动事件o_drv2Dec、o_drv2Excp、o_drv2Excp_2、o_drv2ICache、o_drv2Int分别对应输入自由信号i_freeFDec、i_freeFExcp、i_freeFExcp_2、i_freeFICache、i_freeFInt。这表明模块使用一种请求-确认或握手协议，其中驱动事件是请求，自由信号是下游模块处理完成后的确认，用于控制流水线背压。",
-      "signals": [
-        "o_drv2Dec",
-        "o_drv2Excp",
-        "o_drv2Excp_2",
-        "o_drv2ICache",
-        "o_drv2Int",
-        "i_freeFDec",
-        "i_freeFExcp",
-        "i_freeFExcp_2",
-        "i_freeFICache",
-        "i_freeFInt"
-      ],
-      "related_payload": [
-        "o_instAndPC_66",
-        "o_fetchAddr_32",
-        "o_exceptionF_4",
-        "o_exceptionF_2_4",
-        "o_InterruptF_6"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -601,9 +515,12 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
-      "id": "semantic:module:fetch:interface_intent:001"
+      "id": "semantic:module:fetch:assignment_interpretation:004"
     },
     {
       "claim_type": "interface_intent",
@@ -611,9 +528,9 @@
         "type": "module",
         "module": "fetch"
       },
-      "summary": "i_drvFTop和i_drvFdispatch事件分别与i_pcFTop_32和i_pcFdispatch_32 PC数据相关联。",
+      "summary": "i_drvFTop和i_drvFdispatch事件分别携带对应的PC数据（i_pcFTop_32和i_pcFdispatch_32），表明这些事件与PC值紧密耦合。",
       "subject": "输入驱动事件与PC数据关联",
-      "explanation": "事件-负载合约显示，i_drvFTop的负载是i_pcFTop_32，i_drvFdispatch的负载是i_pcFdispatch_32。这表明当Top或Dispatch模块驱动获取事件时，会同时提供目标PC地址。",
+      "explanation": "事件-载荷合约显示，i_drvFTop事件与i_pcFTop_32关联，i_drvFdispatch事件与i_pcFdispatch_32关联。这表明当这些驱动事件到来时，对应的PC值也同时有效，用于指示当前取指的地址。",
       "signals": [
         "i_drvFTop",
         "i_drvFdispatch",
@@ -633,6 +550,47 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
+        }
+      ],
+      "id": "semantic:module:fetch:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "fetch"
+      },
+      "summary": "输出驱动事件（o_drv2Excp、o_drv2Excp_2、o_drv2Int）与对应的异常/中断数据输出（o_exceptionF_4、o_exceptionF_2_4、o_InterruptF_6）在功能上关联，但事件-载荷合约未明确绑定。",
+      "subject": "输出驱动事件与异常/中断数据关联",
+      "explanation": "虽然事件-载荷合约中这些输出事件没有关联的载荷，但assign依赖显示o_exceptionF_4和o_exceptionF_2_4是异常代码输出，o_InterruptF_6是中断标志输出。这些数据输出很可能与对应的驱动事件同步，但需要RTL源码确认其时序关系。",
+      "signals": [
+        "o_drv2Excp",
+        "o_drv2Excp_2",
+        "o_drv2Int",
+        "o_exceptionF_4",
+        "o_exceptionF_2_4",
+        "o_InterruptF_6"
+      ],
+      "related_payload": [
+        "o_exceptionF_4",
+        "o_exceptionF_2_4",
+        "o_InterruptF_6"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/fetch.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:interface_intent:002"
@@ -643,9 +601,9 @@
         "type": "module",
         "module": "fetch"
       },
-      "summary": "手册应重点描述三个输入驱动事件如何通过内部组件网络（Fifo, Selector, Splitter, MutexMerge）进行路由、缓冲、选择和合并，最终产生五个输出驱动事件。",
-      "subject": "内部事件流与数据路径",
-      "explanation": "模块的核心复杂性在于其内部事件流网络。文档应解释每个输入事件（i_drvFICache, i_drvFTop, i_drvFdispatch）的典型路径，以及Selector和Splitter如何根据内部状态（如r_curNum）进行路由。同时，应说明MutexMerge如何仲裁来自不同路径的事件。",
+      "summary": "手册应重点描述从输入驱动事件到输出驱动事件的内部流水线结构，包括Fifo缓冲、SelSplit拆分和MutexMerge合并的路径。",
+      "subject": "内部事件流水线结构",
+      "explanation": "模块的核心功能是事件驱动的路由和合并，内部包含大量Fifo、SelSplit和MutexMerge组件。文档应清晰说明每个输入事件经过的路径、关键组件的作用以及最终输出事件的生成逻辑，帮助读者理解取指模块的流水线架构。",
       "signals": [
         "i_drvFICache",
         "i_drvFTop",
@@ -659,7 +617,6 @@
       "instances": [
         "pmtLock",
         "pmtLock_top",
-        "instSplit_inst",
         "cfifo0",
         "cfifo0_save",
         "cfifo1",
@@ -667,12 +624,6 @@
         "cfifo7",
         "cfifo8",
         "cfifo8_saveMerge1Data",
-        "cfifo9",
-        "cfifo10",
-        "cfifo11",
-        "cfifo2",
-        "cfifo4",
-        "cfifo5",
         "cfifo_lock",
         "merge0",
         "merge1",
@@ -707,6 +658,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:documentation_focus:001"
@@ -717,31 +671,29 @@
         "type": "module",
         "module": "fetch"
       },
-      "summary": "手册应强调异常和中断信号的产生条件，特别是o_exceptionF_4和o_exceptionF_2_4的赋值逻辑。",
-      "subject": "异常与中断处理",
-      "explanation": "赋值依赖显示，异常码的产生与内部状态（r_PCErr, i_isInInt, w_bx, w_bxCount_10）密切相关。文档应解释这些条件如何触发异常报告，以及异常码（FetchErrCode, FetchErrCode_2）的含义。",
+      "summary": "手册应详细说明指令数据（i_inst_64）和PC值（i_pcFTop_32、i_pcFdispatch_32）的处理流程，以及如何生成o_fetchAddr_32和o_instAndPC_66。",
+      "subject": "指令与PC数据处理逻辑",
+      "explanation": "模块不仅处理事件，还处理指令和PC数据。文档应解释instSplit_inst如何拆分指令，merge0/merge1/merge2如何合并PC和指令数据，以及内部寄存器（如r_fetchAddr、r_instAndPC_66、r_curNum）如何控制数据输出。特别是w_instAndPC_66的生成逻辑（根据r_curNum选择指令）需要重点说明。",
       "signals": [
-        "o_exceptionF_4",
-        "o_exceptionF_2_4",
-        "o_InterruptF_6",
-        "r_PCErr",
-        "i_isInInt",
-        "w_bx",
-        "w_bxCount_10",
-        "FetchErrCode",
-        "FetchErrCode_2"
+        "i_inst_64",
+        "i_pcFTop_32",
+        "i_pcFdispatch_32",
+        "o_fetchAddr_32",
+        "o_instAndPC_66"
       ],
       "instances": [
-        "mergeErr",
-        "mergeInt",
-        "spliter_err_2"
+        "instSplit_inst",
+        "merge0",
+        "merge1",
+        "merge2"
       ],
       "related_flows": [
         "flow_000_fetch_i_drvFdispatch",
-        "flow_001_fetch_i_drvFICache"
+        "flow_001_fetch_i_drvFICache",
+        "flow_002_fetch_i_drvFTop"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -749,6 +701,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:documentation_focus:002"
@@ -759,31 +714,39 @@
         "type": "module",
         "module": "fetch"
       },
-      "reason": "紧凑上下文未提供always块或状态机信息，无法推断r_curNum、r_PCErr、r_fetchAddr、r_instAndPC_66等关键寄存器的更新逻辑。",
-      "subject": "内部状态机与寄存器更新逻辑",
+      "reason": "事件-载荷合约中输出事件（o_drv2Excp等）没有关联载荷，但assign依赖显示有对应的数据输出（o_exceptionF_4等）。需要RTL源码确认这些数据输出是否与驱动事件同步，以及具体的时序关系。",
+      "subject": "输出事件与数据输出的时序关系",
       "needed_source_slice": "always block",
       "signals": [
-        "r_curNum",
-        "r_PCErr",
-        "r_fetchAddr",
-        "r_instAndPC_66",
-        "r_InterruptF_6",
-        "r_dataSelect1"
+        "o_drv2Excp",
+        "o_drv2Excp_2",
+        "o_drv2Int",
+        "o_exceptionF_4",
+        "o_exceptionF_2_4",
+        "o_InterruptF_6"
+      ],
+      "instances": [
+        "mergeErr",
+        "spliter_err_2",
+        "mergeInt"
       ],
       "related_flows": [
         "flow_000_fetch_i_drvFdispatch",
         "flow_001_fetch_i_drvFICache",
         "flow_002_fetch_i_drvFTop"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/fetch.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:source_review_request:001"
@@ -794,54 +757,74 @@
         "type": "module",
         "module": "fetch"
       },
-      "reason": "紧凑上下文未提供Selector和Splitter组件的选择信号或条件，无法解释它们如何决定事件路由路径。",
-      "subject": "Selector/Splitter选择逻辑",
-      "needed_source_slice": "instance connections, assign block",
+      "reason": "pmtLock和pmtLock_top被识别为cPmtFifo1类型，但上下文未提供其具体功能（如权限控制、流量控制等）。需要RTL源码或组件文档确认其确切作用。",
+      "subject": "pmtLock组件的具体功能",
+      "needed_source_slice": "module declaration",
       "signals": [
-        "select0",
-        "select1",
-        "select2",
-        "select3",
-        "select4",
-        "select5",
-        "spliter0",
-        "spliter1",
-        "spliter2",
-        "spliter4",
-        "spliter5",
-        "spliter_err_2"
+        "i_drvFdispatch",
+        "i_drvFTop",
+        "w_drvFdispatch",
+        "w_drvFTop"
       ],
       "instances": [
-        "select0",
-        "select1",
-        "select2",
-        "select3",
-        "select4",
-        "select5",
-        "spliter0",
-        "spliter1",
-        "spliter2",
-        "spliter4",
-        "spliter5",
-        "spliter_err_2"
+        "pmtLock",
+        "pmtLock_top"
       ],
       "related_flows": [
         "flow_000_fetch_i_drvFdispatch",
-        "flow_001_fetch_i_drvFICache",
         "flow_002_fetch_i_drvFTop"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/fetch.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
         }
       ],
       "id": "semantic:module:fetch:source_review_request:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "fetch"
+      },
+      "reason": "instSplit_inst接收64位指令并输出事件，但上下文未说明其拆分逻辑（如拆分为几条指令、如何对齐等）。需要RTL源码确认其具体实现。",
+      "subject": "instSplit_inst的指令拆分逻辑",
+      "needed_source_slice": "module declaration",
+      "signals": [
+        "i_drvFICache",
+        "i_inst_64",
+        "w_drv2cfifo1"
+      ],
+      "instances": [
+        "instSplit_inst"
+      ],
+      "related_flows": [
+        "flow_001_fetch_i_drvFICache"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/fetch.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/fetch.json"
+        },
+        {
+          "source": "rtl/rtl/IF/fetch.v"
+        }
+      ],
+      "id": "semantic:module:fetch:source_review_request:003"
     }
   ],
   "evidence_gaps": []

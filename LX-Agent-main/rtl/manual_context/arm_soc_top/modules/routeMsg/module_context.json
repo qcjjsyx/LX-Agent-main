@@ -6,10 +6,10 @@
     "module_name": "routeMsg",
     "module_role": "submodule",
     "source_files": [
-      "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v"
+      "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v"
     ],
     "source": {
-      "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
+      "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
       "parser_module": "modules/routeMsg.json"
     },
     "certainty": "deterministic_fact",
@@ -98,8 +98,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "路由模块，将输入消息根据方向选择分发到五个输出方向（东、本地、北、南、西）。",
-      "explanation": "模块接收一个输入驱动事件和关联的51位消息负载，通过内部组件（接收FIFO、方向分叉、延迟单元、发送FIFO）处理后，生成五个方向的事件输出和对应的消息输出。方向选择由内部仲裁逻辑（基于w_eastVld、w_westVld等信号）决定。",
+      "value": "路由消息分发模块，将输入消息根据方向选择分发到五个方向（东、本地、北、南、西）的发送FIFO。",
+      "explanation": "模块接收一个输入事件i_drive和对应的51位消息i_msg_51，通过内部组件（receiveFifo、dirFork、方向延迟单元、方向SendFifo）处理后，产生五个方向的事件输出（o_driveEArb等）和对应的消息输出（o_eastMsg_51等）。方向选择逻辑由dirFork（cCondFork5）和相关的valid信号（w_eastVld, w_westVld等）控制。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -147,14 +147,14 @@
           "source": "parser_pipeline_rtl/modules/routeMsg.json"
         },
         {
-          "source": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v"
+          "source": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v"
         }
       ]
     },
     "responsibility_claims": [
       {
-        "value": "路由模块，将输入消息根据方向选择分发到五个输出方向（东、本地、北、南、西）。",
-        "explanation": "模块接收一个输入驱动事件和关联的51位消息负载，通过内部组件（接收FIFO、方向分叉、延迟单元、发送FIFO）处理后，生成五个方向的事件输出和对应的消息输出。方向选择由内部仲裁逻辑（基于w_eastVld、w_westVld等信号）决定。",
+        "value": "路由消息分发模块，将输入消息根据方向选择分发到五个方向（东、本地、北、南、西）的发送FIFO。",
+        "explanation": "模块接收一个输入事件i_drive和对应的51位消息i_msg_51，通过内部组件（receiveFifo、dirFork、方向延迟单元、方向SendFifo）处理后，产生五个方向的事件输出（o_driveEArb等）和对应的消息输出（o_eastMsg_51等）。方向选择逻辑由dirFork（cCondFork5）和相关的valid信号（w_eastVld, w_westVld等）控制。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -202,13 +202,13 @@
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           },
           {
-            "source": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v"
+            "source": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v"
           }
         ]
       },
       {
-        "value": "负责将输入消息根据方向仲裁结果，分发到五个方向（东、本地、北、南、西）的发送FIFO，并输出对应的驱动事件和消息负载。",
-        "explanation": "输入消息通过receiveFifo缓冲，经dirFork（条件分叉）根据方向有效信号（w_eastVld、w_westVld等）选择路径，再通过延迟单元（delayE、delayL等）送入对应的发送FIFO（eastSendFifo等），最终输出驱动事件和消息。方向仲裁逻辑由assign_dependencies中的组合逻辑实现，优先级为东/西 > 北/南 > 本地。",
+        "value": "通过receiveFifo实例缓冲输入事件i_drive，为后续的方向分发提供稳定的驱动信号。",
+        "explanation": "receiveFifo是一个cFifo1实例，它接收i_drive事件，并输出w_driveFork信号。这个FIFO用于解耦输入事件和内部处理逻辑，确保事件不会丢失。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -218,33 +218,150 @@
         "doc_priority": "primary",
         "signals": [
           "i_drive",
-          "i_msg_51",
-          "w_driveFork",
+          "w_driveFork"
+        ],
+        "instances": [
+          "receiveFifo"
+        ],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      {
+        "value": "通过dirFork实例和方向valid信号（w_eastVld, w_westVld等）实现消息的方向路由。",
+        "explanation": "dirFork是一个cCondFork5实例，它根据w_eastVld, w_westVld, w_northVld, w_southVld, w_localVld等信号，将输入事件w_driveFork_delay分发到五个方向对应的延迟单元。方向valid信号的生成逻辑（如assign 6, 8, 9）体现了优先级：东/西方向优先，然后是北/南，最后是本地。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:structural_responsibility:002",
+        "doc_priority": "primary",
+        "signals": [
           "w_driveFork_delay",
           "w_driveEFifo_t",
+          "w_driveLFifo_t",
+          "w_driveNFifo_t",
+          "w_driveSFifo_t",
+          "w_driveWFifo_t",
+          "w_eastVld",
+          "w_westVld",
+          "w_northVld",
+          "w_southVld",
+          "w_localVld"
+        ],
+        "instances": [
+          "dirFork"
+        ],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      {
+        "value": "每个方向（东、本地、北、南、西）都有一个延迟单元（如delayE）和一个发送FIFO（如eastSendFifo），用于进一步处理分发后的事件。",
+        "explanation": "dirFork输出的每个方向事件（如w_driveEFifo_t）先经过一个延迟单元（如delayE），然后驱动对应的发送FIFO（如eastSendFifo）。发送FIFO最终产生输出事件（如o_driveEArb）和消息输出（如o_eastMsg_51）。延迟单元可能用于时序调整或同步。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:structural_responsibility:003",
+        "doc_priority": "primary",
+        "signals": [
+          "w_driveEFifo_t",
           "w_driveEFifo",
+          "o_driveEArb",
+          "o_eastMsg_51",
           "w_driveLFifo_t",
           "w_driveLFifo",
+          "o_driveLArb",
+          "o_localMsg_51",
           "w_driveNFifo_t",
           "w_driveNFifo",
+          "o_driveNArb",
+          "o_northMsg_51",
           "w_driveSFifo_t",
           "w_driveSFifo",
+          "o_driveSArb",
+          "o_southMsg_51",
           "w_driveWFifo_t",
           "w_driveWFifo",
-          "o_driveEArb",
-          "o_driveLArb",
-          "o_driveNArb",
-          "o_driveSArb",
           "o_driveWArb",
-          "o_eastMsg_51",
-          "o_localMsg_51",
-          "o_northMsg_51",
-          "o_southMsg_51",
           "o_westMsg_51"
         ],
         "instances": [
+          "eastSendFifo",
+          "localSendFifo",
+          "northSendFifo",
+          "southSendFifo",
+          "westSendFifo"
+        ],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      {
+        "value": "从五个方向仲裁器接收空闲信号（i_freeEArb等），并汇总输出一个空闲信号（o_free）。",
+        "explanation": "每个方向的发送FIFO（如eastSendFifo）接收来自外部仲裁器的空闲信号（如i_freeEArb），用于指示下游可以接收新消息。receiveFifo则输出一个汇总的空闲信号o_free，用于向上游指示本模块可以接收新消息。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:structural_responsibility:004",
+        "doc_priority": "secondary",
+        "signals": [
+          "i_freeEArb",
+          "i_freeLArb",
+          "i_freeNArb",
+          "i_freeSArb",
+          "i_freeWArb",
+          "o_free"
+        ],
+        "instances": [
           "receiveFifo",
-          "dirFork",
           "eastSendFifo",
           "localSendFifo",
           "northSendFifo",
@@ -272,8 +389,53 @@
     ],
     "documentation_focus": [
       {
-        "value": "文档应重点描述方向仲裁逻辑，包括东/西方向的高优先级以及北/南/本地的优先级顺序。",
-        "explanation": "方向仲裁是模块的核心功能，决定了消息的路由行为。assign_dependencies中的组合逻辑明确显示了优先级：东/西 > 北/南 > 本地。文档应解释这一优先级如何影响消息分发。",
+        "value": "文档应描述从输入到输出的内部流水线：receiveFifo -> delayUart0 -> dirFork -> 方向延迟 -> 方向SendFifo。",
+        "explanation": "key_component_connections显示了清晰的流水线结构。每个阶段都有明确的组件和信号，文档应描述这个流水线如何工作，以及每个组件的角色。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:documentation_focus:002",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drive",
+          "w_driveFork",
+          "w_driveFork_delay",
+          "w_driveEFifo_t",
+          "w_driveEFifo",
+          "o_driveEArb"
+        ],
+        "instances": [
+          "receiveFifo",
+          "dirFork",
+          "eastSendFifo",
+          "localSendFifo",
+          "northSendFifo",
+          "southSendFifo",
+          "westSendFifo"
+        ],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      {
+        "value": "文档应重点描述方向路由的优先级逻辑：东/西 > 北/南 > 本地。",
+        "explanation": "assign 6, 8, 9显示了明确的优先级逻辑。东/西方向具有最高优先级，其次是北/南，本地优先级最低。这是模块的核心行为，需要在文档中清晰说明。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -301,6 +463,9 @@
           "ev:routeMsg:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           }
@@ -558,8 +723,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_routeMsg_i_drive.json",
       "reader_takeaway": {
-        "value": "手册应强调事件从输入到五个方向的分发路径、FIFO缓冲点和延迟单元",
-        "explanation": "流的核心是dirFork分支器和后续的FIFO缓冲，延迟单元用于时序对齐，手册需清晰描述这些组件的连接和功能。",
+        "value": "最终手册应重点描述事件从 i_drive 到五个方向输出端口的完整路径，以及 dirFork 的方向选择机制。",
+        "explanation": "该流的核心功能是事件分发。手册应清晰展示事件经过的每个组件（FIFO、延迟、分叉器）及其作用，并解释 dirFork 如何根据载荷决定事件去向。同时应说明 FIFO 的缓冲作用和可能的阻塞点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -572,14 +737,14 @@
           "w_driveFork",
           "w_driveFork_delay",
           "w_driveEFifo_t",
-          "w_driveLFifo_t",
-          "w_driveNFifo_t",
-          "w_driveSFifo_t",
-          "w_driveWFifo_t",
           "w_driveEFifo",
+          "w_driveLFifo_t",
           "w_driveLFifo",
+          "w_driveNFifo_t",
           "w_driveNFifo",
+          "w_driveSFifo_t",
           "w_driveSFifo",
+          "w_driveWFifo_t",
           "w_driveWFifo",
           "o_driveEArb",
           "o_driveLArb",
@@ -622,8 +787,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "从输入事件 i_drive 到五个方向仲裁器输出事件的分发与缓冲驱动流",
-            "explanation": "该流将单个输入事件通过接收FIFO、UART延迟、条件分支器，再经五个方向各自的延迟和发送FIFO，最终输出到五个方向仲裁器，实现事件的方向分发与同步缓冲。",
+            "value": "从输入端口 i_drive 接收事件，经过缓冲、延迟和方向分叉后，分发到五个方向输出端口的单驱动内部事件流。",
+            "explanation": "该流是 routeMsg 模块的核心内部事件分发路径。事件从 i_drive 进入，首先由 receiveFifo 缓冲，然后经过 delayUart0 延迟，再由 dirFork 根据方向选择分叉为五路，每路再经过各自的 delay6U 延迟和 sendFifo 缓冲，最终输出到五个方向仲裁器。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -636,14 +801,14 @@
               "w_driveFork",
               "w_driveFork_delay",
               "w_driveEFifo_t",
-              "w_driveLFifo_t",
-              "w_driveNFifo_t",
-              "w_driveSFifo_t",
-              "w_driveWFifo_t",
               "w_driveEFifo",
+              "w_driveLFifo_t",
               "w_driveLFifo",
+              "w_driveNFifo_t",
               "w_driveNFifo",
+              "w_driveSFifo_t",
               "w_driveSFifo",
+              "w_driveWFifo_t",
               "w_driveWFifo",
               "o_driveEArb",
               "o_driveLArb",
@@ -686,32 +851,24 @@
             ]
           },
           {
-            "value": "输出事件o_driveEArb等关联空闲信号i_freeEArb等，但流中未体现反压机制",
-            "explanation": "接口显示每个输出事件有对应空闲输入信号，但流步骤和连接中未包含这些信号，可能反压由外部仲裁器处理或通过其他路径实现。",
+            "value": "输入事件携带的 51 位载荷 i_msg_51 可能用于 dirFork 的方向选择。",
+            "explanation": "接口载荷契约显示 i_drive 事件携带 i_msg_51 载荷。dirFork 作为条件分叉，其分叉逻辑很可能依赖于该载荷中的方向字段。然而，当前上下文未提供具体的分叉条件或载荷字段映射。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:completion_backpressure:001",
-            "doc_priority": "secondary",
+            "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
+            "doc_priority": "primary",
             "signals": [
-              "o_driveEArb",
-              "i_freeEArb",
-              "o_driveLArb",
-              "i_freeLArb",
-              "o_driveNArb",
-              "i_freeNArb",
-              "o_driveSArb",
-              "i_freeSArb",
-              "o_driveWArb",
-              "i_freeWArb"
+              "i_drive",
+              "i_msg_51"
             ],
-            "instances": [
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
               "(none)"
             ],
-            "related_flows": [],
-            "related_assignments": [],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [
@@ -728,18 +885,74 @@
             ]
           },
           {
-            "value": "输入事件i_drive携带52位消息负载，但流中未显式传递负载信号",
-            "explanation": "接口显示i_drive关联i_msg_51负载，但流步骤和连接中未出现该负载信号，可能负载在FIFO内部传递或由其他路径处理，需RTL源码确认。",
+            "value": "流中的 FIFO 实例可能引入背压，但具体机制未在上下文中明确。",
+            "explanation": "receiveFifo 和五个 sendFifo 实例被标记为阻塞点，表明它们可能因满而阻塞上游事件。然而，当前上下文未提供这些 FIFO 的满状态信号或背压传播路径。输出端口的 free 信号可能间接影响 sendFifo 的行为。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
+            "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
               "i_drive",
-              "i_msg_51"
+              "o_driveEArb",
+              "o_driveLArb",
+              "o_driveNArb",
+              "o_driveSArb",
+              "o_driveWArb",
+              "i_freeEArb",
+              "i_freeLArb",
+              "i_freeNArb",
+              "i_freeSArb",
+              "i_freeWArb"
+            ],
+            "instances": [
+              "receiveFifo",
+              "eastSendFifo",
+              "localSendFifo",
+              "northSendFifo",
+              "southSendFifo",
+              "westSendFifo"
+            ],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
+              "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "instances.connections"
+              },
+              {
+                "source": "interface.event_ports"
+              }
+            ]
+          },
+          {
+            "value": "每个输出事件端口关联一个独立的 free 输入信号，用于背压控制。",
+            "explanation": "接口契约显示 o_driveEArb、o_driveLArb 等输出事件端口各自关联一个 free 信号（如 i_freeEArb）。这表明下游模块可以通过这些 free 信号向 routeMsg 模块指示是否准备好接收新事件，从而控制事件流。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:002",
+            "doc_priority": "secondary",
+            "signals": [
+              "o_driveEArb",
+              "i_freeEArb",
+              "o_driveLArb",
+              "i_freeLArb",
+              "o_driveNArb",
+              "i_freeNArb",
+              "o_driveSArb",
+              "i_freeSArb",
+              "o_driveWArb",
+              "i_freeWArb"
             ],
             "instances": [],
             "related_flows": [],
@@ -789,13 +1002,43 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No component role claim is available.",
-        "review_status": "needs_review"
+        "value": "条件分支器，根据方向valid信号将事件分发到五个方向路径。",
+        "explanation": "dirFork是一个cCondFork5实例，它根据w_eastVld, w_westVld, w_northVld, w_southVld, w_localVld等信号，将输入事件w_driveFork_delay分发到五个方向对应的延迟单元。它是模块的核心路由决策点。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:component_role:002",
+        "doc_priority": "primary",
+        "signals": [
+          "w_driveFork_delay",
+          "w_driveEFifo_t",
+          "w_driveLFifo_t",
+          "w_driveNFifo_t",
+          "w_driveSFifo_t",
+          "w_driveWFifo_t"
+        ],
+        "instances": [
+          "dirFork"
+        ],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
       },
       "evidence_refs": [
         "ev:routeMsg:key_instances"
@@ -897,13 +1140,39 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No component role claim is available.",
-        "review_status": "needs_review"
+        "value": "输入事件缓冲器，用于解耦上游事件源和内部方向分发逻辑。",
+        "explanation": "receiveFifo是一个cFifo1实例，它接收i_drive事件，并输出w_driveFork信号。它确保输入事件在内部处理前被安全地存储。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:component_role:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drive",
+          "w_driveFork"
+        ],
+        "instances": [
+          "receiveFifo"
+        ],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
       },
       "evidence_refs": [
         "ev:routeMsg:key_instances"
@@ -966,196 +1235,6 @@
   ],
   "assignment_impact_summary": [
     {
-      "assignment_id": "assign_6",
-      "index": 6,
-      "lhs": "w_northVld",
-      "rhs": "w_northVldSN & ~(w_eastVld | w_westVld)",
-      "lhs_terms": [
-        "w_northVld"
-      ],
-      "rhs_terms": [
-        "w_northVldSN",
-        "w_eastVld",
-        "w_westVld"
-      ],
-      "impact_area": "unknown",
-      "doc_priority": "primary",
-      "interpretation": {
-        "value": "方向仲裁逻辑，根据东/西方向有效信号优先级决定北、南、本地方向的有效性。",
-        "explanation": "assign_dependencies中的组合逻辑实现方向优先级仲裁：w_northVld = w_northVldSN & ~(w_eastVld | w_westVld)，w_southVld = w_southVldNS & ~(w_eastVld | w_westVld)，w_localVld = ~(w_westVld | w_eastVld | w_southVld | w_northVld)。这表明东/西方向具有最高优先级，北/南次之，本地最低。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:001",
-        "doc_priority": "primary",
-        "signals": [
-          "w_northVld",
-          "w_southVld",
-          "w_localVld",
-          "w_eastVld",
-          "w_westVld",
-          "w_northVldSN",
-          "w_southVldNS"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_routeMsg_i_drive"
-        ],
-        "related_assignments": [
-          "6",
-          "8",
-          "9"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:routeMsg:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/routeMsg.json"
-          }
-        ]
-      },
-      "certainty": "derived_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:assignments"
-      ]
-    },
-    {
-      "assignment_id": "assign_8",
-      "index": 8,
-      "lhs": "w_southVld",
-      "rhs": "w_southVldNS & ~(w_eastVld | w_westVld)",
-      "lhs_terms": [
-        "w_southVld"
-      ],
-      "rhs_terms": [
-        "w_southVldNS",
-        "w_eastVld",
-        "w_westVld"
-      ],
-      "impact_area": "unknown",
-      "doc_priority": "primary",
-      "interpretation": {
-        "value": "方向仲裁逻辑，根据东/西方向有效信号优先级决定北、南、本地方向的有效性。",
-        "explanation": "assign_dependencies中的组合逻辑实现方向优先级仲裁：w_northVld = w_northVldSN & ~(w_eastVld | w_westVld)，w_southVld = w_southVldNS & ~(w_eastVld | w_westVld)，w_localVld = ~(w_westVld | w_eastVld | w_southVld | w_northVld)。这表明东/西方向具有最高优先级，北/南次之，本地最低。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:001",
-        "doc_priority": "primary",
-        "signals": [
-          "w_northVld",
-          "w_southVld",
-          "w_localVld",
-          "w_eastVld",
-          "w_westVld",
-          "w_northVldSN",
-          "w_southVldNS"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_routeMsg_i_drive"
-        ],
-        "related_assignments": [
-          "6",
-          "8",
-          "9"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:routeMsg:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/routeMsg.json"
-          }
-        ]
-      },
-      "certainty": "derived_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:assignments"
-      ]
-    },
-    {
-      "assignment_id": "assign_9",
-      "index": 9,
-      "lhs": "w_localVld",
-      "rhs": "~(w_westVld | w_eastVld | w_southVld | w_northVld)",
-      "lhs_terms": [
-        "w_localVld"
-      ],
-      "rhs_terms": [
-        "w_westVld",
-        "w_eastVld",
-        "w_southVld",
-        "w_northVld"
-      ],
-      "impact_area": "unknown",
-      "doc_priority": "primary",
-      "interpretation": {
-        "value": "方向仲裁逻辑，根据东/西方向有效信号优先级决定北、南、本地方向的有效性。",
-        "explanation": "assign_dependencies中的组合逻辑实现方向优先级仲裁：w_northVld = w_northVldSN & ~(w_eastVld | w_westVld)，w_southVld = w_southVldNS & ~(w_eastVld | w_westVld)，w_localVld = ~(w_westVld | w_eastVld | w_southVld | w_northVld)。这表明东/西方向具有最高优先级，北/南次之，本地最低。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:001",
-        "doc_priority": "primary",
-        "signals": [
-          "w_northVld",
-          "w_southVld",
-          "w_localVld",
-          "w_eastVld",
-          "w_westVld",
-          "w_northVldSN",
-          "w_southVldNS"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_routeMsg_i_drive"
-        ],
-        "related_assignments": [
-          "6",
-          "8",
-          "9"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:routeMsg:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/routeMsg.json"
-          }
-        ]
-      },
-      "certainty": "derived_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:assignments"
-      ]
-    },
-    {
       "assignment_id": "assign_16",
       "index": 16,
       "lhs": "o_westMsg_51",
@@ -1169,25 +1248,25 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "消息输出赋值，将内部寄存器信号直接连接到模块输出端口。",
-        "explanation": "五个方向的消息输出（如o_westMsg_51）直接由内部寄存器信号（如r_wMsg_51）驱动，表明消息数据在内部经过处理后暂存于寄存器，再输出到模块边界。",
+        "value": "方向消息输出，直接连接到对应的内部寄存器信号。",
+        "explanation": "assign 16-20显示这些输出信号直接连接到内部寄存器信号（如r_wMsg_51, r_lMsg_51等）。这表明消息数据在内部被寄存后直接输出。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:004",
         "doc_priority": "secondary",
         "signals": [
           "o_westMsg_51",
-          "o_localMsg_51",
-          "o_eastMsg_51",
-          "o_northMsg_51",
-          "o_southMsg_51",
           "r_wMsg_51",
+          "o_localMsg_51",
           "r_lMsg_51",
+          "o_eastMsg_51",
           "r_eMsg_51",
+          "o_northMsg_51",
           "r_nMsg_51",
+          "o_southMsg_51",
           "r_sMsg_51"
         ],
         "instances": [],
@@ -1207,6 +1286,9 @@
           "ev:routeMsg:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           }
@@ -1235,25 +1317,25 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "消息输出赋值，将内部寄存器信号直接连接到模块输出端口。",
-        "explanation": "五个方向的消息输出（如o_westMsg_51）直接由内部寄存器信号（如r_wMsg_51）驱动，表明消息数据在内部经过处理后暂存于寄存器，再输出到模块边界。",
+        "value": "方向消息输出，直接连接到对应的内部寄存器信号。",
+        "explanation": "assign 16-20显示这些输出信号直接连接到内部寄存器信号（如r_wMsg_51, r_lMsg_51等）。这表明消息数据在内部被寄存后直接输出。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:004",
         "doc_priority": "secondary",
         "signals": [
           "o_westMsg_51",
-          "o_localMsg_51",
-          "o_eastMsg_51",
-          "o_northMsg_51",
-          "o_southMsg_51",
           "r_wMsg_51",
+          "o_localMsg_51",
           "r_lMsg_51",
+          "o_eastMsg_51",
           "r_eMsg_51",
+          "o_northMsg_51",
           "r_nMsg_51",
+          "o_southMsg_51",
           "r_sMsg_51"
         ],
         "instances": [],
@@ -1273,6 +1355,9 @@
           "ev:routeMsg:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           }
@@ -1301,25 +1386,25 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "消息输出赋值，将内部寄存器信号直接连接到模块输出端口。",
-        "explanation": "五个方向的消息输出（如o_westMsg_51）直接由内部寄存器信号（如r_wMsg_51）驱动，表明消息数据在内部经过处理后暂存于寄存器，再输出到模块边界。",
+        "value": "方向消息输出，直接连接到对应的内部寄存器信号。",
+        "explanation": "assign 16-20显示这些输出信号直接连接到内部寄存器信号（如r_wMsg_51, r_lMsg_51等）。这表明消息数据在内部被寄存后直接输出。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:004",
         "doc_priority": "secondary",
         "signals": [
           "o_westMsg_51",
-          "o_localMsg_51",
-          "o_eastMsg_51",
-          "o_northMsg_51",
-          "o_southMsg_51",
           "r_wMsg_51",
+          "o_localMsg_51",
           "r_lMsg_51",
+          "o_eastMsg_51",
           "r_eMsg_51",
+          "o_northMsg_51",
           "r_nMsg_51",
+          "o_southMsg_51",
           "r_sMsg_51"
         ],
         "instances": [],
@@ -1339,6 +1424,9 @@
           "ev:routeMsg:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           }
@@ -1367,25 +1455,25 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "消息输出赋值，将内部寄存器信号直接连接到模块输出端口。",
-        "explanation": "五个方向的消息输出（如o_westMsg_51）直接由内部寄存器信号（如r_wMsg_51）驱动，表明消息数据在内部经过处理后暂存于寄存器，再输出到模块边界。",
+        "value": "方向消息输出，直接连接到对应的内部寄存器信号。",
+        "explanation": "assign 16-20显示这些输出信号直接连接到内部寄存器信号（如r_wMsg_51, r_lMsg_51等）。这表明消息数据在内部被寄存后直接输出。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:004",
         "doc_priority": "secondary",
         "signals": [
           "o_westMsg_51",
-          "o_localMsg_51",
-          "o_eastMsg_51",
-          "o_northMsg_51",
-          "o_southMsg_51",
           "r_wMsg_51",
+          "o_localMsg_51",
           "r_lMsg_51",
+          "o_eastMsg_51",
           "r_eMsg_51",
+          "o_northMsg_51",
           "r_nMsg_51",
+          "o_southMsg_51",
           "r_sMsg_51"
         ],
         "instances": [],
@@ -1405,6 +1493,9 @@
           "ev:routeMsg:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           }
@@ -1433,25 +1524,25 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "消息输出赋值，将内部寄存器信号直接连接到模块输出端口。",
-        "explanation": "五个方向的消息输出（如o_westMsg_51）直接由内部寄存器信号（如r_wMsg_51）驱动，表明消息数据在内部经过处理后暂存于寄存器，再输出到模块边界。",
+        "value": "方向消息输出，直接连接到对应的内部寄存器信号。",
+        "explanation": "assign 16-20显示这些输出信号直接连接到内部寄存器信号（如r_wMsg_51, r_lMsg_51等）。这表明消息数据在内部被寄存后直接输出。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:004",
         "doc_priority": "secondary",
         "signals": [
           "o_westMsg_51",
-          "o_localMsg_51",
-          "o_eastMsg_51",
-          "o_northMsg_51",
-          "o_southMsg_51",
           "r_wMsg_51",
+          "o_localMsg_51",
           "r_lMsg_51",
+          "o_eastMsg_51",
           "r_eMsg_51",
+          "o_northMsg_51",
           "r_nMsg_51",
+          "o_southMsg_51",
           "r_sMsg_51"
         ],
         "instances": [],
@@ -1471,6 +1562,9 @@
           "ev:routeMsg:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/routeMsg.json"
           }
@@ -1639,6 +1733,67 @@
       ]
     },
     {
+      "assignment_id": "assign_6",
+      "index": 6,
+      "lhs": "w_northVld",
+      "rhs": "w_northVldSN & ~(w_eastVld | w_westVld)",
+      "lhs_terms": [
+        "w_northVld"
+      ],
+      "rhs_terms": [
+        "w_northVldSN",
+        "w_eastVld",
+        "w_westVld"
+      ],
+      "impact_area": "unknown",
+      "doc_priority": "reference",
+      "interpretation": {
+        "value": "北向有效信号，由北向有效信号（w_northVldSN）和东/西向有效信号共同决定。",
+        "explanation": "assign 6显示w_northVld = w_northVldSN & ~(w_eastVld | w_westVld)。这表明北向路由优先级低于东/西向，只有当东/西向无效时，北向才有效。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:001",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_northVld",
+          "w_northVldSN",
+          "w_eastVld",
+          "w_westVld"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [
+          "6"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      "certainty": "derived_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:assignments"
+      ]
+    },
+    {
       "assignment_id": "assign_7",
       "index": 7,
       "lhs": "w_northTmpMsg_51",
@@ -1664,6 +1819,130 @@
       "certainty": "derived_fact",
       "source_layers": [
         "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:assignments"
+      ]
+    },
+    {
+      "assignment_id": "assign_8",
+      "index": 8,
+      "lhs": "w_southVld",
+      "rhs": "w_southVldNS & ~(w_eastVld | w_westVld)",
+      "lhs_terms": [
+        "w_southVld"
+      ],
+      "rhs_terms": [
+        "w_southVldNS",
+        "w_eastVld",
+        "w_westVld"
+      ],
+      "impact_area": "unknown",
+      "doc_priority": "reference",
+      "interpretation": {
+        "value": "南向有效信号，由南向有效信号（w_southVldNS）和东/西向有效信号共同决定。",
+        "explanation": "assign 8显示w_southVld = w_southVldNS & ~(w_eastVld | w_westVld)。这表明南向路由优先级低于东/西向，只有当东/西向无效时，南向才有效。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_southVld",
+          "w_southVldNS",
+          "w_eastVld",
+          "w_westVld"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [
+          "8"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      "certainty": "derived_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:assignments"
+      ]
+    },
+    {
+      "assignment_id": "assign_9",
+      "index": 9,
+      "lhs": "w_localVld",
+      "rhs": "~(w_westVld | w_eastVld | w_southVld | w_northVld)",
+      "lhs_terms": [
+        "w_localVld"
+      ],
+      "rhs_terms": [
+        "w_westVld",
+        "w_eastVld",
+        "w_southVld",
+        "w_northVld"
+      ],
+      "impact_area": "unknown",
+      "doc_priority": "reference",
+      "interpretation": {
+        "value": "本地有效信号，当所有其他方向（东、西、南、北）都无效时有效。",
+        "explanation": "assign 9显示w_localVld = ~(w_westVld | w_eastVld | w_southVld | w_northVld)。这表明本地路由优先级最低，只有当所有其他方向都无效时，才选择本地。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:routeMsg:assignment_interpretation:003",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_localVld",
+          "w_westVld",
+          "w_eastVld",
+          "w_southVld",
+          "w_northVld"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_routeMsg_i_drive"
+        ],
+        "related_assignments": [
+          "9"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json"
+          }
+        ]
+      },
+      "certainty": "derived_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:routeMsg:assignments"
@@ -1886,10 +2165,27 @@
   ],
   "important_internal_signals": [
     {
+      "signal": "i_drive",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 28,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:interface",
+        "ev:routeMsg:knowledge_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
       "signal": "o_driveEArb",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 23,
+      "importance_score": 27,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1971,18 +2267,19 @@
       ]
     },
     {
-      "signal": "i_drive",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
+      "signal": "w_driveEFifo_t",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 22,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
+        "parse",
         "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:routeMsg:interface",
+        "ev:routeMsg:parser_module",
         "ev:routeMsg:knowledge_module",
         "ev:routeMsg:semantic_module"
       ]
@@ -1991,7 +2288,7 @@
       "signal": "w_eastVld",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 16,
+      "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2007,7 +2304,7 @@
       "signal": "w_westVld",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 16,
+      "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2020,18 +2317,20 @@
       ]
     },
     {
-      "signal": "i_msg_51",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 12,
+      "signal": "w_driveEFifo",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
+        "parse",
         "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:routeMsg:interface",
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:knowledge_module",
         "ev:routeMsg:semantic_module"
       ]
     },
@@ -2039,7 +2338,7 @@
       "signal": "o_eastMsg_51",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2055,7 +2354,7 @@
       "signal": "o_localMsg_51",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2071,7 +2370,7 @@
       "signal": "o_northMsg_51",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2087,7 +2386,7 @@
       "signal": "o_southMsg_51",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2103,7 +2402,7 @@
       "signal": "o_westMsg_51",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2116,46 +2415,28 @@
       ]
     },
     {
+      "signal": "w_driveFork",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:knowledge_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
       "signal": "w_driveFork_delay",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:knowledge_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_driveEFifo_t",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:knowledge_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_driveEFifo",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2173,25 +2454,7 @@
       "signal": "w_driveLFifo_t",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:knowledge_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_driveLFifo",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2207,6 +2470,108 @@
     },
     {
       "signal": "w_driveNFifo_t",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:knowledge_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveSFifo_t",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:knowledge_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveWFifo_t",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:knowledge_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_msg_51",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 14,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:interface",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_northVld",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_southVld",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveLFifo",
       "kind": "wire",
       "width_text": "1",
       "importance_score": 12,
@@ -2242,43 +2607,7 @@
       ]
     },
     {
-      "signal": "w_driveSFifo_t",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:knowledge_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
       "signal": "w_driveSFifo",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:knowledge_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_driveWFifo_t",
       "kind": "wire",
       "width_text": "1",
       "importance_score": 12,
@@ -2314,28 +2643,10 @@
       ]
     },
     {
-      "signal": "w_driveFork",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:knowledge_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
       "signal": "i_freeEArb",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 10,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2351,7 +2662,7 @@
       "signal": "i_freeLArb",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 10,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2367,7 +2678,7 @@
       "signal": "i_freeNArb",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 10,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2383,7 +2694,7 @@
       "signal": "i_freeSArb",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 10,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2399,7 +2710,7 @@
       "signal": "i_freeWArb",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 10,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2412,42 +2723,10 @@
       ]
     },
     {
-      "signal": "w_northVld",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_southVld",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
       "signal": "w_localVld",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 8,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2460,10 +2739,10 @@
       ]
     },
     {
-      "signal": "w_northVldSN",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
+      "signal": "r_wMsg_51",
+      "kind": "reg",
+      "width_text": "[50:0]",
+      "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2476,10 +2755,58 @@
       ]
     },
     {
-      "signal": "w_southVldNS",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
+      "signal": "r_lMsg_51",
+      "kind": "reg",
+      "width_text": "[50:0]",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_eMsg_51",
+      "kind": "reg",
+      "width_text": "[50:0]",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_nMsg_51",
+      "kind": "reg",
+      "width_text": "[50:0]",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:parser_module",
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_sMsg_51",
+      "kind": "reg",
+      "width_text": "[50:0]",
+      "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2508,9 +2835,9 @@
       ]
     },
     {
-      "signal": "r_wMsg_51",
-      "kind": "reg",
-      "width_text": "[50:0]",
+      "signal": "w_northVldSN",
+      "kind": "wire",
+      "width_text": "1",
       "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -2524,57 +2851,9 @@
       ]
     },
     {
-      "signal": "r_lMsg_51",
-      "kind": "reg",
-      "width_text": "[50:0]",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_eMsg_51",
-      "kind": "reg",
-      "width_text": "[50:0]",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_nMsg_51",
-      "kind": "reg",
-      "width_text": "[50:0]",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:routeMsg:parser_module",
-        "ev:routeMsg:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_sMsg_51",
-      "kind": "reg",
-      "width_text": "[50:0]",
+      "signal": "w_southVldNS",
+      "kind": "wire",
+      "width_text": "1",
       "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -2681,9 +2960,31 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "当前上下文仅提供了方向仲裁的优先级逻辑，但未说明w_eastVld、w_westVld、w_northVldSN、w_southVldNS等方向有效信号的生成来源。需要查看RTL源文件以了解这些信号如何从westToEast和eastToWest模块产生。",
-      "subject": "方向有效信号生成逻辑",
+      "question": "当前上下文只提供了部分valid信号的生成逻辑（assign 6, 8, 9），但缺少w_eastVld和w_westVld的生成逻辑。需要查看RTL源文件以获取完整的路由决策逻辑。",
+      "subject": "方向valid信号生成逻辑",
       "needed_source_slice": "assign block",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "question": "当前上下文显示了消息输出（如o_eastMsg_51）连接到内部寄存器（如r_eMsg_51），但没有提供这些寄存器是如何被赋值的。需要查看RTL源文件以了解消息数据如何在内部流水线中传递。",
+      "subject": "消息数据路径",
+      "needed_source_slice": "always block",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:routeMsg:semantic_module"
+      ]
+    },
+    {
+      "question": "当前上下文提到了延迟单元（如delayE），但没有提供它们的实现细节或实例化信息。需要查看RTL源文件以了解这些延迟单元的具体功能。",
+      "subject": "延迟单元（delayE, delayL, delayN, delayS, delayW）的实现",
+      "needed_source_slice": "instance connections",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2702,7 +3003,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "routeMsg",
-    "source_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
+    "source_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -2719,8 +3020,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "路由模块，将输入消息根据方向选择分发到五个输出方向（东、本地、北、南、西）。",
-      "explanation": "模块接收一个输入驱动事件和关联的51位消息负载，通过内部组件（接收FIFO、方向分叉、延迟单元、发送FIFO）处理后，生成五个方向的事件输出和对应的消息输出。方向选择由内部仲裁逻辑（基于w_eastVld、w_westVld等信号）决定。",
+      "value": "路由消息分发模块，将输入消息根据方向选择分发到五个方向（东、本地、北、南、西）的发送FIFO。",
+      "explanation": "模块接收一个输入事件i_drive和对应的51位消息i_msg_51，通过内部组件（receiveFifo、dirFork、方向延迟单元、方向SendFifo）处理后，产生五个方向的事件输出（o_driveEArb等）和对应的消息输出（o_eastMsg_51等）。方向选择逻辑由dirFork（cCondFork5）和相关的valid信号（w_eastVld, w_westVld等）控制。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -2768,7 +3069,7 @@
           "source": "parser_pipeline_rtl/modules/routeMsg.json"
         },
         {
-          "source": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v"
+          "source": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v"
         }
       ]
     },
@@ -3123,7 +3424,7 @@
           ],
           "summary": "drive_event ports, count=6, directions=input:1, output:5",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
+            "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -3182,7 +3483,7 @@
           ],
           "summary": "free_backpressure ports, count=6, directions=input:5, output:1",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
+            "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -3241,7 +3542,7 @@
           ],
           "summary": "other_ports ports, count=6, directions=input:1, output:5",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
+            "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -3258,8 +3559,8 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_routeMsg_i_drive.json",
         "reader_takeaway": {
-          "value": "手册应强调事件从输入到五个方向的分发路径、FIFO缓冲点和延迟单元",
-          "explanation": "流的核心是dirFork分支器和后续的FIFO缓冲，延迟单元用于时序对齐，手册需清晰描述这些组件的连接和功能。",
+          "value": "最终手册应重点描述事件从 i_drive 到五个方向输出端口的完整路径，以及 dirFork 的方向选择机制。",
+          "explanation": "该流的核心功能是事件分发。手册应清晰展示事件经过的每个组件（FIFO、延迟、分叉器）及其作用，并解释 dirFork 如何根据载荷决定事件去向。同时应说明 FIFO 的缓冲作用和可能的阻塞点。",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
@@ -3272,14 +3573,14 @@
             "w_driveFork",
             "w_driveFork_delay",
             "w_driveEFifo_t",
-            "w_driveLFifo_t",
-            "w_driveNFifo_t",
-            "w_driveSFifo_t",
-            "w_driveWFifo_t",
             "w_driveEFifo",
+            "w_driveLFifo_t",
             "w_driveLFifo",
+            "w_driveNFifo_t",
             "w_driveNFifo",
+            "w_driveSFifo_t",
             "w_driveSFifo",
+            "w_driveWFifo_t",
             "w_driveWFifo",
             "o_driveEArb",
             "o_driveLArb",
@@ -3322,8 +3623,8 @@
           ],
           "supporting_claims": [
             {
-              "value": "从输入事件 i_drive 到五个方向仲裁器输出事件的分发与缓冲驱动流",
-              "explanation": "该流将单个输入事件通过接收FIFO、UART延迟、条件分支器，再经五个方向各自的延迟和发送FIFO，最终输出到五个方向仲裁器，实现事件的方向分发与同步缓冲。",
+              "value": "从输入端口 i_drive 接收事件，经过缓冲、延迟和方向分叉后，分发到五个方向输出端口的单驱动内部事件流。",
+              "explanation": "该流是 routeMsg 模块的核心内部事件分发路径。事件从 i_drive 进入，首先由 receiveFifo 缓冲，然后经过 delayUart0 延迟，再由 dirFork 根据方向选择分叉为五路，每路再经过各自的 delay6U 延迟和 sendFifo 缓冲，最终输出到五个方向仲裁器。",
               "certainty": "ai_inferred",
               "confidence": "medium",
               "source_layers": [
@@ -3336,14 +3637,14 @@
                 "w_driveFork",
                 "w_driveFork_delay",
                 "w_driveEFifo_t",
-                "w_driveLFifo_t",
-                "w_driveNFifo_t",
-                "w_driveSFifo_t",
-                "w_driveWFifo_t",
                 "w_driveEFifo",
+                "w_driveLFifo_t",
                 "w_driveLFifo",
+                "w_driveNFifo_t",
                 "w_driveNFifo",
+                "w_driveSFifo_t",
                 "w_driveSFifo",
+                "w_driveWFifo_t",
                 "w_driveWFifo",
                 "o_driveEArb",
                 "o_driveLArb",
@@ -3386,32 +3687,24 @@
               ]
             },
             {
-              "value": "输出事件o_driveEArb等关联空闲信号i_freeEArb等，但流中未体现反压机制",
-              "explanation": "接口显示每个输出事件有对应空闲输入信号，但流步骤和连接中未包含这些信号，可能反压由外部仲裁器处理或通过其他路径实现。",
+              "value": "输入事件携带的 51 位载荷 i_msg_51 可能用于 dirFork 的方向选择。",
+              "explanation": "接口载荷契约显示 i_drive 事件携带 i_msg_51 载荷。dirFork 作为条件分叉，其分叉逻辑很可能依赖于该载荷中的方向字段。然而，当前上下文未提供具体的分叉条件或载荷字段映射。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
-              "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:completion_backpressure:001",
-              "doc_priority": "secondary",
+              "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
+              "doc_priority": "primary",
               "signals": [
-                "o_driveEArb",
-                "i_freeEArb",
-                "o_driveLArb",
-                "i_freeLArb",
-                "o_driveNArb",
-                "i_freeNArb",
-                "o_driveSArb",
-                "i_freeSArb",
-                "o_driveWArb",
-                "i_freeWArb"
+                "i_drive",
+                "i_msg_51"
               ],
-              "instances": [
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [
                 "(none)"
               ],
-              "related_flows": [],
-              "related_assignments": [],
               "requires_rtl_source_review": true,
               "review_status": "needs_review",
               "evidence_refs": [
@@ -3428,18 +3721,74 @@
               ]
             },
             {
-              "value": "输入事件i_drive携带52位消息负载，但流中未显式传递负载信号",
-              "explanation": "接口显示i_drive关联i_msg_51负载，但流步骤和连接中未出现该负载信号，可能负载在FIFO内部传递或由其他路径处理，需RTL源码确认。",
+              "value": "流中的 FIFO 实例可能引入背压，但具体机制未在上下文中明确。",
+              "explanation": "receiveFifo 和五个 sendFifo 实例被标记为阻塞点，表明它们可能因满而阻塞上游事件。然而，当前上下文未提供这些 FIFO 的满状态信号或背压传播路径。输出端口的 free 信号可能间接影响 sendFifo 的行为。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
-              "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
+              "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:completion_backpressure:001",
               "doc_priority": "secondary",
               "signals": [
                 "i_drive",
-                "i_msg_51"
+                "o_driveEArb",
+                "o_driveLArb",
+                "o_driveNArb",
+                "o_driveSArb",
+                "o_driveWArb",
+                "i_freeEArb",
+                "i_freeLArb",
+                "i_freeNArb",
+                "i_freeSArb",
+                "i_freeWArb"
+              ],
+              "instances": [
+                "receiveFifo",
+                "eastSendFifo",
+                "localSendFifo",
+                "northSendFifo",
+                "southSendFifo",
+                "westSendFifo"
+              ],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
+                "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "instances.connections"
+                },
+                {
+                  "source": "interface.event_ports"
+                }
+              ]
+            },
+            {
+              "value": "每个输出事件端口关联一个独立的 free 输入信号，用于背压控制。",
+              "explanation": "接口契约显示 o_driveEArb、o_driveLArb 等输出事件端口各自关联一个 free 信号（如 i_freeEArb）。这表明下游模块可以通过这些 free 信号向 routeMsg 模块指示是否准备好接收新事件，从而控制事件流。",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:002",
+              "doc_priority": "secondary",
+              "signals": [
+                "o_driveEArb",
+                "i_freeEArb",
+                "o_driveLArb",
+                "i_freeLArb",
+                "o_driveNArb",
+                "i_freeNArb",
+                "o_driveSArb",
+                "i_freeSArb",
+                "o_driveWArb",
+                "i_freeWArb"
               ],
               "instances": [],
               "related_flows": [],
@@ -3475,11 +3824,11 @@
       "components": 7,
       "assignments": 21,
       "evidence_gaps": 0,
-      "review_questions": 1
+      "review_questions": 3
     },
     "source_review_context": {
       "module": "routeMsg",
-      "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\routeMsg.v",
+      "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/routeMsg.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",

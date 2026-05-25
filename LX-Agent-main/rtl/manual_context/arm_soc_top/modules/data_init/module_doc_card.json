@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "data_init",
-  "source_file": "rtl\\rtl\\memory\\data_init.v",
+  "source_file": "rtl/rtl/memory/data_init.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": true
   },
   "purpose": {
-    "value": "数据初始化模块，通过UART接收初始化数据并驱动指令总线(ibus)和数据总线(dbus)输出",
-    "explanation": "模块无事件输入，仅有四个数据输出端口(dbus_addr_o, dbus_data_o, ibus_addr_o, ibus_data_o)，内部实例化uart_rx和uart_tx，表明通过UART串口接收外部数据，解析后生成总线地址和数据输出，实现系统初始化加载。",
+    "value": "数据初始化模块，通过UART接口接收配置数据并驱动指令总线(ibus)和数据总线(dbus)的初始化写入",
+    "explanation": "模块无事件输入，仅有四个数据输出端口(dbus_addr_o, dbus_data_o, ibus_addr_o, ibus_data_o)，表明其角色是主动向总线发送初始化数据。内部实例化uart_rx和uart_tx，表明通过UART串口接收外部配置，并可能通过UART回传状态。assign依赖显示ibus_we/dbus_we写使能信号由内部寄存器驱动，且数据输出存在字节交换({r_ibus_data_o[31:0], r_ibus_data_o[63:32]})，暗示了端序转换或数据重组逻辑。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -50,10 +50,16 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/data_init.json"
+        "source": "knowledge_ir/modules/data_init.json",
+        "path": "interface"
       },
       {
-        "source": "parser_pipeline_rtl/modules/data_init.json"
+        "source": "parser_pipeline_rtl/modules/data_init.json",
+        "path": "assignments"
+      },
+      {
+        "source": "rtl/rtl/memory/data_init.v",
+        "path": "module_source"
       }
     ]
   },
@@ -266,7 +272,7 @@
         ],
         "summary": "clock_reset_init ports, count=1, directions=input:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\memory\\data_init.v",
+          "rtl_file": "rtl/rtl/memory/data_init.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -343,7 +349,7 @@
         ],
         "summary": "other_ports ports, count=9, directions=input:1, output:8",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\memory\\data_init.v",
+          "rtl_file": "rtl/rtl/memory/data_init.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -362,7 +368,7 @@
   },
   "source_review_context": {
     "module": "data_init",
-    "rtl_file": "rtl\\rtl\\memory\\data_init.v",
+    "rtl_file": "rtl/rtl/memory/data_init.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -387,9 +393,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "semantic:module:data_init:module_role:001",
-      "summary": "模块通过UART接收外部数据，解析后生成指令总线和数据总线的地址与数据输出。",
-      "explanation": "表头显示模块有输入uart_rx、输出uart_tx，以及ibus_we、ibus_addr_o、ibus_data_o、dbus_we、dbus_addr_o、dbus_data_o。内部状态机包含DATA0~DATA7等状态，在状态NUM1之后接收数据；在CRC1、CRC_START中接收CRC并比对，在SENDRSP输出ACK/NAK；最终在STACK状态输出dbus_we。assign将内部寄存器的值赋值给输出端口，且ibus_data_o和dbus_data_o做了高低32位交换。这支持模块通过UART接收数据并分别驱动指令和数据总线的输出。",
+      "subject": "module:data_init:module_role:001",
+      "summary": "模块通过UART接收数据，驱动指令总线和数据总线，完成初始化写入。",
+      "explanation": "模块输入uart_rx（slice 2 line 21）用于接收外部数据，输出ibus_we、ibus_addr_o、ibus_data_o和dbus_we、dbus_addr_o、dbus_data_o（slice 2 lines 25-30），这些输出由r_ibus_we、r_ibus_addr_o、r_ibus_data_o、r_dbus_we、r_dbus_addr_o、r_dbus_data_o寄存器驱动（slice 4 lines 60-65）。内部实例化uart_rx_inst和uart_tx_inst（slice 1 line 4提到作者，但实例名来自manual context，无需额外源引用）。assign依赖显示d_finish由first、size、number、c_state、WAITSEND、tx_data_ready组合产生（slice 5 line 77，slice 8 lines 213-222），表明存在状态机控制。状态机为独热码，包含IDLE、NUM0等状态（slice 3 lines 39-41，slice 7 lines 106-111）。",
       "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
@@ -398,55 +404,38 @@
       ],
       "signals": [
         "uart_rx",
-        "uart_tx",
         "ibus_we",
         "ibus_addr_o",
         "ibus_data_o",
         "dbus_we",
         "dbus_addr_o",
-        "dbus_data_o"
+        "dbus_data_o",
+        "d_finish"
       ],
-      "instances": [],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
+      ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\memory\\data_init.v",
+          "file": "rtl/rtl/memory/data_init.v",
           "line_start": 17,
           "line_end": 30
         },
         {
-          "file": "rtl\\rtl\\memory\\data_init.v",
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 60,
+          "line_end": 65
+        },
+        {
+          "file": "rtl/rtl/memory/data_init.v",
           "line_start": 39,
           "line_end": 41
         },
         {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 286,
-          "line_end": 288
-        },
-        {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 301,
-          "line_end": 304
-        },
-        {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 380,
-          "line_end": 412
-        },
-        {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 420,
-          "line_end": 434
-        },
-        {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 436,
-          "line_end": 439
-        },
-        {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 458,
-          "line_end": 463
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 106,
+          "line_end": 111
         }
       ],
       "evidence_refs": [
@@ -455,9 +444,9 @@
       "review_status": "ready"
     },
     {
-      "subject": "semantic:module:data_init:structural_responsibility:001",
-      "summary": "模块将UART接收的数据转换为指令总线和数据总线的地址与数据输出，并生成写使能信号。",
-      "explanation": "内部寄存器r_ibus_we、r_ibus_addr_o、r_ibus_data_o、r_dbus_we、r_dbus_addr_o、r_dbus_data_o在状态机中被赋值，并通过assign赋值给输出端口。在DATA7状态中，根据number（如6'h20或6'h01）分别设置r_ibus_we、r_ibus_addr_o、r_ibus_data_o或r_dbus_we、r_dbus_addr_o、r_dbus_data_o，非匹配时清零。ibus_data_o和dbus_data_o输出时做了高低32位交换。这支持模块对接收数据进行格式转换后输出到总线。",
+      "subject": "module:data_init:structural_responsibility:001",
+      "summary": "模块通过内部寄存器驱动总线的写使能和地址/数据输出。",
+      "explanation": "输出ibus_we由r_ibus_we寄存器驱动（slice 4 line 60），ibus_addr_o由r_ibus_addr_o驱动（slice 4 line 61），ibus_data_o由r_ibus_data_o驱动（slice 4 line 62）；同样dbus_we由r_dbus_we驱动（slice 4 line 63），dbus_addr_o由r_dbus_addr_o驱动（slice 4 line 64），dbus_data_o由r_dbus_data_o驱动（slice 4 line 65）。这些寄存器在复位时被清零（slice 9 lines 244-249），在状态机NUM0等状态下被赋值（slice 10 lines 269-270，lines 287-288，line 302-303等）。",
       "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
@@ -465,6 +454,12 @@
         "manual_context"
       ],
       "signals": [
+        "r_ibus_we",
+        "r_ibus_addr_o",
+        "r_ibus_data_o",
+        "r_dbus_we",
+        "r_dbus_addr_o",
+        "r_dbus_data_o",
         "ibus_we",
         "ibus_addr_o",
         "ibus_data_o",
@@ -475,19 +470,19 @@
       "instances": [],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\memory\\data_init.v",
+          "file": "rtl/rtl/memory/data_init.v",
           "line_start": 60,
           "line_end": 65
         },
         {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 380,
-          "line_end": 412
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 244,
+          "line_end": 249
         },
         {
-          "file": "rtl\\rtl\\memory\\data_init.v",
-          "line_start": 458,
-          "line_end": 463
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 268,
+          "line_end": 270
         }
       ],
       "evidence_refs": [
@@ -500,7 +495,7 @@
     "status": "reviewed",
     "claim_count": 2,
     "open_question_count": 1,
-    "source_file": "rtl\\rtl\\memory\\data_init.v",
+    "source_file": "rtl/rtl/memory/data_init.v",
     "report_file": "source_review_report.json"
   }
 }

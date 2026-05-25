@@ -648,6 +648,10 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
         self.assertEqual(state["force_stages"], [])
         self.assertEqual(state["restart_stage"], "")
 
+    def test_tool_timeout_is_treated_as_failure(self):
+        self.assertTrue(mw._tool_failed("工具脚本执行超时：run_parser_tool.py"))
+        self.assertTrue(mw._tool_failed("Parser failed: execution timed out after 300s."))
+
     def test_parser_stage_refreshes_artifact_paths_after_generation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

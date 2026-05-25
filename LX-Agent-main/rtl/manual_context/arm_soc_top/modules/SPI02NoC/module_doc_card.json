@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "SPI02NoC",
-  "source_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+  "source_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接与缓冲模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
-    "explanation": "模块通过 cFifo1 和 cFifo2 构成两级事件缓冲流水线，中间插入 delay1 实现时序对齐。u_flash 实例执行实际的 SPI Flash 操作，assign 逻辑将 NoC 数据包解析为寄存器地址和命令，并组合状态寄存器 (SR) 和读数据寄存器 (RDR) 作为回传数据。",
+    "value": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
+    "explanation": "模块接收来自 Mesh 的驱动事件 (i_driveFrmMesh) 和 51 位数据 (i_dataFrmNoc)，通过内部 FIFO 和延迟单元进行流水线控制，最终输出驱动事件 (o_driveNextToMesh) 和 51 位数据 (o_data2Noc)。同时，它实例化了 flash_state 模块 (u_flash) 来驱动 SPI Flash 接口 (sclk, mosi, miso, cs_n)，并输出地址 (address) 和状态信号 (busy, startRead)。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -31,15 +31,22 @@
     "doc_priority": "primary",
     "signals": [
       "i_driveFrmMesh",
-      "o_driveNextToMesh",
       "i_dataFrmNoc",
+      "o_driveNextToMesh",
       "o_data2Noc",
-      "address"
+      "address",
+      "busy",
+      "startRead",
+      "sclk",
+      "mosi",
+      "miso",
+      "cs_n"
     ],
     "instances": [
       "cFifo1",
       "cFifo2",
-      "u_flash"
+      "u_flash",
+      "fire2SyncPluse_u"
     ],
     "related_flows": [
       "flow_000_SPI02NoC_i_driveFrmMesh"
@@ -52,19 +59,10 @@
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_inputs"
+        "source": "knowledge_ir/modules/SPI02NoC.json"
       },
       {
-        "source": "interface.data_inputs"
-      },
-      {
-        "source": "key_component_connections"
-      },
-      {
-        "source": "assign_dependencies"
-      },
-      {
-        "source": "key_instances"
+        "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
       }
     ]
   },
@@ -366,7 +364,7 @@
         ],
         "summary": "clock_reset_init ports, count=3, directions=input:2, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+          "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -401,7 +399,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+          "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -436,7 +434,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+          "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -507,7 +505,7 @@
         ],
         "summary": "other_ports ports, count=8, directions=input:2, output:6",
         "source_review_context": {
-          "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+          "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -524,8 +522,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_SPI02NoC_i_driveFrmMesh.json",
       "reader_takeaway": {
-        "value": "输入事件i_driveFrmMesh携带一个51位的数据负载i_dataFrmNoc，其中包含地址字段。",
-        "explanation": "接口合同显示，输入事件i_driveFrmMesh与数据信号i_dataFrmNoc相关联。赋值依赖进一步表明，该数据负载中的一部分（位段[49:42]）被提取为地址信号。这表明事件驱动流不仅传递控制信号，还同步传递了相关的数据负载。",
+        "value": "输入事件i_driveFrmMesh携带一个51位的数据负载i_dataFrmNoc。",
+        "explanation": "接口负载契约表明，当i_driveFrmMesh事件有效时，会伴随一个51位的数据信号i_dataFrmNoc。该数据负载通过流路径，但当前流步骤中未显示其如何被传递或修改。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -535,8 +533,7 @@
         "doc_priority": "primary",
         "signals": [
           "i_driveFrmMesh",
-          "i_dataFrmNoc",
-          "address"
+          "i_dataFrmNoc"
         ],
         "instances": [],
         "related_flows": [],
@@ -551,18 +548,14 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/SPI02NoC.json",
-            "path": "interface_data_contract"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/SPI02NoC.json",
-            "path": "assignments"
+            "source": "interface_payload_contracts",
+            "path": "module_facts"
           }
         ],
         "supporting_claims": [
           {
-            "value": "手册应重点描述事件驱动流的流水线结构、数据负载的提取以及可能的握手机制。",
-            "explanation": "该流的核心是一个三级流水线（FIFO-延迟-FIFO），用于将输入事件及其关联数据传递到输出。手册应详细说明每个组件的缓冲和延迟作用，并强调从数据负载中提取地址字段的赋值。此外，由于存在释放信号，手册应基于RTL源码进一步阐明握手协议（如反压机制）是如何与FIFO交互的。",
+            "value": "手册应重点描述两级FIFO和一级延迟构成的流水线结构及其对事件传播的影响。",
+            "explanation": "该流的核心结构是cFifo1 -> delay1 -> cFifo2。手册应解释每个组件如何影响事件的时序和有效性，特别是FIFO可能引入的门控和延迟的固定时间偏移。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -572,11 +565,9 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFrmMesh",
-              "o_driveNextToMesh",
-              "i_dataFrmNoc",
-              "address",
-              "o_freeToMesh",
-              "i_freeNextFrmMesh"
+              "w_driveNext",
+              "w_driveNext_delay",
+              "o_driveNextToMesh"
             ],
             "instances": [
               "cFifo1",
@@ -584,29 +575,23 @@
               "cFifo2"
             ],
             "related_flows": [],
-            "related_assignments": [
-              "0"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
             "evidence_refs": [
               "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh",
               "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh"
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "internal_event_flow"
-              },
-              {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "interface_data_contract"
+                "source": "flow.steps",
+                "path": "module_facts"
               }
             ]
           },
           {
             "value": "该驱动流将来自Mesh的输入事件通过两级FIFO和一级透明延迟进行流水线化，最终输出到Mesh。",
-            "explanation": "流从输入端口i_driveFrmMesh开始，经过cFifo1缓冲，然后通过delay1进行固定延迟，再经过cFifo2缓冲，最后从输出端口o_driveNextToMesh输出。这是一个单向、无分支的流水线结构，用于事件驱动的数据传输。",
+            "explanation": "流从输入端口i_driveFrmMesh开始，经过cFifo1缓冲，然后通过delay1进行固定延迟，再经过cFifo2缓冲，最后从输出端口o_driveNextToMesh输出。整个路径是单向的，没有分支或合并点，形成一个简单的流水线。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -637,18 +622,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "internal_event_flow"
+                "source": "instances.connections",
+                "path": "parser_module"
               },
               {
-                "source": "parser_pipeline_rtl/modules/SPI02NoC.json",
-                "path": "flow_graph"
+                "source": "transparent_flows",
+                "path": "parser_module"
               }
             ]
           },
           {
-            "value": "流存在关联的握手信号，但具体机制未在提供的上下文中明确。",
-            "explanation": "接口合同列出了输入事件i_driveFrmMesh的释放信号o_freeToMesh，以及输出事件o_driveNextToMesh的释放信号i_freeNextFrmMesh。这表明该驱动流可能采用某种握手协议（如valid/ready或free/next）来控制数据流。然而，当前上下文未提供这些信号与FIFO实例的连接或逻辑关系，因此无法断言其具体实现。",
+            "value": "输出事件o_driveNextToMesh可能关联一个反压信号i_freeNextFrmMesh，但证据不足。",
+            "explanation": "接口负载契约中列出了输出事件o_driveNextToMesh的free信号为i_freeNextFrmMesh，但置信度为低。这表明可能存在反压机制，但当前上下文未提供连接或逻辑细节，无法确认其与流的直接关系。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -657,7 +642,7 @@
             "semantic_claim_id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
-              "o_freeToMesh",
+              "o_driveNextToMesh",
               "i_freeNextFrmMesh"
             ],
             "instances": [],
@@ -671,8 +656,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/SPI02NoC.json",
-                "path": "interface_data_contract"
+                "source": "interface_payload_contracts",
+                "path": "module_facts"
               }
             ]
           }
@@ -694,7 +679,7 @@
   },
   "source_review_context": {
     "module": "SPI02NoC",
-    "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+    "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -719,41 +704,10 @@
   ],
   "source_review_claims": [
     {
-      "subject": "delay1 实例",
-      "summary": "delay1 实例化于 delay4U 模块，延迟参数由模块名隐含。",
-      "explanation": "根据切片 4（第75行），delay1 的模块类型为 delay4U，实例化连线为 .inR(w_driveNext)、.outR(w_driveNext_delay)、.rst(rst)。模块名 'delay4U' 暗示延迟为4个时钟周期，但具体实现需确认。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "w_driveNext",
-        "w_driveNext_delay"
-      ],
-      "instances": [
-        "delay1"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
-          "line_start": 75,
-          "line_end": 75
-        }
-      ],
-      "evidence_refs": [
-        "ev:SPI02NoC:semantic_module",
-        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh",
-        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "review_status": "needs_review"
-    },
-    {
       "subject": "fire2SyncPluse_u 实例",
-      "summary": "fire2SyncPluse_u 将 startRead_fire 同步转换为 startRead 脉冲。",
-      "explanation": "根据切片7（第170-176行），实例化 fire2SyncPluse 模块，连接 .fire(startRead_fire)、.clk(clk)、.rst(rst)、.rst_finish(rst_finish)、.rise(startRead)。输入 startRead_fire 经同步后输出 startRead 上升沿脉冲。",
-      "certainty": "ai_inferred",
+      "summary": "该实例将组合逻辑信号 startRead_fire 的脉冲同步为寄存器输出信号 startRead。",
+      "explanation": "根据切片 7 第 170-176 行，实例 fire2SyncPluse_u 的输入端口 .fire(startRead_fire) 连接至 startRead_fire，输出端口 .rise(startRead) 连接至 startRead。该模块的作用是将输入 fire 上的脉冲同步到 rise 输出上。",
+      "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
         "rtl_source",
@@ -768,9 +722,73 @@
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
           "line_start": 170,
           "line_end": 176
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:semantic_module",
+        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh",
+        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "w_fire_2 信号",
+      "summary": "w_fire_2 是一个 2 位线网，其每一位分别由两个 cFifo 实例的 o_fire_1 输出驱动。",
+      "explanation": "根据切片 4 第 68 行，cFifo1 实例的 .o_fire_1 连接至 w_fire_2[0]；根据切片 5 第 80 行，cFifo2 实例的 .o_fire_1 连接至 w_fire_2[1]。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "w_fire_2",
+        "w_fire_2[0]",
+        "w_fire_2[1]"
+      ],
+      "instances": [
+        "cFifo1",
+        "cFifo2"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 64,
+          "line_end": 82
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI02NoC:semantic_module",
+        "ev:SPI02NoC:semantic_flow:flow_000_SPI02NoC_i_driveFrmMesh",
+        "ev:SPI02NoC:flow:flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "review_status": "ready"
+    },
+    {
+      "subject": "startRead_fire 信号",
+      "summary": "startRead_fire 是一个组合逻辑信号，在 w_en 为高且地址指向 TDR 时，由 w_fire_2[1] 驱动。",
+      "explanation": "根据切片 7 第 169 行，startRead_fire 被赋值为 ((address[3:0] == TDR) & w_en) ? w_fire_2[1] : 1'b0。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "startRead_fire",
+        "w_fire_2[1]",
+        "w_en",
+        "address"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 169,
+          "line_end": 169
         }
       ],
       "evidence_refs": [
@@ -782,8 +800,8 @@
     },
     {
       "subject": "flow_000_SPI02NoC_i_driveFrmMesh",
-      "summary": "事件 i_driveFrmMesh 通过 cFifo1 按序传递并提取地址字段。",
-      "explanation": "切片3（第64-68行）显示 cFifo1 接收 i_driveFrmMesh 并输出 w_fire_2[0]；切片7（第169行）中 startRead_fire 依赖 w_fire_2[1] 与 address[3:0] 比较；切片2（第35行）声明 address[7:0] 输出，由 i_dataFrmNoc[49:42] 提取（紧凑上下文隐含）。数据负载通过 cFifo 流水线传递。",
+      "summary": "当 i_driveFrmMesh 有效时，该事件通过 cFifo1 和 cFifo2 两级流水传递，并产生 w_fire_2 信号作为下一级逻辑的触发。",
+      "explanation": "根据切片 4 第 64-70 行，输入事件 i_driveFrmMesh 驱动 cFifo1 的 .i_drive 端口；根据切片 5 第 75-82 行，cFifo1 的输出经过 delay4U 延迟后驱动 cFifo2 的 .i_drive 端口。两个 cFifo 的输出 o_fire_1 分别连接到 w_fire_2[0] 和 w_fire_2[1]。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -792,25 +810,26 @@
       ],
       "signals": [
         "i_driveFrmMesh",
-        "w_fire_2[0]",
-        "w_fire_2[1]",
-        "address",
-        "i_dataFrmNoc"
+        "w_fire_2",
+        "w_driveNext",
+        "w_driveNext_delay",
+        "o_driveNextToMesh"
       ],
       "instances": [
         "cFifo1",
-        "cFifo2"
+        "cFifo2",
+        "delay4U"
       ],
       "source_refs": [
         {
-          "file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
           "line_start": 64,
-          "line_end": 68
+          "line_end": 73
         },
         {
-          "file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
-          "line_start": 169,
-          "line_end": 169
+          "file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
+          "line_start": 75,
+          "line_end": 85
         }
       ],
       "evidence_refs": [
@@ -823,9 +842,9 @@
   ],
   "source_review_report": {
     "status": "reviewed",
-    "claim_count": 3,
-    "open_question_count": 2,
-    "source_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+    "claim_count": 4,
+    "open_question_count": 3,
+    "source_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
     "report_file": "source_review_report.json"
   }
 }

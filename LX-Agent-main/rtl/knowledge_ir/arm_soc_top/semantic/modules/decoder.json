@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "decoder",
-  "input_hash": "b75b66ac8f149583cd9c483b44f2e8326c860aa39bdc67f2c7f205d5dc6ffd9e",
+  "input_hash": "c557cdfad2788c7ccb0b639abdaffd355f94e3474db6b922a3da42d216a172f5",
   "source_context": "ai_context/modules/decoder.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\Decode\\decoder.v",
+      "source": "rtl/rtl/Decode/decoder.v",
       "paths": [
         "module_source"
       ]
@@ -40,20 +40,19 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\Decode\\decoder.v",
+        "rtl_file": "rtl/rtl/Decode/decoder.v",
         "parser_module": "modules/decoder.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 18,
+    "count": 13,
     "by_type": {
       "assignment_interpretation": 5,
-      "component_role": 4,
-      "documentation_focus": 2,
-      "interface_intent": 2,
+      "component_role": 3,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
       "structural_responsibility": 2
     }
   },
@@ -64,27 +63,25 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "指令解码与分发模块，负责将取指阶段传入的指令数据解码为控制信号，并分发至发射与异常处理阶段。",
+      "summary": "指令解码与分发模块，将取指阶段传入的指令按长度分流至16位或32位解码器，合并解码结果并输出至发射与异常处理阶段。",
       "subject": "decoder",
-      "explanation": "模块接收来自IF阶段的驱动事件和指令数据，通过内部选择器、16位/32位解码器、合并器及FIFO等组件，生成解码后的数据、写使能、条件标志等输出，并分别驱动至Launch和Exc阶段。",
+      "explanation": "模块接收来自IF阶段的驱动事件和指令数据，通过decoderSele根据指令长度选择器分流至decoder16或decoder32，解码结果经decoMerge合并后，通过decSpli将驱动事件分发至发射和异常处理路径。输出包含解码数据、分支立即数、条件写使能等控制信号。",
       "signals": [
         "i_driveFromIF",
         "i_pcAndIns_64",
-        "o_driveToLaunch_1",
         "o_driveToExc_1",
+        "o_driveToLaunch_1",
         "o_decoderData_187",
-        "o_wen_2",
-        "o_nzcvWen_4",
         "o_blImm9_9",
-        "o_decPCAndNum_36"
+        "o_nzcvWen_4",
+        "o_wen_2"
       ],
       "instances": [
         "decoderSele",
         "decoder16",
         "decoder32",
         "decoMerge",
-        "decSpli",
-        "decodeFifo"
+        "decSpli"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
@@ -94,10 +91,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
+          "source": "knowledge_ir/modules/decoder.json"
         },
         {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:module_role:001"
@@ -108,16 +105,18 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "将输入的PC和指令数据解码为187位宽的解码数据，并提取立即数、写使能、条件标志等控制信号。",
-      "subject": "指令解码与数据路径",
-      "explanation": "通过decoderSele根据指令宽度选择16位或32位解码路径，decoder16和decoder32分别解码，decoMerge合并结果，最终通过assign语句输出o_decoderData_187、o_wen_2、o_nzcvWen_4、o_blImm9_9和o_decPCAndNum_36。",
+      "summary": "根据指令长度标志将指令分发至16位或32位解码器，并合并解码结果。",
+      "subject": "指令长度分流与解码",
+      "explanation": "decoderSele根据i_is16_1信号将i_pcAndIns_64分发至decoder16或decoder32，两个解码器分别输出解码数据，经decoMerge合并为统一的解码结果w_decoderData_191，再通过assign输出为o_decoderData_187。",
       "signals": [
+        "i_is16_1",
         "i_pcAndIns_64",
-        "o_decoderData_187",
-        "o_wen_2",
-        "o_nzcvWen_4",
-        "o_blImm9_9",
-        "o_decPCAndNum_36"
+        "w_DecSeleDriToDec16_1",
+        "w_DecSeleDriToDec32_1",
+        "w_decode16Data_187",
+        "w_decode32Data_187",
+        "w_decoderData_191",
+        "o_decoderData_187"
       ],
       "instances": [
         "decoderSele",
@@ -133,10 +132,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:structural_responsibility:001"
@@ -147,82 +143,9 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "将来自IF的驱动事件通过decSpli分发给Launch和Exc阶段，并处理来自下游的释放信号以控制反压。",
-      "subject": "事件分发与流控",
-      "explanation": "i_driveFromIF驱动decoderSele，decoderSele输出驱动decoder16/32，decoder16/32输出驱动decoMerge，decoMerge输出经decSpli分发给o_driveToLaunch_1和o_driveToExc_1。i_freeFromLaunch_1和i_freeFromExc_1反馈至decSpli，o_freeToIF输出至IF阶段。",
-      "signals": [
-        "i_driveFromIF",
-        "o_driveToLaunch_1",
-        "o_driveToExc_1",
-        "i_freeFromLaunch_1",
-        "i_freeFromExc_1",
-        "o_freeToIF"
-      ],
-      "instances": [
-        "decSpli",
-        "decoderSele",
-        "decoMerge"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:structural_responsibility:002"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "subject": "decoderSele (cSelector2_65b_dec)",
-      "summary": "指令宽度选择器，根据i_is16_1信号选择16位或32位解码路径。",
-      "explanation": "接收i_driveFromIF事件和i_pcAndIns_64数据，根据i_is16_1决定将驱动事件和数据转发给decoder16或decoder32。",
-      "signals": [
-        "i_driveFromIF",
-        "i_pcAndIns_64",
-        "i_is16_1",
-        "w_DecSeleDriToDec16_1",
-        "w_DecSeleDriToDec32_1"
-      ],
-      "instances": [
-        "decoderSele"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:component_role:001"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "subject": "decSpli (cSplitter2_1b)",
-      "summary": "事件分发器，将合并后的解码完成事件分发给Launch和Exc阶段。",
-      "explanation": "接收decoMerge的输出事件，根据内部逻辑将事件分发至o_driveToLaunch_1和o_driveToExc_1，并处理来自下游的释放信号。",
+      "summary": "将解码完成后的驱动事件分别发送至发射阶段和异常处理阶段。",
+      "subject": "驱动事件分发",
+      "explanation": "decSpli接收来自decoderSele的驱动事件，将其分发为o_driveToLaunch_1（发射阶段）和o_driveToExc_1（异常处理阶段），并接收来自下游的释放信号以控制流控。",
       "signals": [
         "o_driveToLaunch_1",
         "o_driveToExc_1",
@@ -240,10 +163,71 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
+          "source": "parser_pipeline_rtl/modules/decoder.json"
+        }
+      ],
+      "id": "semantic:module:decoder:structural_responsibility:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "decoder"
+      },
+      "subject": "decoderSele",
+      "summary": "指令长度选择器，根据指令长度标志将输入指令分流至16位或32位解码器。",
+      "explanation": "decoderSele接收来自IF的驱动事件和指令数据，根据i_is16_1信号选择将指令发送至decoder16或decoder32，同时输出释放信号o_freeToIF以控制上游流控。",
+      "signals": [
+        "i_driveFromIF",
+        "i_pcAndIns_64",
+        "i_is16_1",
+        "w_DecSeleDriToDec16_1",
+        "w_DecSeleDriToDec32_1",
+        "o_freeToIF"
+      ],
+      "instances": [
+        "decoderSele"
+      ],
+      "related_flows": [
+        "flow_000_decoder_i_driveFromIF"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
         {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
+        }
+      ],
+      "id": "semantic:module:decoder:component_role:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "decoder"
+      },
+      "subject": "decSpli",
+      "summary": "驱动事件分发器，将解码完成事件分发至发射和异常处理路径。",
+      "explanation": "decSpli接收来自解码流水线的驱动事件，将其分为两路：o_driveToLaunch_1驱动发射阶段，o_driveToExc_1驱动异常处理阶段。同时接收来自下游的释放信号i_freeFromLaunch_1和i_freeFromExc_1以控制流控。",
+      "signals": [
+        "o_driveToLaunch_1",
+        "o_driveToExc_1",
+        "i_freeFromLaunch_1",
+        "i_freeFromExc_1"
+      ],
+      "instances": [
+        "decSpli"
+      ],
+      "related_flows": [
+        "flow_000_decoder_i_driveFromIF"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:component_role:002"
@@ -254,9 +238,9 @@
         "type": "module",
         "module": "decoder"
       },
-      "subject": "decoMerge (cMutexMerge2_191b_dec)",
-      "summary": "互斥合并器，将16位和32位解码器的输出合并为统一的解码数据。",
-      "explanation": "接收decoder16和decoder32的输出数据及异常编号，合并为191位宽的w_decoderData_191，供后续assign输出。",
+      "subject": "decoMerge",
+      "summary": "互斥合并器，将16位和32位解码结果合并为统一的解码数据。",
+      "explanation": "decoMerge接收来自decoder16和decoder32的解码数据以及异常编号，通过互斥合并逻辑输出统一的解码结果w_decoderData_191，供后续assign输出。",
       "signals": [
         "w_decode16Data_187",
         "w_decode32Data_187",
@@ -270,49 +254,15 @@
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "subject": "decodeFifo (Fifo1)",
-      "summary": "解码FIFO，用于缓冲解码后的数据或事件，处理流水线反压。",
-      "explanation": "作为Fifo1家族实例，可能用于缓冲解码数据或事件，以应对下游阶段的反压。具体连接未在上下文中完全体现。",
-      "signals": [
-        "(未明确)"
-      ],
-      "instances": [
-        "decodeFifo"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:component_role:004"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -321,15 +271,14 @@
         "module": "decoder"
       },
       "subject": "o_decoderData_187",
-      "summary": "输出解码后的187位数据，包含指令解码结果和16位指令标志。",
-      "explanation": "由w_decoderData1_191和w_is16_1拼接而成，w_decoderData1_191来自r_decoderData_191，w_is16_1指示是否为16位指令。",
+      "summary": "将合并后的解码数据与16位标志拼接后输出，作为解码结果的主数据通道。",
+      "explanation": "assign将w_decoderData1_191的高位数据与w_is16_1标志拼接，形成187位解码输出，包含指令解码后的所有控制与数据信息。",
       "signals": [
         "o_decoderData_187",
         "w_decoderData1_191",
         "w_is16_1"
       ],
       "related_assignments": [
-        "1",
         "2"
       ],
       "related_flows": [
@@ -340,10 +289,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:assignment_interpretation:001"
@@ -354,29 +300,25 @@
         "type": "module",
         "module": "decoder"
       },
-      "subject": "o_wen_2",
-      "summary": "输出2位写使能信号，从解码数据中提取。",
-      "explanation": "直接取自w_decoderData1_191的低2位，用于控制后续阶段的寄存器写操作。",
+      "subject": "o_decPCAndNum_36",
+      "summary": "从解码数据中提取PC值和指令编号，输出至后续阶段用于调试或异常处理。",
+      "explanation": "assign从w_decoderData1_191中提取PC字段和指令编号字段，拼接为36位输出，供下游模块使用。",
       "signals": [
-        "o_wen_2",
+        "o_decPCAndNum_36",
         "w_decoderData1_191"
       ],
       "related_assignments": [
-        "1",
-        "3"
+        "6"
       ],
       "related_flows": [
         "flow_000_decoder_i_driveFromIF"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:assignment_interpretation:002"
@@ -387,9 +329,38 @@
         "type": "module",
         "module": "decoder"
       },
+      "subject": "o_wen_2",
+      "summary": "从解码数据中提取写使能信号，控制寄存器写操作。",
+      "explanation": "assign将w_decoderData1_191的低2位直接赋值给o_wen_2，作为写使能控制信号输出。",
+      "signals": [
+        "o_wen_2",
+        "w_decoderData1_191"
+      ],
+      "related_assignments": [
+        "3"
+      ],
+      "related_flows": [
+        "flow_000_decoder_i_driveFromIF"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/decoder.json"
+        }
+      ],
+      "id": "semantic:module:decoder:assignment_interpretation:003"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "decoder"
+      },
       "subject": "o_blImm9_9",
-      "summary": "输出9位BL指令立即数，来自寄存器r_blImm9_9。",
-      "explanation": "从内部寄存器直接输出，可能由解码逻辑在之前周期计算得到。",
+      "summary": "输出分支链接指令的立即数，用于分支预测或跳转地址计算。",
+      "explanation": "assign将寄存器r_blImm9_9的值直接赋值给o_blImm9_9，该值由解码过程产生，用于BL指令的立即数。",
       "signals": [
         "o_blImm9_9",
         "r_blImm9_9"
@@ -401,17 +372,14 @@
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
-      "id": "semantic:module:decoder:assignment_interpretation:003"
+      "id": "semantic:module:decoder:assignment_interpretation:004"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -420,8 +388,8 @@
         "module": "decoder"
       },
       "subject": "o_nzcvWen_4",
-      "summary": "输出4位NZCV条件标志写使能，来自寄存器r_nzcvWen_4。",
-      "explanation": "从内部寄存器直接输出，可能由解码逻辑在之前周期计算得到，用于控制条件标志更新。",
+      "summary": "输出条件码标志写使能，控制NZCV寄存器的更新。",
+      "explanation": "assign将寄存器r_nzcvWen_4的值直接赋值给o_nzcvWen_4，该值由解码过程产生，用于控制条件码标志的写入。",
       "signals": [
         "o_nzcvWen_4",
         "r_nzcvWen_4"
@@ -433,47 +401,11 @@
         "flow_000_decoder_i_driveFromIF"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "subject": "o_decPCAndNum_36",
-      "summary": "输出36位解码PC和异常编号，从解码数据中提取。",
-      "explanation": "由w_decoderData1_191中的PC字段和异常编号字段拼接而成，用于后续阶段的PC恢复和异常处理。",
-      "signals": [
-        "o_decPCAndNum_36",
-        "w_decoderData1_191"
-      ],
-      "related_assignments": [
-        "1",
-        "6"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:assignment_interpretation:005"
@@ -484,64 +416,33 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "i_driveFromIF事件与i_pcAndIns_64数据绑定，构成取指阶段到解码阶段的传输契约。",
-      "subject": "驱动事件与数据绑定",
-      "explanation": "当i_driveFromIF有效时，i_pcAndIns_64携带有效的PC和指令数据，解码模块开始处理。o_freeToIF用于释放IF阶段。",
+      "summary": "解码模块与上下游模块之间采用驱动-释放握手协议，实现流控。",
+      "subject": "驱动-释放握手接口",
+      "explanation": "输入事件i_driveFromIF携带指令数据，输出事件o_driveToLaunch_1和o_driveToExc_1分别驱动发射和异常阶段，对应的释放信号i_freeFromLaunch_1和i_freeFromExc_1用于下游反馈，o_freeToIF用于向上游释放。这种握手机制确保流水线级间数据同步。",
       "signals": [
         "i_driveFromIF",
-        "i_pcAndIns_64",
-        "o_freeToIF"
-      ],
-      "related_payload": [
-        "i_pcAndIns_64"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "summary": "o_driveToLaunch_1和o_driveToExc_1事件分别携带解码结果至发射和异常处理阶段，并接收释放信号。",
-      "subject": "解码结果分发契约",
-      "explanation": "解码完成后，通过o_driveToLaunch_1将解码数据（o_decoderData_187等）发送至发射阶段，通过o_driveToExc_1将异常信息发送至异常处理阶段。i_freeFromLaunch_1和i_freeFromExc_1用于下游阶段释放解码模块。",
-      "signals": [
         "o_driveToLaunch_1",
         "o_driveToExc_1",
         "i_freeFromLaunch_1",
-        "i_freeFromExc_1"
+        "i_freeFromExc_1",
+        "o_freeToIF"
       ],
       "related_payload": [
-        "o_decoderData_187",
-        "o_wen_2",
-        "o_nzcvWen_4",
-        "o_blImm9_9",
-        "o_decPCAndNum_36"
+        "i_pcAndIns_64",
+        "o_decoderData_187"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
+          "source": "knowledge_ir/modules/decoder.json"
         },
         {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
-      "id": "semantic:module:decoder:interface_intent:002"
+      "id": "semantic:module:decoder:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -549,11 +450,11 @@
         "type": "module",
         "module": "decoder"
       },
-      "summary": "文档应重点描述指令解码的流水线结构，包括选择、解码、合并和分发阶段。",
-      "subject": "解码流水线结构",
-      "explanation": "模块内部包含decoderSele（选择）、decoder16/32（解码）、decoMerge（合并）和decSpli（分发）等组件，形成清晰的流水线。文档应说明各阶段的功能和交互。",
+      "summary": "手册应重点描述指令长度分流、双解码器并行工作、结果合并及事件分发的流水线结构。",
+      "subject": "指令解码流水线结构",
+      "explanation": "模块核心设计是16位/32位指令的并行解码架构，通过decoderSele分流、decoder16/decoder32并行解码、decoMerge合并、decSpli分发，形成完整的解码流水线。这是理解模块功能的关键。",
       "signals": [
-        "i_driveFromIF",
+        "i_is16_1",
         "i_pcAndIns_64",
         "o_decoderData_187",
         "o_driveToLaunch_1",
@@ -574,118 +475,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
+          "source": "parser_pipeline_rtl/modules/decoder.json"
         }
       ],
       "id": "semantic:module:decoder:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "summary": "文档应强调事件驱动和释放信号构成的握手协议，以及FIFO在反压中的作用。",
-      "subject": "事件流与反压机制",
-      "explanation": "模块使用事件驱动（i_driveFromIF, o_driveToLaunch_1, o_driveToExc_1）和释放信号（i_freeFromLaunch_1, i_freeFromExc_1, o_freeToIF）实现握手。decodeFifo可能用于缓冲，文档应说明其作用。",
-      "signals": [
-        "i_driveFromIF",
-        "o_driveToLaunch_1",
-        "o_driveToExc_1",
-        "i_freeFromLaunch_1",
-        "i_freeFromExc_1",
-        "o_freeToIF"
-      ],
-      "instances": [
-        "decodeFifo"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:documentation_focus:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "reason": "上下文未提供decodeFifo的输入输出连接，无法确定其在解码流水线中的具体缓冲位置和作用。",
-      "subject": "decodeFifo连接细节",
-      "needed_source_slice": "instance connections",
-      "signals": [
-        "(未明确)"
-      ],
-      "instances": [
-        "decodeFifo"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "decoder"
-      },
-      "reason": "上下文仅显示这些寄存器直接输出，但未提供其赋值来源，无法确定解码逻辑如何计算这些值。",
-      "subject": "r_blImm9_9和r_nzcvWen_4的赋值逻辑",
-      "needed_source_slice": "assign block or always block",
-      "signals": [
-        "r_blImm9_9",
-        "r_nzcvWen_4"
-      ],
-      "instances": [
-        "(无)"
-      ],
-      "related_flows": [
-        "flow_000_decoder_i_driveFromIF"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\Decode\\decoder.v"
-        },
-        {
-          "source": "modules/decoder.json"
-        }
-      ],
-      "id": "semantic:module:decoder:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_driveFromIF",
-      "reason": "未从i_driveFromIF到达模块事件输出，无法确认内部事件流是否完整。"
+      "reason": "内部事件流未追踪到模块事件输出，无法确认驱动事件在解码流水线内的完整传播路径。"
     }
   ]
 }

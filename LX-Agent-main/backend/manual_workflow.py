@@ -4468,6 +4468,8 @@ def _tool_failed(result):
         or lower_result.startswith("knowledge tool execution failed")
         or "knowledge tool execution incomplete" in lower_result
         or "some expected artifacts are missing" in lower_result
+        or "execution timed out" in lower_result
+        or "执行超时" in result
         or "执行失败" in result
         or "不存在" in result
     )

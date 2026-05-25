@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "SPI02NoC",
-  "input_hash": "f8e361ca8c57edc9825aa0de20fe085a04060e28bfc22aa9a510c2428c1bfb47",
+  "input_hash": "b0bf16a1207330f2ba3070d16d0945007ab41437c7a6d4a4f03700f28ea3863b",
   "source_context": "ai_context/modules/SPI02NoC.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+      "source": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
       "paths": [
         "module_source"
       ]
@@ -40,18 +40,18 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\SPI02NoC.v",
+        "rtl_file": "rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v",
         "parser_module": "modules/SPI02NoC.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 15,
+    "count": 11,
     "by_type": {
-      "assignment_interpretation": 5,
+      "assignment_interpretation": 3,
       "component_role": 2,
-      "documentation_focus": 2,
-      "interface_intent": 2,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
       "source_review_request": 2,
       "structural_responsibility": 1
@@ -64,20 +64,27 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接与缓冲模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
+      "summary": "SPI02NoC 是 SPI 控制器与片上网络 (NoC) 之间的桥接模块，负责将 NoC 的驱动事件转换为 SPI Flash 的读写操作，并将结果打包回 NoC。",
       "subject": "SPI02NoC",
-      "explanation": "模块通过 cFifo1 和 cFifo2 构成两级事件缓冲流水线，中间插入 delay1 实现时序对齐。u_flash 实例执行实际的 SPI Flash 操作，assign 逻辑将 NoC 数据包解析为寄存器地址和命令，并组合状态寄存器 (SR) 和读数据寄存器 (RDR) 作为回传数据。",
+      "explanation": "模块接收来自 Mesh 的驱动事件 (i_driveFrmMesh) 和 51 位数据 (i_dataFrmNoc)，通过内部 FIFO 和延迟单元进行流水线控制，最终输出驱动事件 (o_driveNextToMesh) 和 51 位数据 (o_data2Noc)。同时，它实例化了 flash_state 模块 (u_flash) 来驱动 SPI Flash 接口 (sclk, mosi, miso, cs_n)，并输出地址 (address) 和状态信号 (busy, startRead)。",
       "signals": [
         "i_driveFrmMesh",
-        "o_driveNextToMesh",
         "i_dataFrmNoc",
+        "o_driveNextToMesh",
         "o_data2Noc",
-        "address"
+        "address",
+        "busy",
+        "startRead",
+        "sclk",
+        "mosi",
+        "miso",
+        "cs_n"
       ],
       "instances": [
         "cFifo1",
         "cFifo2",
-        "u_flash"
+        "u_flash",
+        "fire2SyncPluse_u"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
@@ -87,19 +94,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface.event_inputs"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
         },
         {
-          "source": "interface.data_inputs"
-        },
-        {
-          "source": "key_component_connections"
-        },
-        {
-          "source": "assign_dependencies"
-        },
-        {
-          "source": "key_instances"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:module_role:001"
@@ -110,22 +108,22 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "模块将 NoC 的驱动事件 (i_driveFrmMesh) 通过两级 FIFO 和延迟单元，最终转换为 SPI Flash 的读写操作，并产生输出驱动事件 (o_driveNextToMesh)。",
-      "subject": "事件驱动的 SPI Flash 访问桥接",
-      "explanation": "输入事件 i_driveFrmMesh 驱动 cFifo1，其输出经 delay1 延迟后驱动 cFifo2，cFifo2 的输出作为模块的输出事件。u_flash 实例在收到 startRead 信号后执行 Flash 操作，其输出 dataReady 和 busy 信号参与内部状态组合。",
+      "summary": "模块将 NoC 的驱动事件和数据转换为 SPI Flash 的寄存器读写操作，并将读取结果或状态寄存器内容打包成 51 位数据返回 NoC。",
+      "subject": "NoC 到 SPI Flash 的桥接与数据打包",
+      "explanation": "输入数据 i_dataFrmNoc[49:42] 被提取为地址 (address)。通过地址译码 (address[3:0] == CR/SR/TDR/RDR) 选择内部寄存器 (r_CR, w_SR, r_TDR, w_RDR) 的值，组合成 w_data2noc 并最终输出为 o_data2Noc。写使能信号 w_en 和地址 8'h64 用于生成 w_en_tmp，可能用于触发特定操作。读使能 r_en 由 !w_en 和 dataReady 共同控制。",
       "signals": [
-        "i_driveFrmMesh",
-        "o_driveNextToMesh",
-        "w_driveNext",
-        "w_driveNext_delay",
-        "startRead",
+        "i_dataFrmNoc",
+        "address",
+        "o_data2Noc",
+        "w_en",
+        "r_en",
         "dataReady",
-        "busy"
+        "w_SR",
+        "r_CR",
+        "r_TDR",
+        "w_RDR"
       ],
       "instances": [
-        "cFifo1",
-        "cFifo2",
-        "delay1",
         "u_flash"
       ],
       "related_flows": [
@@ -136,13 +134,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "internal_event_flow_refs"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
         },
         {
-          "source": "key_component_connections"
-        },
-        {
-          "source": "assign_dependencies"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:structural_responsibility:001"
@@ -154,19 +149,19 @@
         "module": "SPI02NoC"
       },
       "subject": "cFifo1 和 cFifo2 (Fifo1 系列)",
-      "summary": "构成两级事件缓冲流水线，用于解耦 NoC 驱动事件与 SPI Flash 操作之间的时序。",
-      "explanation": "cFifo1 接收输入事件 i_driveFrmMesh，cFifo2 产生输出事件 o_driveNextToMesh。中间通过 delay1 连接，表明需要一定的延迟来等待 Flash 操作完成。两个 FIFO 共享同一复位信号。",
+      "summary": "这两个 FIFO 实例构成一个两级流水线，用于对驱动事件进行延迟和同步，以匹配 SPI Flash 操作的时序。",
+      "explanation": "cFifo1 接收输入驱动事件 i_driveFrmMesh，输出 w_driveNext。该信号经过 delay1 单元延迟后，作为 w_driveNext_delay 输入到 cFifo2。cFifo2 最终输出 o_driveNextToMesh。这种结构表明驱动事件在模块内部被流水线化，以等待 SPI Flash 操作完成。cFifo1 的输出 o_free 直接连接到 o_freeToMesh，表示上游 Mesh 可以释放。",
       "signals": [
         "i_driveFrmMesh",
         "w_driveNext",
         "w_driveNext_delay",
         "o_driveNextToMesh",
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
+        "o_freeToMesh"
       ],
       "instances": [
         "cFifo1",
-        "cFifo2"
+        "cFifo2",
+        "delay1"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
@@ -176,13 +171,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
         },
         {
-          "source": "component_families"
-        },
-        {
-          "source": "key_instances"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:component_role:001"
@@ -194,16 +186,16 @@
         "module": "SPI02NoC"
       },
       "subject": "u_flash (flash_state)",
-      "summary": "执行 SPI Flash 读写操作的核心状态机，其输出 dataReady 和 busy 信号用于控制数据回传和状态指示。",
-      "explanation": "u_flash 接收 startRead 信号启动操作，通过 SPI 接口 (sclk, mosi, miso, cs_n) 与外部 Flash 通信。其输出 dataReady 指示数据就绪，busy 指示忙状态，这些信号被用于组合状态寄存器 w_SR。",
+      "summary": "SPI Flash 状态机控制器，负责执行实际的 SPI Flash 读写操作，并返回数据就绪信号。",
+      "explanation": "u_flash 模块接收时钟 (clk)、复位 (rst_n)、启动读信号 (startRead) 和 SPI 数据输入 (miso)，并输出 SPI 时钟 (sclk)、数据输出 (mosi)、片选 (cs_n)、忙信号 (busy) 和数据就绪信号 (dataReady)。dataReady 信号被用于生成读使能 r_en，表明模块在等待 Flash 操作完成后才读取数据。",
       "signals": [
         "startRead",
-        "dataReady",
-        "busy",
-        "sclk",
-        "mosi",
         "miso",
-        "cs_n"
+        "mosi",
+        "sclk",
+        "cs_n",
+        "busy",
+        "dataReady"
       ],
       "instances": [
         "u_flash"
@@ -216,13 +208,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
         },
         {
-          "source": "key_instances"
-        },
-        {
-          "source": "assign_dependencies"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:component_role:002"
@@ -234,17 +223,14 @@
         "module": "SPI02NoC"
       },
       "subject": "address",
-      "summary": "从 NoC 输入数据包中提取地址字段，用于后续的寄存器选择和命令解析。",
-      "explanation": "address 直接由 i_dataFrmNoc[49:42] 赋值，表明 NoC 数据包的高 8 位被用作地址。该地址用于选择 SPI 控制寄存器 (CR, SR, TDR, RDR) 以及特定的命令地址 (8'h64)。",
+      "summary": "从 NoC 输入数据中提取 SPI 寄存器地址。",
+      "explanation": "赋值 address = i_dataFrmNoc[49:42] 表明 NoC 数据包的高 8 位 (bit 49 到 42) 被用作 SPI 内部寄存器的地址，用于后续的读写译码。",
       "signals": [
         "address",
         "i_dataFrmNoc"
       ],
       "related_assignments": [
-        "0",
-        "2",
-        "5",
-        "6"
+        "0"
       ],
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
@@ -254,7 +240,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:assignment_interpretation:001"
@@ -265,42 +254,9 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "subject": "w_SR",
-      "summary": "组合 SPI 状态寄存器，包含数据就绪、发送空、忙和完成标志。",
-      "explanation": "w_SR 由 dataReady, w_TXE, busy, w_finish 拼接而成，反映了 SPI Flash 操作的当前状态。该寄存器可通过地址 SR 被 NoC 读取。",
-      "signals": [
-        "w_SR",
-        "dataReady",
-        "w_TXE",
-        "busy",
-        "w_finish"
-      ],
-      "related_assignments": [
-        "1",
-        "2"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
       "subject": "w_data2noc",
-      "summary": "根据地址选择对应的寄存器值，作为回传 NoC 的数据。",
-      "explanation": "这是一个多路选择器，根据 address[3:0] 的值选择 CR, SR, TDR 或 RDR 寄存器。表明 NoC 通过地址来读取 SPI 控制/状态/数据寄存器。",
+      "summary": "根据地址译码结果，从内部寄存器中选择数据，用于构建返回 NoC 的数据包。",
+      "explanation": "这是一个多路选择器，根据地址的低 4 位 (address[3:0]) 选择控制寄存器 (CR)、状态寄存器 (SR)、发送数据寄存器 (TDR) 或接收数据寄存器 (RDR) 的值。这表明模块实现了 SPI 控制器的寄存器映射接口。",
       "signals": [
         "w_data2noc",
         "address",
@@ -320,10 +276,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:003"
+      "id": "semantic:module:SPI02NoC:assignment_interpretation:002"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -332,8 +291,8 @@
         "module": "SPI02NoC"
       },
       "subject": "startRead_fire",
-      "summary": "当向 TDR 寄存器写入数据时，产生启动 Flash 读操作的触发信号。",
-      "explanation": "startRead_fire 在地址为 TDR 且写使能 (w_en) 有效时，由 w_fire_2[1] 驱动。这表明向 TDR 写入数据是启动 SPI Flash 读操作的命令。",
+      "summary": "当向发送数据寄存器 (TDR) 写入数据时，触发 SPI Flash 读取操作。",
+      "explanation": "赋值 startRead_fire = ((address[3:0] == TDR) & w_en) ? w_fire_2[1] : 1'b0 表明，对 TDR 寄存器的写操作会生成一个脉冲信号，用于启动 u_flash 模块的读取序列。",
       "signals": [
         "startRead_fire",
         "address",
@@ -346,45 +305,18 @@
       "related_flows": [
         "flow_000_SPI02NoC_i_driveFrmMesh"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "subject": "w_en_tmp",
-      "summary": "当地址为 8'h64 且写使能有效时，产生一个临时写使能信号。",
-      "explanation": "w_en_tmp 在地址为 8'h64 时有效，表明该地址可能对应一个特殊的命令或配置寄存器，需要单独的写使能控制。",
-      "signals": [
-        "w_en_tmp",
-        "w_en",
-        "address"
-      ],
-      "related_assignments": [
-        "6"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
-      "id": "semantic:module:SPI02NoC:assignment_interpretation:005"
+      "id": "semantic:module:SPI02NoC:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -392,67 +324,28 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "输入事件 i_driveFrmMesh 与输入数据 i_dataFrmNoc 构成一个原子操作，事件驱动数据包的解析和处理。",
-      "subject": "NoC 驱动事件与数据包接口",
-      "explanation": "事件 i_driveFrmMesh 的到达表明 i_dataFrmNoc 上的数据有效。模块解析该数据包中的地址字段，执行相应的 SPI 操作，并通过 o_data2Noc 和 o_driveNextToMesh 返回结果。",
+      "summary": "输入驱动事件 i_driveFrmMesh 与输入数据 i_dataFrmNoc 和输出空闲信号 o_freeToMesh 构成一个完整的 NoC 请求-响应握手协议。",
+      "subject": "驱动事件与数据/空闲信号的关系",
+      "explanation": "事件-载荷合约表明，当 i_driveFrmMesh 有效时，i_dataFrmNoc 上的数据被视为有效载荷。模块处理完成后，通过 o_freeToMesh 信号通知上游 Mesh 可以释放该驱动事件。输出驱动事件 o_driveNextToMesh 与输入空闲信号 i_freeNextFrmMesh 构成类似的握手关系，用于向下游 Mesh 传递事件。",
       "signals": [
         "i_driveFrmMesh",
         "i_dataFrmNoc",
+        "o_freeToMesh",
         "o_driveNextToMesh",
-        "o_data2Noc"
-      ],
-      "related_payload": [
-        "i_dataFrmNoc",
-        "o_data2Noc"
+        "i_freeNextFrmMesh"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface.event_inputs"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
         },
         {
-          "source": "interface.data_inputs"
-        },
-        {
-          "source": "event_payload_contracts"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "summary": "自由信号用于实现 NoC 的流控，o_freeToMesh 表示模块已准备好接收新数据，i_freeNextFrmMesh 表示下游已准备好接收模块的输出。",
-      "subject": "自由信号 (free) 接口",
-      "explanation": "o_freeToMesh 来自 cFifo1，表明输入 FIFO 有空闲空间。i_freeNextFrmMesh 连接到 cFifo2，表明输出 FIFO 的下游已准备好。这构成了一个标准的 NoC 握手流控机制。",
-      "signals": [
-        "o_freeToMesh",
-        "i_freeNextFrmMesh"
-      ],
-      "related_payload": [
-        "i_dataFrmNoc",
-        "o_data2Noc"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "interface.free_inputs"
-        },
-        {
-          "source": "interface.free_outputs"
-        },
-        {
-          "source": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -460,17 +353,17 @@
         "type": "module",
         "module": "SPI02NoC"
       },
-      "summary": "手册应重点描述从 NoC 驱动事件到 SPI Flash 操作完成，再到输出驱动事件的完整时序路径。",
-      "subject": "事件流水线与 SPI 操作时序",
-      "explanation": "模块的核心是两级 FIFO 和 delay1 构成的流水线，以及 u_flash 的异步操作。手册需要解释事件如何通过流水线，以及 delay1 的延迟如何与 Flash 操作时间匹配。",
+      "summary": "手册应重点描述驱动事件如何通过两级 FIFO 和延迟单元进行流水线化，以匹配 SPI Flash 的读写延迟。",
+      "subject": "驱动事件流水线与 SPI Flash 操作的时序关系",
+      "explanation": "模块的核心功能是桥接 NoC 的同步驱动事件和 SPI Flash 的异步操作。cFifo1、delay1 和 cFifo2 构成的流水线是实现这一功能的关键。文档需要解释事件流如何与 u_flash 的 busy 和 dataReady 信号同步，以及如何通过 startRead 信号触发 Flash 操作。",
       "signals": [
         "i_driveFrmMesh",
         "w_driveNext",
         "w_driveNext_delay",
         "o_driveNextToMesh",
-        "startRead",
+        "busy",
         "dataReady",
-        "busy"
+        "startRead"
       ],
       "instances": [
         "cFifo1",
@@ -486,85 +379,27 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "internal_event_flow_refs"
+          "source": "knowledge_ir/modules/SPI02NoC.json"
         },
         {
-          "source": "key_component_connections"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:documentation_focus:001"
     },
     {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "summary": "手册应详细说明 NoC 数据包中地址字段的编码方式，以及 SPI 控制/状态/数据寄存器的地址映射。",
-      "subject": "寄存器映射与 NoC 数据包格式",
-      "explanation": "address 从 i_dataFrmNoc[49:42] 提取，用于选择 CR, SR, TDR, RDR 等寄存器。手册需要列出这些寄存器的地址、位定义和功能。",
-      "signals": [
-        "address",
-        "i_dataFrmNoc",
-        "o_data2Noc",
-        "r_CR",
-        "w_SR",
-        "r_TDR",
-        "w_RDR"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:documentation_focus:002"
-    },
-    {
       "claim_type": "source_review_request",
       "scope": {
         "type": "module",
         "module": "SPI02NoC"
       },
-      "reason": "紧凑上下文未提供 delay1 的模块类型和具体延迟参数，需要 RTL 源码确认其实现细节。",
-      "subject": "delay1 实例",
-      "needed_source_slice": "instance connections; module declaration",
-      "signals": [
-        "w_driveNext",
-        "w_driveNext_delay"
-      ],
-      "instances": [
-        "delay1"
-      ],
-      "related_flows": [
-        "flow_000_SPI02NoC_i_driveFrmMesh"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:SPI02NoC:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "SPI02NoC"
-      },
-      "reason": "紧凑上下文未提供 fire2SyncPluse_u 的模块类型和功能，需要 RTL 源码确认其如何将 startRead_fire 转换为 startRead 脉冲。",
+      "reason": "该实例的输入输出连接 (clk, rst, rst_finish, rise) 和其内部逻辑在上下文中不明确，需要查看 RTL 源代码以理解其确切功能。",
       "subject": "fire2SyncPluse_u 实例",
-      "needed_source_slice": "instance connections; module declaration",
+      "needed_source_slice": "instance connections, always block, comments",
       "signals": [
-        "startRead_fire",
+        "clk",
+        "rst",
+        "rst_finish",
         "startRead"
       ],
       "instances": [
@@ -578,24 +413,37 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "key_component_connections"
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
+        }
+      ],
+      "id": "semantic:module:SPI02NoC:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "SPI02NoC"
+      },
+      "reason": "该信号在赋值 startRead_fire 中被引用，但其来源和生成逻辑在上下文中未定义，需要查看 RTL 源代码。",
+      "subject": "w_fire_2 信号",
+      "needed_source_slice": "assign block, always block",
+      "signals": [
+        "w_fire_2",
+        "startRead_fire"
+      ],
+      "related_flows": [
+        "flow_000_SPI02NoC_i_driveFrmMesh"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:module:SPI02NoC:source_review_request:002"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "delay1 的模块类型和延迟参数",
-      "reason": "紧凑上下文中未提供 delay1 的详细信息，无法确定其延迟周期和实现方式。"
-    },
-    {
-      "field": "fire2SyncPluse_u 的模块类型和功能",
-      "reason": "紧凑上下文中未提供 fire2SyncPluse_u 的详细信息，无法确定其如何将 startRead_fire 转换为 startRead 脉冲。"
-    },
-    {
-      "field": "w_TXE, w_finish, w_fire_2, r_CR, r_TDR, w_RDR 等内部信号的来源",
-      "reason": "紧凑上下文中未提供这些信号的赋值来源，需要 RTL 源码确认其生成逻辑。"
-    }
-  ]
+  "evidence_gaps": []
 }

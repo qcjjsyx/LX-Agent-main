@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "align",
-  "input_hash": "3ce5b169eb844a14bc25e345de7336f6c0acea8a3a031fad2327b5d55d65b3ba",
+  "input_hash": "7f4d5f72edac960fa556d6d666067a685fb5780f73cbd3c272b95de1e7e7a009",
   "source_context": "ai_context/modules/align.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\Execute\\align.v",
+      "source": "rtl/rtl/Execute/align.v",
       "paths": [
         "module_source"
       ]
@@ -40,18 +40,19 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\Execute\\align.v",
+        "rtl_file": "rtl/rtl/Execute/align.v",
         "parser_module": "modules/align.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 5,
+    "count": 6,
     "by_type": {
       "assignment_interpretation": 2,
       "documentation_focus": 1,
       "interface_intent": 1,
-      "module_role": 1
+      "module_role": 1,
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -61,9 +62,9 @@
         "type": "module",
         "module": "align"
       },
-      "summary": "该模块执行操作数地址对齐，将输入操作数向上对齐到4字节边界。",
+      "summary": "该模块执行地址对齐操作，将输入的32位操作数向上对齐到4字节边界。",
       "subject": "align",
-      "explanation": "模块接收一个32位操作数，通过加4并清零低2位，实现地址对齐到字边界的功能。",
+      "explanation": "模块接收一个32位输入oprand，通过加4并清零低2位，输出对齐后的32位结果result。该操作是典型的地址对齐（向上取整到下一个4字节边界）实现。",
       "signals": [
         "oprand",
         "result"
@@ -77,6 +78,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/align.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/align.v"
         }
       ],
       "id": "semantic:module:align:module_role:001"
@@ -88,8 +92,8 @@
         "module": "align"
       },
       "subject": "oprandTmp",
-      "summary": "生成对齐所需的中间偏移量，将输入操作数加4。",
-      "explanation": "该赋值将输入操作数增加4，为后续的地址对齐做准备，属于数据路径中的中间信号整形。",
+      "summary": "中间信号oprandTmp存储输入操作数加4后的值，用于后续对齐计算。",
+      "explanation": "赋值0将oprand加上4，生成oprandTmp。这是对齐流程的第一步，将输入值增加一个偏移量，为后续清零低2位做准备。",
       "signals": [
         "oprand",
         "oprandTmp"
@@ -106,6 +110,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/align.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/align.v"
         }
       ],
       "id": "semantic:module:align:assignment_interpretation:001"
@@ -117,8 +124,8 @@
         "module": "align"
       },
       "subject": "result",
-      "summary": "通过清零低2位实现地址对齐到4字节边界。",
-      "explanation": "该赋值将中间信号oprandTmp的低2位清零，生成最终对齐后的结果，属于数据路径中的核心对齐操作。",
+      "summary": "赋值1将oprandTmp的低2位清零，实现4字节对齐输出。",
+      "explanation": "通过拼接{oprandTmp[31:2],{2{1'b0}}}，将oprandTmp的高30位保留，低2位强制置0。结合赋值0的加4操作，最终result是oprand向上对齐到下一个4字节边界的结果。",
       "signals": [
         "oprandTmp",
         "result"
@@ -135,6 +142,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/align.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/align.v"
         }
       ],
       "id": "semantic:module:align:assignment_interpretation:002"
@@ -145,14 +155,10 @@
         "type": "module",
         "module": "align"
       },
-      "summary": "输入输出均为32位数据，构成简单的数据对齐转换通道。",
-      "subject": "数据输入输出接口",
-      "explanation": "输入oprand为待对齐数据，输出result为对齐后数据，两者宽度一致，表明模块为纯组合逻辑的数据转换单元。",
+      "summary": "模块通过oprand接收未对齐地址，通过result输出对齐后的地址，构成一个简单的数据转换接口。",
+      "subject": "数据输入输出对",
+      "explanation": "输入oprand和输出result均为32位数据信号，无事件或控制信号。接口语义明确：输入为原始地址，输出为对齐后的地址，无握手或流控。",
       "signals": [
-        "oprand",
-        "result"
-      ],
-      "related_payload": [
         "oprand",
         "result"
       ],
@@ -165,6 +171,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/align.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/align.v"
         }
       ],
       "id": "semantic:module:align:interface_intent:001"
@@ -175,31 +184,52 @@
         "type": "module",
         "module": "align"
       },
-      "summary": "手册应重点说明对齐操作的数学含义和适用场景。",
-      "subject": "对齐操作语义",
-      "explanation": "模块功能简单明确，文档应强调对齐到4字节边界的计算过程（加4后清零低2位）及其在指令执行流水线中的用途。",
+      "summary": "文档应重点说明对齐操作的数学原理（向上取整到4字节边界）及其在处理器执行阶段中的典型用途（如加载/存储地址对齐）。",
+      "subject": "对齐算法与用途",
+      "explanation": "模块功能简单，但上下文未说明其应用场景。文档应解释为何需要加4再清零低2位，以及该模块在指令流水线中的角色（例如为后续内存访问提供对齐地址）。",
       "signals": [
         "oprand",
         "result"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/align.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/align.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/align.v"
         }
       ],
       "id": "semantic:module:align:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "align"
+      },
+      "reason": "紧凑上下文仅提供接口和赋值信息，未说明模块在处理器执行阶段中的具体用途（如用于何种指令或场景），需要RTL源代码中的注释或连接关系来确认。",
+      "subject": "模块用途与流水线上下文",
+      "needed_source_slice": "module declaration; comments; instance connections",
+      "signals": [
+        "oprand",
+        "result"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "rtl/rtl/Execute/align.v"
+        }
+      ],
+      "id": "semantic:module:align:source_review_request:001"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "模块在流水线中的具体位置和触发条件",
-      "reason": "上下文未提供事件流或控制信号，无法确定模块的使能条件或流水线阶段。"
-    }
-  ]
+  "evidence_gaps": []
 }

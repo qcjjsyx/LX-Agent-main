@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "data_slot",
   "flow_id": "flow_002_data_slot_i_driveFromMesh",
-  "input_hash": "1d0cf4688f42c458cb62cf1298adbc5b5ae4d267924026cbf473b3a7c7b657a5",
+  "input_hash": "c486679ba2d397769fc7e19e64b4c007b32c1890c16ee8fd3b4e13d872872f82",
   "source_context": "ai_context/modules/data_slot/flows/flow_002_data_slot_i_driveFromMesh.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\slot\\data_slot.v",
+      "source": "rtl/rtl/slot/data_slot.v",
       "paths": [
         "module_source"
       ]
@@ -41,7 +41,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\slot\\data_slot.v",
+        "rtl_file": "rtl/rtl/slot/data_slot.v",
         "parser_module": "modules/data_slot.json"
       }
     }
@@ -65,11 +65,14 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "从Mesh侧输入的驱动事件，经过延迟和互斥合并后，最终输出到CPU侧。",
+      "summary": "从Mesh接口接收驱动事件，经过延迟和互斥合并后，最终输出到CPU接口的单向事件驱动流。",
       "subject": "flow_002_data_slot_i_driveFromMesh",
-      "explanation": "该流描述了来自Mesh的驱动信号`i_driveFromMesh`如何通过一个透明的延迟单元`delay_driveFromMesh`，然后与来自Dcache的另一路延迟驱动信号在`MutexMerge`中进行合并或仲裁，最后经过两级延迟后作为`o_driveToCpu`输出。这是一个单向的、从Mesh到CPU的事件传播路径。",
+      "explanation": "该流从模块输入端口i_driveFromMesh开始，经过一个透明延迟单元delay_driveFromMesh后，与来自Dcache的另一路延迟事件在MutexMerge中进行合并仲裁，合并后的结果再经过两级延迟单元delay2CPU和delay2CPU2，最终从模块输出端口o_driveToCpu送出。整个流是单向的，不涉及数据负载，仅传递事件驱动信号。",
       "signals": [
         "i_driveFromMesh",
+        "w_delay_driveFromMesh",
+        "w_driveToCpu",
+        "a",
         "o_driveToCpu"
       ],
       "instances": [
@@ -78,20 +81,15 @@
         "delay2CPU",
         "delay2CPU2"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/data_slot.json",
-          "path": "internal_event_flow"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json",
-          "path": "flow_graph"
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:flow_intent:001"
@@ -104,8 +102,8 @@
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
       "subject": "delay_driveFromMesh",
-      "summary": "作为Mesh侧驱动信号的输入缓冲和延迟单元。",
-      "explanation": "该实例是一个`delay8U`类型的透明延迟单元，其作用是将输入的`i_driveFromMesh`信号进行固定周期的延迟，以对齐时序或满足后续合并模块的建立时间要求。它不改变信号的数据内容，仅负责时间上的平移。",
+      "summary": "对来自Mesh的驱动事件进行透明延迟缓冲。",
+      "explanation": "该实例为delay8U类型，其输入直接连接模块输入端口i_driveFromMesh，输出为w_delay_driveFromMesh。其作用是在事件进入合并器之前提供固定的延迟，不改变事件语义。",
       "signals": [
         "i_driveFromMesh",
         "w_delay_driveFromMesh"
@@ -113,16 +111,15 @@
       "instances": [
         "delay_driveFromMesh"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json",
-          "path": "instances"
+          "source": "instances.connections"
+        },
+        {
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:component_role:001"
@@ -135,30 +132,25 @@
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
       "subject": "MutexMerge",
-      "summary": "作为来自Mesh和Dcache两路驱动事件的互斥合并点。",
-      "explanation": "该实例是一个`cMutexMerge2_64b`类型的合并器，其核心功能是仲裁来自`delay_driveFromMesh`（Mesh路径）和`delay_driveFromDcache`（Dcache路径）的两个驱动事件。它确保在任意时刻，只有一路事件被选通并传递到下一级，从而避免总线冲突或数据竞争。这是该流中的一个关键阻塞点。",
+      "summary": "作为事件合并仲裁点，将来自Mesh和Dcache的两路延迟驱动事件合并为一路输出。",
+      "explanation": "该实例为cMutexMerge2_64b类型，属于MutexMerge家族。它接收两路输入：w_delay_driveFromMesh（来自Mesh）和w_delay_driveFromDcache（来自Dcache），输出一路w_driveToCpu。该组件可能实现互斥仲裁或优先级选择，是流中的关键阻塞点。",
       "signals": [
-        "w_delay_driveFromDcache",
         "w_delay_driveFromMesh",
+        "w_delay_driveFromDcache",
         "w_driveToCpu"
       ],
       "instances": [
         "MutexMerge"
-      ],
-      "related_assignments": [
-        "(无)"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json",
-          "path": "connection_graph"
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:component_role:002"
@@ -171,8 +163,8 @@
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
       "subject": "delay2CPU, delay2CPU2",
-      "summary": "作为输出到CPU前的两级流水线延迟单元。",
-      "explanation": "这两个实例均为`delay4U`类型的透明延迟单元，它们串联在`MutexMerge`的输出之后。其作用是为最终输出到CPU的驱动信号`o_driveToCpu`提供额外的流水线级数，以匹配CPU侧的时序要求或进行更深度的流水线缓冲。",
+      "summary": "对合并后的事件进行两级透明延迟，最终输出到CPU接口。",
+      "explanation": "delay2CPU和delay2CPU2均为delay4U类型，串联连接。delay2CPU接收MutexMerge的输出w_driveToCpu，输出中间信号a；delay2CPU2接收a，输出最终信号o_driveToCpu。两级延迟可能用于时序调整或流水线对齐。",
       "signals": [
         "w_driveToCpu",
         "a",
@@ -182,20 +174,15 @@
         "delay2CPU",
         "delay2CPU2"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json",
-          "path": "instances"
+          "source": "instances.connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_slot.json",
-          "path": "connection_graph"
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:component_role:003"
@@ -207,26 +194,22 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "该流仅描述事件驱动路径，未发现与数据负载的直接耦合。",
-      "subject": "事件驱动与数据负载的分离",
-      "explanation": "根据提供的接口负载契约，`i_driveFromMesh`和`o_driveToCpu`事件均未关联任何数据负载（payloads为空）。这表明该流可能是一个纯控制或握手信号路径，其作用是在Mesh和CPU之间传递一个“驱动”事件，而不携带具体的数据内容。数据可能通过其他独立的路径传输。",
+      "summary": "该流为纯事件驱动流，不携带数据负载。",
+      "subject": "事件驱动与数据负载",
+      "explanation": "根据接口负载契约，i_driveFromMesh和o_driveToCpu均无关联的数据负载信号。流中所有信号均为事件驱动类型，不涉及数据路径。因此，该流仅控制事件传播，不处理数据。",
       "signals": [
         "i_driveFromMesh",
         "o_driveToCpu"
       ],
-      "related_payload": [
-        "(无)"
-      ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/data_slot.json",
-          "path": "interface_data_contract"
+          "source": "interface.event_ports"
+        },
+        {
+          "source": "interface.data_ports"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:data_control_effect:001"
@@ -238,23 +221,24 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "存在关联的反压信号，但其在该流中的具体作用尚不明确。",
-      "subject": "流完成与反压信号",
-      "explanation": "接口契约中提到了与`i_driveFromMesh`关联的`o_freeToMesh`信号，以及与`o_driveToCpu`关联的`i_freeFromCpu`信号。这些信号很可能是用于实现握手的反压或完成指示。然而，当前上下文并未提供这些信号如何与流中的延迟单元或合并器交互的细节，因此无法断言其在该流中的具体行为。",
+      "summary": "该流存在关联的反压信号，但具体机制不明确。",
+      "subject": "流完成与反压",
+      "explanation": "接口负载契约显示，输入事件i_driveFromMesh关联反压信号o_freeToMesh，输出事件o_driveToCpu关联反压信号i_freeFromCpu。这表明该流可能支持反压机制，但当前上下文未提供反压信号如何与流中组件交互的细节。",
       "signals": [
+        "i_driveFromMesh",
+        "o_driveToCpu",
         "o_freeToMesh",
         "i_freeFromCpu"
-      ],
-      "instances": [
-        "(无)"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/data_slot.json",
-          "path": "interface_data_contract"
+          "source": "interface.event_ports"
+        },
+        {
+          "source": "interface.data_ports"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:completion_backpressure:001"
@@ -266,31 +250,26 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "summary": "手册应重点描述从Mesh到CPU的事件路径，并强调MutexMerge的仲裁行为。",
-      "subject": "流路径与阻塞点",
-      "explanation": "该流的核心结构清晰：一个输入、一个输出、一个合并点。手册应详细说明`MutexMerge`如何仲裁来自Mesh和Dcache的两路事件，以及这种仲裁对整体系统行为的影响。同时，应明确`delay_driveFromMesh`、`delay2CPU`和`delay2CPU2`这些延迟单元的作用是时序对齐，而非数据变换。",
+      "summary": "手册应重点描述MutexMerge的合并仲裁行为及其对事件流的影响。",
+      "subject": "事件合并与仲裁逻辑",
+      "explanation": "MutexMerge是流中唯一的阻塞点和分支合并点，其行为决定了来自Mesh和Dcache的事件如何竞争输出。手册需要明确仲裁策略（如优先级、轮询或互斥）以及当两路事件同时到达时的处理方式。",
       "signals": [
-        "i_driveFromMesh",
-        "o_driveToCpu",
+        "w_delay_driveFromMesh",
         "w_delay_driveFromDcache",
-        "w_delay_driveFromMesh"
+        "w_driveToCpu"
       ],
       "instances": [
-        "MutexMerge",
-        "delay_driveFromMesh",
-        "delay2CPU",
-        "delay2CPU2"
-      ],
-      "related_assignments": [
-        "(无)"
+        "MutexMerge"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/data_slot.json",
-          "path": "internal_event_flow"
+          "source": "instances.connections"
+        },
+        {
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:documentation_focus:001"
@@ -302,12 +281,12 @@
         "module": "data_slot",
         "flow_id": "flow_002_data_slot_i_driveFromMesh"
       },
-      "reason": "当前AI上下文仅描述了MutexMerge的存在和连接，但未提供其内部仲裁算法（如固定优先级、轮询等）以及它与`o_freeToMesh`、`i_freeFromCpu`等反压信号的交互方式。这些细节对于生成准确的用户手册至关重要。",
-      "subject": "MutexMerge的仲裁逻辑与反压交互",
-      "needed_source_slice": "always block or assign block for MutexMerge instance",
+      "reason": "当前上下文仅标识MutexMerge为合并器，但未提供其内部仲裁策略（如优先级、互斥或轮询）以及反压信号如何影响事件传播。",
+      "subject": "MutexMerge的仲裁逻辑",
+      "needed_source_slice": "always block; assign block; instance connections",
       "signals": [
-        "w_delay_driveFromDcache",
         "w_delay_driveFromMesh",
+        "w_delay_driveFromDcache",
         "w_driveToCpu",
         "o_freeToMesh",
         "i_freeFromCpu"
@@ -315,20 +294,15 @@
       "instances": [
         "MutexMerge"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/data_slot.json",
-          "path": "internal_event_flow"
+          "source": "instances.connections"
         },
         {
-          "source": "knowledge_ir/modules/data_slot.json",
-          "path": "interface_data_contract"
+          "source": "transparent_flows"
         }
       ],
       "id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:source_review_request:001"
@@ -336,8 +310,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "数据负载",
-      "reason": "接口契约显示事件无关联数据负载，但模块名为`data_slot`，暗示其可能处理数据。需要RTL源确认该流是否确实为纯控制流，或者数据负载是否通过其他方式（如并行总线）传递。"
+      "field": "反压信号与流组件的连接关系",
+      "reason": "接口负载契约列出了反压信号o_freeToMesh和i_freeFromCpu，但当前上下文未显示这些信号如何连接到流中的组件（如MutexMerge或延迟单元），无法确定反压机制的具体实现。"
     }
   ]
 }

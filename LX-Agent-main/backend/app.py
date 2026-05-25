@@ -9,8 +9,12 @@ from datetime import datetime
 
 import dotenv
 from flask import Flask, render_template, request, jsonify
-from openai import OpenAI
 from werkzeug.utils import secure_filename
+
+try:
+    from openai import OpenAI
+except ImportError:  # Web routes that do not call the model should still import.
+    OpenAI = None
 
 try:
     from .agent_runner import AgentRunner, AgentSession
@@ -27,12 +31,21 @@ except ImportError:
 
 dotenv.load_dotenv()
 
-client = OpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com"
-)
+MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
-MODEL = "deepseek-chat"
+
+def build_model_client():
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if OpenAI is None or not api_key:
+        return None
+    return OpenAI(
+        api_key=api_key,
+        base_url=DEEPSEEK_BASE_URL,
+    )
+
+
+client = build_model_client()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"

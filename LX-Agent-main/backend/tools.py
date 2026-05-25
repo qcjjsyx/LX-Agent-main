@@ -315,6 +315,7 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl"):
         parser_pipeline_rtl/ 或 rtl/parser_pipeline_rtl/
     """
     print("\n[Parser Tool] 调用 rtl-manual-generation/scripts/run_parser_tool.py...")
+    parser_timeout = env_int("RTL_MANUAL_PARSER_TIMEOUT", 220)
     return run_skill_script(
         "run_parser_tool.py",
         [
@@ -322,8 +323,10 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl"):
             project_root,
             "--rtl-inputs",
             rtl_inputs,
+            "--timeout",
+            str(parser_timeout),
         ],
-        timeout=env_int("RTL_MANUAL_PARSER_TIMEOUT", 220),
+        timeout=parser_timeout + 30,
     )
 
 

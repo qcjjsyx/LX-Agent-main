@@ -6,10 +6,10 @@
     "module_name": "socmem",
     "module_role": "submodule",
     "source_files": [
-      "rtl\\rtl\\memory\\socmem.v"
+      "rtl/rtl/memory/socmem.v"
     ],
     "source": {
-      "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+      "rtl_file": "rtl/rtl/memory/socmem.v",
       "parser_module": "modules/socmem.json"
     },
     "certainty": "deterministic_fact",
@@ -98,8 +98,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "片上存储器子系统，仲裁并路由来自IF和LSU的访存请求到DCache、ICache、ROM和Stack。",
-      "explanation": "模块通过事件驱动接口接收IF和LSU的驱动信号，内部使用Fifo1组件和延迟链进行请求排队和时序对齐，最终将数据返回给请求源。地址范围决定数据源选择。",
+      "value": "片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并管理IF和LSU接口的驱动与释放握手。",
+      "explanation": "模块通过事件驱动接口（i_driveFrmIf/i_driveFrmLsu）接收来自IF和LSU的访问请求，内部路由到ICache、DCache、ROM或stack组件，并通过延迟链和FIFO组件管理输出驱动信号（o_driveNextToIf/o_driveNextToLsu）和释放信号（o_freeToIf/o_freeToLsu），实现流水线化的存储访问。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -111,7 +111,9 @@
         "i_driveFrmIf",
         "i_driveFrmLsu",
         "o_driveNextToIf",
-        "o_driveNextToLsu"
+        "o_driveNextToLsu",
+        "o_freeToIf",
+        "o_freeToLsu"
       ],
       "instances": [
         "cFifo2_If",
@@ -142,8 +144,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "片上存储器子系统，仲裁并路由来自IF和LSU的访存请求到DCache、ICache、ROM和Stack。",
-        "explanation": "模块通过事件驱动接口接收IF和LSU的驱动信号，内部使用Fifo1组件和延迟链进行请求排队和时序对齐，最终将数据返回给请求源。地址范围决定数据源选择。",
+        "value": "片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并管理IF和LSU接口的驱动与释放握手。",
+        "explanation": "模块通过事件驱动接口（i_driveFrmIf/i_driveFrmLsu）接收来自IF和LSU的访问请求，内部路由到ICache、DCache、ROM或stack组件，并通过延迟链和FIFO组件管理输出驱动信号（o_driveNextToIf/o_driveNextToLsu）和释放信号（o_freeToIf/o_freeToLsu），实现流水线化的存储访问。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -155,7 +157,9 @@
           "i_driveFrmIf",
           "i_driveFrmLsu",
           "o_driveNextToIf",
-          "o_driveNextToLsu"
+          "o_driveNextToLsu",
+          "o_freeToIf",
+          "o_freeToLsu"
         ],
         "instances": [
           "cFifo2_If",
@@ -185,26 +189,23 @@
         ]
       },
       {
-        "value": "接收IF和LSU的独立驱动事件，通过Fifo1组件和延迟链进行流水线化处理，并根据地址范围将数据读取请求路由到对应的存储组件。",
-        "explanation": "i_driveFrmIf和i_driveFrmLsu分别触发两条独立的内部事件流。IF流经过delay_6UIcache和cFifo2_If后，通过三级延迟链输出；LSU流经过cFifo2_Lsu后，通过两级延迟链输出。数据输出通过地址比较选择源：o_idataR_65在ICache和ROM之间选择，o_ddataR_64在DCache和Stack之间选择。",
+        "value": "根据地址范围将数据访问路由到DCache或stack，将指令访问路由到ICache或ROM，并选择正确的读数据输出。",
+        "explanation": "数据读输出o_ddataR_64通过地址r_daddress_32与0x00041200比较，选择来自DCache（o_ddataR_t_64）或stack（o_ddataR_tStack_64）的数据。指令读输出o_idataR_65通过routeSelect信号选择来自ICache（o_idataR_t_64）或ROM（w_idataROM_64）的数据，并附加进位位r_iaddrcarry。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:socmem:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "i_driveFrmIf",
-          "i_driveFrmLsu",
-          "o_driveNextToIf",
-          "o_driveNextToLsu",
           "o_ddataR_64",
-          "o_idataR_65"
+          "o_idataR_65",
+          "r_daddress_32",
+          "routeSelect",
+          "r_iaddrcarry"
         ],
         "instances": [
-          "cFifo2_If",
-          "cFifo2_Lsu",
           "DCache",
           "ICache",
           "ROM",
@@ -215,25 +216,25 @@
           "flow_001_socmem_i_driveFrmLsu"
         ],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:socmem:semantic_module"
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/socmem.json"
+            "source": "parser_pipeline_rtl/modules/socmem.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/socmem.json"
+            "source": "rtl/rtl/memory/socmem.v"
           }
         ]
       }
     ],
     "documentation_focus": [
       {
-        "value": "文档应重点描述地址范围如何决定数据源选择，包括指令数据在ICache和ROM之间的选择条件，以及数据数据在DCache和Stack之间的地址边界。",
-        "explanation": "从assign依赖中可以看出，o_idataR_65由routeSelect控制，o_ddataR_64由地址比较控制。这些地址映射规则是模块的核心功能，需要详细说明。",
+        "value": "手册应重点描述地址范围如何决定数据访问路由到DCache或stack，以及指令访问路由到ICache或ROM的选择逻辑。",
+        "explanation": "从assign依赖中可见，数据读输出依赖于地址比较（r_daddress_32<32'h00041200），指令读输出依赖于routeSelect信号。这些选择逻辑定义了存储器的地址映射，是理解模块行为的关键。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -242,10 +243,10 @@
         "semantic_claim_id": "semantic:module:socmem:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "o_idataR_65",
           "o_ddataR_64",
-          "routeSelect",
-          "r_daddress_32"
+          "o_idataR_65",
+          "r_daddress_32",
+          "routeSelect"
         ],
         "instances": [
           "DCache",
@@ -253,7 +254,10 @@
           "ROM",
           "stack"
         ],
-        "related_flows": [],
+        "related_flows": [
+          "flow_000_socmem_i_driveFrmIf",
+          "flow_001_socmem_i_driveFrmLsu"
+        ],
         "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
@@ -261,9 +265,6 @@
           "ev:socmem:semantic_module"
         ],
         "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/socmem.json"
-          },
           {
             "source": "parser_pipeline_rtl/modules/socmem.json"
           }
@@ -454,18 +455,22 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_socmem_i_driveFrmIf.json",
       "reader_takeaway": {
-        "value": "该驱动流将输入事件 i_driveFrmIf 经过一个 FIFO 缓冲和三级延迟链后，转换为输出事件 o_driveNextToIf。",
-        "explanation": "流从模块输入端口 i_driveFrmIf 开始，首先经过 delay_6UIcache 进行短延迟，然后进入 cFifo2_If 进行缓冲，再经过三个级联的 delay16U 实例（delay_IF1、delay_IF2、delay_IF3）进行长延迟，最终到达模块输出端口 o_driveNextToIf。FIFO 是唯一的阻塞点，可能因背压而暂停事件传播。",
+        "value": "手册应重点描述该流的事件传播路径、各延迟单元的延迟值以及 FIFO 的缓冲作用。",
+        "explanation": "该流的核心功能是将输入事件经过固定延迟和 FIFO 缓冲后输出。手册应明确说明延迟链的总延迟（6 + 16*3 = 54 单位），以及 FIFO 可能引入的额外延迟或门控。同时，应强调该流是单向的，没有分支或汇合点。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:flow_intent:001",
+        "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
           "i_driveFrmIf",
-          "o_driveNextToIf"
+          "o_driveNextToIf",
+          "w_driveFrmIfDelay_1",
+          "w_driveNextToIf[0]",
+          "w_driveNextToIf[1]",
+          "w_driveNextToIf[2]"
         ],
         "instances": [
           "delay_6UIcache",
@@ -475,9 +480,7 @@
           "delay_IF3"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "2"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -486,38 +489,80 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/socmem.json",
-            "path": "internal_event_flow"
+            "source": "instances.connections",
+            "path": "modules/socmem.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/socmem.json",
-            "path": "flow_graph.assignment_dependencies"
+            "source": "transparent_flows",
+            "path": "modules/socmem.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "手册应重点说明输入事件 i_driveFrmIf 如何通过 FIFO 和延迟链传播到输出事件 o_driveNextToIf，并澄清空闲信号 o_freeToIf 与输出事件的直接耦合。",
-            "explanation": "当前上下文显示流路径清晰，但空闲信号 o_freeToIf 与输出事件 o_driveNextToIf 的赋值关系与接口契约中的 free_signal 定义不一致。手册需要解释这种耦合是否意味着 o_freeToIf 反映输出事件状态，以及输入事件 i_driveFrmIf 的背压如何实现。",
+            "value": "该驱动流将输入事件信号 i_driveFrmIf 经过一个 FIFO 缓冲和三级延迟链后，转换为输出事件信号 o_driveNextToIf。",
+            "explanation": "流从模块输入端口 i_driveFrmIf 开始，首先经过一个 6 单位延迟单元 delay_6UIcache，然后进入一个 FIFO 缓冲 cFifo2_If，之后依次通过三个 16 单位延迟单元 delay_IF1、delay_IF2、delay_IF3，最终到达模块输出端口 o_driveNextToIf。整个流是单向的，没有分支或汇合点。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:documentation_focus:001",
+            "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:flow_intent:001",
             "doc_priority": "primary",
             "signals": [
               "i_driveFrmIf",
-              "o_driveNextToIf",
-              "o_freeToIf",
-              "i_freeNextFrmIf"
+              "w_driveFrmIfDelay_1",
+              "w_driveNextToIf[0]",
+              "w_driveNextToIf[1]",
+              "w_driveNextToIf[2]",
+              "o_driveNextToIf"
             ],
             "instances": [
-              "cFifo2_If"
+              "delay_6UIcache",
+              "cFifo2_If",
+              "delay_IF1",
+              "delay_IF2",
+              "delay_IF3"
             ],
             "related_flows": [],
             "related_assignments": [
               "2"
             ],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:socmem:flow:flow_000_socmem_i_driveFrmIf",
+              "ev:socmem:semantic_flow:flow_000_socmem_i_driveFrmIf"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "instances.connections",
+                "path": "modules/socmem.json"
+              },
+              {
+                "source": "transparent_flows",
+                "path": "modules/socmem.json"
+              }
+            ]
+          },
+          {
+            "value": "空闲信号与事件信号的耦合关系不明确，需要 RTL 源码审查以确定背压机制。",
+            "explanation": "当前上下文显示 o_freeToIf 直接由 o_driveNextToIf 驱动，这可能意味着空闲信号是输出事件的简单镜像，而非独立的背压信号。输入事件 i_driveFrmIf 关联的空闲信号是 o_freeToIf，但该信号是输出事件的驱动结果，这可能导致背压逻辑的混淆。需要审查 RTL 源码以确认空闲信号的实际生成逻辑和背压机制。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:completion_backpressure:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "o_freeToIf",
+              "i_freeNextFrmIf",
+              "o_driveNextToIf",
+              "i_driveFrmIf"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [
@@ -526,25 +571,25 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/socmem.json",
-                "path": "internal_event_flow"
+                "source": "interface.event_ports",
+                "path": "modules/socmem.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/socmem.json",
-                "path": "assignments"
+                "source": "assignment_facts",
+                "path": "modules/socmem.json"
               }
             ]
           },
           {
             "value": "输出事件 o_driveNextToIf 与空闲信号 o_freeToIf 直接耦合，但输入事件 i_driveFrmIf 与空闲信号 o_freeToIf 的关系不明确。",
-            "explanation": "根据接口契约，输入事件 i_driveFrmIf 的 free_signal 是 o_freeToIf，输出事件 o_driveNextToIf 的 free_signal 是 i_freeNextFrmIf。但赋值 2 显示 o_freeToIf 直接由 o_driveNextToIf 驱动，表明 o_freeToIf 可能反映输出事件的状态，而非输入事件。这需要 RTL 源码确认。",
+            "explanation": "根据接口契约，输入事件 i_driveFrmIf 关联的空闲信号是 o_freeToIf，输出事件 o_driveNextToIf 关联的空闲信号是 i_freeNextFrmIf。但赋值 2 显示 o_freeToIf 直接由 o_driveNextToIf 驱动，这可能意味着空闲信号是输出事件的直接反映，而非独立的背压信号。输入事件与空闲信号的关系需要进一步审查。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:data_control_effect:001",
-            "doc_priority": "primary",
+            "doc_priority": "secondary",
             "signals": [
               "i_driveFrmIf",
               "o_driveNextToIf",
@@ -564,48 +609,16 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/socmem.json",
-                "path": "interface_payload_contracts"
+                "source": "interface.event_ports",
+                "path": "modules/socmem.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/socmem.json",
-                "path": "assignments"
-              }
-            ]
-          },
-          {
-            "value": "cFifo2_If 是流中唯一的阻塞点，可能通过内部满状态产生背压，但具体机制未在上下文中说明。",
-            "explanation": "流步骤中标记 cFifo2_If 为阻塞点，但未提供其满/空信号或背压路径。接口契约中未明确输入事件 i_driveFrmIf 的 free_signal 如何与 FIFO 状态关联。因此，背压的完整描述需要 RTL 源码。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:completion_backpressure:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "w_driveFrmIfDelay_1",
-              "w_driveNextToIf[0]"
-            ],
-            "instances": [
-              "cFifo2_If"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:socmem:flow:flow_000_socmem_i_driveFrmIf",
-              "ev:socmem:semantic_flow:flow_000_socmem_i_driveFrmIf"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/socmem.json",
-                "path": "internal_event_flow"
+                "source": "interface.data_ports",
+                "path": "modules/socmem.json"
               },
               {
-                "source": "knowledge_ir/modules/socmem.json",
-                "path": "interface_payload_contracts"
+                "source": "assignment_facts",
+                "path": "modules/socmem.json"
               }
             ]
           }
@@ -624,22 +637,30 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_socmem_i_driveFrmLsu.json",
       "reader_takeaway": {
-        "value": "该流传递的是纯驱动事件，没有显式的数据负载。",
-        "explanation": "接口负载契约显示，输入和输出事件均无关联的负载信号。这意味着该流仅用于控制或同步目的，不传输数据。驱动事件本身可能是一个脉冲或电平信号，用于触发LSU的下一个操作。",
+        "value": "文档应强调该流是固定延迟的事件传播路径，而非数据通路",
+        "explanation": "该流由FIFO和两个固定延迟单元串联组成，无数据负载，无分支，是典型的控制事件延迟链，文档应说明总延迟为48周期（16+32），并注明FIFO可能引入额外可变延迟",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
           "i_driveFrmLsu",
+          "w_driveNextToLsu[0]",
+          "w_driveNextToLsu[1]",
           "o_driveNextToLsu"
         ],
-        "instances": [],
+        "instances": [
+          "cFifo2_Lsu",
+          "delay_LSU1",
+          "delay_LSU2"
+        ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "assign 4"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -648,60 +669,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "modules/socmem.json"
+            "source": "parser_pipeline_rtl/modules/socmem.json",
+            "path": "connection_graph"
           },
           {
-            "source": "interface.data_ports",
-            "path": "modules/socmem.json"
+            "source": "knowledge_ir/modules/socmem.json",
+            "path": "internal_event_flow"
           }
         ],
         "supporting_claims": [
           {
-            "value": "手册应重点描述驱动事件的传播路径和FIFO的缓冲行为，同时谨慎处理流控细节。",
-            "explanation": "该流的核心是事件从输入到输出的单向传播，FIFO是唯一可能引入复杂性的组件。手册应明确说明延迟单元的固定延迟值，并基于RTL源码详细解释FIFO的流控机制（如空满标志如何影响空闲信号）。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFrmLsu",
-              "o_driveNextToLsu",
-              "o_freeToLsu",
-              "i_freeNextFrmLsu"
-            ],
-            "instances": [
-              "cFifo2_Lsu",
-              "delay_LSU1",
-              "delay_LSU2"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "4"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:socmem:flow:flow_001_socmem_i_driveFrmLsu",
-              "ev:socmem:semantic_flow:flow_001_socmem_i_driveFrmLsu"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "instances.connections",
-                "path": "modules/socmem.json"
-              },
-              {
-                "source": "transparent_flows",
-                "path": "modules/socmem.json"
-              }
-            ]
-          },
-          {
-            "value": "从LSU输入的驱动事件经过FIFO缓冲和两级延迟后，作为下一个驱动事件输出到LSU。",
-            "explanation": "该流是一个单向的、基于事件的驱动链，从输入端口i_driveFrmLsu开始，经过FIFO实例cFifo2_Lsu进行缓冲，再通过两个透明延迟单元delay_LSU1和delay_LSU2进行时序调整，最终到达输出端口o_driveNextToLsu。流中没有分支或合并点，FIFO是唯一的潜在阻塞点。",
+            "value": "从LSU输入的驱动事件经过两级延迟后输出到LSU的纯延迟链",
+            "explanation": "该流是一个单驱动内部事件流，从输入端口i_driveFrmLsu开始，经过FIFO缓冲和两个不同深度的延迟单元，最终到达输出端口o_driveNextToLsu，没有分支或合并点",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -722,7 +701,7 @@
             ],
             "related_flows": [],
             "related_assignments": [
-              "4"
+              "assign 4"
             ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
@@ -732,18 +711,48 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "modules/socmem.json"
+                "source": "knowledge_ir/modules/socmem.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows",
-                "path": "modules/socmem.json"
+                "source": "parser_pipeline_rtl/modules/socmem.json",
+                "path": "flow_graph.assignment_dependencies"
               }
             ]
           },
           {
-            "value": "存在空闲信号，但流控机制不明确，需要RTL源码确认。",
-            "explanation": "接口契约中提到了空闲信号o_freeToLsu和i_freeNextFrmLsu，但未提供它们与驱动事件的直接时序关系。赋值索引4暗示了o_freeToLsu与o_driveNextToLsu的关联，但完整的背压或完成握手逻辑（如FIFO的空满状态）未在上下文中体现。",
+            "value": "纯事件驱动流，无数据负载伴随",
+            "explanation": "接口负载契约显示i_driveFrmLsu和o_driveNextToLsu均无关联数据负载信号，该流仅传递事件控制信号，不携带数据内容",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:data_control_effect:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_driveFrmLsu",
+              "o_driveNextToLsu"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:socmem:flow:flow_001_socmem_i_driveFrmLsu",
+              "ev:socmem:semantic_flow:flow_001_socmem_i_driveFrmLsu"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/socmem.json",
+                "path": "interface_payload_contracts"
+              }
+            ]
+          },
+          {
+            "value": "输出端有释放信号配对，但输入端的释放信号关系不明确",
+            "explanation": "输出事件o_driveNextToLsu有对应的释放信号i_freeNextFrmLsu，且通过assign 4将输出事件映射到o_freeToLsu，但输入事件i_driveFrmLsu的释放信号o_freeToLsu实际是输出事件的别名，形成循环依赖，需要RTL源码确认实际握手逻辑",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -753,7 +762,9 @@
             "doc_priority": "secondary",
             "signals": [
               "o_freeToLsu",
-              "i_freeNextFrmLsu"
+              "i_freeNextFrmLsu",
+              "o_driveNextToLsu",
+              "i_driveFrmLsu"
             ],
             "instances": [
               "cFifo2_Lsu"
@@ -768,12 +779,12 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "modules/socmem.json"
+                "source": "knowledge_ir/modules/socmem.json",
+                "path": "interface_payload_contracts"
               },
               {
-                "source": "interface.data_ports",
-                "path": "modules/socmem.json"
+                "source": "parser_pipeline_rtl/modules/socmem.json",
+                "path": "assignments"
               }
             ]
           }
@@ -856,8 +867,8 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "空闲信号直接跟随对应的下一个驱动事件输出，表示请求处理完成。",
-        "explanation": "assign o_freeToIf = o_driveNextToIf 和 assign o_freeToLsu = o_driveNextToLsu 表明空闲信号与驱动事件同步，当模块准备好接收下一个请求时，空闲信号与驱动事件同时有效。",
+        "value": "释放信号直接跟随对应的驱动输出信号，表明释放信号是驱动信号的组合逻辑副本。",
+        "explanation": "assign o_freeToIf = o_driveNextToIf 和 assign o_freeToLsu = o_driveNextToLsu 表明释放信号与驱动信号同步，用于通知上游当前驱动已被下游接收，可以发送下一个请求。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -886,9 +897,6 @@
           "ev:socmem:semantic_module"
         ],
         "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/socmem.json"
-          },
           {
             "source": "parser_pipeline_rtl/modules/socmem.json"
           }
@@ -920,8 +928,8 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "指令读数据多路选择器，根据routeSelect信号在ICache数据和ROM数据之间选择，并附加地址进位位。",
-        "explanation": "assign o_idataR_65 = (routeSelect==1) ? {o_idataR_t_64, r_iaddrcarry} : {w_idataROM_64, r_iaddrcarry} 表明指令数据来源由routeSelect控制，同时将地址进位位r_iaddrcarry附加到数据高位，形成65位输出。",
+        "value": "数据输出多路选择器，根据地址或选择信号从不同存储组件中选取读数据。",
+        "explanation": "o_ddataR_64 根据地址范围选择DCache或stack的数据；o_idataR_65 根据routeSelect选择ICache或ROM的数据，并附加进位位。这些选择逻辑定义了存储器的地址映射和访问优先级。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -930,16 +938,20 @@
         "semantic_claim_id": "semantic:module:socmem:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
+          "o_ddataR_64",
           "o_idataR_65",
+          "r_daddress_32",
           "routeSelect",
-          "o_idataR_t_64",
-          "r_iaddrcarry",
-          "w_idataROM_64"
+          "r_iaddrcarry"
         ],
         "instances": [],
-        "related_flows": [],
+        "related_flows": [
+          "flow_000_socmem_i_driveFrmIf",
+          "flow_001_socmem_i_driveFrmLsu"
+        ],
         "related_assignments": [
-          "3"
+          "3",
+          "5"
         ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
@@ -947,9 +959,6 @@
           "ev:socmem:semantic_module"
         ],
         "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/socmem.json"
-          },
           {
             "source": "parser_pipeline_rtl/modules/socmem.json"
           }
@@ -978,8 +987,8 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "空闲信号直接跟随对应的下一个驱动事件输出，表示请求处理完成。",
-        "explanation": "assign o_freeToIf = o_driveNextToIf 和 assign o_freeToLsu = o_driveNextToLsu 表明空闲信号与驱动事件同步，当模块准备好接收下一个请求时，空闲信号与驱动事件同时有效。",
+        "value": "释放信号直接跟随对应的驱动输出信号，表明释放信号是驱动信号的组合逻辑副本。",
+        "explanation": "assign o_freeToIf = o_driveNextToIf 和 assign o_freeToLsu = o_driveNextToLsu 表明释放信号与驱动信号同步，用于通知上游当前驱动已被下游接收，可以发送下一个请求。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1009,9 +1018,6 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/socmem.json"
-          },
-          {
             "source": "parser_pipeline_rtl/modules/socmem.json"
           }
         ]
@@ -1038,38 +1044,40 @@
         "o_ddataR_t_64",
         "o_ddataR_tStack_64"
       ],
-      "impact_area": "data_path",
+      "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "数据读多路选择器，根据地址范围在DCache数据和Stack数据之间选择。",
-        "explanation": "assign o_ddataR_64 = (r_daddress_32<32'h00041200) ? o_ddataR_t_64 : o_ddataR_tStack_64 表明数据读取地址低于0x41200时从DCache读取，否则从Stack读取。这定义了数据存储的地址映射边界。",
+        "value": "数据输出多路选择器，根据地址或选择信号从不同存储组件中选取读数据。",
+        "explanation": "o_ddataR_64 根据地址范围选择DCache或stack的数据；o_idataR_65 根据routeSelect选择ICache或ROM的数据，并附加进位位。这些选择逻辑定义了存储器的地址映射和访问优先级。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:socmem:assignment_interpretation:003",
+        "semantic_claim_id": "semantic:module:socmem:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
           "o_ddataR_64",
+          "o_idataR_65",
           "r_daddress_32",
-          "o_ddataR_t_64",
-          "o_ddataR_tStack_64"
+          "routeSelect",
+          "r_iaddrcarry"
         ],
         "instances": [],
-        "related_flows": [],
+        "related_flows": [
+          "flow_000_socmem_i_driveFrmIf",
+          "flow_001_socmem_i_driveFrmLsu"
+        ],
         "related_assignments": [
+          "3",
           "5"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:socmem:semantic_module"
         ],
         "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/socmem.json"
-          },
           {
             "source": "parser_pipeline_rtl/modules/socmem.json"
           }
@@ -1149,27 +1157,10 @@
   ],
   "important_internal_signals": [
     {
-      "signal": "i_driveFrmIf",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 24,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface",
-        "ev:socmem:knowledge_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
       "signal": "i_driveFrmLsu",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 24,
+      "importance_score": 20,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1186,7 +1177,7 @@
       "signal": "o_driveNextToIf",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 21,
+      "importance_score": 17,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1203,7 +1194,7 @@
       "signal": "o_driveNextToLsu",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 21,
+      "importance_score": 17,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1213,6 +1204,39 @@
       "evidence_refs": [
         "ev:socmem:interface",
         "ev:socmem:knowledge_module",
+        "ev:socmem:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_driveFrmIf",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface",
+        "ev:socmem:knowledge_module",
+        "ev:socmem:semantic_module"
+      ]
+    },
+    {
+      "signal": "routeSelect",
+      "kind": "reg",
+      "width_text": "1",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:socmem:parser_module",
         "ev:socmem:semantic_module"
       ]
     },
@@ -1249,9 +1273,41 @@
       ]
     },
     {
-      "signal": "routeSelect",
+      "signal": "o_freeToIf",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface",
+        "ev:socmem:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeToLsu",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface",
+        "ev:socmem:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_daddress_32",
       "kind": "reg",
-      "width_text": "1",
+      "width_text": "[31:0]",
       "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -1261,6 +1317,24 @@
       ],
       "evidence_refs": [
         "ev:socmem:parser_module",
+        "ev:socmem:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_driveFrmIfDelay_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:socmem:parser_module",
+        "ev:socmem:knowledge_module",
         "ev:socmem:semantic_module"
       ]
     },
@@ -1297,20 +1371,18 @@
       ]
     },
     {
-      "signal": "w_driveFrmIfDelay_1",
-      "kind": "wire",
+      "signal": "r_iaddrcarry",
+      "kind": "reg",
       "width_text": "1",
-      "importance_score": 10,
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
         "parse",
-        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
         "ev:socmem:parser_module",
-        "ev:socmem:knowledge_module",
         "ev:socmem:semantic_module"
       ]
     },
@@ -1343,166 +1415,6 @@
       ],
       "evidence_refs": [
         "ev:socmem:knowledge_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToIf",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToLsu",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_daddress_32",
-      "kind": "reg",
-      "width_text": "[31:0]",
-      "importance_score": 8,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:parser_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_ddataR_t_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:parser_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_idataR_t_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:parser_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_idataROM_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:parser_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_ddataR_tStack_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:parser_module",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_ddataW_64",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_idataW_64",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface",
-        "ev:socmem:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_iaddrcarry",
-      "kind": "reg",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:socmem:parser_module",
         "ev:socmem:semantic_module"
       ]
     },
@@ -1577,49 +1489,7 @@
       ]
     },
     {
-      "signal": "init_sig",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface"
-      ]
-    },
-    {
-      "signal": "i_iwen_8",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface"
-      ]
-    },
-    {
       "signal": "i_dwen_8",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:socmem:interface"
-      ]
-    },
-    {
-      "signal": "i_daddress_32",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1647,7 +1517,21 @@
       ]
     },
     {
-      "signal": "i_iaddress_33",
+      "signal": "i_iwen_8",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface"
+      ]
+    },
+    {
+      "signal": "init_sig",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1662,6 +1546,62 @@
     },
     {
       "signal": "rst",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface"
+      ]
+    },
+    {
+      "signal": "i_ddataW_64",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface"
+      ]
+    },
+    {
+      "signal": "i_iaddress_33",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface"
+      ]
+    },
+    {
+      "signal": "i_daddress_32",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:socmem:interface"
+      ]
+    },
+    {
+      "signal": "i_idataW_64",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1828,9 +1768,9 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "当前上下文未提供routeSelect信号的生成逻辑，无法确定指令数据选择的具体条件。",
+      "question": "当前上下文未提供routeSelect信号的来源和生成逻辑，无法确定指令访问路由到ICache或ROM的具体条件。",
       "subject": "routeSelect信号生成逻辑",
-      "needed_source_slice": "always block or assign block",
+      "needed_source_slice": "always block|assign block",
       "source_layers": [
         "semantic_layer"
       ],
@@ -1839,9 +1779,9 @@
       ]
     },
     {
-      "question": "当前上下文仅显示延迟链的连接关系，未提供delay_6UIcache、delay_IF1/2/3、delay_LSU1/2等组件的内部实现，无法确定延迟周期和时序行为。",
-      "subject": "延迟链组件实现细节",
-      "needed_source_slice": "module declaration or instance connections",
+      "question": "当前上下文仅提供了延迟链的连接关系，未提供这些组件的内部实现或延迟周期数，无法确定流水线深度和时序。",
+      "subject": "延迟链组件 (delay_6UIcache, delay_IF1, delay_IF2, delay_IF3, delay_LSU1, delay_LSU2)",
+      "needed_source_slice": "module declaration|instance connections",
       "source_layers": [
         "semantic_layer"
       ],
@@ -1860,7 +1800,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "socmem",
-    "source_file": "rtl\\rtl\\memory\\socmem.v",
+    "source_file": "rtl/rtl/memory/socmem.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -1877,8 +1817,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "片上存储器子系统，仲裁并路由来自IF和LSU的访存请求到DCache、ICache、ROM和Stack。",
-      "explanation": "模块通过事件驱动接口接收IF和LSU的驱动信号，内部使用Fifo1组件和延迟链进行请求排队和时序对齐，最终将数据返回给请求源。地址范围决定数据源选择。",
+      "value": "片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并管理IF和LSU接口的驱动与释放握手。",
+      "explanation": "模块通过事件驱动接口（i_driveFrmIf/i_driveFrmLsu）接收来自IF和LSU的访问请求，内部路由到ICache、DCache、ROM或stack组件，并通过延迟链和FIFO组件管理输出驱动信号（o_driveNextToIf/o_driveNextToLsu）和释放信号（o_freeToIf/o_freeToLsu），实现流水线化的存储访问。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -1890,7 +1830,9 @@
         "i_driveFrmIf",
         "i_driveFrmLsu",
         "o_driveNextToIf",
-        "o_driveNextToLsu"
+        "o_driveNextToLsu",
+        "o_freeToIf",
+        "o_freeToLsu"
       ],
       "instances": [
         "cFifo2_If",
@@ -2241,7 +2183,7 @@
           ],
           "summary": "clock_reset_init ports, count=1, directions=input:1",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+            "rtl_file": "rtl/rtl/memory/socmem.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2288,7 +2230,7 @@
           ],
           "summary": "drive_event ports, count=4, directions=input:2, output:2",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+            "rtl_file": "rtl/rtl/memory/socmem.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2335,7 +2277,7 @@
           ],
           "summary": "free_backpressure ports, count=4, directions=input:2, output:2",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+            "rtl_file": "rtl/rtl/memory/socmem.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2412,7 +2354,7 @@
           ],
           "summary": "other_ports ports, count=9, directions=input:7, output:2",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+            "rtl_file": "rtl/rtl/memory/socmem.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2429,18 +2371,22 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_socmem_i_driveFrmIf.json",
         "reader_takeaway": {
-          "value": "该驱动流将输入事件 i_driveFrmIf 经过一个 FIFO 缓冲和三级延迟链后，转换为输出事件 o_driveNextToIf。",
-          "explanation": "流从模块输入端口 i_driveFrmIf 开始，首先经过 delay_6UIcache 进行短延迟，然后进入 cFifo2_If 进行缓冲，再经过三个级联的 delay16U 实例（delay_IF1、delay_IF2、delay_IF3）进行长延迟，最终到达模块输出端口 o_driveNextToIf。FIFO 是唯一的阻塞点，可能因背压而暂停事件传播。",
+          "value": "手册应重点描述该流的事件传播路径、各延迟单元的延迟值以及 FIFO 的缓冲作用。",
+          "explanation": "该流的核心功能是将输入事件经过固定延迟和 FIFO 缓冲后输出。手册应明确说明延迟链的总延迟（6 + 16*3 = 54 单位），以及 FIFO 可能引入的额外延迟或门控。同时，应强调该流是单向的，没有分支或汇合点。",
           "certainty": "ai_inferred",
           "confidence": "high",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:flow_intent:001",
+          "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:documentation_focus:001",
           "doc_priority": "primary",
           "signals": [
             "i_driveFrmIf",
-            "o_driveNextToIf"
+            "o_driveNextToIf",
+            "w_driveFrmIfDelay_1",
+            "w_driveNextToIf[0]",
+            "w_driveNextToIf[1]",
+            "w_driveNextToIf[2]"
           ],
           "instances": [
             "delay_6UIcache",
@@ -2450,9 +2396,7 @@
             "delay_IF3"
           ],
           "related_flows": [],
-          "related_assignments": [
-            "2"
-          ],
+          "related_assignments": [],
           "requires_rtl_source_review": false,
           "review_status": "ready",
           "evidence_refs": [
@@ -2461,38 +2405,80 @@
           ],
           "semantic_evidence": [
             {
-              "source": "knowledge_ir/modules/socmem.json",
-              "path": "internal_event_flow"
+              "source": "instances.connections",
+              "path": "modules/socmem.json"
             },
             {
-              "source": "parser_pipeline_rtl/modules/socmem.json",
-              "path": "flow_graph.assignment_dependencies"
+              "source": "transparent_flows",
+              "path": "modules/socmem.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "手册应重点说明输入事件 i_driveFrmIf 如何通过 FIFO 和延迟链传播到输出事件 o_driveNextToIf，并澄清空闲信号 o_freeToIf 与输出事件的直接耦合。",
-              "explanation": "当前上下文显示流路径清晰，但空闲信号 o_freeToIf 与输出事件 o_driveNextToIf 的赋值关系与接口契约中的 free_signal 定义不一致。手册需要解释这种耦合是否意味着 o_freeToIf 反映输出事件状态，以及输入事件 i_driveFrmIf 的背压如何实现。",
+              "value": "该驱动流将输入事件信号 i_driveFrmIf 经过一个 FIFO 缓冲和三级延迟链后，转换为输出事件信号 o_driveNextToIf。",
+              "explanation": "流从模块输入端口 i_driveFrmIf 开始，首先经过一个 6 单位延迟单元 delay_6UIcache，然后进入一个 FIFO 缓冲 cFifo2_If，之后依次通过三个 16 单位延迟单元 delay_IF1、delay_IF2、delay_IF3，最终到达模块输出端口 o_driveNextToIf。整个流是单向的，没有分支或汇合点。",
               "certainty": "ai_inferred",
               "confidence": "medium",
               "source_layers": [
                 "semantic_layer"
               ],
-              "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:documentation_focus:001",
+              "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:flow_intent:001",
               "doc_priority": "primary",
               "signals": [
                 "i_driveFrmIf",
-                "o_driveNextToIf",
-                "o_freeToIf",
-                "i_freeNextFrmIf"
+                "w_driveFrmIfDelay_1",
+                "w_driveNextToIf[0]",
+                "w_driveNextToIf[1]",
+                "w_driveNextToIf[2]",
+                "o_driveNextToIf"
               ],
               "instances": [
-                "cFifo2_If"
+                "delay_6UIcache",
+                "cFifo2_If",
+                "delay_IF1",
+                "delay_IF2",
+                "delay_IF3"
               ],
               "related_flows": [],
               "related_assignments": [
                 "2"
               ],
+              "requires_rtl_source_review": false,
+              "review_status": "ready",
+              "evidence_refs": [
+                "ev:socmem:flow:flow_000_socmem_i_driveFrmIf",
+                "ev:socmem:semantic_flow:flow_000_socmem_i_driveFrmIf"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "instances.connections",
+                  "path": "modules/socmem.json"
+                },
+                {
+                  "source": "transparent_flows",
+                  "path": "modules/socmem.json"
+                }
+              ]
+            },
+            {
+              "value": "空闲信号与事件信号的耦合关系不明确，需要 RTL 源码审查以确定背压机制。",
+              "explanation": "当前上下文显示 o_freeToIf 直接由 o_driveNextToIf 驱动，这可能意味着空闲信号是输出事件的简单镜像，而非独立的背压信号。输入事件 i_driveFrmIf 关联的空闲信号是 o_freeToIf，但该信号是输出事件的驱动结果，这可能导致背压逻辑的混淆。需要审查 RTL 源码以确认空闲信号的实际生成逻辑和背压机制。",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:completion_backpressure:001",
+              "doc_priority": "secondary",
+              "signals": [
+                "o_freeToIf",
+                "i_freeNextFrmIf",
+                "o_driveNextToIf",
+                "i_driveFrmIf"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [],
               "requires_rtl_source_review": true,
               "review_status": "needs_review",
               "evidence_refs": [
@@ -2501,25 +2487,25 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/socmem.json",
-                  "path": "internal_event_flow"
+                  "source": "interface.event_ports",
+                  "path": "modules/socmem.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/socmem.json",
-                  "path": "assignments"
+                  "source": "assignment_facts",
+                  "path": "modules/socmem.json"
                 }
               ]
             },
             {
               "value": "输出事件 o_driveNextToIf 与空闲信号 o_freeToIf 直接耦合，但输入事件 i_driveFrmIf 与空闲信号 o_freeToIf 的关系不明确。",
-              "explanation": "根据接口契约，输入事件 i_driveFrmIf 的 free_signal 是 o_freeToIf，输出事件 o_driveNextToIf 的 free_signal 是 i_freeNextFrmIf。但赋值 2 显示 o_freeToIf 直接由 o_driveNextToIf 驱动，表明 o_freeToIf 可能反映输出事件的状态，而非输入事件。这需要 RTL 源码确认。",
+              "explanation": "根据接口契约，输入事件 i_driveFrmIf 关联的空闲信号是 o_freeToIf，输出事件 o_driveNextToIf 关联的空闲信号是 i_freeNextFrmIf。但赋值 2 显示 o_freeToIf 直接由 o_driveNextToIf 驱动，这可能意味着空闲信号是输出事件的直接反映，而非独立的背压信号。输入事件与空闲信号的关系需要进一步审查。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
               "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:data_control_effect:001",
-              "doc_priority": "primary",
+              "doc_priority": "secondary",
               "signals": [
                 "i_driveFrmIf",
                 "o_driveNextToIf",
@@ -2539,48 +2525,16 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/socmem.json",
-                  "path": "interface_payload_contracts"
+                  "source": "interface.event_ports",
+                  "path": "modules/socmem.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/socmem.json",
-                  "path": "assignments"
-                }
-              ]
-            },
-            {
-              "value": "cFifo2_If 是流中唯一的阻塞点，可能通过内部满状态产生背压，但具体机制未在上下文中说明。",
-              "explanation": "流步骤中标记 cFifo2_If 为阻塞点，但未提供其满/空信号或背压路径。接口契约中未明确输入事件 i_driveFrmIf 的 free_signal 如何与 FIFO 状态关联。因此，背压的完整描述需要 RTL 源码。",
-              "certainty": "ai_inferred",
-              "confidence": "low",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:socmem:flow_000_socmem_i_driveFrmIf:completion_backpressure:001",
-              "doc_priority": "secondary",
-              "signals": [
-                "w_driveFrmIfDelay_1",
-                "w_driveNextToIf[0]"
-              ],
-              "instances": [
-                "cFifo2_If"
-              ],
-              "related_flows": [],
-              "related_assignments": [],
-              "requires_rtl_source_review": true,
-              "review_status": "needs_review",
-              "evidence_refs": [
-                "ev:socmem:flow:flow_000_socmem_i_driveFrmIf",
-                "ev:socmem:semantic_flow:flow_000_socmem_i_driveFrmIf"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "knowledge_ir/modules/socmem.json",
-                  "path": "internal_event_flow"
+                  "source": "interface.data_ports",
+                  "path": "modules/socmem.json"
                 },
                 {
-                  "source": "knowledge_ir/modules/socmem.json",
-                  "path": "interface_payload_contracts"
+                  "source": "assignment_facts",
+                  "path": "modules/socmem.json"
                 }
               ]
             }
@@ -2599,22 +2553,30 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_001_socmem_i_driveFrmLsu.json",
         "reader_takeaway": {
-          "value": "该流传递的是纯驱动事件，没有显式的数据负载。",
-          "explanation": "接口负载契约显示，输入和输出事件均无关联的负载信号。这意味着该流仅用于控制或同步目的，不传输数据。驱动事件本身可能是一个脉冲或电平信号，用于触发LSU的下一个操作。",
+          "value": "文档应强调该流是固定延迟的事件传播路径，而非数据通路",
+          "explanation": "该流由FIFO和两个固定延迟单元串联组成，无数据负载，无分支，是典型的控制事件延迟链，文档应说明总延迟为48周期（16+32），并注明FIFO可能引入额外可变延迟",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:data_control_effect:001",
+          "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:documentation_focus:001",
           "doc_priority": "primary",
           "signals": [
             "i_driveFrmLsu",
+            "w_driveNextToLsu[0]",
+            "w_driveNextToLsu[1]",
             "o_driveNextToLsu"
           ],
-          "instances": [],
+          "instances": [
+            "cFifo2_Lsu",
+            "delay_LSU1",
+            "delay_LSU2"
+          ],
           "related_flows": [],
-          "related_assignments": [],
+          "related_assignments": [
+            "assign 4"
+          ],
           "requires_rtl_source_review": false,
           "review_status": "ready",
           "evidence_refs": [
@@ -2623,60 +2585,18 @@
           ],
           "semantic_evidence": [
             {
-              "source": "interface.event_ports",
-              "path": "modules/socmem.json"
+              "source": "parser_pipeline_rtl/modules/socmem.json",
+              "path": "connection_graph"
             },
             {
-              "source": "interface.data_ports",
-              "path": "modules/socmem.json"
+              "source": "knowledge_ir/modules/socmem.json",
+              "path": "internal_event_flow"
             }
           ],
           "supporting_claims": [
             {
-              "value": "手册应重点描述驱动事件的传播路径和FIFO的缓冲行为，同时谨慎处理流控细节。",
-              "explanation": "该流的核心是事件从输入到输出的单向传播，FIFO是唯一可能引入复杂性的组件。手册应明确说明延迟单元的固定延迟值，并基于RTL源码详细解释FIFO的流控机制（如空满标志如何影响空闲信号）。",
-              "certainty": "ai_inferred",
-              "confidence": "medium",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:documentation_focus:001",
-              "doc_priority": "primary",
-              "signals": [
-                "i_driveFrmLsu",
-                "o_driveNextToLsu",
-                "o_freeToLsu",
-                "i_freeNextFrmLsu"
-              ],
-              "instances": [
-                "cFifo2_Lsu",
-                "delay_LSU1",
-                "delay_LSU2"
-              ],
-              "related_flows": [],
-              "related_assignments": [
-                "4"
-              ],
-              "requires_rtl_source_review": true,
-              "review_status": "needs_review",
-              "evidence_refs": [
-                "ev:socmem:flow:flow_001_socmem_i_driveFrmLsu",
-                "ev:socmem:semantic_flow:flow_001_socmem_i_driveFrmLsu"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "instances.connections",
-                  "path": "modules/socmem.json"
-                },
-                {
-                  "source": "transparent_flows",
-                  "path": "modules/socmem.json"
-                }
-              ]
-            },
-            {
-              "value": "从LSU输入的驱动事件经过FIFO缓冲和两级延迟后，作为下一个驱动事件输出到LSU。",
-              "explanation": "该流是一个单向的、基于事件的驱动链，从输入端口i_driveFrmLsu开始，经过FIFO实例cFifo2_Lsu进行缓冲，再通过两个透明延迟单元delay_LSU1和delay_LSU2进行时序调整，最终到达输出端口o_driveNextToLsu。流中没有分支或合并点，FIFO是唯一的潜在阻塞点。",
+              "value": "从LSU输入的驱动事件经过两级延迟后输出到LSU的纯延迟链",
+              "explanation": "该流是一个单驱动内部事件流，从输入端口i_driveFrmLsu开始，经过FIFO缓冲和两个不同深度的延迟单元，最终到达输出端口o_driveNextToLsu，没有分支或合并点",
               "certainty": "ai_inferred",
               "confidence": "medium",
               "source_layers": [
@@ -2697,7 +2617,7 @@
               ],
               "related_flows": [],
               "related_assignments": [
-                "4"
+                "assign 4"
               ],
               "requires_rtl_source_review": false,
               "review_status": "ready",
@@ -2707,18 +2627,48 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "instances.connections",
-                  "path": "modules/socmem.json"
+                  "source": "knowledge_ir/modules/socmem.json",
+                  "path": "internal_event_flow"
                 },
                 {
-                  "source": "transparent_flows",
-                  "path": "modules/socmem.json"
+                  "source": "parser_pipeline_rtl/modules/socmem.json",
+                  "path": "flow_graph.assignment_dependencies"
                 }
               ]
             },
             {
-              "value": "存在空闲信号，但流控机制不明确，需要RTL源码确认。",
-              "explanation": "接口契约中提到了空闲信号o_freeToLsu和i_freeNextFrmLsu，但未提供它们与驱动事件的直接时序关系。赋值索引4暗示了o_freeToLsu与o_driveNextToLsu的关联，但完整的背压或完成握手逻辑（如FIFO的空满状态）未在上下文中体现。",
+              "value": "纯事件驱动流，无数据负载伴随",
+              "explanation": "接口负载契约显示i_driveFrmLsu和o_driveNextToLsu均无关联数据负载信号，该流仅传递事件控制信号，不携带数据内容",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:data_control_effect:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_driveFrmLsu",
+                "o_driveNextToLsu"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": false,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:socmem:flow:flow_001_socmem_i_driveFrmLsu",
+                "ev:socmem:semantic_flow:flow_001_socmem_i_driveFrmLsu"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "knowledge_ir/modules/socmem.json",
+                  "path": "interface_payload_contracts"
+                }
+              ]
+            },
+            {
+              "value": "输出端有释放信号配对，但输入端的释放信号关系不明确",
+              "explanation": "输出事件o_driveNextToLsu有对应的释放信号i_freeNextFrmLsu，且通过assign 4将输出事件映射到o_freeToLsu，但输入事件i_driveFrmLsu的释放信号o_freeToLsu实际是输出事件的别名，形成循环依赖，需要RTL源码确认实际握手逻辑",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -2728,7 +2678,9 @@
               "doc_priority": "secondary",
               "signals": [
                 "o_freeToLsu",
-                "i_freeNextFrmLsu"
+                "i_freeNextFrmLsu",
+                "o_driveNextToLsu",
+                "i_driveFrmLsu"
               ],
               "instances": [
                 "cFifo2_Lsu"
@@ -2743,12 +2695,12 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "interface.event_ports",
-                  "path": "modules/socmem.json"
+                  "source": "knowledge_ir/modules/socmem.json",
+                  "path": "interface_payload_contracts"
                 },
                 {
-                  "source": "interface.data_ports",
-                  "path": "modules/socmem.json"
+                  "source": "parser_pipeline_rtl/modules/socmem.json",
+                  "path": "assignments"
                 }
               ]
             }
@@ -2770,7 +2722,7 @@
     },
     "source_review_context": {
       "module": "socmem",
-      "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+      "rtl_file": "rtl/rtl/memory/socmem.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",

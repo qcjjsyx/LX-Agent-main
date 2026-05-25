@@ -6,10 +6,10 @@
     "module_name": "stateUpdate",
     "module_role": "submodule",
     "source_files": [
-      "rtl\\rtl\\Lsu\\stateUpdate.v"
+      "rtl/rtl/Lsu/stateUpdate.v"
     ],
     "source": {
-      "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+      "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
       "parser_module": "modules/stateUpdate.json"
     },
     "certainty": "deterministic_fact",
@@ -95,8 +95,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "状态更新模块，负责将来自更新分割器的请求根据负载类型（加载/存储）分发到对应的FIFO，并通过互斥合并后输出驱动信号。",
-      "explanation": "模块接收一个事件驱动输入和7位负载数据，通过Fifo1缓存后，由loadAndStoreSelector根据负载类型（w_isLoad_1/w_isStore_1）将请求分发到loadFifo或storeFifo，最后通过loadOrStoreMutexMerge合并为单一输出事件。同时输出12位状态有效信号。",
+      "value": "状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）、状态机转换，并通过互斥合并后输出到状态更新选择器。",
+      "explanation": "模块接收一个事件驱动输入 i_driveFromUpdateSplitter_1 及其关联的7位数据，经过Fifo1缓冲后，由loadAndStoreSelector根据数据内容区分加载或存储操作，分别送入loadFifo和storeFifo，再通过loadOrStoreMutexMerge互斥合并后输出事件 o_driveToStateUpdateSelector_1。同时，模块内部维护状态机（由assign依赖中的w_nextState_4等信号体现），并输出12位状态有效信号 o_stateValid_12。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -108,7 +108,9 @@
         "i_driveFromUpdateSplitter_1",
         "i_fromUpdateSplitterData_7",
         "o_driveToStateUpdateSelector_1",
-        "o_stateValid_12"
+        "o_stateValid_12",
+        "o_freeToUpdateSplitter_1",
+        "i_freeFromStateUpdateSelector_1"
       ],
       "instances": [
         "Fifo1",
@@ -132,13 +134,16 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/stateUpdate.v"
         }
       ]
     },
     "responsibility_claims": [
       {
-        "value": "状态更新模块，负责将来自更新分割器的请求根据负载类型（加载/存储）分发到对应的FIFO，并通过互斥合并后输出驱动信号。",
-        "explanation": "模块接收一个事件驱动输入和7位负载数据，通过Fifo1缓存后，由loadAndStoreSelector根据负载类型（w_isLoad_1/w_isStore_1）将请求分发到loadFifo或storeFifo，最后通过loadOrStoreMutexMerge合并为单一输出事件。同时输出12位状态有效信号。",
+        "value": "状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）、状态机转换，并通过互斥合并后输出到状态更新选择器。",
+        "explanation": "模块接收一个事件驱动输入 i_driveFromUpdateSplitter_1 及其关联的7位数据，经过Fifo1缓冲后，由loadAndStoreSelector根据数据内容区分加载或存储操作，分别送入loadFifo和storeFifo，再通过loadOrStoreMutexMerge互斥合并后输出事件 o_driveToStateUpdateSelector_1。同时，模块内部维护状态机（由assign依赖中的w_nextState_4等信号体现），并输出12位状态有效信号 o_stateValid_12。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -150,7 +155,9 @@
           "i_driveFromUpdateSplitter_1",
           "i_fromUpdateSplitterData_7",
           "o_driveToStateUpdateSelector_1",
-          "o_stateValid_12"
+          "o_stateValid_12",
+          "o_freeToUpdateSplitter_1",
+          "i_freeFromStateUpdateSelector_1"
         ],
         "instances": [
           "Fifo1",
@@ -174,27 +181,31 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          },
+          {
+            "source": "rtl/rtl/Lsu/stateUpdate.v"
           }
         ]
       },
       {
-        "value": "将输入请求按加载/存储类型分发到不同FIFO路径，并维护加载和存储的状态机，输出当前状态有效位。",
-        "explanation": "通过loadAndStoreSelector将Fifo1输出的请求分发到loadFifo或storeFifo，每个FIFO路径对应独立的状态机（r_nextLoadState_4/r_nextStoreState_4），通过assign 14组合生成下一状态，最终通过assign 18输出12位状态有效信号。",
+        "value": "将输入的更新请求缓冲后，根据数据内容区分加载或存储类型，并分别送入对应的FIFO队列。",
+        "explanation": "输入事件 i_driveFromUpdateSplitter_1 和数据 i_fromUpdateSplitterData_7 首先进入Fifo1缓冲。Fifo1的输出数据 w_isLoad_1 和 w_isStore_1 连接到 loadAndStoreSelector，该选择器根据这些信号将事件分发到 loadFifo（加载）或 storeFifo（存储）。这构成了模块的核心数据路径。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:stateUpdate:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "w_isLoad_1",
-          "w_isStore_1",
+          "i_driveFromUpdateSplitter_1",
+          "i_fromUpdateSplitterData_7",
+          "w_driveToLoadAndStoreSelector_1",
           "w_loadAndStoreSelectorToLoadFifo_1",
-          "w_loadAndStoreSelectorToStoreFifo_1",
-          "o_stateValid_12"
+          "w_loadAndStoreSelectorToStoreFifo_1"
         ],
         "instances": [
+          "Fifo1",
           "loadAndStoreSelector",
           "loadFifo",
           "storeFifo"
@@ -210,6 +221,49 @@
         ],
         "semantic_evidence": [
           {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          }
+        ]
+      },
+      {
+        "value": "管理加载和存储操作的状态机，生成下一状态和状态有效信号，并通过互斥合并输出最终事件。",
+        "explanation": "模块内部通过assign依赖（如w_nextState_4）实现状态机逻辑，根据当前操作类型（加载/存储）和子状态（如lbValid, lwValid, swValid等）计算下一状态。loadFifo和storeFifo的输出事件通过loadOrStoreMutexMerge互斥合并后，作为模块输出事件 o_driveToStateUpdateSelector_1。同时，状态有效信号 r_stateValid_12 被赋值给输出 o_stateValid_12。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:stateUpdate:structural_responsibility:002",
+        "doc_priority": "primary",
+        "signals": [
+          "w_nextState_4",
+          "r_nextLoadState_4",
+          "r_nextStoreState_4",
+          "o_stateValid_12",
+          "o_driveToStateUpdateSelector_1"
+        ],
+        "instances": [
+          "loadFifo",
+          "storeFifo",
+          "loadOrStoreMutexMerge"
+        ],
+        "related_flows": [
+          "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:stateUpdate:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
+          {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
         ]
@@ -217,22 +271,24 @@
     ],
     "documentation_focus": [
       {
-        "value": "文档应重点描述加载和存储状态机的状态转换逻辑，以及状态有效信号的生成方式。",
-        "explanation": "模块的核心功能是维护加载和存储操作的状态机，通过assign 14的组合逻辑和assign 18的输出，生成12位状态有效信号。需要详细说明各状态（如state_Idle、state_LoadHwordEnd等）的转换条件和有效信号的含义。",
+        "value": "文档应重点描述模块如何根据输入数据区分加载/存储操作，以及内部状态机的转换逻辑。",
+        "explanation": "模块的核心功能是请求缓冲、类型分发和状态管理。输入数据到操作类型的映射（w_isLoad_1, w_isStore_1）以及状态机（w_nextState_4）是理解模块行为的关键。应详细说明各种子操作状态（如lbValid, lwValid, swValid等）的含义和状态转换条件。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:stateUpdate:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "o_stateValid_12",
+          "i_fromUpdateSplitterData_7",
+          "w_isLoad_1",
+          "w_isStore_1",
           "w_nextState_4",
-          "r_nextLoadState_4",
-          "r_nextStoreState_4"
+          "o_stateValid_12"
         ],
         "instances": [
+          "loadAndStoreSelector",
           "loadFifo",
           "storeFifo"
         ],
@@ -246,6 +302,9 @@
           "ev:stateUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
@@ -379,8 +438,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_stateUpdate_i_driveFromUpdateSplitter_1.json",
       "reader_takeaway": {
-        "value": "文档应重点描述事件如何通过loadAndStoreSelector分支，以及如何通过loadOrStoreMutexMerge互斥合并。",
-        "explanation": "该流的核心语义是事件的分发和汇聚。loadAndStoreSelector的分支逻辑和loadOrStoreMutexMerge的互斥仲裁机制是理解流行为的关键。文档应解释分支条件（如基于事件类型）和合并仲裁策略（如优先级或轮询），但当前上下文未提供这些细节。",
+        "value": "最终手册应重点描述事件如何通过loadAndStoreSelector分流，以及loadOrStoreMutexMerge如何互斥合并两路事件。",
+        "explanation": "该流的核心语义是事件的分发与有序合并，分流和合并节点的行为是理解流的关键。FIFO的缓冲作用次之。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -392,7 +451,8 @@
           "w_loadAndStoreSelectorToLoadFifo_1",
           "w_loadAndStoreSelectorToStoreFifo_1",
           "w_loadFifoDrive_1",
-          "w_storeFifoDrive_1"
+          "w_storeFifoDrive_1",
+          "o_driveToStateUpdateSelector_1"
         ],
         "instances": [
           "loadAndStoreSelector",
@@ -402,22 +462,21 @@
         "related_assignments": [
           "16"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:stateUpdate:flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
           "ev:stateUpdate:semantic_flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-            "path": "flow_graph.assignment_dependencies"
+            "source": "knowledge_ir/modules/stateUpdate.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "从更新拆分器接收的单个事件驱动，经过FIFO缓冲、负载/存储选择器分支、独立FIFO路径，最终由互斥合并器合并后输出到状态更新选择器。",
-            "explanation": "该流描述了一个从输入端口i_driveFromUpdateSplitter_1进入的事件，经过Fifo1缓冲后，由loadAndStoreSelector根据事件类型（负载或存储）分叉到两个独立的FIFO路径（loadFifo和storeFifo），最后通过loadOrStoreMutexMerge互斥合并器合并为单一输出o_driveToStateUpdateSelector_1。该流是模块stateUpdate内部的核心事件传播路径，用于将更新事件分发并重新汇聚。",
+            "value": "该驱动流将来自更新分配器的事件，经过一级FIFO缓冲、负载/存储选择器分流、两路独立FIFO缓存，最终通过互斥合并器输出到状态更新选择器。",
+            "explanation": "流从输入端口i_driveFromUpdateSplitter_1进入，首先由Fifo1缓冲，然后由loadAndStoreSelector根据事件类型分流至loadFifo或storeFifo，两路FIFO输出经loadOrStoreMutexMerge互斥合并后，从o_driveToStateUpdateSelector_1输出。该流实现了事件的分发与有序合并。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -453,18 +512,16 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/stateUpdate.json",
-                "path": "internal_event_flow"
+                "source": "knowledge_ir/modules/stateUpdate.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "parser_pipeline_rtl/modules/stateUpdate.json"
               }
             ]
           },
           {
-            "value": "输入事件有自由信号o_freeToUpdateSplitter_1，输出事件有自由信号i_freeFromStateUpdateSelector_1，表明存在背压机制。",
-            "explanation": "输入端口i_driveFromUpdateSplitter_1关联自由信号o_freeToUpdateSplitter_1，输出端口o_driveToStateUpdateSelector_1关联自由信号i_freeFromStateUpdateSelector_1。这表明流中的FIFO和合并器可能通过自由信号实现背压控制，但具体实现细节（如自由信号如何与内部组件交互）未在上下文中明确。",
+            "value": "流中多个FIFO和合并器可能引入背压，但具体完成或空闲信号未在上下文中明确。",
+            "explanation": "输入端口有o_freeToUpdateSplitter_1作为空闲信号，输出端口有i_freeFromStateUpdateSelector_1作为空闲信号，但内部组件的背压信号（如FIFO的满/空标志）未提供。因此，背压传播路径不明确。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -492,14 +549,13 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/stateUpdate.json",
-                "path": "interface"
+                "source": "knowledge_ir/modules/stateUpdate.json"
               }
             ]
           },
           {
-            "value": "7位数据负载与事件驱动信号i_driveFromUpdateSplitter_1关联，随事件流经整个路径。",
-            "explanation": "输入数据i_fromUpdateSplitterData_7通过Fifo1的i_data_7端口进入，与事件驱动信号同步。该数据负载可能包含更新信息（如地址或操作码），并随事件经过分支和合并路径，最终输出到o_driveToStateUpdateSelector_1。但输出端口的payloads列表为空，表明数据负载可能在路径中被消耗或转换。",
+            "value": "输入数据i_fromUpdateSplitterData_7与事件i_driveFromUpdateSplitter_1关联，随事件流经Fifo1，但后续路径中数据信号未明确连接。",
+            "explanation": "数据信号i_fromUpdateSplitterData_7仅连接到Fifo1的输入数据端口，后续组件（loadAndStoreSelector、loadFifo、storeFifo、loadOrStoreMutexMerge）的数据连接未在上下文中提供。因此，数据是否随事件传递至输出端不确定。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -522,12 +578,7 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/stateUpdate.json",
-                "path": "interface_data_contract"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-                "path": "connection_graph"
+                "source": "knowledge_ir/modules/stateUpdate.json"
               }
             ]
           }
@@ -556,19 +607,20 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "加载和存储路径的互斥合并器，将两个FIFO的输出合并为单一输出事件。",
-        "explanation": "接收loadFifo和storeFifo的驱动信号，通过互斥机制确保只有一个路径的输出被传递到o_driveToStateUpdateSelector_1，避免冲突。",
+        "value": "互斥合并器，将加载和存储FIFO的输出事件合并为一个输出事件流。",
+        "explanation": "该组件接收来自 loadFifo 和 storeFifo 的事件，并确保它们互斥地输出到 o_driveToStateUpdateSelector_1。它解决了两个FIFO可能同时有输出时的仲裁问题。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:stateUpdate:component_role:003",
-        "doc_priority": "secondary",
+        "semantic_claim_id": "semantic:module:stateUpdate:component_role:004",
+        "doc_priority": "primary",
         "signals": [
           "w_loadFifoDrive_1",
           "w_storeFifoDrive_1",
-          "o_driveToStateUpdateSelector_1"
+          "o_driveToStateUpdateSelector_1",
+          "i_freeFromStateUpdateSelector_1"
         ],
         "instances": [
           "loadOrStoreMutexMerge"
@@ -583,6 +635,9 @@
           "ev:stateUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
@@ -605,10 +660,10 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "加载/存储请求选择器，根据负载类型将请求分发到加载或存储FIFO路径。",
-        "explanation": "接收Fifo1的驱动信号，根据w_isLoad_1和w_isStore_1信号将请求分别导向loadFifo或storeFifo，输出w_loadAndStoreSelectorToLoadFifo_1和w_loadAndStoreSelectorToStoreFifo_1。",
+        "value": "加载/存储类型选择器，根据Fifo1输出的数据信号，将事件分发到加载或存储FIFO。",
+        "explanation": "该选择器接收来自Fifo1的事件 w_driveToLoadAndStoreSelector_1 和数据 w_isLoad_1/w_isStore_1，并根据这些数据信号决定将事件输出到 loadFifo (o_driveNext0) 还是 storeFifo (o_driveNext1)。它是模块内部分发逻辑的核心。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -635,6 +690,9 @@
         ],
         "semantic_evidence": [
           {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
+          {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
         ]
@@ -660,8 +718,8 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "输入请求的缓存与同步FIFO，将外部事件和负载数据转换为内部使用的驱动信号和数据。",
-        "explanation": "接收来自更新分割器的事件和7位负载数据，输出驱动信号w_driveToLoadAndStoreSelector_1和数据w_isLoad_1/w_isStore_1，作为后续分发和状态判断的基础。",
+        "value": "输入缓冲FIFO，暂存来自更新拆分器的请求和数据，为后续的类型分发提供同步。",
+        "explanation": "作为模块的第一个组件，Fifo1接收外部事件和数据，其输出驱动 loadAndStoreSelector。它起到了输入同步和缓冲的作用，确保内部逻辑处理的是稳定的请求。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -673,8 +731,7 @@
           "i_driveFromUpdateSplitter_1",
           "i_fromUpdateSplitterData_7",
           "w_driveToLoadAndStoreSelector_1",
-          "w_isLoad_1",
-          "w_isStore_1"
+          "o_freeToUpdateSplitter_1"
         ],
         "instances": [
           "Fifo1"
@@ -689,6 +746,9 @@
           "ev:stateUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
@@ -755,6 +815,144 @@
   ],
   "assignment_impact_summary": [
     {
+      "assignment_id": "assign_12",
+      "index": 12,
+      "lhs": "LoadIdleValid",
+      "rhs": "w_isLoad_1 & idle",
+      "lhs_terms": [
+        "LoadIdleValid"
+      ],
+      "rhs_terms": [
+        "w_isLoad_1",
+        "idle"
+      ],
+      "impact_area": "control_path",
+      "doc_priority": "primary",
+      "interpretation": {
+        "value": "组合逻辑计算下一状态，根据当前操作类型（加载/存储）和子操作状态（如lbValid, lwValid）选择目标状态。",
+        "explanation": "该赋值是状态机核心，通过多路选择器结构，根据 w_isLoad_1/w_isStore_1 及各种子操作有效信号（如lbValid, lwValid, swValid等）决定下一状态是 r_nextLoadState_4、r_nextStoreState_4 还是 state_Idle。它直接体现了加载和存储操作的状态转换逻辑。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:stateUpdate:assignment_interpretation:001",
+        "doc_priority": "primary",
+        "signals": [
+          "w_nextState_4",
+          "w_isLoad_1",
+          "w_isStore_1",
+          "LoadIdleValid",
+          "StoreIdleValid",
+          "r_nextLoadState_4",
+          "r_nextStoreState_4",
+          "lbValid",
+          "lwValid",
+          "swValid",
+          "state_Idle"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
+        ],
+        "related_assignments": [
+          "12",
+          "13",
+          "14"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:stateUpdate:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          }
+        ]
+      },
+      "certainty": "derived_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:assignments"
+      ]
+    },
+    {
+      "assignment_id": "assign_13",
+      "index": 13,
+      "lhs": "StoreIdleValid",
+      "rhs": "w_isStore_1 & idle",
+      "lhs_terms": [
+        "StoreIdleValid"
+      ],
+      "rhs_terms": [
+        "w_isStore_1",
+        "idle"
+      ],
+      "impact_area": "control_path",
+      "doc_priority": "primary",
+      "interpretation": {
+        "value": "组合逻辑计算下一状态，根据当前操作类型（加载/存储）和子操作状态（如lbValid, lwValid）选择目标状态。",
+        "explanation": "该赋值是状态机核心，通过多路选择器结构，根据 w_isLoad_1/w_isStore_1 及各种子操作有效信号（如lbValid, lwValid, swValid等）决定下一状态是 r_nextLoadState_4、r_nextStoreState_4 还是 state_Idle。它直接体现了加载和存储操作的状态转换逻辑。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:stateUpdate:assignment_interpretation:001",
+        "doc_priority": "primary",
+        "signals": [
+          "w_nextState_4",
+          "w_isLoad_1",
+          "w_isStore_1",
+          "LoadIdleValid",
+          "StoreIdleValid",
+          "r_nextLoadState_4",
+          "r_nextStoreState_4",
+          "lbValid",
+          "lwValid",
+          "swValid",
+          "state_Idle"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
+        ],
+        "related_assignments": [
+          "12",
+          "13",
+          "14"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:stateUpdate:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+          }
+        ]
+      },
+      "certainty": "derived_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:assignments"
+      ]
+    },
+    {
       "assignment_id": "assign_14",
       "index": 14,
       "lhs": "w_nextState_4",
@@ -787,14 +985,14 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "下一状态组合逻辑，根据当前请求类型和有效信号选择加载或存储状态机的下一状态。",
-        "explanation": "通过复杂的组合逻辑，根据w_isLoad_1/w_isStore_1、LoadIdleValid/StoreIdleValid以及各种加载/存储操作的有效信号（如lbValid、lwValid等），从r_nextLoadState_4或r_nextStoreState_4中选择下一状态，或保持空闲状态。",
+        "value": "组合逻辑计算下一状态，根据当前操作类型（加载/存储）和子操作状态（如lbValid, lwValid）选择目标状态。",
+        "explanation": "该赋值是状态机核心，通过多路选择器结构，根据 w_isLoad_1/w_isStore_1 及各种子操作有效信号（如lbValid, lwValid, swValid等）决定下一状态是 r_nextLoadState_4、r_nextStoreState_4 还是 state_Idle。它直接体现了加载和存储操作的状态转换逻辑。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:stateUpdate:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:stateUpdate:assignment_interpretation:001",
         "doc_priority": "primary",
         "signals": [
           "w_nextState_4",
@@ -803,13 +1001,19 @@
           "LoadIdleValid",
           "StoreIdleValid",
           "r_nextLoadState_4",
-          "r_nextStoreState_4"
+          "r_nextStoreState_4",
+          "lbValid",
+          "lwValid",
+          "swValid",
+          "state_Idle"
         ],
         "instances": [],
         "related_flows": [
           "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
         ],
         "related_assignments": [
+          "12",
+          "13",
           "14"
         ],
         "requires_rtl_source_review": true,
@@ -818,6 +1022,9 @@
           "ev:stateUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
@@ -1223,68 +1430,6 @@
       ]
     },
     {
-      "assignment_id": "assign_12",
-      "index": 12,
-      "lhs": "LoadIdleValid",
-      "rhs": "w_isLoad_1 & idle",
-      "lhs_terms": [
-        "LoadIdleValid"
-      ],
-      "rhs_terms": [
-        "w_isLoad_1",
-        "idle"
-      ],
-      "impact_area": "control_path",
-      "doc_priority": "secondary",
-      "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
-      },
-      "certainty": "derived_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:assignments"
-      ]
-    },
-    {
-      "assignment_id": "assign_13",
-      "index": 13,
-      "lhs": "StoreIdleValid",
-      "rhs": "w_isStore_1 & idle",
-      "lhs_terms": [
-        "StoreIdleValid"
-      ],
-      "rhs_terms": [
-        "w_isStore_1",
-        "idle"
-      ],
-      "impact_area": "control_path",
-      "doc_priority": "secondary",
-      "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
-      },
-      "certainty": "derived_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:assignments"
-      ]
-    },
-    {
       "assignment_id": "assign_15",
       "index": 15,
       "lhs": "w_stateValid_12",
@@ -1340,14 +1485,14 @@
       "impact_area": "control_path",
       "doc_priority": "secondary",
       "interpretation": {
-        "value": "状态更新触发信号，当请求被分发到加载或存储FIFO时有效。",
-        "explanation": "由w_loadAndStoreSelectorToLoadFifo_1和w_loadAndStoreSelectorToStoreFifo_1的或运算生成，表示有新的请求进入加载或存储路径，用于触发状态更新。",
+        "value": "指示状态更新触发的信号，当有事件被分发到加载或存储FIFO时置位。",
+        "explanation": "该信号是 w_loadAndStoreSelectorToLoadFifo_1 和 w_loadAndStoreSelectorToStoreFifo_1 的或逻辑，表明模块内部有新的请求正在被处理。它可能用于驱动状态机或作为内部握手信号。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:stateUpdate:assignment_interpretation:001",
+        "semantic_claim_id": "semantic:module:stateUpdate:assignment_interpretation:002",
         "doc_priority": "secondary",
         "signals": [
           "w_stateUpdateFire",
@@ -1367,6 +1512,9 @@
           "ev:stateUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
@@ -1418,7 +1566,7 @@
       "signal": "i_driveFromUpdateSplitter_1",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 20,
+      "importance_score": 24,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1428,22 +1576,6 @@
       "evidence_refs": [
         "ev:stateUpdate:interface",
         "ev:stateUpdate:knowledge_module",
-        "ev:stateUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_stateValid_12",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:interface",
         "ev:stateUpdate:semantic_module"
       ]
     },
@@ -1451,7 +1583,7 @@
       "signal": "o_driveToStateUpdateSelector_1",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 17,
+      "importance_score": 23,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1465,42 +1597,10 @@
       ]
     },
     {
-      "signal": "w_isLoad_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:parser_module",
-        "ev:stateUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_isStore_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:parser_module",
-        "ev:stateUpdate:semantic_module"
-      ]
-    },
-    {
       "signal": "i_fromUpdateSplitterData_7",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 14,
+      "importance_score": 22,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1513,10 +1613,28 @@
       ]
     },
     {
+      "signal": "w_driveToLoadAndStoreSelector_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:knowledge_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
       "signal": "w_loadAndStoreSelectorToLoadFifo_1",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 14,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1534,7 +1652,7 @@
       "signal": "w_loadAndStoreSelectorToStoreFifo_1",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 14,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1549,20 +1667,50 @@
       ]
     },
     {
-      "signal": "w_driveToLoadAndStoreSelector_1",
+      "signal": "o_stateValid_12",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 14,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:interface",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeFromStateUpdateSelector_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 14,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:interface",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_nextState_4",
       "kind": "wire",
-      "width_text": "1",
+      "width_text": "[3:0]",
       "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
         "parse",
-        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
         "ev:stateUpdate:parser_module",
-        "ev:stateUpdate:knowledge_module",
         "ev:stateUpdate:semantic_module"
       ]
     },
@@ -1599,10 +1747,10 @@
       ]
     },
     {
-      "signal": "w_nextState_4",
+      "signal": "w_isLoad_1",
       "kind": "wire",
-      "width_text": "[3:0]",
-      "importance_score": 8,
+      "width_text": "1",
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1615,10 +1763,42 @@
       ]
     },
     {
+      "signal": "w_isStore_1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeToUpdateSplitter_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:interface",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
       "signal": "w_loadFifoDrive_1",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 6,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1636,7 +1816,7 @@
       "signal": "w_storeFifoDrive_1",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 6,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1651,34 +1831,16 @@
       ]
     },
     {
-      "signal": "o_freeToUpdateSplitter_1",
+      "signal": "state_Idle",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 6,
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
+      "certainty": "ai_inferred",
       "source_layers": [
-        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:stateUpdate:interface",
-        "ev:stateUpdate:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_freeFromStateUpdateSelector_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:interface",
         "ev:stateUpdate:semantic_module"
       ]
     },
@@ -1711,6 +1873,112 @@
       ],
       "evidence_refs": [
         "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "lbValid",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "lwValid",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "swValid",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_stateValid_12",
+      "kind": "reg",
+      "width_text": "[11:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:parser_module",
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "state_LoadHwordEnd",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "state_LoadDwordEnd",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:stateUpdate:semantic_module"
+      ]
+    },
+    {
+      "signal": "state_LoadWordEnd",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
         "ev:stateUpdate:semantic_module"
       ]
     },
@@ -2096,26 +2364,26 @@
     ],
     "semantic_notes": [
       {
-        "value": "将输入请求按加载/存储类型分发到不同FIFO路径，并维护加载和存储的状态机，输出当前状态有效位。",
-        "explanation": "通过loadAndStoreSelector将Fifo1输出的请求分发到loadFifo或storeFifo，每个FIFO路径对应独立的状态机（r_nextLoadState_4/r_nextStoreState_4），通过assign 14组合生成下一状态，最终通过assign 18输出12位状态有效信号。",
+        "value": "管理加载和存储操作的状态机，生成下一状态和状态有效信号，并通过互斥合并输出最终事件。",
+        "explanation": "模块内部通过assign依赖（如w_nextState_4）实现状态机逻辑，根据当前操作类型（加载/存储）和子状态（如lbValid, lwValid, swValid等）计算下一状态。loadFifo和storeFifo的输出事件通过loadOrStoreMutexMerge互斥合并后，作为模块输出事件 o_driveToStateUpdateSelector_1。同时，状态有效信号 r_stateValid_12 被赋值给输出 o_stateValid_12。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:stateUpdate:structural_responsibility:001",
+        "semantic_claim_id": "semantic:module:stateUpdate:structural_responsibility:002",
         "doc_priority": "primary",
         "signals": [
-          "w_isLoad_1",
-          "w_isStore_1",
-          "w_loadAndStoreSelectorToLoadFifo_1",
-          "w_loadAndStoreSelectorToStoreFifo_1",
-          "o_stateValid_12"
+          "w_nextState_4",
+          "r_nextLoadState_4",
+          "r_nextStoreState_4",
+          "o_stateValid_12",
+          "o_driveToStateUpdateSelector_1"
         ],
         "instances": [
-          "loadAndStoreSelector",
           "loadFifo",
-          "storeFifo"
+          "storeFifo",
+          "loadOrStoreMutexMerge"
         ],
         "related_flows": [
           "flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
@@ -2127,6 +2395,9 @@
           "ev:stateUpdate:semantic_module"
         ],
         "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/stateUpdate.json"
+          },
           {
             "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
@@ -2196,26 +2467,14 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "当前上下文仅提供组合逻辑assign 14的RHS表达式，缺少状态机寄存器的定义和状态编码信息，无法完整描述状态转换逻辑。",
-      "subject": "状态机实现细节",
-      "needed_source_slice": "always block",
+      "question": "当前上下文仅提供了w_nextState_4的组合逻辑表达式，但缺少状态寄存器的定义（如r_stateValid_12, r_nextLoadState_4, r_nextStoreState_4）以及状态编码（如state_Idle, state_LoadHwordEnd等）的完整定义。需要查看RTL源文件以获取完整的状态机实现。",
+      "subject": "状态机详细逻辑",
+      "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
       ],
       "evidence_refs": [
         "ev:stateUpdate:semantic_module"
-      ]
-    },
-    {
-      "question": "Review semantic meaning for flow flow_000_stateUpdate_i_driveFromUpdateSplitter_1.",
-      "subject": "flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
-      "source_layers": [
-        "semantic_layer",
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:stateUpdate:flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
-        "ev:stateUpdate:semantic_flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
       ]
     }
   ],
@@ -2229,7 +2488,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "stateUpdate",
-    "source_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+    "source_file": "rtl/rtl/Lsu/stateUpdate.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -2246,8 +2505,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "状态更新模块，负责将来自更新分割器的请求根据负载类型（加载/存储）分发到对应的FIFO，并通过互斥合并后输出驱动信号。",
-      "explanation": "模块接收一个事件驱动输入和7位负载数据，通过Fifo1缓存后，由loadAndStoreSelector根据负载类型（w_isLoad_1/w_isStore_1）将请求分发到loadFifo或storeFifo，最后通过loadOrStoreMutexMerge合并为单一输出事件。同时输出12位状态有效信号。",
+      "value": "状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）、状态机转换，并通过互斥合并后输出到状态更新选择器。",
+      "explanation": "模块接收一个事件驱动输入 i_driveFromUpdateSplitter_1 及其关联的7位数据，经过Fifo1缓冲后，由loadAndStoreSelector根据数据内容区分加载或存储操作，分别送入loadFifo和storeFifo，再通过loadOrStoreMutexMerge互斥合并后输出事件 o_driveToStateUpdateSelector_1。同时，模块内部维护状态机（由assign依赖中的w_nextState_4等信号体现），并输出12位状态有效信号 o_stateValid_12。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -2259,7 +2518,9 @@
         "i_driveFromUpdateSplitter_1",
         "i_fromUpdateSplitterData_7",
         "o_driveToStateUpdateSelector_1",
-        "o_stateValid_12"
+        "o_stateValid_12",
+        "o_freeToUpdateSplitter_1",
+        "i_freeFromStateUpdateSelector_1"
       ],
       "instances": [
         "Fifo1",
@@ -2283,6 +2544,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/stateUpdate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/stateUpdate.v"
         }
       ]
     },
@@ -2468,7 +2732,7 @@
           ],
           "summary": "drive_event ports, count=2, directions=input:1, output:1",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+            "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2503,7 +2767,7 @@
           ],
           "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+            "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2544,7 +2808,7 @@
           ],
           "summary": "other_ports ports, count=3, directions=input:1, output:2",
           "source_review_context": {
-            "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+            "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -2561,8 +2825,8 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_stateUpdate_i_driveFromUpdateSplitter_1.json",
         "reader_takeaway": {
-          "value": "文档应重点描述事件如何通过loadAndStoreSelector分支，以及如何通过loadOrStoreMutexMerge互斥合并。",
-          "explanation": "该流的核心语义是事件的分发和汇聚。loadAndStoreSelector的分支逻辑和loadOrStoreMutexMerge的互斥仲裁机制是理解流行为的关键。文档应解释分支条件（如基于事件类型）和合并仲裁策略（如优先级或轮询），但当前上下文未提供这些细节。",
+          "value": "最终手册应重点描述事件如何通过loadAndStoreSelector分流，以及loadOrStoreMutexMerge如何互斥合并两路事件。",
+          "explanation": "该流的核心语义是事件的分发与有序合并，分流和合并节点的行为是理解流的关键。FIFO的缓冲作用次之。",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
@@ -2574,7 +2838,8 @@
             "w_loadAndStoreSelectorToLoadFifo_1",
             "w_loadAndStoreSelectorToStoreFifo_1",
             "w_loadFifoDrive_1",
-            "w_storeFifoDrive_1"
+            "w_storeFifoDrive_1",
+            "o_driveToStateUpdateSelector_1"
           ],
           "instances": [
             "loadAndStoreSelector",
@@ -2584,22 +2849,21 @@
           "related_assignments": [
             "16"
           ],
-          "requires_rtl_source_review": true,
-          "review_status": "needs_review",
+          "requires_rtl_source_review": false,
+          "review_status": "ready",
           "evidence_refs": [
             "ev:stateUpdate:flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1",
             "ev:stateUpdate:semantic_flow:flow_000_stateUpdate_i_driveFromUpdateSplitter_1"
           ],
           "semantic_evidence": [
             {
-              "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-              "path": "flow_graph.assignment_dependencies"
+              "source": "knowledge_ir/modules/stateUpdate.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "从更新拆分器接收的单个事件驱动，经过FIFO缓冲、负载/存储选择器分支、独立FIFO路径，最终由互斥合并器合并后输出到状态更新选择器。",
-              "explanation": "该流描述了一个从输入端口i_driveFromUpdateSplitter_1进入的事件，经过Fifo1缓冲后，由loadAndStoreSelector根据事件类型（负载或存储）分叉到两个独立的FIFO路径（loadFifo和storeFifo），最后通过loadOrStoreMutexMerge互斥合并器合并为单一输出o_driveToStateUpdateSelector_1。该流是模块stateUpdate内部的核心事件传播路径，用于将更新事件分发并重新汇聚。",
+              "value": "该驱动流将来自更新分配器的事件，经过一级FIFO缓冲、负载/存储选择器分流、两路独立FIFO缓存，最终通过互斥合并器输出到状态更新选择器。",
+              "explanation": "流从输入端口i_driveFromUpdateSplitter_1进入，首先由Fifo1缓冲，然后由loadAndStoreSelector根据事件类型分流至loadFifo或storeFifo，两路FIFO输出经loadOrStoreMutexMerge互斥合并后，从o_driveToStateUpdateSelector_1输出。该流实现了事件的分发与有序合并。",
               "certainty": "ai_inferred",
               "confidence": "medium",
               "source_layers": [
@@ -2635,18 +2899,16 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/stateUpdate.json",
-                  "path": "internal_event_flow"
+                  "source": "knowledge_ir/modules/stateUpdate.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-                  "path": "flow_graph.assignment_dependencies"
+                  "source": "parser_pipeline_rtl/modules/stateUpdate.json"
                 }
               ]
             },
             {
-              "value": "输入事件有自由信号o_freeToUpdateSplitter_1，输出事件有自由信号i_freeFromStateUpdateSelector_1，表明存在背压机制。",
-              "explanation": "输入端口i_driveFromUpdateSplitter_1关联自由信号o_freeToUpdateSplitter_1，输出端口o_driveToStateUpdateSelector_1关联自由信号i_freeFromStateUpdateSelector_1。这表明流中的FIFO和合并器可能通过自由信号实现背压控制，但具体实现细节（如自由信号如何与内部组件交互）未在上下文中明确。",
+              "value": "流中多个FIFO和合并器可能引入背压，但具体完成或空闲信号未在上下文中明确。",
+              "explanation": "输入端口有o_freeToUpdateSplitter_1作为空闲信号，输出端口有i_freeFromStateUpdateSelector_1作为空闲信号，但内部组件的背压信号（如FIFO的满/空标志）未提供。因此，背压传播路径不明确。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -2674,14 +2936,13 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/stateUpdate.json",
-                  "path": "interface"
+                  "source": "knowledge_ir/modules/stateUpdate.json"
                 }
               ]
             },
             {
-              "value": "7位数据负载与事件驱动信号i_driveFromUpdateSplitter_1关联，随事件流经整个路径。",
-              "explanation": "输入数据i_fromUpdateSplitterData_7通过Fifo1的i_data_7端口进入，与事件驱动信号同步。该数据负载可能包含更新信息（如地址或操作码），并随事件经过分支和合并路径，最终输出到o_driveToStateUpdateSelector_1。但输出端口的payloads列表为空，表明数据负载可能在路径中被消耗或转换。",
+              "value": "输入数据i_fromUpdateSplitterData_7与事件i_driveFromUpdateSplitter_1关联，随事件流经Fifo1，但后续路径中数据信号未明确连接。",
+              "explanation": "数据信号i_fromUpdateSplitterData_7仅连接到Fifo1的输入数据端口，后续组件（loadAndStoreSelector、loadFifo、storeFifo、loadOrStoreMutexMerge）的数据连接未在上下文中提供。因此，数据是否随事件传递至输出端不确定。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -2704,12 +2965,7 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/stateUpdate.json",
-                  "path": "interface_data_contract"
-                },
-                {
-                  "source": "parser_pipeline_rtl/modules/stateUpdate.json",
-                  "path": "connection_graph"
+                  "source": "knowledge_ir/modules/stateUpdate.json"
                 }
               ]
             }
@@ -2727,11 +2983,11 @@
       "components": 5,
       "assignments": 19,
       "evidence_gaps": 0,
-      "review_questions": 2
+      "review_questions": 1
     },
     "source_review_context": {
       "module": "stateUpdate",
-      "rtl_file": "rtl\\rtl\\Lsu\\stateUpdate.v",
+      "rtl_file": "rtl/rtl/Lsu/stateUpdate.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",

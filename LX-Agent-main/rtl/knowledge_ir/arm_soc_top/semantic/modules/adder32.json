@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "adder32",
-  "input_hash": "f8f40bf6415e660c4273fdbfc4847888d046ac5da5fa53fbde02f72f9d486ae4",
+  "input_hash": "006cac242e900f30d84dfc162f7a781515eff0ab57a2465c6b5fdbe6bb620a41",
   "source_context": "ai_context/modules/adder32.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\Execute\\adder32.v",
+      "source": "rtl/rtl/Execute/adder32.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\Execute\\adder32.v",
+        "rtl_file": "rtl/rtl/Execute/adder32.v",
         "parser_module": "modules/adder32.json"
       }
     }
@@ -62,17 +62,17 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "32位算术加法器，支持有符号和无符号加法模式选择",
+      "summary": "32位算术加法器，支持有符号/无符号模式选择，并生成进位和溢出标志",
       "subject": "adder32",
-      "explanation": "模块通过symbol信号选择有符号或无符号加法，同时生成进位和溢出标志，是执行单元中的核心数据路径组件",
+      "explanation": "模块通过assign依赖实现双模式加法：无符号模式（symbol=1）产生进位，有符号模式（symbol=0）检测溢出。无事件流，纯组合逻辑。",
       "signals": [
         "oprand1",
         "oprand2",
         "result",
-        "carry_in",
         "carry_out",
         "overflow",
-        "symbol"
+        "symbol",
+        "carry_in"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -93,9 +93,9 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "根据symbol信号选择执行有符号或无符号32位加法，并生成对应的进位和溢出标志",
-      "subject": "双模式加法运算",
-      "explanation": "无符号模式计算33位和并输出进位，有符号模式通过符号扩展计算并检测溢出，结果通过多路选择器输出",
+      "summary": "根据symbol选择无符号或有符号加法，分别输出进位或溢出标志",
+      "subject": "双模式加法与标志生成",
+      "explanation": "assign_dependencies显示unsignedSum和signedSum分别计算，result通过symbol选择，carry_out仅无符号有效，overflow仅符号模式有效。",
       "signals": [
         "unsignedSum",
         "signedSum",
@@ -124,8 +124,8 @@
         "module": "adder32"
       },
       "subject": "unsignedSum",
-      "summary": "无符号加法中间结果，33位宽以捕获进位",
-      "explanation": "将两个32位操作数零扩展为33位后相加，最高位作为进位输出，低32位作为无符号结果",
+      "summary": "无符号加法中间结果，扩展1位用于进位捕获",
+      "explanation": "将操作数零扩展至33位后相加，高位用于carry_out输出，低位用于result选择。",
       "signals": [
         "unsignedSum",
         "oprand1",
@@ -143,9 +143,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:001"
@@ -157,8 +154,8 @@
         "module": "adder32"
       },
       "subject": "signedSum",
-      "summary": "有符号加法中间结果，通过符号扩展处理负数",
-      "explanation": "将两个32位操作数符号扩展为33位后执行有符号加法，结果用于有符号模式下的最终输出",
+      "summary": "有符号加法中间结果，符号扩展后计算",
+      "explanation": "将操作数符号扩展至33位后相加，结果用于符号模式下的result选择。",
       "signals": [
         "signedSum",
         "oprand1",
@@ -175,9 +172,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:002"
@@ -189,17 +183,18 @@
         "module": "adder32"
       },
       "subject": "result",
-      "summary": "最终加法结果输出，由symbol选择有符号或无符号结果",
-      "explanation": "symbol为1时选择无符号结果，为0时选择有符号结果，直接驱动模块输出端口",
+      "summary": "最终加法结果，由symbol选择无符号或有符号结果",
+      "explanation": "根据symbol选择unsignedSum或signedSum的低32位作为输出。",
       "signals": [
         "result",
+        "symbol",
         "unsignedSum",
-        "signedSum",
-        "symbol"
+        "signedSum"
       ],
       "related_assignments": [
-        "2",
-        "4"
+        "0",
+        "1",
+        "2"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -207,9 +202,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:003"
@@ -221,25 +213,23 @@
         "module": "adder32"
       },
       "subject": "carry_out",
-      "summary": "无符号模式下的进位输出",
-      "explanation": "仅在symbol为1（无符号模式）时有效，输出unsignedSum的第33位作为进位；有符号模式下恒为0",
+      "summary": "无符号模式进位输出，符号模式恒为0",
+      "explanation": "symbol=1时取unsignedSum[32]作为进位，symbol=0时输出0。",
       "signals": [
         "carry_out",
-        "unsignedSum",
-        "symbol"
+        "symbol",
+        "unsignedSum"
       ],
       "related_assignments": [
+        "0",
         "3"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:004"
@@ -251,27 +241,25 @@
         "module": "adder32"
       },
       "subject": "overflow",
-      "summary": "有符号模式下的溢出检测标志",
-      "explanation": "仅在symbol为0（有符号模式）时有效，通过比较操作数符号位与结果符号位检测溢出；无符号模式下恒为0",
+      "summary": "有符号模式溢出检测，无符号模式恒为0",
+      "explanation": "symbol=0时检测操作数符号相同但结果符号不同，symbol=1时输出0。",
       "signals": [
         "overflow",
+        "symbol",
         "oprand1",
         "oprand2",
-        "result",
-        "symbol"
+        "result"
       ],
       "related_assignments": [
+        "2",
         "4"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:assignment_interpretation:005"
@@ -282,17 +270,13 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "纯组合逻辑数据路径，无时钟或控制握手信号",
-      "subject": "数据输入输出端口",
-      "explanation": "所有输入输出均为纯数据信号，无事件或控制接口，表明模块为组合逻辑加法器，直接由输入驱动输出",
+      "summary": "纯组合数据路径，无控制或事件接口",
+      "subject": "数据输入输出组",
+      "explanation": "仅包含oprand1、oprand2（输入）和result（输出），无时钟、复位或使能信号，表明模块为纯组合逻辑。",
       "signals": [
         "oprand1",
         "oprand2",
-        "result",
-        "carry_in",
-        "carry_out",
-        "overflow",
-        "symbol"
+        "result"
       ],
       "related_payload": [
         "oprand1",
@@ -305,9 +289,6 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:interface_intent:001"
@@ -318,9 +299,9 @@
         "type": "module",
         "module": "adder32"
       },
-      "summary": "重点说明symbol信号如何控制有符号/无符号模式切换，以及进位和溢出标志的生成条件",
-      "subject": "模式选择与标志生成逻辑",
-      "explanation": "模块核心语义在于双模式加法及对应的状态标志，这是文档需要强调的设计意图",
+      "summary": "重点说明symbol对加法模式、进位和溢出标志的影响",
+      "subject": "模式选择与标志语义",
+      "explanation": "模块核心是symbol驱动的双模式，carry_out和overflow互斥有效，需明确文档化。",
       "signals": [
         "symbol",
         "carry_out",
@@ -333,13 +314,20 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/adder32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/adder32.json"
         }
       ],
       "id": "semantic:module:adder32:documentation_focus:001"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "carry_in",
+      "reason": "输入端口carry_in在接口中未列出，但assign依赖中使用，可能为未捕获的输入或内部信号，需RTL源确认。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/adder32.json"
+        }
+      ]
+    }
+  ]
 }

@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "CPU2NoC",
   "flow_id": "flow_000_CPU2NoC_i_drvFCPU",
-  "input_hash": "c168bdf7f437d6f2d7225977d82a413865ae8143443be7b263afffeab1bbecf5",
+  "input_hash": "83c993dac376fa902fd46a4e6b647455d202b51391ec6ca20a1c023ee705aae7",
   "source_context": "ai_context/modules/CPU2NoC/flows/flow_000_CPU2NoC_i_drvFCPU.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\IONet\\IONetwork_9.24\\CPU2NoC.v",
+      "source": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
       "paths": [
         "module_source"
       ]
@@ -41,7 +41,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\IONet\\IONetwork_9.24\\CPU2NoC.v",
+        "rtl_file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
         "parser_module": "modules/CPU2NoC.json"
       }
     }
@@ -65,9 +65,9 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "summary": "从CPU输入事件驱动，经两级FIFO缓冲、延迟对齐、通道选择与拆分，最终分发至两个NoC通道及一个互斥合并回路的内部事件流。",
+      "summary": "从CPU驱动事件输入到NoC双通道输出及CPU存储回写的扇出与合并流",
       "subject": "flow_000_CPU2NoC_i_drvFCPU",
-      "explanation": "该流以i_drvFCPU为唯一起点，通过cfifo0和cfifo2两级FIFO实现事件缓冲与速率匹配，中间插入delay7进行时序对齐。select0将事件流拆分为两个通道分支，每个分支再经splitter进一步拆分：一路经延迟后输出至NoC通道，另一路经select2/select3后汇聚至mutexWrite，形成CPU存储回写路径。整体结构体现了事件从CPU到NoC的双通道分发与局部回环。",
+      "explanation": "该流将单个CPU驱动事件（i_drvFCPU）经过两级FIFO缓冲和延迟后，通过选择器扇出为两个通道，每个通道再经分裂器产生NoC输出和内部反馈路径，最终通过互斥合并器回写至CPU存储，形成完整的驱动-分发-回写闭环。",
       "signals": [
         "i_drvFCPU",
         "o_drv2NoCChanel0",
@@ -77,22 +77,14 @@
       "instances": [
         "cfifo0",
         "cfifo2",
-        "delay7",
         "select0",
         "splitterChannel0",
         "splitterChannel1",
-        "delay18",
-        "delay20",
-        "select2",
-        "select3",
         "mutexWrite"
-      ],
-      "related_assignments": [
-        "(无)"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "instances.connections"
@@ -114,8 +106,8 @@
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
       "subject": "cfifo0, cfifo2",
-      "summary": "事件流中的两级FIFO缓冲级，用于吸收CPU事件突发并实现流水线级间速率匹配。",
-      "explanation": "cfifo0接收外部输入i_drvFCPU，输出至delay7；cfifo2接收延迟后信号，输出至select0。两者均为cFifo1类型，表明是单深度或简单FIFO，可能仅提供单拍缓冲与握手机制，不涉及复杂深度管理。",
+      "summary": "事件流的两级FIFO缓冲级，用于速率匹配或流水线深度控制",
+      "explanation": "这两个cFifo1实例串联在事件路径上，cfifo0接收外部驱动，cfifo2接收经delay7延迟后的信号，它们可能提供背压或事件暂存功能，但具体深度和满空状态需RTL确认。",
       "signals": [
         "i_drvFCPU",
         "w_drv2fifo2",
@@ -126,10 +118,7 @@
         "cfifo0",
         "cfifo2"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -149,31 +138,16 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "subject": "select0, splitterChannel0, splitterChannel1, select2, select3",
-      "summary": "事件流中的选择/拆分节点，实现事件从单路径到多路径的扇出与条件路由。",
-      "explanation": "select0（cSelector2_41b）将单路事件拆分为两路，分别导向splitterChannel0和splitterChannel1。每个splitter（cSplitter2_51b）进一步将事件拆分为两路：一路经延迟输出至NoC通道，另一路经select2/select3（cSelector2_1b）导向mutexWrite。这些节点可能依赖内部选择信号或事件有效位进行路由，但当前上下文未提供选择条件。",
+      "subject": "select0",
+      "summary": "事件扇出选择器，将单路事件流分发至两个NoC通道路径",
+      "explanation": "select0（cSelector2_41b）接收来自cfifo2的事件，根据内部选择逻辑将事件导向splitterChannel0或splitterChannel1，实现通道级分发。",
       "signals": [
         "w_drvSelect0",
         "w_drv2Channel0",
-        "w_drv2Channel1",
-        "w_drv2NoCChanel0",
-        "w_drv2NoCChanel1",
-        "w_drv2select2",
-        "w_drv2select3",
-        "w_drv2Mutex0Channel0",
-        "w_drv2Mutex0Channel1",
-        "w_overselect2",
-        "w_overselect3"
+        "w_drv2Channel1"
       ],
       "instances": [
-        "select0",
-        "splitterChannel0",
-        "splitterChannel1",
-        "select2",
-        "select3"
-      ],
-      "related_assignments": [
-        "(无)"
+        "select0"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -195,19 +169,20 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "subject": "mutexWrite",
-      "summary": "事件流中的互斥合并节点，将两个通道的回环事件合并为单路CPU存储写请求。",
-      "explanation": "mutexWrite（cMutexMerge2_51b）接收来自select2和select3的两路事件，输出w_drv2CPUStore_dalay1。其“互斥”特性表明两路输入不能同时有效，或内部具有仲裁逻辑，确保合并后的单路事件无冲突。该输出后续可能连接至CPU存储接口。",
+      "subject": "splitterChannel0, splitterChannel1",
+      "summary": "每个NoC通道内的二次分裂器，分离NoC输出与内部反馈路径",
+      "explanation": "每个cSplitter2_51b实例将来自select0的通道事件进一步分裂：一路经延迟后输出至NoC（o_drv2NoCChanel0/1），另一路送至select2/select3用于内部反馈。",
       "signals": [
-        "w_drv2Mutex0Channel0",
-        "w_drv2Mutex0Channel1",
-        "w_drv2CPUStore_dalay1"
+        "w_drv2Channel0",
+        "w_drv2Channel1",
+        "w_drv2NoCChanel0",
+        "w_drv2NoCChanel1",
+        "w_drv2select2",
+        "w_drv2select3"
       ],
       "instances": [
-        "mutexWrite"
-      ],
-      "related_assignments": [
-        "(无)"
+        "splitterChannel0",
+        "splitterChannel1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -229,26 +204,18 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "subject": "delay7, delay18, delay20",
-      "summary": "事件流中的透明延迟单元，用于调整事件时序以满足后续级联或输出接口的建立/保持时间要求。",
-      "explanation": "delay7位于cfifo0与cfifo2之间，delay18和delay20分别位于splitterChannel0/splitterChannel1输出至NoC通道的路径上。这些延迟单元不改变事件语义，仅增加固定拍数的传播延迟，可能用于对齐数据与事件或满足外部接口时序。",
+      "subject": "mutexWrite",
+      "summary": "两路反馈事件的互斥合并器，确保回写至CPU存储的原子性",
+      "explanation": "mutexWrite（cMutexMerge2_51b）接收来自select2和select3的两路反馈事件，通过互斥仲裁合并为单路事件（w_drv2CPUStore_dalay1），避免写冲突。",
       "signals": [
-        "w_drv2fifo2",
-        "w_drv2fifo2_dalay",
-        "w_drv2NoCChanel0",
-        "o_drv2NoCChanel0",
-        "w_drv2NoCChanel1",
-        "o_drv2NoCChanel1"
+        "w_drv2Mutex0Channel0",
+        "w_drv2Mutex0Channel1",
+        "w_drv2CPUStore_dalay1"
       ],
       "instances": [
-        "delay7",
-        "delay18",
-        "delay20"
+        "mutexWrite"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -268,15 +235,13 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "summary": "事件流携带51位数据载荷，事件有效时数据同步传播，但当前上下文未明确事件与数据的握手关系。",
-      "subject": "事件驱动与数据载荷的关联",
-      "explanation": "接口载荷契约显示i_drvFCPU关联i_dataFCPU_51，o_drv2NoCChanel0关联o_data2NoCChanel0_51，o_drv2NoCChanel1关联o_data2NoCChanel1_51。splitterChannel0和splitterChannel1的o_data0_51直接连接至模块输出。这表明事件流同时传输数据，但事件有效信号与数据有效信号的关系（如是否同步、是否独立握手机制）未在上下文中体现。",
+      "summary": "事件驱动伴随51位数据载荷，经流路径同步传播至两个NoC输出",
+      "subject": "i_drvFCPU事件与i_dataFCPU_51载荷",
+      "explanation": "输入事件i_drvFCPU携带51位数据i_dataFCPU_51，该载荷通过cfifo0、delay7、cfifo2、select0、splitterChannel0/1等实例，最终以o_data2NoCChanel0_51和o_data2NoCChanel1_51输出至NoC。反馈路径（select2/3 -> mutexWrite）可能也携带载荷，但未在接口合同中明确。",
       "signals": [
         "i_drvFCPU",
         "i_dataFCPU_51",
-        "o_drv2NoCChanel0",
         "o_data2NoCChanel0_51",
-        "o_drv2NoCChanel1",
         "o_data2NoCChanel1_51"
       ],
       "related_payload": [
@@ -284,18 +249,15 @@
         "o_data2NoCChanel0_51",
         "o_data2NoCChanel1_51"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "interface.data_ports"
         },
         {
-          "source": "interface.data_ports"
+          "source": "interface.event_ports"
         }
       ],
       "id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:data_control_effect:001"
@@ -307,21 +269,18 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "summary": "当前上下文未提供反压或完成信号，无法确认流控机制。",
-      "subject": "流控与反压机制",
-      "explanation": "接口载荷契约中o_drv2NoCChanel0和o_drv2NoCChanel1分别关联i_freeFNoCChanel0和i_freeFNoCChanel1，表明NoC通道可能使用空闲/反压信号进行流控。但该流内部（如FIFO、选择器、合并器）的握手机制、反压传播路径均未在上下文中体现。FIFO级（cfifo0, cfifo2）通常具有反压输出，但未列出。",
+      "summary": "两个NoC输出通道分别有独立的free输入信号，用于背压控制",
+      "subject": "o_drv2NoCChanel0/1的free信号",
+      "explanation": "接口合同显示o_drv2NoCChanel0和o_drv2NoCChanel1分别关联i_freeFNoCChanel0和i_freeFNoCChanel1，表明NoC端可通过free信号反压事件流。但流路径中cfifo0/cfifo2的背压机制及free信号如何影响内部FIFO未在上下文中体现。",
       "signals": [
+        "o_drv2NoCChanel0",
+        "o_drv2NoCChanel1",
         "i_freeFNoCChanel0",
         "i_freeFNoCChanel1"
       ],
-      "instances": [
-        "cfifo0",
-        "cfifo2",
-        "mutexWrite"
-      ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "interface.event_ports"
@@ -339,9 +298,9 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "summary": "手册应重点描述事件从CPU到NoC的双通道分发路径、数据载荷的同步传播、以及回环合并路径的互斥特性。",
-      "subject": "流手册重点",
-      "explanation": "该流的核心价值在于将CPU事件高效分发至两个NoC通道，同时保留一条回环路径用于CPU存储写。手册需明确：两级FIFO的缓冲深度与反压行为、选择/拆分节点的路由条件（需RTL确认）、延迟单元的延迟拍数、以及mutexWrite的互斥仲裁逻辑。数据载荷与事件的关系应作为独立章节说明。",
+      "summary": "最终手册应重点描述事件从单输入到双通道输出及反馈合并的完整路径，强调扇出点和合并点的逻辑",
+      "subject": "流的分发与合并拓扑",
+      "explanation": "该流的核心特征是select0的通道分发、splitter的二次分裂、以及mutexWrite的互斥合并。手册需清晰说明每个分支点的选择条件（需RTL确认）和合并点的仲裁机制。",
       "signals": [
         "i_drvFCPU",
         "o_drv2NoCChanel0",
@@ -349,28 +308,20 @@
         "w_drv2CPUStore_dalay1"
       ],
       "instances": [
-        "cfifo0",
-        "cfifo2",
         "select0",
         "splitterChannel0",
         "splitterChannel1",
         "mutexWrite"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "instances.connections"
         },
         {
           "source": "transparent_flows"
-        },
-        {
-          "source": "interface.event_ports"
         }
       ],
       "id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:documentation_focus:001"
@@ -382,17 +333,15 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "reason": "当前上下文仅列出选择/拆分节点，未提供其选择信号或条件，无法确定事件路由逻辑。",
-      "subject": "选择/拆分节点的路由条件",
-      "needed_source_slice": "assign block或always block中与select0、splitterChannel0、splitterChannel1、select2、select3的选择信号相关的逻辑",
+      "reason": "当前上下文仅表明这些实例是选择器/分裂器，但未提供选择条件（如地址、类型或优先级），需RTL源确认",
+      "subject": "select0、splitterChannel0/1、select2/3的选择逻辑",
+      "needed_source_slice": "assign块或always块中定义选择器输入选择信号的逻辑",
       "signals": [
         "w_drvSelect0",
         "w_drv2Channel0",
         "w_drv2Channel1",
         "w_drv2select2",
-        "w_drv2select3",
-        "w_overselect2",
-        "w_overselect3"
+        "w_drv2select3"
       ],
       "instances": [
         "select0",
@@ -400,9 +349,6 @@
         "splitterChannel1",
         "select2",
         "select3"
-      ],
-      "related_assignments": [
-        "(无)"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -424,23 +370,20 @@
         "module": "CPU2NoC",
         "flow_id": "flow_000_CPU2NoC_i_drvFCPU"
       },
-      "reason": "当前上下文未提供FIFO（cfifo0, cfifo2）和互斥合并器（mutexWrite）的握手信号（如full、empty、valid、ready），无法确认流控与反压行为。",
-      "subject": "FIFO与合并器的握手机制",
-      "needed_source_slice": "实例连接图中与cfifo0、cfifo2、mutexWrite相关的握手信号连接",
+      "reason": "上下文仅表明其为互斥合并器，但未说明仲裁策略（如固定优先级、轮询或基于数据），需RTL源确认",
+      "subject": "mutexWrite的互斥仲裁机制",
+      "needed_source_slice": "mutexWrite实例的配置参数或内部仲裁逻辑",
       "signals": [
-        "(未知，需从RTL提取)"
+        "w_drv2Mutex0Channel0",
+        "w_drv2Mutex0Channel1",
+        "w_drv2CPUStore_dalay1"
       ],
       "instances": [
-        "cfifo0",
-        "cfifo2",
         "mutexWrite"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "instances.connections"
@@ -454,16 +397,20 @@
   ],
   "evidence_gaps": [
     {
-      "field": "选择/拆分节点的路由条件",
-      "reason": "上下文未提供任何选择信号或条件逻辑，无法确定事件如何被路由至不同分支。"
+      "field": "claims.assignment_interpretation",
+      "reason": "Skipped invalid [ASSIGNMENT_INTERPRETATION] section because required text or evidence was missing."
     },
     {
-      "field": "FIFO与合并器的握手信号",
-      "reason": "上下文未列出任何反压或完成信号，无法确认流控机制。"
+      "field": "选择器/分裂器的选择条件",
+      "reason": "上下文未提供任何选择信号或条件，无法确定事件分发逻辑"
     },
     {
-      "field": "延迟单元的延迟拍数",
-      "reason": "上下文仅标注模块类型（delay4U, delay8U），未提供具体延迟拍数或配置方式。"
+      "field": "FIFO深度与满空状态",
+      "reason": "上下文未提供cfifo0/cfifo2的深度参数或满空信号，无法评估背压能力"
+    },
+    {
+      "field": "反馈路径的数据载荷",
+      "reason": "接口合同仅定义了NoC输出的数据载荷，反馈路径（select2/3 -> mutexWrite）是否携带数据未明确"
     }
   ]
 }

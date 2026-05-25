@@ -19,7 +19,18 @@ def package_env():
     return env
 
 
-def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl") -> str:
+def env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl", timeout: int | None = None) -> str:
     root = Path(project_root).resolve()
 
     if not root.exists():
@@ -47,17 +58,18 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl") -> str:
         output_arg,
     ]
 
+    parser_timeout = timeout or env_int("RTL_MANUAL_PARSER_TIMEOUT", 220)
     try:
         result = subprocess.run(
             cmd,
             cwd=str(root),
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=parser_timeout,
             env=package_env(),
         )
     except subprocess.TimeoutExpired:
-        return "Parser failed: execution timed out."
+        return f"Parser failed: execution timed out after {parser_timeout}s."
     except Exception as exc:
         return f"Parser failed: {exc}"
 
@@ -141,9 +153,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--rtl-inputs", default="rtl")
+    parser.add_argument("--timeout", type=int, default=0)
     args = parser.parse_args()
 
-    print(run_parser_tool(args.project_root, args.rtl_inputs))
+    print(run_parser_tool(args.project_root, args.rtl_inputs, timeout=args.timeout or None))
     return 0
 
 

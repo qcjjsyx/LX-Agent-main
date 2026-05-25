@@ -1680,8 +1680,8 @@
         "w_icacheDriveToLsu_1"
       ],
       "role_in_flow": {
-        "value": "作为流的分发节点，将延迟后的驱动信号分发给 fetch 和 LSU 两条路径。",
-        "explanation": "icacheSelector 是一个 cSelector2_65b_cpu 类型的选择/分发器。它接收来自 icacheSelectorDelay1 的延迟驱动信号，并将其分发为两个输出：w_drvFICache（驱动 fetch 模块）和 w_icacheDriveToLsu_1（驱动 LSU 模块）。这标志着该流从单一驱动源分裂为两条独立的处理路径。",
+        "value": "作为事件分发器，将延迟后的驱动信号 w_drvFICacheDelay1 分发给 fetch_inst 和 lsu_inst。",
+        "explanation": "icacheSelector 是一个 cSelector2_65b_cpu 类型的 splitter，其输入为 w_drvFICacheDelay1，输出 w_drvFICache 和 w_icacheDriveToLsu_1 分别驱动 fetch_inst 和 lsu_inst，实现事件的分叉。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -2284,8 +2284,8 @@
         "o_drv2ICache"
       ],
       "role_in_flow": {
-        "value": "作为 ICache 驱动的仲裁合并点，合并来自 fetch 和 LSU 的 ICache 请求。",
-        "explanation": "icachecArbMerge 是一个 cArbMerge2_105b_cpu 类型的仲裁合并器。它接收来自 fetch 路径（经过 fetchToIcacheDelay 延迟）和 LSU 路径（经过 lsuToIcacheDelay 延迟）的 ICache 驱动信号，进行仲裁后输出到 o_drv2ICache。这表明 ICache 的驱动源可能来自指令预取或 LSU 的缓存操作。",
+        "value": "作为仲裁合并器，将来自 fetch_inst 和 lsu_inst 的 ICache 驱动信号合并后输出到 o_drv2ICache。",
+        "explanation": "icachecArbMerge 是一个 cArbMerge2_105b_cpu 类型的 merger，输入 w_fetchDriveToIcacheDelay_1 和 w_lsuDriveToIcacheDelay_1，输出 o_drv2ICache，表明该端点由两个源仲裁驱动。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -2334,8 +2334,8 @@
         "w_lsuDriveToDR_1"
       ],
       "role_in_flow": {
-        "value": "作为数据路由驱动的互斥合并点，合并来自 LSU 和中断/异常模块的数据路由请求。",
-        "explanation": "DRMutexMerge 是一个 cMutexMerge2_105b_cpu 类型的互斥合并器。它接收来自 LSU 路径（经过 lsuToDataRoutDelay1 延迟）和中断/异常模块（intAndExc_inst）的驱动信号，进行互斥合并后输出到 o_lsuDriveToDataRout_1。这表明数据路由的驱动源可能来自 LSU 的访存操作或中断/异常处理。",
+        "value": "作为互斥合并器，将来自 lsu_inst 和 intAndExc_inst 的数据路由驱动信号合并后，经延迟输出到 o_lsuDriveToDataRout_1。",
+        "explanation": "DRMutexMerge 是一个 cMutexMerge2_105b_cpu 类型的 merger，输入 w_lsuDriveToDataRoutDelay1_1 和 w_intDriveToDR，输出 w_lsuDriveToDR_1，再经 lsuToDataRoutDelay1 延迟后输出到 o_lsuDriveToDataRout_1。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -2346,6 +2346,7 @@
         "signals": [
           "w_lsuDriveToDataRoutDelay1_1",
           "w_intDriveToDR",
+          "w_lsuDriveToDR_1",
           "o_lsuDriveToDataRout_1"
         ],
         "instances": [
@@ -4307,8 +4308,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "最终手册应重点描述该流如何从单一输入分发到 fetch 和 LSU，以及如何通过仲裁/合并单元驱动 ICache 和数据路由。",
-    "explanation": "该流的核心语义在于“分发-处理-合并”的拓扑结构。icacheSelector 的分发、fetch 和 LSU 的并行处理、以及 icachecArbMerge 和 DRMutexMerge 的合并是理解该流的关键。手册应强调这些组件的角色和信号路径，避免过度描述延迟单元的细节。",
+    "value": "最终手册应重点描述 i_drvFICache 如何通过 icacheSelector 分发给 fetch_inst 和 lsu_inst，以及各自路径如何通过延迟、FIFO 和合并器到达最终输出端点。",
+    "explanation": "该流的核心在于 icacheSelector 的分发和后续路径的汇聚，包括 fetch_inst 到 icachecArbMerge 的路径和 lsu_inst 到 DRMutexMerge 的路径，这些是理解模块内部事件驱动的关键。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -4318,16 +4319,13 @@
     "doc_priority": "primary",
     "signals": [
       "i_drvFICache",
-      "w_drvFICache",
-      "w_drvFICacheDelay",
       "w_drvFICacheDelay1",
+      "w_drvFICache",
       "w_icacheDriveToLsu_1",
       "o_drv2ICache",
       "o_lsuDriveToDataRout_1"
     ],
     "instances": [
-      "icacheSelectorDelay",
-      "icacheSelectorDelay1",
       "icacheSelector",
       "fetch_inst",
       "lsu_inst",
@@ -4344,16 +4342,13 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/cpu_top_all.json"
-      },
-      {
         "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "输出数据路由驱动信号与输入空闲信号构成握手关系，控制数据路由的传输。",
-        "explanation": "接口合约显示 o_lsuDriveToDataRout_1 携带 105 位数据负载（o_lsuToDataRoutData_105），并关联空闲信号 i_lsuFreeFromDataRout_1。这表明该流在驱动数据路由时，需要等待下游的空闲信号才能有效传输数据，形成典型的 ready/valid 握手。",
+        "value": "o_lsuDriveToDataRout_1 携带 105 位数据载荷，其流控由 i_lsuFreeFromDataRout_1 信号控制。",
+        "explanation": "接口载荷合约显示 o_lsuDriveToDataRout_1 关联了 105 位数据信号 o_lsuToDataRoutData_105，并有一个空闲信号 i_lsuFreeFromDataRout_1，表明该输出端口的驱动受外部数据路由模块的空闲状态控制。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -4363,6 +4358,7 @@
         "doc_priority": "primary",
         "signals": [
           "o_lsuDriveToDataRout_1",
+          "o_lsuToDataRoutData_105",
           "i_lsuFreeFromDataRout_1"
         ],
         "instances": [],
@@ -4381,8 +4377,8 @@
         ]
       },
       {
-        "value": "从外部输入 i_drvFICache 出发，经过延迟、选择、分发，最终驱动 ICache 和 LSU 数据路由的指令缓存驱动流。",
-        "explanation": "该流是 CPU 核心中指令缓存（ICache）驱动的起点。外部输入的驱动信号经过两级延迟（icacheSelectorDelay, icacheSelectorDelay1）后，由 icacheSelector 分发给 fetch 模块和 LSU 模块。fetch 模块进一步处理并产生对 ICache 的请求，而 LSU 模块则产生对数据路由的驱动。最终，通过 icachecArbMerge 和 DRMutexMerge 等仲裁/合并单元，驱动到输出端口 o_drv2ICache 和 o_lsuDriveToDataRout_1。",
+        "value": "从外部输入 i_drvFICache 出发，经延迟、选择、分发后，最终汇聚到两个模块输出端点 o_drv2ICache 和 o_lsuDriveToDataRout_1 的驱动事件流。",
+        "explanation": "该流描述了 i_drvFICache 信号如何通过 icacheSelectorDelay 和 icacheSelectorDelay1 两级延迟后，由 icacheSelector 分发给 fetch_inst 和 lsu_inst，再经各自路径（包括延迟、FIFO、合并器）最终到达 icachecArbMerge 和 DRMutexMerge，形成对 ICache 和数据路由的驱动。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -4425,34 +4421,19 @@
         ]
       },
       {
-        "value": "流中存在多个 FIFO 和合并器，它们可能引入背压或阻塞，但具体机制需要 RTL 源码确认。",
-        "explanation": "流中包含多个 cFifo1 类型的 FIFO 实例（如 ifHelpDecExcDelayFifo, ifExcDelayFifo, ifIntDelayFifo, lsuDelayFifo 等）和 cMutexMerge2 类型的合并器。这些组件通常具有满/空状态信号，可能对上游产生背压。然而，当前上下文中未提供这些组件的 free/backpressure 信号连接，因此无法断言其具体行为。",
+        "value": "该信号作为 o_lsuDriveToDataRout_1 的反压信号，但当前上下文未提供其内部连接细节。",
+        "explanation": "接口载荷合约中提到了 i_lsuFreeFromDataRout_1 作为空闲信号，但未在流步骤或连接中体现其如何影响内部延迟或 FIFO 的流控，因此无法断言其具体作用。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:cpu_top_all:flow_001_cpu_top_all_i_drvFICache:completion_backpressure:001",
-        "doc_priority": "secondary",
+        "doc_priority": "reference",
         "signals": [
-          "w_drv2Excp_2Tmp",
-          "w_drv2Excp_2",
-          "w_iFExcdriToIntTmp",
-          "w_iFExcdriToInt",
-          "w_intDriToIntTmp",
-          "w_intDriToInt",
-          "w_lsuDriveToExcMutexMerge_1",
-          "w_lsuDriveToExcMutexMerge1_1"
+          "i_lsuFreeFromDataRout_1"
         ],
-        "instances": [
-          "ifHelpDecExcDelayFifo",
-          "ifExcDelayFifo",
-          "ifIntDelayFifo",
-          "lsuDelayFifo",
-          "lsuDriveToLaunchDelayFifo1",
-          "exeWaitMergeDelayFifo1",
-          "pmtfifo"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -4463,7 +4444,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
+            "source": "knowledge_ir/modules/cpu_top_all.json"
           }
         ]
       }

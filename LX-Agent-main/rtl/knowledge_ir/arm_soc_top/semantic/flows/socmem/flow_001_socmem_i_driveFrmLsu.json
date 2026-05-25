@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "socmem",
   "flow_id": "flow_001_socmem_i_driveFrmLsu",
-  "input_hash": "952fb56d44455feaf3da259388399f8e7fc6fd8f06f921e41edc132abed4d01a",
+  "input_hash": "87e47bd5e4bcb04e8278c10bec695bf564787f9d4b752fd0a6bc4335edf91aa8",
   "source_context": "ai_context/modules/socmem/flows/flow_001_socmem_i_driveFrmLsu.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\memory\\socmem.v",
+      "source": "rtl/rtl/memory/socmem.v",
       "paths": [
         "module_source"
       ]
@@ -41,7 +41,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\memory\\socmem.v",
+        "rtl_file": "rtl/rtl/memory/socmem.v",
         "parser_module": "modules/socmem.json"
       }
     }
@@ -66,9 +66,9 @@
         "module": "socmem",
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
-      "summary": "从LSU输入的驱动事件经过FIFO缓冲和两级延迟后，作为下一个驱动事件输出到LSU。",
+      "summary": "从LSU输入的驱动事件经过两级延迟后输出到LSU的纯延迟链",
       "subject": "flow_001_socmem_i_driveFrmLsu",
-      "explanation": "该流是一个单向的、基于事件的驱动链，从输入端口i_driveFrmLsu开始，经过FIFO实例cFifo2_Lsu进行缓冲，再通过两个透明延迟单元delay_LSU1和delay_LSU2进行时序调整，最终到达输出端口o_driveNextToLsu。流中没有分支或合并点，FIFO是唯一的潜在阻塞点。",
+      "explanation": "该流是一个单驱动内部事件流，从输入端口i_driveFrmLsu开始，经过FIFO缓冲和两个不同深度的延迟单元，最终到达输出端口o_driveNextToLsu，没有分支或合并点",
       "signals": [
         "i_driveFrmLsu",
         "w_driveNextToLsu[0]",
@@ -81,19 +81,19 @@
         "delay_LSU2"
       ],
       "related_assignments": [
-        "4"
+        "assign 4"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "transparent_flows",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "flow_graph.assignment_dependencies"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:flow_intent:001"
@@ -106,8 +106,8 @@
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
       "subject": "cFifo2_Lsu",
-      "summary": "作为FIFO缓冲器，接收输入驱动事件并可能进行同步或节流。",
-      "explanation": "该实例是流中唯一的非透明组件，其角色是缓冲来自i_driveFrmLsu的事件。它可能包含存储单元，用于处理事件速率不匹配或跨时钟域同步，但具体实现细节（如深度、空满标志）未在上下文中提供。",
+      "summary": "事件流的入口缓冲级，可能对输入事件进行同步或节流",
+      "explanation": "作为FIFO2类型实例，它接收i_driveFrmLsu输入事件，输出到w_driveNextToLsu[0]，是流中唯一的阻塞点，可能根据内部满状态决定是否传播事件",
       "signals": [
         "i_driveFrmLsu",
         "w_driveNextToLsu[0]"
@@ -120,8 +120,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:component_role:001"
@@ -134,8 +138,8 @@
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
       "subject": "delay_LSU1, delay_LSU2",
-      "summary": "作为透明延迟单元，对驱动事件进行固定周期的时序调整。",
-      "explanation": "这两个实例分别实现16和32个单位的延迟，其角色是纯粹的时间移位，不改变事件的数据内容或控制语义。它们串联在一起，共同提供总共48个单位的延迟。",
+      "summary": "透明延迟级，分别提供16和32个时钟周期的固定延迟",
+      "explanation": "这两个延迟单元串联在FIFO之后，delay_LSU1将w_driveNextToLsu[0]延迟16周期输出到w_driveNextToLsu[1]，delay_LSU2再延迟32周期输出到o_driveNextToLsu，总延迟为48周期",
       "signals": [
         "w_driveNextToLsu[0]",
         "w_driveNextToLsu[1]",
@@ -145,13 +149,17 @@
         "delay_LSU1",
         "delay_LSU2"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "transparent_flows",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "instances"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:component_role:002"
@@ -163,27 +171,27 @@
         "module": "socmem",
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
-      "subject": "o_freeToLsu",
-      "summary": "该赋值将输出驱动信号与空闲信号关联，可能用于握手或流控。",
-      "explanation": "赋值索引4将o_freeToLsu与o_driveNextToLsu关联，表明当驱动事件输出时，空闲信号可能被置位，以指示LSU可以发送下一个请求。这暗示了流控机制，但具体逻辑（如组合逻辑还是时序逻辑）未明确。",
+      "subject": "assign 4 (o_freeToLsu = o_driveNextToLsu)",
+      "summary": "将输出驱动事件直接映射为释放信号，表明事件驱动与释放同步",
+      "explanation": "该赋值将o_driveNextToLsu信号直接连接到o_freeToLsu输出，意味着每当有驱动事件输出到LSU时，同时向LSU发送释放信号，形成事件-释放配对关系",
       "signals": [
         "o_freeToLsu",
         "o_driveNextToLsu"
       ],
       "related_assignments": [
-        "4"
+        "assign 4"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "connection_related",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "assignments"
         },
         {
-          "source": "interface_related",
-          "path": "modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:assignment_interpretation:001"
@@ -195,24 +203,20 @@
         "module": "socmem",
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
-      "summary": "该流传递的是纯驱动事件，没有显式的数据负载。",
-      "subject": "i_driveFrmLsu 与 o_driveNextToLsu",
-      "explanation": "接口负载契约显示，输入和输出事件均无关联的负载信号。这意味着该流仅用于控制或同步目的，不传输数据。驱动事件本身可能是一个脉冲或电平信号，用于触发LSU的下一个操作。",
+      "summary": "纯事件驱动流，无数据负载伴随",
+      "subject": "i_driveFrmLsu -> o_driveNextToLsu",
+      "explanation": "接口负载契约显示i_driveFrmLsu和o_driveNextToLsu均无关联数据负载信号，该流仅传递事件控制信号，不携带数据内容",
       "signals": [
         "i_driveFrmLsu",
         "o_driveNextToLsu"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "modules/socmem.json"
-        },
-        {
-          "source": "interface.data_ports",
-          "path": "modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json",
+          "path": "interface_payload_contracts"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:data_control_effect:001"
@@ -224,12 +228,14 @@
         "module": "socmem",
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
-      "summary": "存在空闲信号，但流控机制不明确，需要RTL源码确认。",
+      "summary": "输出端有释放信号配对，但输入端的释放信号关系不明确",
       "subject": "o_freeToLsu 与 i_freeNextFrmLsu",
-      "explanation": "接口契约中提到了空闲信号o_freeToLsu和i_freeNextFrmLsu，但未提供它们与驱动事件的直接时序关系。赋值索引4暗示了o_freeToLsu与o_driveNextToLsu的关联，但完整的背压或完成握手逻辑（如FIFO的空满状态）未在上下文中体现。",
+      "explanation": "输出事件o_driveNextToLsu有对应的释放信号i_freeNextFrmLsu，且通过assign 4将输出事件映射到o_freeToLsu，但输入事件i_driveFrmLsu的释放信号o_freeToLsu实际是输出事件的别名，形成循环依赖，需要RTL源码确认实际握手逻辑",
       "signals": [
         "o_freeToLsu",
-        "i_freeNextFrmLsu"
+        "i_freeNextFrmLsu",
+        "o_driveNextToLsu",
+        "i_driveFrmLsu"
       ],
       "instances": [
         "cFifo2_Lsu"
@@ -239,12 +245,12 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json",
+          "path": "interface_payload_contracts"
         },
         {
-          "source": "interface.data_ports",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "assignments"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:completion_backpressure:001"
@@ -256,14 +262,14 @@
         "module": "socmem",
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
-      "summary": "手册应重点描述驱动事件的传播路径和FIFO的缓冲行为，同时谨慎处理流控细节。",
-      "subject": "驱动事件流与流控",
-      "explanation": "该流的核心是事件从输入到输出的单向传播，FIFO是唯一可能引入复杂性的组件。手册应明确说明延迟单元的固定延迟值，并基于RTL源码详细解释FIFO的流控机制（如空满标志如何影响空闲信号）。",
+      "summary": "文档应强调该流是固定延迟的事件传播路径，而非数据通路",
+      "subject": "延迟链的固定延迟特性",
+      "explanation": "该流由FIFO和两个固定延迟单元串联组成，无数据负载，无分支，是典型的控制事件延迟链，文档应说明总延迟为48周期（16+32），并注明FIFO可能引入额外可变延迟",
       "signals": [
         "i_driveFrmLsu",
-        "o_driveNextToLsu",
-        "o_freeToLsu",
-        "i_freeNextFrmLsu"
+        "w_driveNextToLsu[0]",
+        "w_driveNextToLsu[1]",
+        "o_driveNextToLsu"
       ],
       "instances": [
         "cFifo2_Lsu",
@@ -271,19 +277,19 @@
         "delay_LSU2"
       ],
       "related_assignments": [
-        "4"
+        "assign 4"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "connection_graph"
         },
         {
-          "source": "transparent_flows",
-          "path": "modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:documentation_focus:001"
@@ -295,30 +301,27 @@
         "module": "socmem",
         "flow_id": "flow_001_socmem_i_driveFrmLsu"
       },
-      "reason": "当前上下文仅表明FIFO可能阻塞事件，但未提供其空满标志如何与空闲信号交互的细节。",
-      "subject": "cFifo2_Lsu 的流控逻辑",
-      "needed_source_slice": "always block 或 assign block 中与 cFifo2_Lsu 的空满标志及 o_freeToLsu 相关的逻辑",
+      "reason": "当前上下文仅标注cFifo2_Lsu为阻塞点，但未提供其满状态信号、反压机制或是否在空时直接透传",
+      "subject": "cFifo2_Lsu 的阻塞行为",
+      "needed_source_slice": "cFifo2_Lsu实例的always块或assign块，以及其与i_driveFrmLsu和w_driveNextToLsu[0]的连接逻辑",
       "signals": [
-        "o_freeToLsu",
-        "i_freeNextFrmLsu"
+        "i_driveFrmLsu",
+        "w_driveNextToLsu[0]"
       ],
       "instances": [
         "cFifo2_Lsu"
-      ],
-      "related_assignments": [
-        "4"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports",
-          "path": "modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "interface.data_ports",
-          "path": "modules/socmem.json"
+          "source": "parser_pipeline_rtl/modules/socmem.json",
+          "path": "instances"
         }
       ],
       "id": "semantic:flow:socmem:flow_001_socmem_i_driveFrmLsu:source_review_request:001"
@@ -326,8 +329,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "流控握手逻辑",
-      "reason": "缺少FIFO空满标志与空闲信号之间的具体连接或赋值关系。"
+      "field": "数据负载信号",
+      "reason": "接口负载契约显示无数据负载，但未提供证据说明该流是否确实不携带数据，或数据负载信号未被正确解析"
     }
   ]
 }

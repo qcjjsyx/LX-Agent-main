@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "spi_master_spi0",
-  "input_hash": "e741946f4c4d3f10077a6e7b881b43dfcc399db832b9264550f62ea4c8f65d78",
+  "input_hash": "e7b2e6bbe036414dd1c946e130ced30f68f6a5d7a9ea0dbca88b3d68737899c7",
   "source_context": "ai_context/modules/spi_master_spi0.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl\\rtl\\IONet\\SPI\\SPI0\\spi_master_spi0.v",
+      "source": "rtl/rtl/IONet/SPI/SPI0/spi_master_spi0.v",
       "paths": [
         "module_source"
       ]
@@ -40,19 +40,17 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\spi_master_spi0.v",
+        "rtl_file": "rtl/rtl/IONet/SPI/SPI0/spi_master_spi0.v",
         "parser_module": "modules/spi_master_spi0.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 8,
+    "count": 6,
     "by_type": {
       "assignment_interpretation": 3,
-      "component_role": 1,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -63,14 +61,15 @@
         "type": "module",
         "module": "spi_master_spi0"
       },
-      "summary": "SPI主控制器模块，负责将并行数据转换为串行SPI协议输出，并接收串行数据转换为并行输出。",
+      "summary": "SPI主控制器模块，负责生成SPI时钟、片选信号并完成数据收发。",
       "subject": "spi_master_spi0",
-      "explanation": "模块具有数据输入(data_in)和数据输出(data_out)接口，以及控制寄存器(CR)和时钟分频输出(sclk_cnt_div)，表明其核心功能是SPI协议的数据收发与控制。内部连接了时钟分频器实例(clk_div_u)，用于生成SPI时钟。",
+      "explanation": "模块通过内部时钟分频器实例clk_div_u生成SPI时钟和片选，并通过assign逻辑根据CPOL/CPHA配置调整输出时钟极性，同时产生收发完成标志。",
       "signals": [
-        "data_in",
-        "data_out",
-        "CR",
-        "sclk_cnt_div"
+        "sclk_out",
+        "nss_out",
+        "sclk_cnt_div",
+        "rx_done",
+        "tx_done"
       ],
       "instances": [
         "clk_div_u"
@@ -94,22 +93,25 @@
         "type": "module",
         "module": "spi_master_spi0"
       },
-      "summary": "通过内部计数器(rx_cnt, tx_cnt)和缓冲控制信号(cnt_buf_rx, cnt_buf_tx)管理SPI数据的接收与发送完成状态。",
-      "subject": "SPI数据收发控制",
-      "explanation": "赋值依赖显示rx_done和tx_done由计数器高位和缓冲控制信号组合产生，并受CPHA模式影响，表明模块内部实现了基于计数的SPI传输完成检测逻辑。",
+      "summary": "通过实例化时钟分频器生成SPI时钟和片选信号，并输出分频计数值。",
+      "subject": "spi时钟和片选生成",
+      "explanation": "clk_div_u实例接收系统时钟和复位，输出nss_out（片选）和sclk_cnt（分频计数值），后者直接连接到顶层输出sclk_cnt_div。",
       "signals": [
-        "rx_done",
-        "tx_done",
-        "rx_cnt",
-        "tx_cnt",
-        "cnt_buf_rx",
-        "cnt_buf_tx",
-        "CPHA"
+        "clk",
+        "rst_n",
+        "nss_out",
+        "sclk_cnt_div"
+      ],
+      "instances": [
+        "clk_div_u"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "rtl/rtl/IONet/SPI/SPI0/spi_master_spi0.v"
+        },
         {
           "source": "parser_pipeline_rtl/modules/spi_master_spi0.json"
         }
@@ -123,8 +125,8 @@
         "module": "spi_master_spi0"
       },
       "subject": "sclk_out",
-      "summary": "根据CPOL极性选择输出时钟极性，实现SPI时钟极性的可配置性。",
-      "explanation": "赋值sclk_out = CPOL ? ~sclk_out_div : sclk_out_div表明该信号是SPI输出时钟，其极性由CPOL控制位决定，直接关联SPI接口时序。",
+      "summary": "根据CPOL极性选择输出SPI时钟，实现时钟极性配置。",
+      "explanation": "当CPOL为1时输出反相时钟，否则输出分频后的时钟，直接控制SPI总线时钟极性。",
       "signals": [
         "sclk_out",
         "CPOL",
@@ -134,7 +136,7 @@
         "0"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
@@ -150,8 +152,8 @@
         "module": "spi_master_spi0"
       },
       "subject": "rx_done",
-      "summary": "指示SPI接收完成，由接收计数器高位和缓冲控制信号共同判定。",
-      "explanation": "赋值rx_done = (~rx_cnt[5]) & cnt_buf_rx表明当接收计数器未达到高位且缓冲接收条件满足时，接收完成信号有效。",
+      "summary": "根据接收计数器和缓冲标志产生接收完成信号。",
+      "explanation": "当rx_cnt[5]为低且cnt_buf_rx有效时，表示接收完成，用于触发后续数据读取或中断。",
       "signals": [
         "rx_done",
         "rx_cnt",
@@ -177,8 +179,8 @@
         "module": "spi_master_spi0"
       },
       "subject": "tx_done",
-      "summary": "指示SPI发送完成，其判定条件受CPHA模式影响，不同相位下使用不同的计数器高位。",
-      "explanation": "赋值tx_done = CPHA ? (~tx_cnt[5]) & cnt_buf_tx : (~tx_cnt[4]) & cnt_buf_tx表明发送完成检测与CPHA配置相关，CPHA=1时使用tx_cnt[5]，CPHA=0时使用tx_cnt[4]。",
+      "summary": "根据CPHA和发送计数器产生发送完成信号，支持两种SPI模式。",
+      "explanation": "CPHA为1时使用tx_cnt[5]判断，否则使用tx_cnt[4]，结合cnt_buf_tx产生发送完成标志。",
       "signals": [
         "tx_done",
         "CPHA",
@@ -199,42 +201,14 @@
       "id": "semantic:module:spi_master_spi0:assignment_interpretation:003"
     },
     {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "spi_master_spi0"
-      },
-      "subject": "clk_div_u",
-      "summary": "时钟分频器实例，为SPI主控制器提供分频后的时钟和片选信号。",
-      "explanation": "连接显示clk_div_u接收模块时钟(clk)和复位(rst_n)，输出nss_out（片选）和sclk_cnt_div（时钟分频计数值），表明其负责生成SPI通信所需的时钟分频和片选控制。",
-      "signals": [
-        "clk",
-        "rst_n",
-        "nss_out",
-        "sclk_cnt_div"
-      ],
-      "instances": [
-        "clk_div_u"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/spi_master_spi0.json"
-        }
-      ],
-      "id": "semantic:module:spi_master_spi0:component_role:001"
-    },
-    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "spi_master_spi0"
       },
-      "summary": "8位控制寄存器(CR)输入，用于配置SPI模式参数（如CPOL、CPHA）。",
-      "subject": "CR控制寄存器接口",
-      "explanation": "CR作为数据输入，其位域可能包含CPOL和CPHA等控制位，这些信号在赋值依赖中被引用，表明CR是模块的配置接口。",
+      "summary": "CR[7:0]作为控制寄存器输入，配置SPI模式参数（如CPOL、CPHA）。",
+      "subject": "控制寄存器接口",
+      "explanation": "CR输入宽度为8位，结合assign中使用的CPOL和CPHA信号，推测CR包含这些控制位，但具体位域映射需RTL确认。",
       "signals": [
         "CR",
         "CPOL",
@@ -242,7 +216,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_master_spi0.json"
@@ -252,44 +226,20 @@
         }
       ],
       "id": "semantic:module:spi_master_spi0:interface_intent:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "spi_master_spi0"
-      },
-      "reason": "需要查看RTL源代码中的always块或状态机，以理解rx_done和tx_done如何驱动后续数据输出或中断。",
-      "subject": "SPI传输完成逻辑",
-      "needed_source_slice": "always block",
-      "signals": [
-        "rx_done",
-        "tx_done",
-        "data_out"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "rtl\\rtl\\IONet\\SPI\\SPI0\\spi_master_spi0.v"
-        }
-      ],
-      "id": "semantic:module:spi_master_spi0:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部状态机或控制逻辑",
-      "reason": "上下文未提供内部事件流或状态机信息，无法推断SPI传输的详细状态转换。"
+      "field": "内部数据路径",
+      "reason": "缺少data_in到data_out的传输路径、移位寄存器或FIFO的实例信息，无法推断数据收发机制。"
     },
     {
-      "field": "数据路径宽度与串行转换细节",
-      "reason": "未提供data_in/data_out与串行数据线之间的映射关系，以及移位寄存器的实现细节。"
+      "field": "控制寄存器位域映射",
+      "reason": "未提供CR寄存器各位的定义，CPOL/CPHA的来源和位位置不明确。"
     },
     {
-      "field": "片选信号nss_out的控制逻辑",
-      "reason": "仅知nss_out来自clk_div_u，但缺乏其生成逻辑和与传输时序的关联。"
+      "field": "内部状态机或计数器逻辑",
+      "reason": "缺少always块或状态机描述，rx_cnt、tx_cnt、cnt_buf_rx、cnt_buf_tx等信号的生成逻辑未知。"
     }
   ]
 }
