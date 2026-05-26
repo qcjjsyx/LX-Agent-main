@@ -24,25 +24,29 @@ from typing import Any
 
 try:
     from .event_logger import log_event
-    from .manual_cli import _load_dotenv, apply_runtime_env, build_model_client
+    from .manual_cli import _load_dotenv, apply_runtime_env, build_manual_intent_from_args, build_model_client
+    from .manual_planner import build_manual_plan
     from .manual_workflow import (
+        MANUAL_GENERATION_MODES,
         MANUAL_STAGE_ORDER,
         PROJECT_EVIDENCE_MODE,
-        _artifact_base_from_parser,
+        READING_PATH_EVIDENCE_MODE,
+        apply_manual_plan_to_state,
         _ensure_state,
         _run_current_stage,
-        _select_parser_dir,
     )
 except ImportError:  # pragma: no cover - supports direct script execution
     from event_logger import log_event
-    from manual_cli import _load_dotenv, apply_runtime_env, build_model_client
+    from manual_cli import _load_dotenv, apply_runtime_env, build_manual_intent_from_args, build_model_client
+    from manual_planner import build_manual_plan
     from manual_workflow import (
+        MANUAL_GENERATION_MODES,
         MANUAL_STAGE_ORDER,
         PROJECT_EVIDENCE_MODE,
-        _artifact_base_from_parser,
+        READING_PATH_EVIDENCE_MODE,
+        apply_manual_plan_to_state,
         _ensure_state,
         _run_current_stage,
-        _select_parser_dir,
     )
 
 
@@ -60,7 +64,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    state = build_initial_state(args)
+    try:
+        state = build_initial_state(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     run_id = "manual_timing_" + datetime.now().strftime("%Y%m%d_%H%M%S")
     event_logger = (
         (lambda event_type, **payload: log_event(run_id, event_type, **payload))
@@ -108,8 +116,40 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rtl-inputs", default="rtl", help="RTL input path under project root. Defaults to rtl.")
     parser.add_argument("--top-module", default="arm_soc_top", help="Top module name.")
     parser.add_argument("--audience", choices=("newcomer", "maintainer", "reviewer"), default="newcomer")
+    parser.add_argument(
+        "--evidence-mode",
+        choices=(PROJECT_EVIDENCE_MODE, READING_PATH_EVIDENCE_MODE),
+        default=PROJECT_EVIDENCE_MODE,
+        help="Evidence selection mode.",
+    )
     parser.add_argument("--output", default="", help="Optional manual output path.")
     parser.add_argument("--report-dir", default=str(BASE_DIR / "data" / "logs"), help="Timing report output directory.")
+    parser.add_argument(
+        "--manual-generation-mode",
+        choices=tuple(sorted(MANUAL_GENERATION_MODES)),
+        default="deterministic",
+        help=(
+            "Manual generation mode. deterministic keeps current renderer; "
+            "llm_polish polishes the main manual with LLM after deterministic rendering."
+        ),
+    )
+    parser.add_argument(
+        "--llm-module-page-scope",
+        choices=("none", "top_only", "top_and_direct", "all", "allowlist"),
+        default="top_and_direct",
+        help="Which module pages should be polished by LLM when page polish is enabled.",
+    )
+    parser.add_argument(
+        "--llm-module-page-limit",
+        type=int,
+        default=20,
+        help="Maximum number of module pages to polish with LLM.",
+    )
+    parser.add_argument(
+        "--llm-module-page-allowlist",
+        default="",
+        help="Comma-separated module names to polish when scope=allowlist.",
+    )
     parser.add_argument("--parser-timeout", type=int, default=0, help="Parser timeout seconds.")
     parser.add_argument("--knowledge-timeout", type=int, default=0, help="Knowledge timeout seconds.")
     parser.add_argument("--no-llm", action="store_true", help="Disable source_review model calls.")
@@ -123,33 +163,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def build_initial_state(args: argparse.Namespace) -> dict[str, Any]:
-    project_root = Path(args.project_root).expanduser().resolve()
-    state = _ensure_state(None)
-    state.update(
-        {
-            "active": True,
-            "stage": "references",
-            "project_root": str(project_root),
-            "rtl_inputs": args.rtl_inputs,
-            "top_module": args.top_module,
-            "audience": args.audience,
-            "evidence_mode": PROJECT_EVIDENCE_MODE,
-            "auto_run": False,
-            "force_regenerate": True,
-            "force_stages": list(MANUAL_STAGE_ORDER),
-            "restart_stage": "references",
-            "semantic_enrichment": True,
-            "enrich_modules": args.enrich_modules,
-            "manual_output_override": str(Path(args.output).expanduser().resolve()) if args.output else "",
-            "completed_stages": [],
-            "last_error": "",
-        }
-    )
-    parser_dir = _select_parser_dir(state["project_root"])
-    artifact_base = _artifact_base_from_parser(state["project_root"], parser_dir)
-    state["parser_dir"] = str(parser_dir)
-    state["knowledge_dir"] = str(artifact_base / "knowledge_ir" / state["top_module"])
-    state["manual_context_dir"] = str(artifact_base / "manual_context" / state["top_module"])
+    intent = build_manual_intent_from_args(args, force_full_run=True)
+    plan = build_manual_plan(intent, None, BASE_DIR)
+    if plan.confirmation_required:
+        raise ValueError(plan.confirmation_message)
+    state = apply_manual_plan_to_state(_ensure_state(None), plan)
+    state["auto_run"] = False
+    state["manual_output_override"] = str(Path(args.output).expanduser().resolve()) if args.output else ""
+    state["completed_stages"] = []
+    state["last_error"] = ""
     return state
 
 
@@ -196,6 +218,12 @@ def extract_important_lines(reply: str) -> list[str]:
         "源码复核报告：",
         "保存路径：",
         "模块页目录：",
+        "手册生成模式：",
+        "LLM 润色状态：",
+        "主手册整篇润色状态：",
+        "主手册章节 LLM：",
+        "模块页 LLM 润色：",
+        "回退原因：",
         "手册路径：",
         "审查报告路径：",
     )
@@ -222,6 +250,10 @@ def build_report(args, run_id, state, timings, total_seconds):
             "knowledge_timeout": os.getenv("RTL_MANUAL_KNOWLEDGE_TIMEOUT") or "default",
             "semantic_workers": os.getenv("RTL_MANUAL_SEMANTIC_WORKERS") or "default",
             "source_review_llm": not args.no_llm,
+            "manual_generation_mode": state.get("manual_generation_mode", "deterministic"),
+            "llm_module_page_scope": state.get("llm_module_page_scope", "top_and_direct"),
+            "llm_module_page_limit": state.get("llm_module_page_limit", 20),
+            "llm_module_page_allowlist": state.get("llm_module_page_allowlist", ""),
         },
         "timings": timings,
         "artifacts": {
@@ -280,6 +312,11 @@ def print_header(args, state, model, run_id):
     print(f"- rtl_inputs: {state['rtl_inputs']}  (source is expected at rtl/rtl for this repo)")
     print(f"- top_module: {state['top_module']}")
     print(f"- force_regenerate: true")
+    print(f"- manual_generation_mode: {state.get('manual_generation_mode', 'deterministic')}")
+    print(f"- llm_module_page_scope: {state.get('llm_module_page_scope', 'top_and_direct')}")
+    print(f"- llm_module_page_limit: {state.get('llm_module_page_limit', 20)}")
+    if state.get("llm_module_page_allowlist"):
+        print(f"- llm_module_page_allowlist: {state.get('llm_module_page_allowlist')}")
     print(f"- source_review_model: {model or 'disabled'}")
     print(f"- report_dir: {Path(args.report_dir).expanduser().resolve()}")
     print("")

@@ -46,11 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 3,
+    "count": 4,
     "by_type": {
       "assignment_interpretation": 1,
       "interface_intent": 1,
-      "module_role": 1
+      "module_role": 1,
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -60,26 +61,25 @@
         "type": "module",
         "module": "uart_tx"
       },
-      "summary": "UART发送模块，负责将并行数据转换为串行比特流并通过tx_pin输出",
+      "summary": "该模块负责将并行数据转换为串行比特流，并通过单线 tx_pin 发送，实现 UART 发送功能。",
       "subject": "uart_tx",
-      "explanation": "模块通过tx_data和tx_data_valid接收并行数据，使用tx_data_ready进行握手控制，最终通过tx_pin输出串行数据",
+      "explanation": "模块具有数据输入 tx_data[7:0] 和握手信号 tx_data_valid/tx_data_ready，表明其从系统总线接收并行数据。输出 tx_pin 由内部 tx_reg 驱动，表明串行化过程在内部完成。",
       "signals": [
         "tx_data",
         "tx_data_valid",
         "tx_data_ready",
-        "tx_pin"
+        "tx_pin",
+        "tx_reg"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/uart_tx.json",
-          "path": "interface"
+          "source": "knowledge_ir/modules/uart_tx.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/uart_tx.json",
-          "path": "interface"
+          "source": "parser_pipeline_rtl/modules/uart_tx.json"
         }
       ],
       "id": "semantic:module:uart_tx:module_role:001"
@@ -90,9 +90,9 @@
         "type": "module",
         "module": "uart_tx"
       },
-      "summary": "基于valid-ready握手的并行数据输入接口，用于接收待发送的8位数据",
-      "subject": "数据输入接口",
-      "explanation": "tx_data提供8位并行数据，tx_data_valid指示数据有效，tx_data_ready表示模块可接收新数据，构成标准valid-ready握手协议",
+      "summary": "该接口实现了一个标准的 valid-ready 握手协议，用于从系统总线接收待发送的并行数据。",
+      "subject": "数据输入接口 (tx_data, tx_data_valid, tx_data_ready)",
+      "explanation": "tx_data_valid 作为有效载荷指示信号，tx_data_ready 作为反压信号，表明模块内部已准备好接收新数据。这种协议常用于流式数据传输。",
       "signals": [
         "tx_data",
         "tx_data_valid",
@@ -106,12 +106,10 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/uart_tx.json",
-          "path": "interface_data_contract"
+          "source": "knowledge_ir/modules/uart_tx.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/uart_tx.json",
-          "path": "interface"
+          "source": "parser_pipeline_rtl/modules/uart_tx.json"
         }
       ],
       "id": "semantic:module:uart_tx:interface_intent:001"
@@ -123,8 +121,8 @@
         "module": "uart_tx"
       },
       "subject": "tx_pin",
-      "summary": "串行输出引脚，由内部移位寄存器tx_reg驱动",
-      "explanation": "tx_pin直接连接到tx_reg，表明串行数据通过移位寄存器逐位输出到外部引脚",
+      "summary": "该赋值将内部串行化寄存器 tx_reg 的值直接驱动到输出引脚 tx_pin，是串行数据输出的关键路径。",
+      "explanation": "赋值 tx_pin = tx_reg 表明 tx_reg 是串行化后的比特流寄存器，其输出直接连接到物理引脚。这是数据路径的核心赋值。",
       "signals": [
         "tx_pin",
         "tx_reg"
@@ -137,29 +135,46 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/uart_tx.json",
-          "path": "assignments"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/uart_tx.json",
-          "path": "flow_graph.assignment_dependencies"
+          "source": "parser_pipeline_rtl/modules/uart_tx.json"
         }
       ],
       "id": "semantic:module:uart_tx:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "uart_tx"
+      },
+      "reason": "紧凑上下文仅提供了接口和顶层赋值，缺少波特率生成、移位寄存器、起始/停止位插入等关键内部逻辑的实现细节。",
+      "subject": "内部串行化逻辑",
+      "needed_source_slice": "always block, assign block, comments",
+      "signals": [
+        "tx_reg",
+        "tx_pin",
+        "tx_data",
+        "tx_data_valid",
+        "tx_data_ready"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "rtl/rtl/memory/uart_tx.v"
+        }
+      ],
+      "id": "semantic:module:uart_tx:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部状态机与移位控制逻辑",
-      "reason": "缺少波特率生成、移位寄存器控制、起始位/停止位插入等关键内部逻辑信息"
+      "field": "内部串行化逻辑",
+      "reason": "缺少内部事件流和关键组件连接信息，无法推断波特率生成、移位寄存器、起始/停止位插入等具体实现细节。"
     },
     {
-      "field": "内部事件流",
-      "reason": "未提供内部事件流信息，无法确定数据加载、移位、发送完成等时序关系"
-    },
-    {
-      "field": "关键组件连接",
-      "reason": "未提供内部组件实例及其连接关系，无法分析模块内部结构"
+      "field": "状态机或控制逻辑",
+      "reason": "没有提供内部状态机、计数器或控制逻辑的详细信息，无法确定数据串行化的具体时序和控制流程。"
     }
   ]
 }

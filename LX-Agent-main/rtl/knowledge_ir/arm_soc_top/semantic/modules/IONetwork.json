@@ -63,20 +63,20 @@
         "type": "module",
         "module": "IONetwork"
       },
-      "summary": "2x2 片上网络路由器节点，负责在四个方向（东、西、南、北）和本地端口之间路由事件驱动消息。",
+      "summary": "2x2 片上网络路由器节点阵列，负责在四个节点之间路由事件驱动信号和51位消息负载。",
       "subject": "IONetwork",
-      "explanation": "模块实例化了四个 nodeTop 实例（node_00、node_01、node_10、node_11），形成一个 2x2 网格。每个 nodeTop 处理来自其相邻节点和本地端口的驱动事件，并将驱动事件转发到其他节点。事件流证据显示，每个输入驱动事件都会传播到所有 12 个输出驱动事件，表明这是一个全连接或广播式路由器。",
+      "explanation": "模块实例化四个nodeTop实例（node_00, node_01, node_10, node_11），形成2x2网格。每个节点通过事件驱动信号（i_drive*）和消息负载（*InMsg_51）与外部及相邻节点连接。事件流分析显示每个输入事件可到达所有12个输出事件，表明模块实现全连通或广播路由。",
       "signals": [
         "i_driveEast_10",
         "i_driveLocal_00",
         "i_driveNorth_01",
         "i_driveSouth_00",
         "i_driveWest_00",
-        "o_driveEast_10",
-        "o_driveLocal_00",
-        "o_driveNorth_01",
-        "o_driveSouth_00",
-        "o_driveWest_00"
+        "i_eastInMsg_51_10",
+        "i_localInMsg_51_00",
+        "i_northInMsg_51_01",
+        "i_southInMsg_51_00",
+        "i_westInMsg_51_00"
       ],
       "instances": [
         "node_00",
@@ -123,13 +123,13 @@
         "type": "module",
         "module": "IONetwork"
       },
-      "summary": "模块根据输入驱动事件，将 51 位消息数据从输入端口路由到相应的输出端口。",
-      "subject": "事件驱动消息路由",
-      "explanation": "事件-负载合约将每个输入驱动事件（i_drive*）与一个或多个输入消息数据（i_*InMsg_51_*）关联起来。类似地，输出驱动事件（o_drive*）与输出消息数据（o_*Msg_51_*）关联。这表明驱动事件选通或控制着相应消息数据的传输。自由信号（i_free*、o_free*）可能表示下游节点已准备好接收新消息（握手机制）。",
+      "summary": "模块根据输入事件驱动信号，将51位消息负载从输入端口路由到所有输出端口，实现全广播或全连通路由。",
+      "subject": "事件驱动路由与消息转发",
+      "explanation": "每个输入事件（如i_driveEast_10）通过4步内部事件流到达所有12个输出事件（如o_driveEast_10, o_driveLocal_10等）。消息负载（如i_eastInMsg_51_10）通过节点实例（node_10）转发到对应输出（如o_eastMsg_51_10）。空闲信号（i_free*）用于流控，指示下游节点可接收新消息。",
       "signals": [
         "i_driveEast_10",
-        "i_eastInMsg_51_10",
         "o_driveEast_10",
+        "i_eastInMsg_51_10",
         "o_eastMsg_51_10",
         "i_freeEast_10",
         "o_freeEast_10"
@@ -142,19 +142,29 @@
       ],
       "related_flows": [
         "flow_000_IONetwork_i_driveEast_10",
-        "flow_001_IONetwork_i_driveEast_11"
+        "flow_001_IONetwork_i_driveEast_11",
+        "flow_002_IONetwork_i_driveLocal_00",
+        "flow_003_IONetwork_i_driveLocal_01",
+        "flow_004_IONetwork_i_driveLocal_10",
+        "flow_005_IONetwork_i_driveLocal_11",
+        "flow_006_IONetwork_i_driveNorth_01",
+        "flow_007_IONetwork_i_driveNorth_11",
+        "flow_008_IONetwork_i_driveSouth_00",
+        "flow_009_IONetwork_i_driveSouth_10",
+        "flow_010_IONetwork_i_driveWest_00",
+        "flow_011_IONetwork_i_driveWest_01"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "interface_data_contract"
+          "path": "internal_event_flow"
         },
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "interface"
+          "path": "key_components_connections"
         }
       ],
       "id": "semantic:module:IONetwork:structural_responsibility:001"
@@ -166,15 +176,21 @@
         "module": "IONetwork"
       },
       "subject": "node_00, node_01, node_10, node_11",
-      "summary": "这四个 nodeTop 实例构成了 2x2 网格的四个路由器节点，每个节点处理来自其本地端口和两个相邻节点的驱动事件。",
-      "explanation": "关键组件连接显示，每个 nodeTop 实例都连接到其本地端口（例如，node_00 连接到 i_driveLocal_00）以及两个相邻节点（例如，node_00 通过 w_drive00201 连接到 node_01，通过 w_drive00210 连接到 node_10）。这种连接模式形成了一个 2x2 的网格拓扑。每个节点还接收来自其相邻节点的消息数据（例如，node_00 接收 i_localInMsg_51_00、i_southInMsg_51_00、i_westInMsg_51_00）。",
+      "summary": "四个nodeTop实例构成2x2网格，每个节点处理来自本地、南、西方向的事件和消息，并转发到北、东、本地方向。",
+      "explanation": "每个节点实例（如node_00）接收来自本地（i_driveLocal_00）、南（i_driveSouth_00）、西（i_driveWest_00）的事件，以及来自相邻节点（node_01的w_drive01200和node_10的w_drive10200）的事件。输出事件包括本地（o_driveLocal_00）、南（o_driveSouth_00）、西（o_driveWest_00），以及转发到相邻节点（node_01的w_drive00201和node_10的w_drive00210）。消息负载通过*InMsg_51和*oMsg_51端口在节点间传递。",
       "signals": [
         "i_driveLocal_00",
+        "i_driveSouth_00",
+        "i_driveWest_00",
+        "w_drive01200",
+        "w_drive10200",
+        "o_driveLocal_00",
+        "o_driveSouth_00",
+        "o_driveWest_00",
         "w_drive00201",
         "w_drive00210",
         "i_localInMsg_51_00",
-        "i_southInMsg_51_00",
-        "i_westInMsg_51_00"
+        "o_localMsg_51_00"
       ],
       "instances": [
         "node_00",
@@ -197,7 +213,7 @@
         },
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "key_component_connections"
+          "path": "key_components_connections"
         }
       ],
       "id": "semantic:module:IONetwork:component_role:001"
@@ -208,9 +224,9 @@
         "type": "module",
         "module": "IONetwork"
       },
-      "summary": "每个方向（东、西、南、北、本地）的接口由三个信号组组成：驱动事件、消息数据和自由信号，共同实现一个基于信用的流控制协议。",
-      "subject": "事件-负载-自由信号接口",
-      "explanation": "事件-负载合约将每个驱动事件（i_drive*）与一个或多个消息数据输入（i_*InMsg_51_*）以及一个自由信号输出（o_free*）配对。类似地，输出驱动事件（o_drive*）与消息数据输出（o_*Msg_51_*）和自由信号输入（i_free*）配对。这种模式表明，驱动事件表示数据有效，自由信号表示接收方已准备好接收新数据，从而形成一个简单的握手或基于信用的流控制机制。",
+      "summary": "每个方向（东、西、南、北、本地）的接口由事件驱动信号、51位消息负载和空闲信号组成，实现基于握手的消息传递。",
+      "subject": "事件-消息-空闲三线接口",
+      "explanation": "事件驱动信号（如i_driveEast_10）触发消息负载（如i_eastInMsg_51_10）的传输。空闲信号（如o_freeEast_10）指示发送方当前消息已被接收，可发送新消息。事件-负载-空闲契约显示每个事件对应一组负载和空闲信号，形成完整的传输协议。",
       "signals": [
         "i_driveEast_10",
         "i_eastInMsg_51_10",
@@ -231,11 +247,11 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "interface_data_contract"
+          "path": "interface"
         },
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "interface"
+          "path": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:IONetwork:interface_intent:001"
@@ -246,14 +262,16 @@
         "type": "module",
         "module": "IONetwork"
       },
-      "summary": "手册应重点描述 2x2 网格拓扑、每个 nodeTop 实例的路由行为以及基于事件-负载-自由信号的流控制协议。",
-      "subject": "2x2 网格路由器的路由和流控制",
-      "explanation": "模块的核心功能是路由，由四个 nodeTop 实例实现。事件流证据表明，每个输入驱动事件都会广播到所有输出，但实际的路由决策可能在 nodeTop 内部进行。流控制协议对于理解数据如何在不丢失的情况下传输至关重要。应避免详细列出所有端口，而是解释接口的语义。",
+      "summary": "手册应重点描述2x2网格拓扑、事件驱动路由的全连通特性，以及基于空闲信号的流控协议。",
+      "subject": "路由拓扑与流控机制",
+      "explanation": "模块核心功能是事件驱动的消息广播路由。每个输入事件可到达所有输出，表明非确定性路由或广播。空闲信号（i_free*/o_free*）用于流控，但契约显示输入事件对应输出空闲信号，输出事件对应输入空闲信号，形成握手。需明确路由算法（如XY路由或泛洪）和流控细节。",
       "signals": [
         "i_driveEast_10",
-        "o_driveLocal_00",
+        "o_driveEast_10",
         "i_freeEast_10",
-        "o_freeLocal_00"
+        "o_freeEast_10",
+        "i_eastInMsg_51_10",
+        "o_eastMsg_51_10"
       ],
       "instances": [
         "node_00",
@@ -263,23 +281,33 @@
       ],
       "related_flows": [
         "flow_000_IONetwork_i_driveEast_10",
-        "flow_002_IONetwork_i_driveLocal_00"
+        "flow_001_IONetwork_i_driveEast_11",
+        "flow_002_IONetwork_i_driveLocal_00",
+        "flow_003_IONetwork_i_driveLocal_01",
+        "flow_004_IONetwork_i_driveLocal_10",
+        "flow_005_IONetwork_i_driveLocal_11",
+        "flow_006_IONetwork_i_driveNorth_01",
+        "flow_007_IONetwork_i_driveNorth_11",
+        "flow_008_IONetwork_i_driveSouth_00",
+        "flow_009_IONetwork_i_driveSouth_10",
+        "flow_010_IONetwork_i_driveWest_00",
+        "flow_011_IONetwork_i_driveWest_01"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "key_instances"
-        },
         {
           "source": "knowledge_ir/modules/IONetwork.json",
           "path": "internal_event_flow"
         },
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "interface_data_contract"
+          "path": "event_payload_contracts"
+        },
+        {
+          "source": "knowledge_ir/modules/IONetwork.json",
+          "path": "key_components_connections"
         }
       ],
       "id": "semantic:module:IONetwork:documentation_focus:001"
@@ -290,18 +318,14 @@
         "type": "module",
         "module": "IONetwork"
       },
-      "reason": "紧凑上下文仅显示 IONetwork 模块的顶层连接和事件流，但未提供 nodeTop 实例内部的路由决策逻辑。需要查看 nodeTop 的 RTL 源代码以了解其如何根据输入驱动事件选择输出。",
-      "subject": "nodeTop 内部路由逻辑",
-      "needed_source_slice": "module_source",
+      "reason": "事件流显示全连通，但未说明路由算法（如XY路由、泛洪或自适应）。空闲信号契约显示输入事件对应输出空闲，输出事件对应输入空闲，但流控握手的具体时序和条件未知。",
+      "subject": "路由算法与流控细节",
+      "needed_source_slice": "always block, assign block, comments",
       "signals": [
-        "w_drive00201",
-        "w_drive00210",
-        "w_drive01200",
-        "w_drive01211",
-        "w_drive10200",
-        "w_drive10211",
-        "w_drive11201",
-        "w_drive11210"
+        "i_driveEast_10",
+        "o_freeEast_10",
+        "o_driveEast_10",
+        "i_freeEast_10"
       ],
       "instances": [
         "node_00",
@@ -315,15 +339,15 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "key_instances"
+          "path": "internal_event_flow"
         },
         {
           "source": "knowledge_ir/modules/IONetwork.json",
-          "path": "key_component_connections"
+          "path": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:IONetwork:source_review_request:001"
@@ -331,8 +355,12 @@
   ],
   "evidence_gaps": [
     {
-      "field": "消息数据路由",
-      "reason": "紧凑上下文未显示消息数据（i_*InMsg_51_*）如何通过 nodeTop 实例路由到输出消息数据（o_*Msg_51_*）。事件流仅跟踪驱动事件，未跟踪数据路径。需要查看 nodeTop 的 RTL 源代码或更详细的数据流分析。"
+      "field": "路由算法",
+      "reason": "事件流显示每个输入事件到达所有输出，但未说明路由算法（如XY路由、泛洪或自适应）。需RTL源码确认。"
+    },
+    {
+      "field": "流控握手时序",
+      "reason": "空闲信号契约显示输入事件对应输出空闲，输出事件对应输入空闲，但流控握手的具体时序和条件未知。需RTL源码确认。"
     }
   ]
 }

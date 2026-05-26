@@ -1,8 +1,8 @@
 # 模块 `spi_s`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/spi_s.v`。
-- 职责：AI 推断：该模块是SPI从设备控制器，负责在SPI总线上作为从机接收和发送数据，并支持CRC校验。。
-- 说明：模块具有数据输入TXCRC和data_in，数据输出data_out，以及内部信号busy、tx、rx_done、tx_done、sclk_rise和crc_done，表明其处理SPI从机数据传输和CRC计算。
+- 职责：AI 推断：该模块是SPI从机核心控制器，负责在SPI从机模式下处理数据收发、时钟同步和CRC校验。。
+- 说明：模块通过assign依赖中的busy、tx、rx_done、tx_done、sclk_rise和crc_done信号，表明其核心功能是管理SPI从机传输状态、数据移位、时钟边沿检测和CRC计算完成标志。
 
 ## 1. 层级位置
 
@@ -52,8 +52,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `tx` | rxonly ? 1'b0 :(CPHA ? tx_reg :((tx_cnt == 4'b0) ? tx_reg0 : tx_reg)) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | unknown | `rx_done` | DFF ? ((~rx_cnt[3]) & cnt_buf_rx) : ((~rx_cnt[2]) & cnt_buf_rx) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | unknown | `tx_done` | DFF ? ((~tx_cnt[3]) & cnt_buf_tx) : ((~tx_cnt[2]) & cnt_buf_tx) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | unknown | `sclk_rise` | S_en ? (~sclk_buf) & sclk : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | unknown | `crc_done` | DFF ? ((~crc_cnt[3]) & cnt_buf_crc) : ((~crc_cnt[2]) & cnt_buf_crc) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | unknown | `rx_done` | DFF ? ((~rx_cnt[3]) & cnt_buf_rx) : ((~rx_cnt[2]) & cnt_buf_rx) | AI 推断：这三个assign根据DFF配置和计数器状态生成接收、发送和CRC完成的脉冲标志。 |
+| `assign_3` | unknown | `tx_done` | DFF ? ((~tx_cnt[3]) & cnt_buf_tx) : ((~tx_cnt[2]) & cnt_buf_tx) | AI 推断：这三个assign根据DFF配置和计数器状态生成接收、发送和CRC完成的脉冲标志。 |
+| `assign_4` | unknown | `sclk_rise` | S_en ? (~sclk_buf) & sclk : 1'b0 | AI 推断：该assign检测SPI时钟的上升沿，仅在S_en使能时有效。 |
+| `assign_5` | unknown | `crc_done` | DFF ? ((~crc_cnt[3]) & cnt_buf_crc) : ((~crc_cnt[2]) & cnt_buf_crc) | AI 推断：这三个assign根据DFF配置和计数器状态生成接收、发送和CRC完成的脉冲标志。 |
 | `assign_0` | unknown | `busy` | enable \| !TXE \| crc_en | 证据不足：No Semantic Layer assignment interpretation is available. |

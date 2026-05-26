@@ -1,8 +1,8 @@
 # 模块 `IONet_slot`
 
 - 源文件：`rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v`。
-- 职责：AI 推断：该模块是SoC内部CPU与外围设备（UART、SPI、I2C、PWM、Timer、GPIO、WatchDog）之间的NoC（片上网络）桥接与路由节点。。
-- 说明：模块通过CPU2NoC实例接收CPU的驱动事件和数据，并通过IONetwork实例（uut）将事件和数据路由到各个外设，同时收集外设的响应事件和数据，再通过CPU2NoC实例返回给CPU。接口中的事件驱动信号（i_drvFCPU/o_drv2CPU）和自由信号（i_freeFCPU/o_free2CPU）构成了CPU与NoC之间的握手机制。
+- 职责：AI 推断：该模块是SoC中CPU与片上网络(NoC)之间的桥接与外围设备汇聚节点，负责将CPU的驱动事件和数据分发到各外围设备，并收集外围设备的响应返回CPU。。
+- 说明：模块通过cpu2noc_instance与CPU接口，通过uut(IONetwork)实例连接多个外围设备(IIC, PWM, UART, SPI, Timer, WatchDog, GPIO)，形成星型拓扑。事件流从CPU输入，经模块分发到各外设，再汇聚返回CPU。
 
 ## 1. 层级位置
 
@@ -107,7 +107,7 @@ IONet_slot
 - Payload：`i_drvFCPU` -> `i_dataFCPU_51 [50:0]`。
 - 输出/影响：`o_drv2CPU`。
 - 结构复杂度：branch=2，join=2，blocking=0。
-- AI 推断：手册应重点描述该流的请求-响应环路结构，强调 cpu2noc_instance 和 uut 的路由与桥接角色，并明确指出数据载荷 i_dataFCPU_51 的流向需要 RTL 源码确认。
+- AI 推断：i_drvFCPU 事件携带一个 51 位的数据载荷 i_dataFCPU_51，该载荷可能包含目标外设地址、命令或数据。
 
 
 ## 5. 内部组件与 assign 影响

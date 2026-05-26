@@ -1,8 +1,8 @@
 # 模块 `I2C2NoC`
 
 - 源文件：`rtl/rtl/IONet/IIC/I2C2NoC.v`。
-- 职责：AI 推断：验证了模块将输入数据拆解并重组输出数据，其中插入I2C读数据（RDATA）。。
-- 说明：切片2行73-74声明了r_middle_24和r_last_10寄存器；切片5行118表明r_dataFNoc锁存i_dataFNoc_51全51位；切片7行204-207表明r_mode0有效时，RD（读/写指示）取自r_dataFNoc[50]，ADDRESS取自[44:42]，WDATA取自[17:10]；切片8行228表明RDATA在w_firefifo1触发时更新为w_rdata；切片9行236将输出拼接为{r_dataFNoc[50], [49:42], r_middle_24, RDATA, r_last_10}。该拼接直接对应claim描述的结构。
+- 职责：AI 推断：该模块作为I2C主控制器（mi2cv2）与片上网络（NoC）之间的桥接与数据同步模块，负责将I2C总线事件转换为NoC兼容的驱动事件，并管理数据路径的延迟与同步。。
+- 说明：模块通过事件驱动接口（i_drvFNoc/o_drv2Noc）与NoC交互，内部使用多个延迟单元（delay*）和FIFO（cfifo1/cfifo2/cfifo3_0）对I2C主控制器（U1）的驱动事件进行流水线延迟和同步，最终输出到NoC。数据路径（i_dataFNoc_51/o_data2Noc_51）通过组合逻辑重组（assign index 2）实现数据映射。
 
 ## 1. 层级位置
 
@@ -65,7 +65,7 @@ I2C2NoC
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
 - 输出/影响：`o_drv2Noc`。
 - 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：最终手册应重点描述该流作为纯事件驱动路径的结构，强调FIFO的选通作用和延迟链的累积延迟。
+- AI 推断：事件i_drvFNoc的到达触发数据i_dataFNoc_51的采样和传播，但数据路径与事件路径在FIFO和延迟链中保持同步。
 
 
 ## 5. 内部组件与 assign 影响
@@ -82,6 +82,6 @@ I2C2NoC
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `o_free2Noc` | w_freeFfifo2 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `o_data2Noc_51` | {r_dataFNoc[50],r_dataFNoc[49:42],r_middle_24,RDATA,r_last_10} | AI 推断：该赋值是模块的核心数据路径操作，将I2C读取的数据（RDATA）整合到NoC输出数据包中。 |
+| `assign_1` | control_path | `o_free2Noc` | w_freeFfifo2 | AI 推断：输出释放信号，直接由内部释放链信号w_freeFfifo2驱动。 |
+| `assign_2` | data_path | `o_data2Noc_51` | {r_dataFNoc[50],r_dataFNoc[49:42],r_middle_24,RDATA,r_last_10} | AI 推断：输出数据重组，将内部数据信号（r_dataFNoc, r_middle_24, RDATA, r_last_10）按位拼接为51位输出数据。 |
 | `assign_0` | unknown | `RESETN` | rst | 证据不足：No Semantic Layer assignment interpretation is available. |

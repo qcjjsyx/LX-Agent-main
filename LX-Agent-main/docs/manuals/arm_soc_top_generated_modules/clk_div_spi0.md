@@ -1,8 +1,8 @@
 # 模块 `clk_div_spi0`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI0/clk_div_spi0.v`。
-- 职责：AI 推断：模块通过组合逻辑从cnt[BR]与nss_out生成sclk_m，再在bit8_out有效时输出sclk_out，实现了基于BR的分频和片选门控。。
-- 说明：slice 5 第105行assign sclk_m = nss_out ? 1'b0 : cnt[BR]；第106行assign sclk_out = bit8_out ? sclk_m : 1'b0。片选无效(nss_out为高)时sclk_m强制为低；bit8_out由sclk_cnt非零决定(第104行)。sclk_cnt在sclk_m的下降沿计数(第109-115行)，从0到32循环，用于指示8位传输进行中。该结构符合模块角色描述。
+- 职责：AI 推断：该模块根据波特率选择信号BR和片选信号nss_out，从内部计数器cnt生成SPI主时钟sclk_out。。
+- 说明：模块接收3位波特率选择BR，输出6位计数器值sclk_cnt，并通过组合逻辑生成sclk_out。sclk_out在nss_out有效（低电平）时由cnt[BR]驱动，在bit8_out有效时输出，否则保持低电平。这表明模块是SPI时钟分频器，负责根据配置产生串行时钟。
 
 ## 1. 层级位置
 
@@ -59,6 +59,6 @@ clk_div_spi0
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 : cnt[BR] | AI 推断：该赋值在片选有效时从计数器cnt的BR位提取分频时钟，片选无效时强制为低。 |
-| `assign_2` | unknown | `sclk_out` | bit8_out ? sclk_m : 1'b0 | AI 推断：该赋值在8位传输进行中输出分频时钟，否则保持为低。 |
-| `assign_0` | unknown | `bit8_out` | (sclk_cnt != 0) ? 1'b1 : 1'b0 | AI 推断：该赋值将sclk_cnt非零条件转换为8位传输进行中的标志信号。 |
+| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 : cnt[BR] | AI 推断：根据片选信号nss_out和波特率选择BR，从内部计数器cnt中提取原始分频时钟。 |
+| `assign_2` | unknown | `sclk_out` | bit8_out ? sclk_m : 1'b0 | AI 推断：最终的SPI主时钟输出，由传输使能bit8_out和原始分频时钟sclk_m共同门控。 |
+| `assign_0` | unknown | `bit8_out` | (sclk_cnt != 0) ? 1'b1 : 1'b0 | AI 推断：指示sclk_cnt非零，作为sclk_out的使能信号。 |

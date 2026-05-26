@@ -62,9 +62,9 @@
         "type": "module",
         "module": "reverse"
       },
-      "summary": "该模块根据 reverseType 选择信号，对输入操作数 oprand 执行位反转、字节反转、半字反转或带符号扩展的半字反转操作，并输出结果 result。",
+      "summary": "该模块根据 reverseType 选择信号，对 32 位操作数 oprand 执行位反转、字节反转、半字反转或带符号扩展的半字反转操作，并输出结果 result。",
       "subject": "reverse",
-      "explanation": "模块的 assign 依赖显示，w_rbitResult_32、w_revResult_32、w_rev16Result_32 和 w_revshResult_32 分别对应四种不同的反转操作，最终由 reverseType 通过多路选择器决定输出 result。这符合一个数据路径中执行多种反转功能的角色。",
+      "explanation": "模块的输入为数据 oprand 和控制信号 reverseType，输出为 result。assign 依赖显示，模块内部生成了 w_rbitResult_32（位反转）、w_revResult_32（字节反转）、w_rev16Result_32（半字反转）和 w_revshResult_32（带符号扩展的半字反转）四个中间结果，最终通过多路选择器根据 reverseType 的值选择输出。这符合一个数据格式转换单元的设计意图。",
       "signals": [
         "oprand",
         "result",
@@ -92,16 +92,17 @@
         "type": "module",
         "module": "reverse"
       },
-      "summary": "模块负责生成四种反转结果（位反转、字节反转、半字反转、带符号扩展的半字反转），并根据 reverseType 选择其一作为最终输出。",
-      "subject": "数据反转与选择",
-      "explanation": "assign 依赖 0-31 生成 w_rbitResult_32（位反转），32-35 生成 w_revResult_32（字节反转），36-39 生成 w_rev16Result_32（半字反转），40-42 生成 w_revshResult_32（带符号扩展的半字反转）。assign 43 使用 reverseType 进行多路选择。",
+      "summary": "模块负责将输入的 32 位操作数 oprand 按照四种不同的反转模式进行位级或字节级重排，并输出结果。",
+      "subject": "数据反转与重排",
+      "explanation": "通过分析 assign 依赖，模块内部计算了四种结果：w_rbitResult_32 将 oprand 的位顺序完全反转；w_revResult_32 将 oprand 的四个字节顺序反转；w_rev16Result_32 将 oprand 的两个半字内部字节交换；w_revshResult_32 将 oprand 的低半字字节交换后，高半字进行符号扩展。最终结果由 reverseType 选择。",
       "signals": [
+        "oprand",
+        "result",
+        "reverseType",
         "w_rbitResult_32",
         "w_revResult_32",
         "w_rev16Result_32",
-        "w_revshResult_32",
-        "reverseType",
-        "result"
+        "w_revshResult_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -112,6 +113,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:structural_responsibility:001"
@@ -123,8 +127,8 @@
         "module": "reverse"
       },
       "subject": "w_rbitResult_32",
-      "summary": "该信号通过对 oprand 的位进行反转（bit-reverse）生成，用于实现位反转操作。",
-      "explanation": "assign 0-31 将 oprand 的每一位映射到 w_rbitResult_32 的相反位序上，例如 assign 0 将 oprand[0] 赋值给 w_rbitResult_32[31]。这是典型的位反转数据路径。",
+      "summary": "该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。",
+      "explanation": "从 assign 0 到 31，每条语句将 oprand 的第 N 位赋值给 w_rbitResult_32 的第 (31-N) 位。这构成了一个纯粹的位级重排数据路径，没有控制逻辑参与。",
       "signals": [
         "w_rbitResult_32",
         "oprand"
@@ -163,7 +167,7 @@
         "30",
         "31"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -172,6 +176,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:assignment_interpretation:001"
@@ -183,8 +190,8 @@
         "module": "reverse"
       },
       "subject": "w_revResult_32",
-      "summary": "该信号通过对 oprand 的字节进行反转（byte-reverse）生成，用于实现字节反转操作。",
-      "explanation": "assign 32-35 将 oprand 的四个字节（[7:0], [15:8], [23:16], [31:24]）按相反顺序赋值给 w_revResult_32。例如 assign 32 将 oprand[7:0] 赋值给 w_revResult_32[31:24]。",
+      "summary": "该信号通过 4 条连续赋值语句，将 oprand 的四个字节顺序反转，生成字节反转结果。",
+      "explanation": "assign 32 到 35 分别将 oprand 的 [7:0] 赋值给 w_revResult_32 的 [31:24]，[15:8] 赋值给 [23:16]，[23:16] 赋值给 [15:8]，[31:24] 赋值给 [7:0]。这实现了字节级的重排。",
       "signals": [
         "w_revResult_32",
         "oprand"
@@ -195,7 +202,7 @@
         "34",
         "35"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -204,6 +211,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:assignment_interpretation:002"
@@ -215,8 +225,8 @@
         "module": "reverse"
       },
       "subject": "w_rev16Result_32",
-      "summary": "该信号通过对 oprand 的半字进行反转（halfword-reverse）生成，用于实现半字反转操作。",
-      "explanation": "assign 36-39 将 oprand 的两个半字（[15:0] 和 [31:16]）内部的字节顺序进行反转。例如 assign 36 将 oprand[23:16] 赋值给 w_rev16Result_32[31:24]。",
+      "summary": "该信号通过 4 条连续赋值语句，将 oprand 的两个半字内部的字节顺序反转，生成半字反转结果。",
+      "explanation": "assign 36 到 39 分别将 oprand 的 [23:16] 赋值给 w_rev16Result_32 的 [31:24]，[31:24] 赋值给 [23:16]，[7:0] 赋值给 [15:8]，[15:8] 赋值给 [7:0]。这实现了每个 16 位半字内部的字节交换。",
       "signals": [
         "w_rev16Result_32",
         "oprand"
@@ -227,7 +237,7 @@
         "38",
         "39"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -236,6 +246,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:assignment_interpretation:003"
@@ -247,8 +260,8 @@
         "module": "reverse"
       },
       "subject": "w_revshResult_32",
-      "summary": "该信号通过对 oprand 的低半字进行字节反转，并对高半字进行符号扩展，用于实现带符号扩展的半字反转操作。",
-      "explanation": "assign 42 将 oprand[15:8] 赋值给 w_revshResult_32[7:0]，assign 41 将 w_signExtendOp1_24（由 assign 40 根据 oprand[7] 进行符号扩展得到）赋值给 w_revshResult_32[31:8]。这实现了对低半字（[15:0]）的字节反转，并将结果的高24位进行符号扩展。",
+      "summary": "该信号通过组合 w_signExtendOp1_24 和 oprand 的部分位，生成带符号扩展的半字反转结果。",
+      "explanation": "assign 42 将 oprand 的 [15:8] 赋值给 w_revshResult_32 的 [7:0]，实现了低半字的字节交换。assign 41 将符号扩展后的 24 位信号 w_signExtendOp1_24 赋值给 w_revshResult_32 的 [31:8]，实现了高半字的符号扩展。w_signExtendOp1_24 由 assign 40 根据 oprand[7] 的值进行符号扩展。",
       "signals": [
         "w_revshResult_32",
         "oprand",
@@ -259,7 +272,7 @@
         "41",
         "42"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -268,6 +281,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:assignment_interpretation:004"
@@ -279,8 +295,8 @@
         "module": "reverse"
       },
       "subject": "result",
-      "summary": "该信号是模块的最终输出，通过 reverseType 从四种反转结果中选择一个。",
-      "explanation": "assign 43 显示 result 由 reverseType 控制的多路选择器驱动。reverseType 为 2'b00 时选择 w_rbitResult_32，2'b01 时选择 w_revResult_32，2'b10 时选择 w_rev16Result_32，2'b11 时选择 w_revshResult_32。",
+      "summary": "该信号通过一个嵌套的条件运算符，根据 reverseType 的值从四个中间结果中选择最终输出。",
+      "explanation": "assign 43 实现了 4 选 1 的多路选择器。当 reverseType 为 2'b00 时选择 w_rbitResult_32，2'b01 时选择 w_revResult_32，2'b10 时选择 w_rev16Result_32，2'b11 时选择 w_revshResult_32。这是模块的控制路径，决定了最终的数据输出。",
       "signals": [
         "result",
         "reverseType",
@@ -301,6 +317,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:assignment_interpretation:005"
@@ -311,9 +330,9 @@
         "type": "module",
         "module": "reverse"
       },
-      "summary": "reverseType 是一个2位控制信号，用于选择模块执行的反转操作类型，其编码直接对应四种不同的反转功能。",
+      "summary": "reverseType 是一个 2 位控制输入，用于选择模块内部四种数据反转模式之一。",
       "subject": "控制接口 reverseType",
-      "explanation": "从 assign 43 可以看出，reverseType 的四种编码（00, 01, 10, 11）分别选择位反转、字节反转、半字反转和带符号扩展的半字反转。该信号是模块的控制核心，决定了数据路径的最终输出。",
+      "explanation": "该信号不携带数据，而是作为条件选择器，直接决定了最终输出 result 的数据来源。其编码方式（00, 01, 10, 11）与四种反转操作一一对应，构成了模块的控制面。",
       "signals": [
         "reverseType"
       ],
@@ -329,6 +348,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:interface_intent:001"
@@ -339,17 +361,13 @@
         "type": "module",
         "module": "reverse"
       },
-      "summary": "手册应重点说明四种反转操作（位反转、字节反转、半字反转、带符号扩展的半字反转）的具体行为，以及 reverseType 如何选择输出。",
-      "subject": "反转操作类型与选择逻辑",
-      "explanation": "模块的核心功能是提供多种反转操作，并通过控制信号选择。文档需要清晰描述每种反转操作对输入 oprand 的变换规则，以及 reverseType 的编码与对应关系。",
+      "summary": "手册应重点说明四种反转模式（位反转、字节反转、半字反转、带符号扩展的半字反转）的具体操作和 reverseType 的编码对应关系。",
+      "subject": "反转模式选择与数据路径",
+      "explanation": "模块的核心功能是数据重排，其行为完全由 reverseType 控制。文档需要清晰描述每种模式下的数据变换规则，并明确 reverseType 的编码与模式的对应关系，以便用户正确使用。",
       "signals": [
         "reverseType",
-        "oprand",
         "result",
-        "w_rbitResult_32",
-        "w_revResult_32",
-        "w_rev16Result_32",
-        "w_revshResult_32"
+        "oprand"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -360,6 +378,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/reverse.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/reverse.v"
         }
       ],
       "id": "semantic:module:reverse:documentation_focus:001"

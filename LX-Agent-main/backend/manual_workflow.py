@@ -1,10 +1,15 @@
 import json
 import re
+from dataclasses import asdict
 from pathlib import Path
 
 try:
+    from .manual_intent import parse_manual_intent
+    from .manual_planner import build_manual_plan
     from .tools import run_knowledge_tool, run_parser_tool
 except ImportError:
+    from manual_intent import parse_manual_intent
+    from manual_planner import build_manual_plan
     from tools import run_knowledge_tool, run_parser_tool
 
 
@@ -126,6 +131,13 @@ REFERENCE_FILES = (
 PROJECT_EVIDENCE_MODE = "project"
 READING_PATH_EVIDENCE_MODE = "reading_path"
 VALID_AUDIENCES = {"newcomer", "maintainer", "reviewer"}
+MANUAL_GENERATION_MODES = {
+    "deterministic",
+    "llm_polish",
+    "llm_section_generate",
+    "llm_section_generate_with_page_polish",
+}
+LLM_MODULE_PAGE_SCOPES = {"none", "top_only", "top_and_direct", "all", "allowlist"}
 SOURCE_REVIEW_MAX_MODULES = 20
 SOURCE_REVIEW_MAX_TARGETS_PER_MODULE = 8
 SOURCE_REVIEW_MAX_SNIPPET_LINES = 180
@@ -140,10 +152,25 @@ def should_handle_manual_workflow(user_input, state):
     if is_manual_usage_request(text):
         return True
 
+    intent = parse_manual_intent(text, state)
+
     if state and state.get("active") and state.get("stage") != "done":
         return True
 
     if state and state.get("active") and is_continue_request(text):
+        return True
+
+    if state and intent.intent in {"rerun_workflow", "inspect_status", "cancel_workflow"}:
+        return True
+
+    if intent.intent == "generate_manual":
+        return True
+
+    if intent.intent == "rerun_workflow" and (
+        intent.start_stage
+        or intent.rerun_policy in {"clean_all_and_run", "manual_only"}
+        or is_manual_request(text)
+    ):
         return True
 
     return is_manual_request(text)
@@ -318,6 +345,44 @@ def _reset_from_stage(state, stage):
     _clear_stage_outputs(state, affected_set)
 
 
+def apply_manual_plan_to_state(state, plan):
+    state = _ensure_state(state)
+    affected_stages = set(plan.force_stages or [])
+
+    state["active"] = True
+    state["stage"] = plan.start_stage
+    state["project_root"] = plan.project_root
+    state["rtl_inputs"] = plan.rtl_inputs
+    state["top_module"] = plan.top_module
+    state["audience"] = plan.audience
+    state["evidence_mode"] = plan.evidence_mode
+    state["auto_run"] = plan.auto_run
+    state["semantic_enrichment"] = True
+    state["enrich_modules"] = plan.enrich_modules
+    state["manual_generation_mode"] = _normalize_manual_generation_mode(
+        getattr(plan, "manual_generation_mode", "deterministic")
+    )
+    state["llm_module_page_scope"] = getattr(plan, "llm_module_page_scope", "top_and_direct")
+    state["llm_module_page_limit"] = max(0, int(getattr(plan, "llm_module_page_limit", 20) or 0))
+    state["llm_module_page_allowlist"] = getattr(plan, "llm_module_page_allowlist", "")
+    state["restart_stage"] = plan.start_stage if plan.force_stages else ""
+    state["force_stages"] = list(plan.force_stages or [])
+    state["force_regenerate"] = False
+    state["last_error"] = ""
+
+    if affected_stages:
+        state["completed_stages"] = [
+            item for item in state.get("completed_stages", [])
+            if item not in affected_stages
+        ]
+        _clear_stage_outputs(state, affected_stages)
+
+    _normalize_evidence_selection(state)
+    parser_dir = _select_parser_dir(state["project_root"])
+    _refresh_artifact_paths(state, parser_dir)
+    return state
+
+
 def _clear_stage_outputs(state, affected_stages):
     if "parser" in affected_stages:
         state["parser_result"] = ""
@@ -359,46 +424,172 @@ def _extract_enrich_modules(text):
     return ",".join(modules)
 
 
+def _extract_manual_generation_mode(text):
+    raw_text = text or ""
+    lower_text = raw_text.lower()
+    value = _match_value(
+        raw_text,
+        (
+            r"manual_generation_mode\s*(?:=|:|：|是|为)?\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
+            r"manual_mode\s*(?:=|:|：|是|为)?\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
+            r"手册生成模式\s*(?:=|:|：|是|为)?\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
+            r"手册模式\s*(?:=|:|：|是|为)?\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
+        ),
+    )
+    if value:
+        return _normalize_manual_generation_mode(value)
+
+    deterministic_patterns = (
+        "不用 llm",
+        "不用llm",
+        "不要 llm",
+        "不要llm",
+        "不要让 llm",
+        "不要让llm",
+        "不用模型润色",
+        "不要模型润色",
+        "确定性",
+        "模板生成",
+    )
+    if any(pattern in lower_text for pattern in deterministic_patterns):
+        return "deterministic"
+
+    compact_text = re.sub(r"[\s_-]+", "_", lower_text)
+    if "llm_section_generate_with_page_polish" in compact_text:
+        return "llm_section_generate_with_page_polish"
+    if "llm_section_generate" in compact_text:
+        return "llm_section_generate"
+    if "llm_polish" in compact_text:
+        return "llm_polish"
+
+    if (
+        re.search(r"(?:llm|模型).*(?:章节|按章节).*(?:模块页).*(?:润色|polish)", raw_text, flags=re.IGNORECASE)
+        or re.search(r"(?:模块页).*(?:也)?.*(?:llm|模型).*(?:润色|polish)", raw_text, flags=re.IGNORECASE)
+        or re.search(r"(?:llm|模型).*(?:生成章节|章节内容).*(?:润色模块页)", raw_text, flags=re.IGNORECASE)
+    ):
+        return "llm_section_generate_with_page_polish"
+
+    section_patterns = (
+        r"用\s*(?:llm|模型)\s*(?:按章节)?生成主手册",
+        r"(?:llm|模型)\s*按章节\s*生成(?:主手册)?",
+        r"章节内容\s*用\s*(?:llm|模型)\s*生成",
+        r"(?:llm|模型)\s*生成章节内容",
+    )
+    for pattern in section_patterns:
+        if re.search(pattern, raw_text, flags=re.IGNORECASE):
+            return "llm_section_generate"
+
+    polish_patterns = (
+        r"(?:llm|模型)\s*润色",
+        r"润色\s*(?:主手册|最终手册)",
+        r"用\s*(?:llm|模型)\s*润色手册",
+        r"让\s*模型\s*润色(?:最终)?手册",
+        r"llm\s*polish",
+    )
+    for pattern in polish_patterns:
+        if re.search(pattern, raw_text, flags=re.IGNORECASE):
+            return "llm_polish"
+    return ""
+
+
+def _extract_llm_module_page_options(text):
+    raw_text = text or ""
+    options = {}
+    scope = _match_value(
+        raw_text,
+        (
+            r"llm_module_page_scope\s*(?:=|:|：|是|为)?\s*(top_and_direct|top_only|allowlist|none|all)",
+            r"模块页范围\s*(?:=|:|：|是|为)?\s*(top_and_direct|top_only|allowlist|none|all)",
+        ),
+    )
+    if scope in LLM_MODULE_PAGE_SCOPES:
+        options["llm_module_page_scope"] = scope
+
+    limit = _match_value(raw_text, (r"llm_module_page_limit\s*(?:=|:|：|是|为)?\s*(\d+)",))
+    if limit:
+        try:
+            options["llm_module_page_limit"] = max(0, int(limit))
+        except ValueError:
+            pass
+
+    allowlist = _match_value(
+        raw_text,
+        (
+            r"llm_module_page_allowlist\s*(?:=|:|：|是|为)?\s*([A-Za-z0-9_,$\-\s，]+)",
+            r"模块页白名单\s*(?:=|:|：|是|为)?\s*([A-Za-z0-9_,$\-\s，]+)",
+        ),
+    )
+    if allowlist:
+        modules = [item.strip() for item in re.split(r"[,，\s]+", allowlist) if item.strip()]
+        options["llm_module_page_allowlist"] = ",".join(modules)
+    return options
+
+
+def _normalize_manual_generation_mode(value):
+    mode = (value or "deterministic").strip().lower()
+    if mode in MANUAL_GENERATION_MODES:
+        return mode
+    return "deterministic"
+
+
 def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=None, event_logger=None):
+    reply, manual_state, _intent, _plan = handle_manual_workflow_structured(
+        user_input=user_input,
+        state=state,
+        base_dir=base_dir,
+        client=client,
+        model=model,
+        auto_run=auto_run,
+        event_logger=event_logger,
+    )
+    return reply, manual_state
+
+
+def handle_manual_workflow_structured(user_input, state, base_dir, client, model, auto_run=None, event_logger=None):
     if is_manual_usage_request(user_input):
         usage_state = _ensure_state(state if state is not None else {"active": False})
         if state is None:
             usage_state["active"] = False
-        return build_manual_generation_usage_reply(), usage_state
+        return build_manual_generation_usage_reply(), usage_state, None, None
+
+    previous_state = state
+    intent = parse_manual_intent(user_input, previous_state)
+    if auto_run is not None:
+        intent.auto_run = bool(auto_run)
 
     if (
         state
         and (not state.get("active") or state.get("stage") == "done")
-        and is_manual_request(user_input)
-        and not is_continue_request(user_input)
-        and not _extract_restart_stage(user_input)
+        and intent.intent == "generate_manual"
+        and intent.rerun_policy == "reuse_valid_artifacts"
+        and not intent.start_stage
     ):
         state = None
 
     state = _ensure_state(state)
-    _update_state_from_user_input(state, user_input)
-    _update_execution_mode(state, user_input, auto_run)
 
-    _log_event(
-        event_logger,
-        "manual_workflow_request",
-        skill=MANUAL_SKILL_NAME,
-        stage=state.get("stage"),
-        project_root=state.get("project_root"),
-        rtl_inputs=state.get("rtl_inputs"),
-        top_module=state.get("top_module"),
-        evidence_mode=state.get("evidence_mode"),
-        auto_run=state.get("auto_run"),
-        force_regenerate=state.get("force_regenerate"),
-        force_stages=state.get("force_stages"),
-        semantic_enrichment=state.get("semantic_enrichment"),
-        enrich_modules=state.get("enrich_modules"),
-    )
-
-    if _is_cancel_request(user_input):
+    if intent.intent == "cancel_workflow" or _is_cancel_request(user_input):
         state["active"] = False
         state["stage"] = "cancelled"
-        return "已取消当前代码手册生成流程。", state
+        plan = build_manual_plan(intent, state, base_dir)
+        _log_manual_request(event_logger, state, intent, plan)
+        return "已取消当前代码手册生成流程。", state, asdict(intent), asdict(plan)
+
+    plan = build_manual_plan(intent, state, base_dir)
+
+    if plan.confirmation_required:
+        _log_manual_request(event_logger, state, intent, plan)
+        return _format_reply(
+            state,
+            "需要确认 workflow 执行范围",
+            [
+                plan.confirmation_message or "我无法确定这次请求的 workflow 执行范围。",
+                "请明确回复要继续当前阶段，还是从哪个阶段开始强制重跑。",
+            ],
+        ), state, asdict(intent), asdict(plan)
+
+    state = apply_manual_plan_to_state(state, plan)
+    _log_manual_request(event_logger, state, intent, plan)
 
     if not state.get("top_module"):
         state["stage"] = "awaiting_top_module"
@@ -411,13 +602,18 @@ def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=
                 f"当前 project_root：`{state['project_root']}`",
                 f"当前 rtl_inputs：`{state['rtl_inputs']}`",
             ],
-        ), state
+        ), state, asdict(intent), asdict(plan)
 
     if state.get("stage") in ("collect_params", "awaiting_top_module"):
         state["stage"] = "references"
 
     if not state.get("auto_run", True):
-        return _run_current_stage(state, base_dir, client, model, user_input, event_logger), state
+        return (
+            _run_current_stage(state, base_dir, client, model, user_input, event_logger),
+            state,
+            asdict(intent),
+            asdict(plan),
+        )
 
     replies = []
     for _ in range(10):
@@ -447,7 +643,38 @@ def handle_manual_workflow(user_input, state, base_dir, client, model, auto_run=
         if after_stage == before_stage:
             break
 
-    return _combine_stage_replies(replies), state
+    return _combine_stage_replies(replies), state, asdict(intent), asdict(plan)
+
+
+def _log_manual_request(event_logger, state, intent, plan):
+    _log_event(
+        event_logger,
+        "manual_workflow_request",
+        skill=MANUAL_SKILL_NAME,
+        stage=state.get("stage"),
+        project_root=state.get("project_root"),
+        rtl_inputs=state.get("rtl_inputs"),
+        top_module=state.get("top_module"),
+        evidence_mode=state.get("evidence_mode"),
+        auto_run=state.get("auto_run"),
+        force_regenerate=state.get("force_regenerate"),
+        force_stages=state.get("force_stages"),
+        semantic_enrichment=state.get("semantic_enrichment"),
+        enrich_modules=state.get("enrich_modules"),
+        manual_generation_mode=state.get("manual_generation_mode"),
+        llm_module_page_scope=state.get("llm_module_page_scope"),
+        llm_module_page_limit=state.get("llm_module_page_limit"),
+        llm_module_page_allowlist=state.get("llm_module_page_allowlist"),
+        intent=getattr(intent, "intent", None),
+        rerun_policy=getattr(intent, "rerun_policy", None),
+        parsed_start_stage=getattr(intent, "start_stage", None),
+        plan_start_stage=getattr(plan, "start_stage", None),
+        plan_force_stages=getattr(plan, "force_stages", None),
+        artifact_policy=getattr(plan, "artifact_policy", None),
+        confirmation_required=getattr(plan, "confirmation_required", None),
+        conflicts=getattr(intent, "conflicts", None),
+        questions=getattr(intent, "questions", None),
+    )
 
 
 def _run_current_stage(state, base_dir, client, model, user_input, event_logger=None):
@@ -519,6 +746,19 @@ def _log_event(event_logger, event_type, **payload):
         pass
 
 
+def _count_llm_status(status_dict):
+    counts = {"success": 0, "fallback": 0, "skipped": 0}
+    for item in (status_dict or {}).values():
+        status = item.get("status", "") if isinstance(item, dict) else str(item)
+        if status == "success":
+            counts["success"] += 1
+        elif "skipped" in status:
+            counts["skipped"] += 1
+        elif "fallback" in status or "failed" in status:
+            counts["fallback"] += 1
+    return counts
+
+
 def _ensure_state(state):
     if not state:
         return {
@@ -544,6 +784,19 @@ def _ensure_state(state):
             "last_error": "",
             "manual_output_path": "",
             "manual_output_override": "",
+            "manual_generation_mode": "deterministic",
+            "manual_llm_polish_required": False,
+            "manual_llm_polish_status": "not_requested",
+            "manual_llm_polish_error": "",
+            "manual_llm_validation_error": "",
+            "manual_llm_polish_chars_before": 0,
+            "manual_llm_polish_chars_after": 0,
+            "manual_llm_section_status": {},
+            "manual_llm_page_status": {},
+            "llm_module_page_scope": "top_and_direct",
+            "llm_module_page_limit": 20,
+            "llm_module_page_allowlist": "",
+            "manual_llm_required": False,
             "auto_run": True,
             "force_regenerate": False,
             "force_stages": [],
@@ -575,6 +828,19 @@ def _ensure_state(state):
     state.setdefault("last_error", "")
     state.setdefault("manual_output_path", "")
     state.setdefault("manual_output_override", "")
+    state.setdefault("manual_generation_mode", "deterministic")
+    state.setdefault("manual_llm_polish_required", False)
+    state.setdefault("manual_llm_polish_status", "not_requested")
+    state.setdefault("manual_llm_polish_error", "")
+    state.setdefault("manual_llm_validation_error", "")
+    state.setdefault("manual_llm_polish_chars_before", 0)
+    state.setdefault("manual_llm_polish_chars_after", 0)
+    state.setdefault("manual_llm_section_status", {})
+    state.setdefault("manual_llm_page_status", {})
+    state.setdefault("llm_module_page_scope", "top_and_direct")
+    state.setdefault("llm_module_page_limit", 20)
+    state.setdefault("llm_module_page_allowlist", "")
+    state.setdefault("manual_llm_required", False)
     state.setdefault("auto_run", True)
     state.setdefault("force_regenerate", False)
     state.setdefault("force_stages", [])
@@ -596,15 +862,15 @@ def _update_state_from_user_input(state, user_input):
         if value:
             state[key] = value
 
-    restart_stage = _extract_restart_stage(user_input)
-    if restart_stage:
-        _reset_from_stage(state, restart_stage)
-    elif _wants_regenerate(user_input):
-        state["force_regenerate"] = True
     state["semantic_enrichment"] = True
     enrich_modules = _extract_enrich_modules(user_input)
     if enrich_modules:
         state["enrich_modules"] = enrich_modules
+    manual_generation_mode = _extract_manual_generation_mode(user_input)
+    if manual_generation_mode:
+        state["manual_generation_mode"] = manual_generation_mode
+    for key, value in _extract_llm_module_page_options(user_input).items():
+        state[key] = value
 
     _normalize_evidence_selection(state)
 
@@ -1029,9 +1295,10 @@ def _run_knowledge_stage(state, event_logger=None):
     audience = state.get("audience", "newcomer")
     enrich = bool(state.get("semantic_enrichment"))
     enrich_modules = state.get("enrich_modules") or DEFAULT_ENRICH_MODULES
+    force = _should_force_stage(state, "knowledge")
 
     ready, manual_context_dir, missing = _knowledge_artifacts_ready(state)
-    if ready and not _should_force_stage(state, "knowledge"):
+    if ready and not force:
         _log_event(
             event_logger,
             "tool_skip",
@@ -1064,6 +1331,7 @@ def _run_knowledge_stage(state, event_logger=None):
         "audience": audience,
         "enrich": enrich,
         "enrich_modules": enrich_modules,
+        "force": force,
     }
     _log_event(
         event_logger,
@@ -1078,6 +1346,7 @@ def _run_knowledge_stage(state, event_logger=None):
         audience=audience,
         enrich=enrich,
         enrich_modules=enrich_modules,
+        force=force,
     )
 
     state["knowledge_result"] = _clip_text(result)
@@ -2075,6 +2344,7 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
         manual = output_path.read_text(encoding="utf-8")
         state["manual_output_path"] = str(output_path)
         state["manual_summary"] = _build_manual_summary(manual, state)
+        state["manual_llm_polish_status"] = "not_requested"
         _mark_stage_done(state, "manual")
         state["stage"] = "review"
 
@@ -2084,6 +2354,7 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
             [
                 "检测到已有 Markdown 代码手册文件，本次复用已有手册。",
                 f"手册路径：`{state['manual_output_path']}`",
+                f"手册生成模式：{state.get('manual_generation_mode', 'deterministic')}",
                 "",
                 _format_manual_summary(state["manual_summary"]),
                 "",
@@ -2100,6 +2371,9 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
             skill=MANUAL_SKILL_NAME,
             stage="manual",
             model=model,
+            manual_generation_mode=state.get("manual_generation_mode", "deterministic"),
+            llm_module_page_scope=state.get("llm_module_page_scope", "top_and_direct"),
+            llm_module_page_limit=state.get("llm_module_page_limit", 20),
         )
         manual = _generate_manual_markdown(state, client, model)
     except Exception as exc:
@@ -2110,6 +2384,18 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
             stage="manual",
             status="error",
             error=str(exc),
+            manual_generation_mode=state.get("manual_generation_mode", "deterministic"),
+            manual_llm_polish_status=state.get("manual_llm_polish_status", "not_requested"),
+            manual_llm_polish_chars_before=state.get("manual_llm_polish_chars_before", 0),
+            manual_llm_polish_chars_after=state.get("manual_llm_polish_chars_after", 0),
+            manual_llm_polish_error=state.get("manual_llm_polish_error", ""),
+            manual_llm_validation_error=state.get("manual_llm_validation_error", ""),
+            section_llm_success_count=_count_llm_status(state.get("manual_llm_section_status", {}))["success"],
+            section_llm_fallback_count=_count_llm_status(state.get("manual_llm_section_status", {}))["fallback"],
+            section_llm_skipped_count=_count_llm_status(state.get("manual_llm_section_status", {}))["skipped"],
+            page_llm_success_count=_count_llm_status(state.get("manual_llm_page_status", {}))["success"],
+            page_llm_fallback_count=_count_llm_status(state.get("manual_llm_page_status", {}))["fallback"],
+            page_llm_skipped_count=_count_llm_status(state.get("manual_llm_page_status", {}))["skipped"],
         )
         state["last_error"] = str(exc)
         return _format_reply(
@@ -2128,7 +2414,9 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
     output_path = _manual_output_path(state, user_input)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(manual + "\n", encoding="utf-8")
-    module_page_paths = _write_module_pages(state, output_path)
+    module_page_paths = _write_module_pages(state, output_path, client=client, model=model)
+    section_counts = _count_llm_status(state.get("manual_llm_section_status", {}))
+    page_counts = _count_llm_status(state.get("manual_llm_page_status", {}))
 
     _log_event(
         event_logger,
@@ -2137,6 +2425,18 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
         stage="manual",
         status="success",
         chars=len(manual),
+        manual_generation_mode=state.get("manual_generation_mode", "deterministic"),
+        manual_llm_polish_status=state.get("manual_llm_polish_status", "not_requested"),
+        manual_llm_polish_chars_before=state.get("manual_llm_polish_chars_before", 0),
+        manual_llm_polish_chars_after=state.get("manual_llm_polish_chars_after", 0),
+        manual_llm_polish_error=state.get("manual_llm_polish_error", ""),
+        manual_llm_validation_error=state.get("manual_llm_validation_error", ""),
+        section_llm_success_count=section_counts["success"],
+        section_llm_fallback_count=section_counts["fallback"],
+        section_llm_skipped_count=section_counts["skipped"],
+        page_llm_success_count=page_counts["success"],
+        page_llm_fallback_count=page_counts["fallback"],
+        page_llm_skipped_count=page_counts["skipped"],
     )
     _log_event(
         event_logger,
@@ -2169,11 +2469,40 @@ def _run_manual_stage(state, client, model, user_input, event_logger=None):
         "",
         f"保存路径：`{state['manual_output_path']}`",
         f"模块页目录：`{state['manual_module_pages_dir']}`（{len(module_page_paths)} 个模块页）",
+        f"手册生成模式：{state.get('manual_generation_mode', 'deterministic')}",
+    ]
+    polish_status = state.get("manual_llm_polish_status", "not_requested")
+    mode = state.get("manual_generation_mode")
+    if mode == "deterministic":
+        lines.append("主手册章节 LLM：未启用")
+        lines.append("模块页 LLM 润色：未启用")
+    elif mode == "llm_polish":
+        lines.append(f"主手册整篇润色状态：{polish_status}")
+        lines.append("模块页 LLM 润色：未启用")
+        fallback_reason = state.get("manual_llm_validation_error") or state.get("manual_llm_polish_error")
+        if fallback_reason and polish_status != "success":
+            lines.append(f"回退原因：{fallback_reason}")
+    elif mode == "llm_section_generate":
+        lines.append(
+            f"主手册章节 LLM：成功 {section_counts['success']} 节，"
+            f"回退 {section_counts['fallback']} 节，跳过 {section_counts['skipped']} 节"
+        )
+        lines.append("模块页 LLM 润色：未启用")
+    elif mode == "llm_section_generate_with_page_polish":
+        lines.append(
+            f"主手册章节 LLM：成功 {section_counts['success']} 节，"
+            f"回退 {section_counts['fallback']} 节，跳过 {section_counts['skipped']} 节"
+        )
+        lines.append(
+            f"模块页 LLM 润色：成功 {page_counts['success']} 页，"
+            f"回退 {page_counts['fallback']} 页，跳过 {page_counts['skipped']} 页"
+        )
+    lines.extend([
         "",
         _format_manual_summary(state["manual_summary"]),
         "",
         _next_stage_hint(state, "阶段9：审查手册"),
-    ]
+    ])
 
     return _format_reply(state, "阶段8：生成手册", lines)
 
@@ -2646,7 +2975,391 @@ def _build_outline(digest):
 
 
 def _generate_manual_markdown(state, client, model):
-    return _render_manual_context_markdown(state)
+    draft = _render_manual_context_markdown(state)
+    mode = _normalize_manual_generation_mode(state.get("manual_generation_mode", "deterministic"))
+    state["manual_generation_mode"] = mode
+
+    state["manual_llm_polish_chars_before"] = len(draft)
+    state["manual_llm_polish_chars_after"] = len(draft)
+    state["manual_llm_polish_error"] = ""
+    state["manual_llm_validation_error"] = ""
+    state["manual_llm_section_status"] = {}
+
+    if mode == "deterministic":
+        state["manual_llm_polish_status"] = "not_requested"
+        return draft
+
+    if mode == "llm_polish":
+        return _polish_manual_with_llm(state, draft, client, model)
+
+    if mode in {"llm_section_generate", "llm_section_generate_with_page_polish"}:
+        state["manual_llm_polish_status"] = "not_requested"
+        return _generate_main_manual_by_sections(state, draft, client, model)
+
+    state["manual_llm_polish_status"] = "not_requested"
+    return draft
+
+
+def _polish_manual_with_llm(state, draft, client, model):
+    state["manual_llm_polish_chars_before"] = len(draft or "")
+    state["manual_llm_polish_chars_after"] = len(draft or "")
+    state["manual_llm_polish_error"] = ""
+    state["manual_llm_validation_error"] = ""
+
+    if client is None or model is None:
+        state["manual_llm_polish_status"] = "skipped_model_unavailable"
+        state["manual_llm_polish_error"] = "model client is unavailable"
+        if state.get("manual_llm_polish_required") or state.get("manual_llm_required"):
+            raise RuntimeError("model client is unavailable")
+        return draft
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个 RTL 代码手册 Markdown 润色器。你的任务是改善可读性和段落连贯性，"
+                "但必须严格遵守证据边界。你不能新增任何 draft 中没有的技术事实，不能补充"
+                "未知模块功能、信号语义、时序关系、协议行为或状态机解释。你必须保留标题层级、"
+                "模块页链接、表格、代码块、路径、风险提示和证据不足说明。只输出润色后的完整 Markdown。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "下面是确定性 renderer 生成的 RTL 代码手册 draft。请在不改变事实边界的前提下润色语言，"
+                "使其更适合作为项目代码手册阅读。只输出完整 Markdown。\n\n"
+                "```markdown\n"
+                f"{draft}\n"
+                "```"
+            ),
+        },
+    ]
+
+    try:
+        response = client.chat.completions.create(model=model, messages=messages)
+        polished = _strip_wrapping_markdown_fence(response.choices[0].message.content or "")
+    except Exception as exc:
+        state["manual_llm_polish_status"] = "failed_fallback_to_draft"
+        state["manual_llm_polish_error"] = str(exc)
+        if state.get("manual_llm_polish_required") or state.get("manual_llm_required"):
+            raise
+        return draft
+
+    state["manual_llm_polish_chars_after"] = len(polished)
+    valid, reason = _validate_polished_manual(draft, polished, state)
+    if not valid:
+        state["manual_llm_polish_status"] = "failed_validation_fallback_to_draft"
+        state["manual_llm_validation_error"] = reason
+        if state.get("manual_llm_polish_required") or state.get("manual_llm_required"):
+            raise ValueError(reason)
+        return draft
+
+    state["manual_llm_polish_status"] = "success"
+    return polished
+
+
+def _strip_wrapping_markdown_fence(text):
+    content = (text or "").strip()
+    if not content:
+        return ""
+
+    lines = content.splitlines()
+    if not lines:
+        return content
+
+    first_line = lines[0].strip().lower()
+    if re.fullmatch(r"```(?:markdown|md)?", first_line):
+        lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+
+    return content
+
+
+def _validate_polished_manual(draft, polished, state):
+    polished = polished or ""
+    if not polished.strip():
+        return False, "polished manual is empty"
+    if len(polished) < int(len(draft or "") * 0.6):
+        return False, "polished manual is shorter than 60% of draft"
+    if "# " not in polished:
+        return False, "polished manual does not contain a top-level heading"
+
+    stripped = polished.lstrip()
+    conversational_prefixes = ("好的", "我将", "当然", "下面是")
+    if stripped.startswith(conversational_prefixes):
+        return False, "polished manual starts with conversational text"
+    if stripped.startswith("```"):
+        return False, "polished manual starts with a markdown code fence"
+    if polished.count("```") % 2 != 0:
+        return False, "polished manual has unbalanced markdown code fences"
+
+    draft_links = sorted(set(re.findall(r"\(([^)\s]+\.md)\)", draft or "")))
+    for link in draft_links:
+        if f"({link})" not in polished:
+            return False, f"polished manual dropped module page link: {link}"
+
+    forbidden_fields = (
+        "evidence_refs",
+        "requires_rtl_source_review",
+        "review_status",
+        "confidence=",
+        "manual_ir",
+        "contextpack",
+    )
+    lower_polished = polished.lower()
+    for field in forbidden_fields:
+        if field.lower() in lower_polished:
+            return False, f"polished manual contains internal field: {field}"
+
+    if "AI 推断" in (draft or "") and "AI 推断" not in polished:
+        return False, "polished manual dropped AI 推断 marker"
+    if "证据不足" in (draft or "") and "证据不足" not in polished:
+        return False, "polished manual dropped 证据不足 marker"
+
+    return True, ""
+
+
+def _generate_main_manual_by_sections(state, draft, client, model):
+    state["manual_llm_section_status"] = {}
+    if client is None or model is None:
+        state["manual_llm_section_status"]["__all__"] = {
+            "status": "skipped_model_unavailable",
+            "reason": "model client is unavailable",
+            "chars_before": len(draft or ""),
+            "chars_after": len(draft or ""),
+        }
+        if state.get("manual_llm_required"):
+            raise RuntimeError("model client is unavailable")
+        return draft
+
+    sections = _split_manual_markdown_sections(draft)
+    generated_sections = []
+    for section in sections:
+        heading = section["heading"]
+        packet = _build_section_generation_packet(state, section)
+        original = section["markdown"]
+        try:
+            generated = _generate_one_section_with_llm(state, packet, client, model)
+        except Exception as exc:
+            state["manual_llm_section_status"][heading] = {
+                "status": "failed_fallback_to_draft",
+                "reason": str(exc),
+                "chars_before": len(original),
+                "chars_after": 0,
+            }
+            if state.get("manual_llm_required"):
+                raise
+            generated_sections.append(original)
+            continue
+
+        ok, reason = _validate_generated_section(packet, generated)
+        if ok:
+            state["manual_llm_section_status"][heading] = {
+                "status": "success",
+                "chars_before": len(original),
+                "chars_after": len(generated),
+            }
+            generated_sections.append(generated)
+        else:
+            state["manual_llm_section_status"][heading] = {
+                "status": "failed_validation_fallback_to_draft",
+                "reason": reason,
+                "chars_before": len(original),
+                "chars_after": len(generated or ""),
+            }
+            if state.get("manual_llm_required"):
+                raise ValueError(reason)
+            generated_sections.append(original)
+    return _assemble_manual_sections(generated_sections)
+
+
+def _split_manual_markdown_sections(draft):
+    lines = (draft or "").splitlines()
+    heading_indices = [index for index, line in enumerate(lines) if line.startswith("## ")]
+    sections = []
+    if not heading_indices:
+        text = "\n".join(lines).strip()
+        return [{
+            "index": 0,
+            "heading": "__front__",
+            "required_heading": _first_markdown_heading(text),
+            "markdown": text,
+            "links": _markdown_links(text),
+        }]
+
+    first = heading_indices[0]
+    if first > 0:
+        text = "\n".join(lines[:first]).strip()
+        if text:
+            sections.append({
+                "index": len(sections),
+                "heading": "__front__",
+                "required_heading": _first_markdown_heading(text),
+                "markdown": text,
+                "links": _markdown_links(text),
+            })
+
+    for pos, start in enumerate(heading_indices):
+        end = heading_indices[pos + 1] if pos + 1 < len(heading_indices) else len(lines)
+        text = "\n".join(lines[start:end]).strip()
+        sections.append({
+            "index": len(sections),
+            "heading": lines[start].strip(),
+            "required_heading": lines[start].strip(),
+            "markdown": text,
+            "links": _markdown_links(text),
+        })
+    return sections
+
+
+def _assemble_manual_sections(sections):
+    return "\n\n".join(section.strip() for section in sections if section and section.strip()).strip()
+
+
+def _build_section_generation_packet(state, section):
+    digest = state.get("evidence_digest") or {}
+    project_context = digest.get("project_context", {})
+    top_level = project_context.get("top_level", {})
+    source_review = state.get("source_review_report") or digest.get("source_review_report") or {}
+    heading_text = _normalize_heading_text(section.get("heading", ""))
+    return {
+        "top_module": state.get("top_module") or digest.get("top_module", ""),
+        "heading": section.get("heading", ""),
+        "required_heading": section.get("required_heading", ""),
+        "deterministic_section_markdown": section.get("markdown", ""),
+        "section_links": section.get("links", []),
+        "outline_item": _find_plan_item(state.get("outline", []), heading_text),
+        "chapter_plan_item": _find_plan_item(state.get("chapter_plan", []), heading_text),
+        "project_summary": {
+            "purpose": _claim_value(project_context.get("project_purpose", {})),
+            "source_file": top_level.get("source_file", ""),
+            "top_module": digest.get("top_module") or state.get("top_module", ""),
+        },
+        "direct_modules": _claim_value(top_level.get("direct_modules", [])) or [],
+        "source_review_summary": {
+            "reviewed_modules": source_review.get("reviewed_modules", 0),
+            "claim_count": source_review.get("claim_count", 0),
+            "unresolved_count": source_review.get("unresolved_count", 0),
+        },
+        "evidence_boundary": [
+            "不得推断 Manual Context 未提供的 always/FSM/寄存器更新语义。",
+            "不得新增未在 deterministic section 或 packet 中出现的模块、端口、信号、实例。",
+            "证据不足内容必须保留为证据不足或需要源码复核。",
+        ],
+    }
+
+
+def _generate_one_section_with_llm(state, packet, client, model):
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个 RTL 代码手册章节生成器。你必须严格基于输入中的 deterministic section、"
+                "chapter plan、Manual Context 摘要和 source review 摘要生成章节内容。你可以改善结构、"
+                "解释顺序和语言表达，但不能新增没有证据支持的模块功能、端口语义、信号时序、"
+                "状态机行为、协议关系或设计意图。必须保留原章节标题、模块页链接、路径、表格、"
+                "代码块、风险提示、证据不足说明和 AI 推断标记。只输出该章节的完整 Markdown，"
+                "不要输出解释过程。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "请生成下面这个章节的最终 Markdown。\n\n"
+                "要求：\n"
+                "1. 保留章节标题。\n"
+                "2. 保留所有模块页链接。\n"
+                "3. 不新增未知模块、信号、端口、实例。\n"
+                "4. 不泄露内部字段名。\n"
+                "5. 不确定的信息保持为“证据不足”或“需要源码复核”。\n"
+                "6. 只输出 Markdown。\n\n"
+                "输入 packet：\n"
+                "```json\n"
+                f"{json.dumps(packet, ensure_ascii=False, indent=2)}\n"
+                "```"
+            ),
+        },
+    ]
+    response = client.chat.completions.create(model=model, messages=messages)
+    return _strip_wrapping_markdown_fence(response.choices[0].message.content or "")
+
+
+def _validate_generated_section(packet, generated):
+    generated = generated or ""
+    original = packet.get("deterministic_section_markdown", "") or ""
+    if not generated.strip():
+        return False, "generated section is empty"
+    if len(generated) < int(len(original) * 0.5):
+        return False, "generated section is shorter than 50% of deterministic section"
+    stripped = generated.lstrip()
+    if stripped.startswith(("好的", "当然", "下面是", "我将")):
+        return False, "generated section starts with conversational text"
+    if stripped.startswith("```"):
+        return False, "generated section starts with a markdown code fence"
+    if generated.count("```") % 2 != 0:
+        return False, "generated section has unbalanced markdown code fences"
+
+    required_heading = packet.get("required_heading") or packet.get("heading") or ""
+    if required_heading and required_heading not in generated:
+        return False, f"generated section dropped heading: {required_heading}"
+
+    original_links = set(packet.get("section_links", []))
+    generated_links = set(_markdown_links(generated))
+    missing_links = sorted(original_links - generated_links)
+    if missing_links:
+        return False, f"generated section dropped module page link: {missing_links[0]}"
+    extra_links = sorted(generated_links - original_links)
+    if extra_links:
+        return False, f"generated section added module page link: {extra_links[0]}"
+
+    for marker in ("AI 推断", "证据不足"):
+        if marker in original and marker not in generated:
+            return False, f"generated section dropped {marker} marker"
+    for field in _forbidden_llm_fields():
+        if field.lower() in generated.lower():
+            return False, f"generated section contains internal field: {field}"
+    top_module = packet.get("top_module")
+    if top_module and top_module in original and top_module not in generated:
+        return False, f"generated section dropped top_module: {top_module}"
+    return True, ""
+
+
+def _markdown_links(markdown):
+    return sorted(set(re.findall(r"\(([^)\s]+\.md)\)", markdown or "")))
+
+
+def _forbidden_llm_fields():
+    return (
+        "evidence_refs",
+        "requires_rtl_source_review",
+        "review_status",
+        "confidence=",
+        "manual_ir",
+        "contextpack",
+    )
+
+
+def _first_markdown_heading(markdown):
+    for line in (markdown or "").splitlines():
+        if line.startswith("#"):
+            return line.strip()
+    return ""
+
+
+def _normalize_heading_text(value):
+    return re.sub(r"[#`：:]", "", value or "").strip().lower()
+
+
+def _find_plan_item(items, heading_text):
+    if not heading_text:
+        return {}
+    for item in items or []:
+        title = _normalize_heading_text(item.get("title", "") if isinstance(item, dict) else str(item))
+        if title and (title in heading_text or heading_text in title):
+            return item
+    return {}
 
 
 def _render_manual_context_markdown(state):
@@ -3549,22 +4262,240 @@ def _render_evidence_boundary_section(digest):
     return lines
 
 
-def _write_module_pages(state, output_path):
+def _write_module_pages(state, output_path, client=None, model=None):
     digest = state.get("evidence_digest") or {}
     modules = digest.get("modules", [])
     if not modules:
         return []
     module_dir = output_path.with_name(output_path.stem + "_modules")
     module_dir.mkdir(parents=True, exist_ok=True)
+    state["manual_llm_page_status"] = {}
+    selected_modules = _select_modules_for_llm_page_polish(state, modules) if _should_polish_module_pages(state) else set()
     paths = []
     for module in modules:
         module_name = module.get("module_name", "")
         if not module_name:
             continue
         path = module_dir / f"{safe_filename(module_name)}.md"
-        path.write_text(_render_module_page(digest, module) + "\n", encoding="utf-8")
+        draft_page = _render_module_page(digest, module)
+        final_page = draft_page
+        if module_name in selected_modules:
+            if client is None or model is None:
+                state["manual_llm_page_status"][module_name] = {
+                    "status": "skipped_model_unavailable",
+                    "chars_before": len(draft_page),
+                    "chars_after": len(draft_page),
+                }
+            else:
+                packet = _build_module_page_polish_packet(state, digest, module, draft_page)
+                try:
+                    polished = _polish_module_page_with_llm(state, module_name, draft_page, packet, client, model)
+                    ok, reason = _validate_polished_module_page(packet, draft_page, polished)
+                except Exception as exc:
+                    ok, reason = False, str(exc)
+                    polished = ""
+                    if state.get("manual_llm_required"):
+                        raise
+                if ok:
+                    final_page = polished
+                    state["manual_llm_page_status"][module_name] = {
+                        "status": "success",
+                        "chars_before": len(draft_page),
+                        "chars_after": len(polished),
+                    }
+                else:
+                    state["manual_llm_page_status"][module_name] = {
+                        "status": "failed_validation_fallback_to_draft",
+                        "reason": reason,
+                        "chars_before": len(draft_page),
+                        "chars_after": len(polished or ""),
+                    }
+                    if state.get("manual_llm_required"):
+                        raise ValueError(reason)
+        path.write_text(final_page + "\n", encoding="utf-8")
         paths.append(path)
     return paths
+
+
+def _should_polish_module_pages(state):
+    return _normalize_manual_generation_mode(state.get("manual_generation_mode")) == "llm_section_generate_with_page_polish"
+
+
+def _select_modules_for_llm_page_polish(state, modules):
+    scope = state.get("llm_module_page_scope", "top_and_direct")
+    if scope not in LLM_MODULE_PAGE_SCOPES:
+        scope = "top_and_direct"
+    try:
+        limit = max(0, int(state.get("llm_module_page_limit", 20) or 20))
+    except (TypeError, ValueError):
+        limit = 20
+    if scope == "none" or limit == 0:
+        return set()
+
+    digest = state.get("evidence_digest") or {}
+    top_module = state.get("top_module") or digest.get("top_module", "")
+    module_names = [module.get("module_name", "") for module in modules if module.get("module_name")]
+    selected = []
+
+    def add(name):
+        if name and name in module_names and name not in selected:
+            selected.append(name)
+
+    add(top_module)
+    if scope == "top_only":
+        return set(selected[:limit])
+    if scope == "all":
+        for name in module_names:
+            add(name)
+        return set(selected[:limit])
+    if scope == "allowlist":
+        selected = []
+        for name in (state.get("llm_module_page_allowlist") or "").replace("，", ",").split(","):
+            add(name.strip())
+        return set(selected[:limit])
+
+    direct_modules = _direct_modules_from_digest(digest)
+    for name in direct_modules:
+        add(name)
+    return set(selected[:limit])
+
+
+def _direct_modules_from_digest(digest):
+    top_level = (digest.get("project_context") or {}).get("top_level", {})
+    direct_modules = _claim_value(top_level.get("direct_modules", [])) or []
+    if isinstance(direct_modules, str):
+        return [direct_modules]
+    if isinstance(direct_modules, list):
+        return [str(item) for item in direct_modules if item]
+    return []
+
+
+def _build_module_page_polish_packet(state, digest, module, draft_page):
+    position = module.get("system_position", {})
+    source_review = module.get("source_review_report", {}) or {}
+    return {
+        "top_module": state.get("top_module") or digest.get("top_module", ""),
+        "module_name": module.get("module_name", ""),
+        "source_files": module.get("source_files", []),
+        "parents": position.get("parents", []),
+        "children": position.get("children", []),
+        "component_children": position.get("component_children", []),
+        "port_names": _module_port_names(module),
+        "instance_names": _module_instance_names(module),
+        "flow_titles": _module_flow_titles(module),
+        "source_review_summary": {
+            "claim_count": source_review.get("claim_count", 0),
+            "open_question_count": source_review.get("open_question_count", 0),
+        },
+        "draft_links": _markdown_links(draft_page),
+        "evidence_boundary": [
+            "只能润色 deterministic draft 中已有内容。",
+            "不得新增 packet 或 draft 中没有的端口、信号、实例、状态机、协议行为、时序关系或模块功能。",
+            "证据不足、AI 推断、需要源码复核等风险标记必须保留。",
+        ],
+    }
+
+
+def _polish_module_page_with_llm(state, module_name, draft_page, module_packet, client, model):
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个 RTL 模块页 Markdown 润色器。你只能润色给定模块页 draft，使其更清晰、"
+                "更适合新读者阅读。你不能新增 draft 或 module packet 中没有的端口、信号、实例、"
+                "状态机、协议行为、时序关系或模块功能。你必须保留模块名、source_file、端口表、"
+                "实例名、模块页标题、证据不足说明、AI 推断标记和风险提示。只输出完整 Markdown。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "请润色下面的模块页。\n"
+                "要求：保留模块页标题和模块名；保留所有端口名；保留所有实例名；保留 source_file；"
+                "保留证据不足 / AI 推断 / 需要源码复核；不输出解释过程；只输出 Markdown。\n\n"
+                "module packet：\n"
+                "```json\n"
+                f"{json.dumps(module_packet, ensure_ascii=False, indent=2)}\n"
+                "```\n\n"
+                "deterministic draft：\n"
+                "```markdown\n"
+                f"{draft_page}\n"
+                "```"
+            ),
+        },
+    ]
+    response = client.chat.completions.create(model=model, messages=messages)
+    return _strip_wrapping_markdown_fence(response.choices[0].message.content or "")
+
+
+def _validate_polished_module_page(module_packet, draft_page, polished):
+    polished = polished or ""
+    if not polished.strip():
+        return False, "polished module page is empty"
+    if len(polished) < int(len(draft_page or "") * 0.5):
+        return False, "polished module page is shorter than 50% of draft"
+    stripped = polished.lstrip()
+    if stripped.startswith(("好的", "当然", "下面是", "我将")):
+        return False, "polished module page starts with conversational text"
+    if stripped.startswith("```"):
+        return False, "polished module page starts with a markdown code fence"
+    if polished.count("```") % 2 != 0:
+        return False, "polished module page has unbalanced markdown code fences"
+
+    module_name = module_packet.get("module_name", "")
+    if module_name and module_name not in polished:
+        return False, f"polished module page dropped module name: {module_name}"
+    for source_file in module_packet.get("source_files", []) or []:
+        if source_file and source_file in draft_page and source_file not in polished:
+            return False, f"polished module page dropped source file: {source_file}"
+    for port_name in module_packet.get("port_names", []) or []:
+        if port_name and port_name in draft_page and port_name not in polished:
+            return False, f"polished module page dropped port name: {port_name}"
+    for instance_name in module_packet.get("instance_names", []) or []:
+        if instance_name and instance_name in draft_page and instance_name not in polished:
+            return False, f"polished module page dropped instance name: {instance_name}"
+    for link in _markdown_links(draft_page):
+        if f"({link})" not in polished:
+            return False, f"polished module page dropped link: {link}"
+    for marker in ("AI 推断", "证据不足"):
+        if marker in draft_page and marker not in polished:
+            return False, f"polished module page dropped {marker} marker"
+    for field in _forbidden_llm_fields():
+        if field.lower() in polished.lower():
+            return False, f"polished module page contains internal field: {field}"
+    return True, ""
+
+
+def _module_port_names(module):
+    names = []
+    port_summary = module.get("port_summary", {}) if isinstance(module, dict) else {}
+    for group in port_summary.get("external_port_groups", []) or []:
+        for signal in group.get("signals", []) or []:
+            if isinstance(signal, dict) and signal.get("name"):
+                names.append(signal["name"])
+    for group in (module.get("interfaces", {}) or {}).get("interface_groups", []) or []:
+        for key in ("event_signals", "payload_signals", "free_backpressure_signals"):
+            for signal in group.get(key, []) or []:
+                if isinstance(signal, dict) and signal.get("name"):
+                    names.append(signal["name"])
+    return sorted(set(names))
+
+
+def _module_instance_names(module):
+    names = []
+    for component in (module.get("internal_components", {}) or {}).get("primary_samples", []) or []:
+        if component.get("instance_name"):
+            names.append(component["instance_name"])
+    return sorted(set(names))
+
+
+def _module_flow_titles(module):
+    titles = []
+    for flow in module.get("key_drive_flows", []) or []:
+        title = flow.get("title") or flow.get("flow_id") or flow.get("source_file")
+        if title:
+            titles.append(title)
+    return titles[:12]
 
 
 def _render_module_page(digest, module):

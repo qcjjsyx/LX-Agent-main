@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/Execute/adder.v`。
 - 职责：AI 推断：多宽度算术加法器，根据操作类型选择32位、5位或64位加法结果。
-- 说明：模块接收两个64位操作数，通过i_adderType_2选择不同位宽的加法器子模块（adder32、adder5、adder64）进行计算，并输出结果、进位和溢出标志。i_addSymbolFlag_1和i_carryInType_1控制符号和进位模式。
+- 说明：模块接收两个64位操作数，通过i_adderType_2选择不同位宽的加法器子模块（32位、5位、64位）进行计算，并输出结果、进位和溢出标志。i_addSymbolFlag_1和i_carryInType_1控制符号和进位模式。
 
 ## 1. 层级位置
 
@@ -66,7 +66,7 @@ adder
 | `assign_1` | data_path | `w_oprand2_32` | i_oprand2_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_2` | data_path | `w_oprand1_5` | i_oprand1_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_3` | data_path | `w_oprand2_5` | i_oprand2_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | data_path | `o_adderResult_64` | i_adderType_2 == 2'b00 ? w_adder32Result_32 : (i_adderType_2==2'b01 ? w_adder5Result_5 :(i_ad... | AI 推断：通过多路选择器输出最终加法结果 |
-| `assign_5` | unknown | `o_adderCarryOut_1` | i_adderType_2 == 2'b00 ? w_adder32CarryOut_1 : (i_adderType_2==2'b01 ? w_adder5CarryOut_1 :(i... | AI 推断：输出进位标志，由i_adderType_2选择子模块进位 |
-| `assign_6` | unknown | `o_adderOverFlow_1` | i_adderType_2 == 2'b00 ? w_adder32OverFlow_1 : (i_adderType_2==2'b01 ? w_adder5OverFlow_1 :(i... | AI 推断：输出溢出标志，由i_adderType_2选择子模块溢出 |
+| `assign_4` | data_path | `o_adderResult_64` | i_adderType_2 == 2'b00 ? w_adder32Result_32 : (i_adderType_2==2'b01 ? w_adder5Result_5 :(i_ad... | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_5` | unknown | `o_adderCarryOut_1` | i_adderType_2 == 2'b00 ? w_adder32CarryOut_1 : (i_adderType_2==2'b01 ? w_adder5CarryOut_1 :(i... | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_6` | unknown | `o_adderOverFlow_1` | i_adderType_2 == 2'b00 ? w_adder32OverFlow_1 : (i_adderType_2==2'b01 ? w_adder5OverFlow_1 :(i... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_0` | data_path | `w_oprand1_32` | i_oprand1_64[31:0] | 证据不足：No Semantic Layer assignment interpretation is available. |

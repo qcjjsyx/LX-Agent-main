@@ -49,13 +49,13 @@
   "claim_summary": {
     "count": 14,
     "by_type": {
-      "assignment_interpretation": 2,
-      "completion_backpressure": 2,
-      "component_role": 4,
+      "assignment_interpretation": 3,
+      "completion_backpressure": 1,
+      "component_role": 5,
       "data_control_effect": 2,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 2
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -66,9 +66,9 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "summary": "从写回阶段（WB）输入的单一驱动事件，经过合并、选择、延迟和拆分后，最终分发至数据路由、通用寄存器文件和程序状态寄存器三个输出端点。",
+      "summary": "从写回阶段（WB）输入的驱动事件，经过合并、选择、延迟和拆分后，最终分发到数据路由、通用寄存器文件和程序状态寄存器三个输出端点。",
       "subject": "flow_008_intAndExc_i_driveFromWB",
-      "explanation": "该流程以 `i_driveFromWB` 为唯一起点，通过 `WbMerge` 和 `WbtopcMerge` 两个合并器并行扇出，随后经过 `inOutSele` 选择器、`u_outStack` 出栈模块、`SRMerge` 合并器、`intAndExeSele` 选择器以及多个延迟和拆分单元，最终生成三个输出驱动信号。流程中存在多个分支和合并点，表明事件路径具有条件性。",
+      "explanation": "该流程以 `i_driveFromWB` 为单一输入起点，通过 `WbMerge` 和 `WbtopcMerge` 两个合并器进行初步路径分发，随后经过 `inOutSele` 选择器、`u_outStack` 出栈模块、`SRMerge` 合并器、`intAndExeSele` 选择器以及 `preStackSpli` 拆分器等多个处理节点，最终生成三个输出驱动信号。流程中包含了多个分支和合并点，体现了事件在异常处理模块内的复杂路由逻辑。",
       "signals": [
         "i_driveFromWB",
         "o_driveToDataRoute_1",
@@ -90,7 +90,7 @@
         "17"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -112,8 +112,8 @@
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
       "subject": "WbMerge",
-      "summary": "作为流程的初始合并器，将来自写回阶段的直接驱动与来自预栈拆分和向量拆分的驱动进行仲裁合并。",
-      "explanation": "`WbMerge` 是一个 `cWaitMerge3_1b` 类型的合并器，其输入包括 `i_driveFromWB`、`w_preSSpliDriToWbMer_1` 和 `w_vecSpliDriToWbMer_1`。它负责将这三个可能不同源的1位驱动信号合并为一个输出 `w_WbMerDriToInOut_1`，该输出随后驱动 `inOutSele` 选择器。其合并行为可能涉及等待或仲裁。",
+      "summary": "作为流程的初始合并节点，将来自写回阶段的直接驱动、预栈拆分驱动和向量拆分驱动合并为一个统一的内部驱动信号。",
+      "explanation": "`WbMerge` 是一个 `cWaitMerge3_1b` 类型的合并器，它接收 `i_driveFromWB`、`w_preSSpliDriToWbMer_1` 和 `w_vecSpliDriToWbMer_1` 三个输入，输出 `w_WbMerDriToInOut_1`。它负责将不同来源的写回事件进行仲裁和合并，是流程的第一个关键汇聚点。",
       "signals": [
         "i_driveFromWB",
         "w_preSSpliDriToWbMer_1",
@@ -124,16 +124,12 @@
         "WbMerge"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc.json",
           "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:component_role:001"
@@ -146,33 +142,23 @@
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
       "subject": "inOutSele",
-      "summary": "作为流程中的关键选择/拆分节点，根据控制信号将合并后的写回驱动事件分发至内部栈或出栈路径。",
-      "explanation": "`inOutSele` 是一个 `cSelector2_34b_int` 类型的选择器/拆分器。其输入包括来自 `WbMerge` 的驱动信号 `w_WbMerDriToInOut_1` 以及数据信号 `w_DRValid_2` 和 `w_SP_32`。它根据选择逻辑将事件和数据导向两个输出：`w_inOutDriToDataSpli_1`（通往内部栈）和 `w_inOutDriToOutMer_1`（通往出栈模块）。这表明该节点决定了事件是进入栈操作还是出栈操作。",
+      "summary": "作为流程中的关键选择/拆分节点，根据控制信号将合并后的写回驱动分发到入栈或出栈路径。",
+      "explanation": "`inOutSele` 是一个 `cSelector2_34b_int` 类型的选择器/拆分器，它接收 `w_WbMerDriToInOut_1` 作为输入驱动，并输出 `w_inOutDriToDataSpli_1` 和 `w_inOutDriToOutMer_1` 两个信号。该节点决定了事件是进入入栈路径（`u_inStack`）还是出栈路径（`u_outStack`），是流程中重要的分支决策点。",
       "signals": [
         "w_WbMerDriToInOut_1",
-        "w_DRValid_2",
-        "w_SP_32",
         "w_inOutDriToDataSpli_1",
         "w_inOutDriToOutMer_1"
       ],
       "instances": [
         "inOutSele"
       ],
-      "related_assignments": [
-        "13",
-        "17"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc.json",
           "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:component_role:002"
@@ -185,11 +171,11 @@
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
       "subject": "u_outStack",
-      "summary": "作为流程中的出栈执行模块，接收来自选择器的事件，处理后生成通往WGRF和WPSR的输出驱动及数据。",
-      "explanation": "`u_outStack` 是一个 `intAndExc_pop` 类型的模块实例。它接收来自 `inOutSele` 的驱动信号 `w_inOutDriToOutMer_1` 和来自 `DRSelector` 的驱动信号 `w_DRSeleDriToWbSpli_1`。其输出包括 `o_driveToWGRF_1`、`o_driveToWPSR_1`、`w_driveFromoutStackSP` 和 `w_outMerDriToDR_1`。这表明该模块负责执行出栈操作，并产生最终的目标输出。",
+      "summary": "作为出栈处理模块，接收来自选择器的驱动，生成到通用寄存器文件和程序状态寄存器的输出，并产生反馈驱动信号。",
+      "explanation": "`u_outStack` 是一个 `intAndExc_pop` 类型的模块实例，它接收 `w_DRSeleDriToWbSpli_1` 和 `w_inOutDriToOutMer_1` 作为输入，输出 `o_driveToWGRF_1`、`o_driveToWPSR_1`、`w_driveFromoutStackSP` 和 `w_outMerDriToDR_1`。该模块是流程中两个最终输出端点（`o_driveToWGRF_1` 和 `o_driveToWPSR_1`）的直接来源，同时其输出也反馈到 `SRMerge` 和 `dataRoteMerge`，形成闭环。",
       "signals": [
-        "w_inOutDriToOutMer_1",
         "w_DRSeleDriToWbSpli_1",
+        "w_inOutDriToOutMer_1",
         "o_driveToWGRF_1",
         "o_driveToWPSR_1",
         "w_driveFromoutStackSP",
@@ -199,16 +185,12 @@
         "u_outStack"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc.json",
           "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:component_role:003"
@@ -221,8 +203,8 @@
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
       "subject": "intAndExeSele",
-      "summary": "作为流程中的中断与异常选择器，在SR驱动和比较器驱动之间进行选择，以决定后续事件流向。",
-      "explanation": "`intAndExeSele` 是一个 `cSelector2_181b_int` 类型的选择器/拆分器。其输入包括来自 `SRMerge` 的 `w_SRDrive_1` 和来自 `Delay3` 的 `w_cmpMerDrive1_1`。它根据选择逻辑将事件和数据导向两个输出：`w_intAndExeSeleDriveToMe` 和 `w_intSeleDrive_1`。这表明该节点负责在栈指针（SR）相关事件和比较器相关事件之间做出路由决策。",
+      "summary": "作为流程中的高级选择节点，在异常和比较结果之间进行选择，决定后续事件的处理路径。",
+      "explanation": "`intAndExeSele` 是一个 `cSelector2_181b_int` 类型的选择器/拆分器，它接收来自 `SRMerge` 的 `w_SRDrive_1` 和来自比较器的 `w_cmpMerDrive1_1` 作为输入，输出 `w_intAndExeSeleDriveToMe` 和 `w_intSeleDrive_1`。该节点在异常处理流程和比较执行流程之间进行仲裁，是决定事件最终去向的关键决策点。",
       "signals": [
         "w_SRDrive_1",
         "w_cmpMerDrive1_1",
@@ -233,19 +215,44 @@
         "intAndExeSele"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/intAndExc.json",
           "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "intAndExc",
+        "flow_id": "flow_008_intAndExc_i_driveFromWB"
+      },
+      "subject": "preStackSpli",
+      "summary": "作为流程末端的拆分节点，将经过延迟的选择信号拆分为两个反馈路径，分别回到 `WbMerge` 和 `WbtopcMerge`。",
+      "explanation": "`preStackSpli` 是一个 `cSplitter2_1b` 类型的拆分器，它接收经过 `preDelay0` 延迟后的 `w_intSeleDrive1_1` 信号，输出 `w_preSSpliDriToWbMer_1` 和 `w_vecDriveToDataRoute_1`。该节点将处理后的信号反馈到流程的起始合并节点，形成了事件处理的循环或流水线结构。",
+      "signals": [
+        "w_intSeleDrive1_1",
+        "w_preSSpliDriToWbMer_1",
+        "w_vecDriveToDataRoute_1"
+      ],
+      "instances": [
+        "preStackSpli"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/intAndExc.json",
+          "path": "instances"
+        }
+      ],
+      "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:component_role:005"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -254,20 +261,20 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "subject": "assign 15 (w_en_DRValid)",
-      "summary": "该赋值将向量拆分驱动和延迟后的SR驱动进行逻辑或，生成数据路由有效使能信号。",
-      "explanation": "`w_en_DRValid` 由 `w_vecSpliDriToWbMer_1 | w_SRDriveDelay_1` 赋值。这表明数据路由的有效性由两个独立的事件源共同决定：一个来自向量拆分路径，另一个来自经过延迟的栈指针（SR）驱动路径。该信号可能用于控制 `inOutSele` 或其他下游逻辑。",
+      "subject": "assign 13",
+      "summary": "计算向量地址，根据异常类型选择使用栈指针或异常地址。",
+      "explanation": "该赋值语句 `w_vecAddr_32 = (w_excNum_4 == 4'b0010) ? (w_SP_32 + 24) : w_exeAddr_32` 用于生成向量地址。当异常号为特定值时，地址为栈指针加偏移，否则使用异常地址。该信号可能用于后续的数据路由或向量处理路径。",
       "signals": [
-        "w_en_DRValid",
-        "w_vecSpliDriToWbMer_1",
-        "w_SRDriveDelay_1"
+        "w_vecAddr_32",
+        "w_excNum_4",
+        "w_SP_32",
+        "w_exeAddr_32"
       ],
       "related_assignments": [
-        "13",
         "17"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -284,21 +291,19 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "subject": "assign 13 (w_vecAddr_32)",
-      "summary": "该赋值根据异常号选择向量地址或异常地址，为数据路由提供地址载荷。",
-      "explanation": "`w_vecAddr_32` 由条件表达式 `(w_excNum_4 == 4'b0010) ? (w_SP_32 + 24) : w_exeAddr_32` 赋值。这表明当异常号为特定值时，地址为栈指针加24，否则为异常地址。该地址是数据路由载荷的一部分。",
+      "subject": "assign 15",
+      "summary": "生成数据路由有效使能信号，由向量拆分驱动和状态寄存器驱动延迟信号共同控制。",
+      "explanation": "该赋值语句 `w_en_DRValid = w_vecSpliDriToWbMer_1 | w_SRDriveDelay_1` 将两个不同路径的驱动信号进行逻辑或，生成数据路由的有效使能信号。这表明数据路由的有效性可以由向量路径或状态寄存器路径中的任意一个触发。",
       "signals": [
-        "w_vecAddr_32",
-        "w_excNum_4",
-        "w_SP_32",
-        "w_exeAddr_32"
+        "w_en_DRValid",
+        "w_vecSpliDriToWbMer_1",
+        "w_SRDriveDelay_1"
       ],
       "related_assignments": [
-        "15",
-        "17"
+        "15"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -309,15 +314,43 @@
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:assignment_interpretation:002"
     },
     {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "flow",
+        "module": "intAndExc",
+        "flow_id": "flow_008_intAndExc_i_driveFromWB"
+      },
+      "subject": "assign 17",
+      "summary": "将寄存器中的栈指针值赋给组合信号，用于后续的地址计算。",
+      "explanation": "该赋值语句 `w_SP_32 = r_SP_32` 将寄存器 `r_SP_32` 的值直接传递给组合信号 `w_SP_32`。该信号在赋值13中被用于向量地址的计算，是流程中数据路径的一部分。",
+      "signals": [
+        "w_SP_32",
+        "r_SP_32"
+      ],
+      "related_assignments": [
+        "13"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/intAndExc.json",
+          "path": "assignments"
+        }
+      ],
+      "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:assignment_interpretation:003"
+    },
+    {
       "claim_type": "data_control_effect",
       "scope": {
         "type": "flow",
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "summary": "输入驱动事件 `i_driveFromWB` 触发数据路由载荷 `o_dataRouteData_104` 的生成与输出。",
-      "subject": "i_driveFromWB 与 o_dataRouteData_104",
-      "explanation": "接口载荷合约显示，输出事件 `o_driveToDataRoute_1` 关联有104位宽的数据载荷 `o_dataRouteData_104`。该载荷的生成路径始于 `i_driveFromWB`，经过 `WbMerge`、`inOutSele`、`u_outStack` 或 `u_inStack`，最终由 `dataRoteMerge` 合并后输出。赋值13（`w_vecAddr_32`）和17（`w_SP_32`）是构成该载荷的关键数据源。",
+      "summary": "输入驱动事件 `i_driveFromWB` 触发流程，最终通过 `dataRoteMerge` 输出驱动事件 `o_driveToDataRoute_1`，并携带 104 位数据负载。",
+      "subject": "i_driveFromWB 与 o_driveToDataRoute_1 的数据与控制耦合",
+      "explanation": "输入事件 `i_driveFromWB` 作为流程的起点，经过 `WbtopcMerge` 和 `dataRoteMerge` 等节点后，生成输出事件 `o_driveToDataRoute_1`。该输出事件关联了 104 位数据负载 `o_dataRouteData_104`，表明该路径用于传输较宽的数据包，可能包含异常处理相关的上下文信息。",
       "signals": [
         "i_driveFromWB",
         "o_driveToDataRoute_1",
@@ -326,21 +359,13 @@
       "related_payload": [
         "o_dataRouteData_104"
       ],
-      "related_assignments": [
-        "13",
-        "17"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "interface_data_contract"
-        },
-        {
           "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "connection_graph"
+          "path": "interface_data_contract"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:data_control_effect:001"
@@ -352,9 +377,9 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "summary": "输入驱动事件 `i_driveFromWB` 触发通往WGRF和WPSR的数据载荷生成，这些载荷由 `u_outStack` 模块产生。",
-      "subject": "i_driveFromWB 与 o_dataToWGRF_72, o_dataToWPSR_32",
-      "explanation": "接口载荷合约显示，输出事件 `o_driveToWGRF_1` 和 `o_driveToWPSR_1` 分别关联72位和32位的数据载荷。这些载荷由 `u_outStack` 模块直接输出，表明该模块在执行出栈操作时，会生成并输出这些数据。",
+      "summary": "输入驱动事件 `i_driveFromWB` 通过 `u_outStack` 模块生成到通用寄存器文件和程序状态寄存器的输出，并分别携带 72 位和 32 位数据负载。",
+      "subject": "i_driveFromWB 与 o_driveToWGRF_1/o_driveToWPSR_1 的数据与控制耦合",
+      "explanation": "输入事件 `i_driveFromWB` 经过 `inOutSele` 选择后进入 `u_outStack` 模块，该模块生成两个输出事件 `o_driveToWGRF_1` 和 `o_driveToWPSR_1`。这两个输出分别关联了 72 位和 32 位数据负载，表明它们用于更新通用寄存器文件和程序状态寄存器的内容，是异常处理结果写回的关键路径。",
       "signals": [
         "i_driveFromWB",
         "o_driveToWGRF_1",
@@ -367,16 +392,12 @@
         "o_dataToWPSR_32"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "interface_data_contract"
-        },
-        {
           "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "connection_graph"
+          "path": "interface_data_contract"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:data_control_effect:002"
@@ -388,51 +409,30 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "summary": "输入事件 `i_driveFromWB` 存在对应的反压信号 `o_freeToWB`，表明该流程支持握手协议。",
-      "subject": "i_driveFromWB 与 o_freeToWB",
-      "explanation": "接口载荷合约中，`i_driveFromWB` 的 `free_signal` 为 `o_freeToWB`。这表明当 `i_driveFromWB` 有效时，下游逻辑可以通过 `o_freeToWB` 信号向写回阶段指示其是否准备好接收新事件。该反压信号的具体生成逻辑未在提供的上下文中明确，但可以推断其与流程中各个合并器的阻塞行为相关。",
+      "summary": "流程中涉及多个合并器（如 `WbMerge`、`dataRoteMerge`），这些节点可能通过反压机制控制事件传播，但当前上下文未提供具体的反压信号细节。",
+      "subject": "流程中的反压与完成信号",
+      "explanation": "合并器通常需要等待所有输入就绪或进行仲裁，这隐含了反压或完成信号的存在。例如，`dataRoteMerge` 是一个 `cMutexMerge3_104b_int`，其输出 `o_driveToDataRoute_1` 关联了反压信号 `i_freeFromDataRoute_1`。然而，流程内部的反压信号（如合并器之间的握手信号）在当前上下文中未明确给出，需要 RTL 源码确认。",
       "signals": [
-        "i_driveFromWB",
-        "o_freeToWB"
+        "i_freeFromDataRoute_1",
+        "i_freeFromWGRF_1",
+        "i_freeFromWPSR_1"
+      ],
+      "instances": [
+        "WbMerge",
+        "WbtopcMerge",
+        "dataRoteMerge",
+        "SRMerge"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json",
+          "source": "parser_pipeline_rtl/modules/intAndExc.json",
           "path": "interface_data_contract"
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:completion_backpressure:001"
-    },
-    {
-      "claim_type": "completion_backpressure",
-      "scope": {
-        "type": "flow",
-        "module": "intAndExc",
-        "flow_id": "flow_008_intAndExc_i_driveFromWB"
-      },
-      "summary": "输出事件 `o_driveToDataRoute_1` 存在对应的反压信号 `i_freeFromDataRoute_1`，表明下游模块可以控制事件流。",
-      "subject": "o_driveToDataRoute_1 与 i_freeFromDataRoute_1",
-      "explanation": "接口载荷合约中，`o_driveToDataRoute_1` 的 `free_signal` 为 `i_freeFromDataRoute_1`。这表明数据路由模块可以通过该信号反压 `intAndExc` 模块，阻止新事件的发送。该反压信号如何影响流程中的合并器（如 `dataRoteMerge`）是理解流程控制的关键。",
-      "signals": [
-        "o_driveToDataRoute_1",
-        "i_freeFromDataRoute_1"
-      ],
-      "instances": [
-        "dataRoteMerge"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json",
-          "path": "interface_data_contract"
-        }
-      ],
-      "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:completion_backpressure:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -441,30 +441,24 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "summary": "最终手册应重点解释 `inOutSele`、`intAndExeSele` 和 `preStackSpli` 等节点的选择条件，以及 `WbMerge`、`dataRoteMerge` 和 `SRMerge` 等合并器的仲裁与阻塞行为。",
-      "subject": "流程分支与合并逻辑",
-      "explanation": "该流程包含多个分支和合并点，其行为决定了事件如何从单一的 `i_driveFromWB` 最终分发到三个不同的输出端点。理解这些节点的控制逻辑（如选择信号、仲裁策略）是理解整个流程语义的核心。当前上下文仅提供了节点类型和连接关系，缺乏具体的选择条件和合并策略。",
+      "summary": "最终手册应重点描述 `inOutSele`、`intAndExeSele` 和 `preStackSpli` 等节点的选择/拆分逻辑，以及 `WbMerge`、`dataRoteMerge` 等节点的合并仲裁逻辑。",
+      "subject": "流程的分支与合并逻辑",
+      "explanation": "该流程包含了多个分支和合并点，这些节点决定了事件的路由路径。`inOutSele` 决定事件是入栈还是出栈，`intAndExeSele` 在异常和比较结果之间选择，`preStackSpli` 将处理结果反馈到流程起点。这些节点的行为是理解整个异常处理流程的关键。",
       "signals": [
-        "w_DRValid_2",
-        "w_SP_32",
+        "w_WbMerDriToInOut_1",
         "w_SRDrive_1",
-        "w_cmpMerDrive1_1"
+        "w_cmpMerDrive1_1",
+        "w_intSeleDrive1_1"
       ],
       "instances": [
         "inOutSele",
         "intAndExeSele",
         "preStackSpli",
         "WbMerge",
-        "dataRoteMerge",
-        "SRMerge"
-      ],
-      "related_assignments": [
-        "13",
-        "15",
-        "17"
+        "dataRoteMerge"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -481,18 +475,20 @@
         "module": "intAndExc",
         "flow_id": "flow_008_intAndExc_i_driveFromWB"
       },
-      "reason": "当前上下文仅指出 `inOutSele` 是一个选择器/拆分器，但未提供其选择信号或条件。需要查看RTL源码以确定其如何根据 `w_DRValid_2` 和 `w_SP_32` 等信号决定事件流向。",
-      "subject": "inOutSele 的选择逻辑",
-      "needed_source_slice": "always block or assign block for inOutSele instance",
+      "reason": "当前上下文仅提供了合并器的类型和连接关系，未包含其内部的反压或完成信号细节，这些信息对于理解流程的阻塞点和时序至关重要。",
+      "subject": "合并器内部的反压/握手逻辑",
+      "needed_source_slice": "always block or assign block for WbMerge, WbtopcMerge, dataRoteMerge, SRMerge",
       "signals": [
         "w_WbMerDriToInOut_1",
-        "w_DRValid_2",
-        "w_SP_32",
-        "w_inOutDriToDataSpli_1",
-        "w_inOutDriToOutMer_1"
+        "w_pcDriveToDataRoute_1",
+        "o_driveToDataRoute_1",
+        "w_SRDrive_1"
       ],
       "instances": [
-        "inOutSele"
+        "WbMerge",
+        "WbtopcMerge",
+        "dataRoteMerge",
+        "SRMerge"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -504,49 +500,12 @@
         }
       ],
       "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "intAndExc",
-        "flow_id": "flow_008_intAndExc_i_driveFromWB"
-      },
-      "reason": "这些合并器（`cWaitMerge3_1b`, `cMutexMerge3_104b_int`）的具体行为（如等待所有输入、互斥选择、优先级仲裁）未在上下文中说明。需要查看RTL源码或模块文档以确定其合并策略，这对于理解事件流控制和反压至关重要。",
-      "subject": "WbMerge 和 dataRoteMerge 的合并/仲裁策略",
-      "needed_source_slice": "module definition or instantiation for cWaitMerge3_1b and cMutexMerge3_104b_int",
-      "signals": [
-        "w_WbMerDriToInOut_1",
-        "o_driveToDataRoute_1"
-      ],
-      "instances": [
-        "WbMerge",
-        "dataRoteMerge"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json",
-          "path": "instances"
-        }
-      ],
-      "id": "semantic:flow:intAndExc:flow_008_intAndExc_i_driveFromWB:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "inOutSele 选择条件",
-      "reason": "上下文未提供 `inOutSele` 如何根据输入信号选择输出路径的具体逻辑。"
-    },
-    {
-      "field": "合并器仲裁策略",
-      "reason": "上下文未说明 `WbMerge`、`dataRoteMerge` 和 `SRMerge` 等合并器是等待所有输入、互斥选择还是其他策略。"
-    },
-    {
-      "field": "反压信号生成逻辑",
-      "reason": "上下文仅指出存在反压信号，但未说明 `o_freeToWB` 是如何从流程中各个组件的阻塞状态推导出来的。"
+      "field": "合并器内部反压信号",
+      "reason": "当前上下文未提供合并器内部的反压或完成信号细节，无法确定流程的阻塞点和时序关系。"
     }
   ]
 }

@@ -1,8 +1,8 @@
 # 模块 `data_slot`
 
 - 源文件：`rtl/rtl/slot/data_slot.v`。
-- 职责：AI 推断：数据槽模块，作为CPU、Dcache和Mesh之间的数据通路仲裁与分发中心。
-- 说明：模块接收来自Dcache、Mesh和CPU的驱动事件，通过内部组件（MutexMerge、SelSplit、cFifo）进行仲裁和选择，最终将数据分发到CPU、Dcache和Mesh。同时处理来自各方的释放信号，实现数据通路的完整生命周期管理。
+- 职责：AI 推断：从切片确认了i_driveFromDcache经过delay单元后连接至MutexMerge输入。。
+- 说明：切片[8]第209行显示i_driveFromDcache经过delay8U实例delay_driveFromDcache，输出w_delay_driveFromDcache，该信号通过MutexMerge实例处理。但delay单元的具体功能和MutexMerge内部的仲裁逻辑未在切片中完整描述。
 
 ## 1. 层级位置
 
@@ -66,7 +66,7 @@ data_slot
 - Payload：`i_driveFromDcache` -> `i_dcache_data [63:0]`。
 - 输出/影响：`o_driveToCpu`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：Dcache数据负载通过MutexMerge与驱动事件同步传递
+- AI 推断：数据负载与驱动事件并行传输，在MutexMerge处与事件同步
 
 ### `i_driveFromMesh`
 
@@ -74,7 +74,7 @@ data_slot
 - Payload：未记录。
 - 输出/影响：`o_driveToCpu`。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：手册应重点描述MutexMerge的合并仲裁行为及其对事件流的影响。
+- AI 推断：该流为纯事件驱动流，不涉及数据负载的传递或变换。
 
 ### `i_drvCpu2Mux`
 
@@ -82,7 +82,6 @@ data_slot
 - Payload：`i_drvCpu2Mux` -> `i_dataCPU2Mux_105 [104:0]`, `o_driveToDcache` -> `o_dcache_addr [31:0]`, `o_driveToDcache` -> `o_dcache_data [63:0]`, `o_driveToDcache` -> `o_dcache_we [7:0]`。
 - 输出/影响：`o_driveToDcache`, `o_driveToMesh`。
 - 结构复杂度：branch=1，join=0，blocking=1。
-- AI 推断：输出至Dcache的事件伴随地址、数据和写使能载荷
 
 
 ## 5. 内部组件与 assign 影响
@@ -101,14 +100,9 @@ data_slot
 | --- | --- | --- | --- | --- |
 | `assign_1` | data_path | `o_dcache_data` | r_cpu_data | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_2` | unknown | `o_dcache_addr` | r_cpu_addr | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | control_path | `w_toMesh_1` | i_data_bus_addr >=32'h00001000&&i_data_bus_addr<32'h00001200 | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_5` | control_path | `w_toCache_1` | i_data_bus_addr >=32'h00021200 | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_6` | control_path | `w_toUART0_1` | i_data_bus_addr >= 32'h00001000 && i_data_bus_addr <= 32'h0000100F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_7` | control_path | `w_toUART1_1` | i_data_bus_addr >= 32'h00001010 && i_data_bus_addr <= 32'h0000101F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_8` | control_path | `w_toPWM0_1` | i_data_bus_addr >= 32'h00001020 && i_data_bus_addr <= 32'h0000102F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_9` | control_path | `w_toPWM1_1` | i_data_bus_addr >= 32'h00001030 && i_data_bus_addr <= 32'h0000103F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_10` | control_path | `w_toIIC_1` | i_data_bus_addr >= 32'h00001040 && i_data_bus_addr <= 32'h0000104F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_11` | control_path | `w_toTIMER_1` | i_data_bus_addr >= 32'h00001050 && i_data_bus_addr <= 32'h0000105F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_12` | control_path | `w_toSPI0_1` | i_data_bus_addr >= 32'h00001060 && i_data_bus_addr <= 32'h0000106F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| `assign_13` | control_path | `w_toSPI1_1` | i_data_bus_addr >= 32'h00001070 && i_data_bus_addr <= 32'h0000107F | AI 推断：通过地址范围比较，确定CPU请求的目标是Dcache、Mesh还是其他外设 |
-| ... | ... | ... | ... | 其余 3 条 assign 省略 |
+| `assign_4` | control_path | `w_toMesh_1` | i_data_bus_addr >=32'h00001000&&i_data_bus_addr<32'h00001200 | AI 推断：地址解码信号，用于确定CPU数据请求的目标是Dcache还是Mesh。 |
+| `assign_5` | control_path | `w_toCache_1` | i_data_bus_addr >=32'h00021200 | AI 推断：地址解码信号，用于确定CPU数据请求的目标是Dcache还是Mesh。 |
+| `assign_22` | control_path | `o_data2Mesh` | data_pre_51 | AI 推断：将Mesh写使能、地址、数据、X/Y坐标打包成51位数据，用于输出到Mesh。 |
+| `assign_23` | data_path | `w_dataFromMesh_64` | {r_data0,i_dataFMesh[41:10]} | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_24` | data_path | `o_memData_65` | {w_memData_64,r_carry} | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | control_path | `o_dcache_we` | r_cpuWen_8 | 证据不足：No Semantic Layer assignment interpretation is available. |

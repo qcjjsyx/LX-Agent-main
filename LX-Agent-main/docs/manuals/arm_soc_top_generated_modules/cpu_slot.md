@@ -1,8 +1,8 @@
 # 模块 `cpu_slot`
 
 - 源文件：`rtl/rtl/slot/cpu_slot.v`。
-- 职责：AI 推断：i_driveFromMesh 是 data_mux 模块的输入数据驱动信号，代表来自片外 Mesh 网络的数据有效。。
-- 说明：切片 9 (第 214-216 行) 连接了 data_mux 的 i_driveFromMesh 端口至顶层输入 i_driveFromMesh。o_freeToMesh 作为对应的握手释放信号。切片 8 (第 209-211 行) 展示了输出方向相反的类似握手。这表明该流是一个标准的输入数据流，遵循 'drive' (valid) / 'free' (ready) 协议。
+- 职责：AI 推断：该模块是CPU核心与片上网络Mesh之间的数据与事件桥接槽位，负责路由驱动事件、数据负载和初始化控制流。。
+- 说明：通过i_driveFromMesh接收Mesh驱动事件，经内部组件（data_mux、u_cpu_core、u_memory_slot）处理后，通过o_driveToMesh输出响应事件；同时管理初始化序列（SoCStart、select2、event2CPU）和自由信号（i_freeFMesh/o_free2Mesh）。
 
 ## 1. 层级位置
 
@@ -81,7 +81,7 @@ cpu_slot
 - Payload：`o_driveToMesh` -> `o_data2Mesh [50:0]`。
 - 输出/影响：`o_driveToMesh`。
 - 结构复杂度：branch=3，join=3，blocking=0。
-- AI 推断：手册应重点描述data_mux作为核心分发节点的选择逻辑，以及事件在CPU核心和内存槽之间的回传路径。
+- AI 推断：手册应重点描述i_driveFromMesh事件如何经data_mux分发至CPU核心和内存槽，以及最终输出回Mesh的路径。
 
 
 ## 5. 内部组件与 assign 影响

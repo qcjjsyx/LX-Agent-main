@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/SPI_control.v`。
 - 职责：AI 推断：SPI 主从控制器，通过 APB 接口配置寄存器并驱动 SPI 协议引擎。
-- 说明：模块通过 reg_apb_u 实例接收 APB 总线配置，内部包含主模式 (spi_m_u)、从模式 (spi_s_u)、时钟分频 (clk_div_u)、CRC 校验 (CRC_rx_u/CRC_tx_u) 及错误检测 (MODF_u/OVR_u) 子模块，通过组合逻辑生成 SPI 接口控制信号和中断
+- 说明：模块通过 reg_apb 实例接收 APB 总线配置，内部包含主模式引擎 spi_m_u、从模式引擎 spi_s_u、时钟分频器 clk_div_u、CRC 校验单元及错误状态单元，实现 SPI 协议控制
 
 ## 1. 层级位置
 

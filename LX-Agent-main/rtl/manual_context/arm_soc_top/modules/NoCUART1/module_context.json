@@ -101,8 +101,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "该模块是UART外设与片上网络(NoC)之间的驱动事件与数据同步桥接层，负责将UART中断/状态事件转换为NoC驱动事件并同步数据负载。",
-      "explanation": "模块通过事件驱动接口(i_drvFNoc/o_drv2Noc)与NoC交互，内部使用FIFO链(cfifo0→pmtAck→cfifo1)和延迟链(delay8/9/10/11)对驱动事件进行同步与延迟处理，同时将UART实例的寄存器数据(r_dataFNoc_51, ReceiveData等)打包为51位数据输出。",
+      "value": "该模块是UART实例与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC侧的驱动事件经FIFO和确认管道转发至UART，并将UART的响应数据打包回NoC。",
+      "explanation": "模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck确认后送入cfifo1，再经三级延迟链(delay8/9/10)输出o_drv2Noc；同时将内部寄存器r_dataFNoc_51、r_dataHigh、ReceiveData等拼接为o_data2Noc_51返回NoC。uart_instance作为纯数据终端，其BAUD/IRQ/SIN/SOUT等信号直通模块边界。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -144,8 +144,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "该模块是UART外设与片上网络(NoC)之间的驱动事件与数据同步桥接层，负责将UART中断/状态事件转换为NoC驱动事件并同步数据负载。",
-        "explanation": "模块通过事件驱动接口(i_drvFNoc/o_drv2Noc)与NoC交互，内部使用FIFO链(cfifo0→pmtAck→cfifo1)和延迟链(delay8/9/10/11)对驱动事件进行同步与延迟处理，同时将UART实例的寄存器数据(r_dataFNoc_51, ReceiveData等)打包为51位数据输出。",
+        "value": "该模块是UART实例与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC侧的驱动事件经FIFO和确认管道转发至UART，并将UART的响应数据打包回NoC。",
+        "explanation": "模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck确认后送入cfifo1，再经三级延迟链(delay8/9/10)输出o_drv2Noc；同时将内部寄存器r_dataFNoc_51、r_dataHigh、ReceiveData等拼接为o_data2Noc_51返回NoC。uart_instance作为纯数据终端，其BAUD/IRQ/SIN/SOUT等信号直通模块边界。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -186,8 +186,8 @@
         ]
       },
       {
-        "value": "模块将输入的NoC驱动事件(i_drvFNoc)通过FIFO链和延迟链同步后输出(o_drv2Noc)，同时将UART内部数据(ReceiveData, r_dataHigh等)打包为51位数据输出(o_data2Noc_51)。",
-        "explanation": "事件流从i_drvFNoc进入cfifo0，经pmtAck和cfifo1后通过三级延迟链(delay8/9/10)输出；数据打包赋值将r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y组合为o_data2Noc_51，表明模块负责UART状态数据的NoC适配。",
+        "value": "模块将NoC输入的驱动事件i_drvFNoc通过两级FIFO和一级确认管道转发至输出o_drv2Noc，同时将UART内部状态数据打包为51位数据输出o_data2Noc_51。",
+        "explanation": "事件流从i_drvFNoc经cfifo0、pmtAck、cfifo1、delay8/9/10到达o_drv2Noc，形成7步流水线；数据输出由assign 0将r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y拼接而成，表明模块同时转发NoC数据并采集UART内部状态。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -204,7 +204,11 @@
         "instances": [
           "cfifo0",
           "cfifo1",
-          "pmtAck"
+          "pmtAck",
+          "delay8",
+          "delay9",
+          "delay10",
+          "delay11"
         ],
         "related_flows": [
           "flow_000_NoCUART1_i_drvFNoc"
@@ -217,20 +221,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+            "source": "knowledge_ir/modules/NoCUART1.json"
           },
           {
-            "source": "knowledge_ir/modules/NoCUART1.json"
+            "source": "parser_pipeline_rtl/modules/NoCUART1.json"
           }
         ]
       }
     ],
     "documentation_focus": [
       {
-        "value": "手册应重点描述驱动事件从输入到输出的同步路径(包括FIFO链和延迟链)以及数据打包格式。",
-        "explanation": "模块核心功能是事件同步和数据打包，FIFO链(cfifo0→pmtAck→cfifo1)和三级延迟链(delay8/9/10)构成主要事件路径，数据赋值定义了输出数据格式，这些是理解模块行为的关键。",
+        "value": "手册应重点描述驱动事件从输入到输出的7步流水线（cfifo0→pmtAck→cfifo1→三级延迟链），以及输出数据o_data2Noc_51的拼接规则。",
+        "explanation": "事件流路径清晰且包含多个组件，是模块核心功能；数据输出赋值涉及多个内部寄存器，需说明各字段来源（NoC数据高位、UART接收数据、状态位）。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -239,19 +243,28 @@
         "signals": [
           "i_drvFNoc",
           "o_drv2Noc",
-          "o_data2Noc_51"
+          "o_data2Noc_51",
+          "r_dataFNoc_51",
+          "r_dataHigh",
+          "ReceiveData",
+          "r_X",
+          "r_Y"
         ],
         "instances": [
           "cfifo0",
           "cfifo1",
-          "pmtAck"
+          "pmtAck",
+          "delay8",
+          "delay9",
+          "delay10",
+          "delay11"
         ],
         "related_flows": [
           "flow_000_NoCUART1_i_drvFNoc"
         ],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:NoCUART1:semantic_module"
         ],
@@ -397,8 +410,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_NoCUART1_i_drvFNoc.json",
       "reader_takeaway": {
-        "value": "手册应强调事件流是纯控制路径，数据打包通过独立赋值完成，两者在时序上可能对齐但逻辑上解耦。",
-        "explanation": "当前上下文显示事件流经过 FIFO 和延迟链，而数据打包直接来自内部寄存器。手册应说明事件流不携带数据，数据通过并行总线输出，并指出事件可能作为数据有效的使能信号。",
+        "value": "最终手册应重点描述事件流如何从输入驱动传播到输出驱动，以及数据负载在传播过程中如何被整形。",
+        "explanation": "该流的核心是串行事件传播，但 assign 0 显示输出数据由多个内部寄存器拼接而成。手册应解释这些寄存器的来源（如是否来自输入数据、内部状态或控制逻辑），以及它们与事件传播的时序关系。同时，应说明 FIFO 和延迟链的作用，但避免过度推测背压细节。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -409,6 +422,7 @@
         "signals": [
           "i_drvFNoc",
           "o_drv2Noc",
+          "i_dataFNoc_51",
           "o_data2Noc_51"
         ],
         "instances": [
@@ -432,7 +446,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
+            "source": "instances.connections",
             "path": "knowledge_ir/modules/NoCUART1.json"
           },
           {
@@ -442,8 +456,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "从输入事件 i_drvFNoc 到输出事件 o_drv2Noc 的单驱动内部事件流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据打包输出。",
-            "explanation": "该流是 NoCUART1 模块内部唯一的事件驱动路径，从输入端口 i_drvFNoc 开始，经过 cfifo0、pmtAck、delay11、cfifo1、delay8、delay9、delay10 七个阶段，最终到达输出端口 o_drv2Noc。所有阶段均为单输入单输出，无分支或合并点，形成一条清晰的流水线。",
+            "value": "从输入事件驱动 i_drvFNoc 到输出事件驱动 o_drv2Noc 的串行流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据整形后发送至片上网络。",
+            "explanation": "该流由单个输入事件 i_drvFNoc 触发，经过 cfifo0 缓冲、pmtAck 确认、delay11 延迟、cfifo1 再次缓冲，再经 delay8/delay9/delay10 三级延迟后输出。流中无分支或合并点，是纯串行事件传播路径。assign 0 显示输出数据 o_data2Noc_51 由内部寄存器 r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y 拼接而成，表明该流在传播过程中携带并整形了数据负载。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -477,7 +491,7 @@
             "semantic_evidence": [
               {
                 "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+                "path": "knowledge_ir/modules/NoCUART1.json"
               },
               {
                 "source": "transparent_flows",
@@ -486,17 +500,19 @@
             ]
           },
           {
-            "value": "事件流 o_drv2Noc 与数据总线 o_data2Noc_51 并行输出，事件触发数据采样，但数据打包独立于事件路径。",
-            "explanation": "事件流从 i_drvFNoc 到 o_drv2Noc 经过 FIFO 和延迟链，而数据总线 o_data2Noc_51 由内部寄存器直接组合生成。事件流可能作为数据有效的指示信号，但当前上下文未显示直接耦合。",
+            "value": "事件流 i_drvFNoc 到 o_drv2Noc 的传播伴随着数据负载的整形，但数据负载的更新时机与事件传播的精确关系未在上下文中明确。",
+            "explanation": "输入事件 i_drvFNoc 携带数据 i_dataFNoc_51，输出事件 o_drv2Noc 携带数据 o_data2Noc_51。assign 0 显示输出数据由多个内部寄存器拼接而成，但这些寄存器（如 r_dataFNoc_51、ReceiveData）的更新是否与事件流同步，或由其他独立逻辑控制，当前上下文未提供证据。因此，数据负载的更新与事件传播的耦合程度需进一步确认。",
             "certainty": "ai_inferred",
-            "confidence": "low",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:data_control_effect:001",
-            "doc_priority": "secondary",
+            "doc_priority": "primary",
             "signals": [
+              "i_drvFNoc",
               "o_drv2Noc",
+              "i_dataFNoc_51",
               "o_data2Noc_51"
             ],
             "instances": [],
@@ -522,15 +538,15 @@
             ]
           },
           {
-            "value": "cfifo0、pmtAck、cfifo1 作为 FIFO 阶段可能提供背压，但当前上下文未提供具体信号。",
-            "explanation": "这三个 FIFO 实例可能具有满/空标志或就绪信号，用于控制事件流。但当前上下文未列出任何 free 或 backpressure 信号，因此无法确认背压机制的具体实现。",
+            "value": "流中存在三个 FIFO 级（cfifo0、pmtAck、cfifo1），它们可能因满状态而阻塞事件传播，但背压信号未在上下文中明确。",
+            "explanation": "上下文将 cfifo0、pmtAck、cfifo1 标记为阻塞点，但未提供它们的满/空状态信号或背压路径。因此，背压机制的存在是合理的推断，但具体实现（如是否使用 ready/valid 握手）无法从当前证据确认。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:completion_backpressure:001",
-            "doc_priority": "reference",
+            "doc_priority": "secondary",
             "signals": [],
             "instances": [
               "cfifo0",
@@ -547,8 +563,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+                "source": "transparent_flows",
+                "path": "knowledge_ir/modules/NoCUART1.json"
               }
             ]
           }
@@ -576,13 +592,40 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No component role claim is available.",
-        "review_status": "needs_review"
+        "value": "作为NoC驱动事件输入的第一级FIFO，缓冲i_drvFNoc事件并输出至pmtAck确认管道。",
+        "explanation": "cfifo0接收模块边界事件i_drvFNoc，输出w_drv2Pmt至pmtAck，同时输出o_free2Noc作为空闲信号返回NoC，表明其具有事件缓冲和流控功能。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:NoCUART1:component_role:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drvFNoc",
+          "w_drv2Pmt",
+          "o_free2Noc"
+        ],
+        "instances": [
+          "cfifo0"
+        ],
+        "related_flows": [
+          "flow_000_NoCUART1_i_drvFNoc"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:NoCUART1:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/NoCUART1.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          }
+        ]
       },
       "evidence_refs": [
         "ev:NoCUART1:key_instances"
@@ -603,13 +646,39 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No component role claim is available.",
-        "review_status": "needs_review"
+        "value": "作为驱动事件输出的第二级FIFO，接收经确认和延迟的事件，输出至三级延迟链。",
+        "explanation": "cfifo1接收w_drv2fifo1_delay（经delay11延迟），输出w_drv2Noc_delay至delay8，构成事件输出路径的最后缓冲级。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:NoCUART1:component_role:003",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_drv2fifo1_delay",
+          "w_drv2Noc_delay"
+        ],
+        "instances": [
+          "cfifo1"
+        ],
+        "related_flows": [
+          "flow_000_NoCUART1_i_drvFNoc"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:NoCUART1:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/NoCUART1.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          }
+        ]
       },
       "evidence_refs": [
         "ev:NoCUART1:key_instances"
@@ -630,13 +699,39 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No component role claim is available.",
-        "review_status": "needs_review"
+        "value": "作为事件确认管道，接收cfifo0的输出事件并产生确认后的驱动事件，送入下一级FIFO。",
+        "explanation": "pmtAck接收w_drv2Pmt，输出w_drv2fifo1至delay11，表明其执行事件确认/握手机制，确保事件可靠传递。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:NoCUART1:component_role:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_drv2Pmt",
+          "w_drv2fifo1"
+        ],
+        "instances": [
+          "pmtAck"
+        ],
+        "related_flows": [
+          "flow_000_NoCUART1_i_drvFNoc"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:NoCUART1:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/NoCUART1.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+          }
+        ]
       },
       "evidence_refs": [
         "ev:NoCUART1:key_instances"
@@ -662,45 +757,17 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "将UART内部数据(ReceiveData, r_dataHigh, r_X, r_Y)与输入数据(r_dataFNoc_51)打包为51位NoC数据输出。",
-        "explanation": "赋值将r_dataFNoc_51的高位和中间位、r_dataHigh、ReceiveData、r_X、r_Y组合，表明模块将UART接收数据(ReceiveData)和状态位(r_X, r_Y)与输入数据合并后输出，实现数据透传与状态嵌入。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:NoCUART1:assignment_interpretation:001",
-        "doc_priority": "primary",
-        "signals": [
-          "o_data2Noc_51",
-          "r_dataFNoc_51",
-          "r_dataHigh",
-          "ReceiveData",
-          "r_X",
-          "r_Y"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_NoCUART1_i_drvFNoc"
-        ],
-        "related_assignments": [
-          "0"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:NoCUART1:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/NoCUART1.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:NoCUART1:assignments"
@@ -712,7 +779,7 @@
       "signal": "i_drvFNoc",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 26,
+      "importance_score": 28,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -759,6 +826,22 @@
       ]
     },
     {
+      "signal": "ReceiveData",
+      "kind": "reg",
+      "width_text": "[7:0]",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:parser_module",
+        "ev:NoCUART1:semantic_module"
+      ]
+    },
+    {
       "signal": "i_dataFNoc_51",
       "kind": "interface_or_inferred",
       "width_text": "",
@@ -778,7 +861,7 @@
       "signal": "o_free2Noc",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 12,
+      "importance_score": 14,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -787,6 +870,54 @@
       ],
       "evidence_refs": [
         "ev:NoCUART1:interface",
+        "ev:NoCUART1:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_dataHigh",
+      "kind": "reg",
+      "width_text": "[23:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:parser_module",
+        "ev:NoCUART1:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_X",
+      "kind": "reg",
+      "width_text": "[4:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:parser_module",
+        "ev:NoCUART1:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_Y",
+      "kind": "reg",
+      "width_text": "[4:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:parser_module",
         "ev:NoCUART1:semantic_module"
       ]
     },
@@ -811,24 +942,6 @@
       "kind": "wire",
       "width_text": "1",
       "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:knowledge_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_drv2fifo1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -879,66 +992,52 @@
       ]
     },
     {
-      "signal": "SIN",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
+      "signal": "w_rdata",
+      "kind": "wire",
+      "width_text": "[7:0]",
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
+        "parse",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:NoCUART1:interface",
+        "ev:NoCUART1:parser_module",
         "ev:NoCUART1:semantic_module"
       ]
     },
     {
-      "signal": "SOUT",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
+      "signal": "r_dataFNoc_51",
+      "kind": "reg",
+      "width_text": "[50:0]",
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
+        "parse",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:NoCUART1:interface",
+        "ev:NoCUART1:parser_module",
         "ev:NoCUART1:semantic_module"
       ]
     },
     {
-      "signal": "NCTS",
-      "kind": "interface_or_inferred",
-      "width_text": "",
+      "signal": "w_drv2fifo1",
+      "kind": "wire",
+      "width_text": "1",
       "importance_score": 6,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
+        "parse",
         "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:NoCUART1:interface",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "NRTS",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:interface",
+        "ev:NoCUART1:parser_module",
+        "ev:NoCUART1:knowledge_module",
         "ev:NoCUART1:semantic_module"
       ]
     },
@@ -1007,6 +1106,38 @@
       ]
     },
     {
+      "signal": "SIN",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface",
+        "ev:NoCUART1:semantic_module"
+      ]
+    },
+    {
+      "signal": "SOUT",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface",
+        "ev:NoCUART1:semantic_module"
+      ]
+    },
+    {
       "signal": "w_drv2Noc_delay1",
       "kind": "wire",
       "width_text": "1",
@@ -1043,145 +1174,7 @@
       ]
     },
     {
-      "signal": "w_rdata",
-      "kind": "wire",
-      "width_text": "[7:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_dataFNoc_51",
-      "kind": "reg",
-      "width_text": "[50:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_dataHigh",
-      "kind": "reg",
-      "width_text": "[23:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "ReceiveData",
-      "kind": "reg",
-      "width_text": "[7:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_X",
-      "kind": "reg",
-      "width_text": "[4:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_Y",
-      "kind": "reg",
-      "width_text": "[4:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:parser_module",
-        "ev:NoCUART1:semantic_module"
-      ]
-    },
-    {
-      "signal": "NDCD",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:interface"
-      ]
-    },
-    {
-      "signal": "NDTR",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:interface"
-      ]
-    },
-    {
       "signal": "NOUT1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:interface"
-      ]
-    },
-    {
-      "signal": "RCLK_BAUD",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1209,6 +1202,20 @@
       ]
     },
     {
+      "signal": "rst",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface"
+      ]
+    },
+    {
       "signal": "NRI",
       "kind": "interface_or_inferred",
       "width_text": "",
@@ -1223,7 +1230,7 @@
       ]
     },
     {
-      "signal": "rst_finish",
+      "signal": "RCLK_BAUD",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1237,7 +1244,49 @@
       ]
     },
     {
-      "signal": "rst",
+      "signal": "NOUT2",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface"
+      ]
+    },
+    {
+      "signal": "NDTR",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface"
+      ]
+    },
+    {
+      "signal": "NDCD",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface"
+      ]
+    },
+    {
+      "signal": "NCTS",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1265,7 +1314,21 @@
       ]
     },
     {
-      "signal": "NOUT2",
+      "signal": "NRTS",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir"
+      ],
+      "evidence_refs": [
+        "ev:NoCUART1:interface"
+      ]
+    },
+    {
+      "signal": "rst_finish",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1371,9 +1434,9 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "当前上下文仅显示pmtAck位于cfifo0和cfifo1之间，但未提供其内部同步机制和与UART数据就绪的交互细节，需要RTL源码确认其具体同步行为。",
-      "subject": "pmtAck同步逻辑",
-      "needed_source_slice": "always block; instance connections",
+      "question": "紧凑上下文未提供uart_instance内部寄存器（如ReceiveData、r_dataHigh、r_X、r_Y）的更新逻辑，无法确定数据打包的完整语义。",
+      "subject": "uart_instance内部状态与数据路径",
+      "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
       ],
@@ -1382,9 +1445,9 @@
       ]
     },
     {
-      "question": "上下文显示存在三级延迟链(delay8/9/10)和一级延迟(delay11)，但未提供延迟周期数或配置参数，需要RTL源码确认延迟深度。",
-      "subject": "延迟链(delay8/9/10/11)参数",
-      "needed_source_slice": "instance connections; parameter definitions",
+      "question": "紧凑上下文仅显示延迟链的连接关系，未提供延迟周期数或触发条件，无法确定事件流水线的时序特性。",
+      "subject": "延迟链组件（delay8/9/10/11）的实现细节",
+      "needed_source_slice": "module declaration, instance connections",
       "source_layers": [
         "semantic_layer"
       ],
@@ -1420,8 +1483,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "该模块是UART外设与片上网络(NoC)之间的驱动事件与数据同步桥接层，负责将UART中断/状态事件转换为NoC驱动事件并同步数据负载。",
-      "explanation": "模块通过事件驱动接口(i_drvFNoc/o_drv2Noc)与NoC交互，内部使用FIFO链(cfifo0→pmtAck→cfifo1)和延迟链(delay8/9/10/11)对驱动事件进行同步与延迟处理，同时将UART实例的寄存器数据(r_dataFNoc_51, ReceiveData等)打包为51位数据输出。",
+      "value": "该模块是UART实例与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC侧的驱动事件经FIFO和确认管道转发至UART，并将UART的响应数据打包回NoC。",
+      "explanation": "模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck确认后送入cfifo1，再经三级延迟链(delay8/9/10)输出o_drv2Noc；同时将内部寄存器r_dataFNoc_51、r_dataHigh、ReceiveData等拼接为o_data2Noc_51返回NoC。uart_instance作为纯数据终端，其BAUD/IRQ/SIN/SOUT等信号直通模块边界。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -2069,8 +2132,8 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_NoCUART1_i_drvFNoc.json",
         "reader_takeaway": {
-          "value": "手册应强调事件流是纯控制路径，数据打包通过独立赋值完成，两者在时序上可能对齐但逻辑上解耦。",
-          "explanation": "当前上下文显示事件流经过 FIFO 和延迟链，而数据打包直接来自内部寄存器。手册应说明事件流不携带数据，数据通过并行总线输出，并指出事件可能作为数据有效的使能信号。",
+          "value": "最终手册应重点描述事件流如何从输入驱动传播到输出驱动，以及数据负载在传播过程中如何被整形。",
+          "explanation": "该流的核心是串行事件传播，但 assign 0 显示输出数据由多个内部寄存器拼接而成。手册应解释这些寄存器的来源（如是否来自输入数据、内部状态或控制逻辑），以及它们与事件传播的时序关系。同时，应说明 FIFO 和延迟链的作用，但避免过度推测背压细节。",
           "certainty": "ai_inferred",
           "confidence": "high",
           "source_layers": [
@@ -2081,6 +2144,7 @@
           "signals": [
             "i_drvFNoc",
             "o_drv2Noc",
+            "i_dataFNoc_51",
             "o_data2Noc_51"
           ],
           "instances": [
@@ -2104,7 +2168,7 @@
           ],
           "semantic_evidence": [
             {
-              "source": "interface.event_ports",
+              "source": "instances.connections",
               "path": "knowledge_ir/modules/NoCUART1.json"
             },
             {
@@ -2114,8 +2178,8 @@
           ],
           "supporting_claims": [
             {
-              "value": "从输入事件 i_drvFNoc 到输出事件 o_drv2Noc 的单驱动内部事件流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据打包输出。",
-              "explanation": "该流是 NoCUART1 模块内部唯一的事件驱动路径，从输入端口 i_drvFNoc 开始，经过 cfifo0、pmtAck、delay11、cfifo1、delay8、delay9、delay10 七个阶段，最终到达输出端口 o_drv2Noc。所有阶段均为单输入单输出，无分支或合并点，形成一条清晰的流水线。",
+              "value": "从输入事件驱动 i_drvFNoc 到输出事件驱动 o_drv2Noc 的串行流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据整形后发送至片上网络。",
+              "explanation": "该流由单个输入事件 i_drvFNoc 触发，经过 cfifo0 缓冲、pmtAck 确认、delay11 延迟、cfifo1 再次缓冲，再经 delay8/delay9/delay10 三级延迟后输出。流中无分支或合并点，是纯串行事件传播路径。assign 0 显示输出数据 o_data2Noc_51 由内部寄存器 r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y 拼接而成，表明该流在传播过程中携带并整形了数据负载。",
               "certainty": "ai_inferred",
               "confidence": "high",
               "source_layers": [
@@ -2149,7 +2213,7 @@
               "semantic_evidence": [
                 {
                   "source": "instances.connections",
-                  "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+                  "path": "knowledge_ir/modules/NoCUART1.json"
                 },
                 {
                   "source": "transparent_flows",
@@ -2158,17 +2222,19 @@
               ]
             },
             {
-              "value": "事件流 o_drv2Noc 与数据总线 o_data2Noc_51 并行输出，事件触发数据采样，但数据打包独立于事件路径。",
-              "explanation": "事件流从 i_drvFNoc 到 o_drv2Noc 经过 FIFO 和延迟链，而数据总线 o_data2Noc_51 由内部寄存器直接组合生成。事件流可能作为数据有效的指示信号，但当前上下文未显示直接耦合。",
+              "value": "事件流 i_drvFNoc 到 o_drv2Noc 的传播伴随着数据负载的整形，但数据负载的更新时机与事件传播的精确关系未在上下文中明确。",
+              "explanation": "输入事件 i_drvFNoc 携带数据 i_dataFNoc_51，输出事件 o_drv2Noc 携带数据 o_data2Noc_51。assign 0 显示输出数据由多个内部寄存器拼接而成，但这些寄存器（如 r_dataFNoc_51、ReceiveData）的更新是否与事件流同步，或由其他独立逻辑控制，当前上下文未提供证据。因此，数据负载的更新与事件传播的耦合程度需进一步确认。",
               "certainty": "ai_inferred",
-              "confidence": "low",
+              "confidence": "medium",
               "source_layers": [
                 "semantic_layer"
               ],
               "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:data_control_effect:001",
-              "doc_priority": "secondary",
+              "doc_priority": "primary",
               "signals": [
+                "i_drvFNoc",
                 "o_drv2Noc",
+                "i_dataFNoc_51",
                 "o_data2Noc_51"
               ],
               "instances": [],
@@ -2194,15 +2260,15 @@
               ]
             },
             {
-              "value": "cfifo0、pmtAck、cfifo1 作为 FIFO 阶段可能提供背压，但当前上下文未提供具体信号。",
-              "explanation": "这三个 FIFO 实例可能具有满/空标志或就绪信号，用于控制事件流。但当前上下文未列出任何 free 或 backpressure 信号，因此无法确认背压机制的具体实现。",
+              "value": "流中存在三个 FIFO 级（cfifo0、pmtAck、cfifo1），它们可能因满状态而阻塞事件传播，但背压信号未在上下文中明确。",
+              "explanation": "上下文将 cfifo0、pmtAck、cfifo1 标记为阻塞点，但未提供它们的满/空状态信号或背压路径。因此，背压机制的存在是合理的推断，但具体实现（如是否使用 ready/valid 握手）无法从当前证据确认。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
               "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:completion_backpressure:001",
-              "doc_priority": "reference",
+              "doc_priority": "secondary",
               "signals": [],
               "instances": [
                 "cfifo0",
@@ -2219,8 +2285,8 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "instances.connections",
-                  "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+                  "source": "transparent_flows",
+                  "path": "knowledge_ir/modules/NoCUART1.json"
                 }
               ]
             }
@@ -2268,9 +2334,9 @@
   },
   "source_review_claims": [
     {
-      "subject": "i_drvFNoc输入路径",
-      "summary": "i_drvFNoc直接连接到cfifo0的i_drive端口，无需额外同步逻辑。",
-      "explanation": "从切片2（第68行）可见，i_drvFNoc直接连接到cfifo0实例的i_drive端口，表明该输入信号直接作为FIFO的驱动信号，未使用其他同步或延迟电路。",
+      "subject": "uart_instance内部状态与数据路径",
+      "summary": "内部寄存器r_dataFNoc_51、r_dataHigh、r_X、r_Y在时钟沿无条件更新为固定值，未体现UART接收数据的动态写入。",
+      "explanation": "切片3显示：在非复位条件下，r_dataFNoc_51被直接赋值为输入i_dataFNoc_51，r_X固定为5'b10001，r_Y固定为5'b00000，且无其他写入通路。切片5显示输出o_data2Noc_51由上述寄存器拼接而成，但r_dataHigh、ReceiveData的来源未在当前切片中体现。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -2278,16 +2344,23 @@
         "manual_context"
       ],
       "signals": [
-        "i_drvFNoc"
+        "r_dataFNoc_51",
+        "r_dataHigh",
+        "r_X",
+        "r_Y",
+        "o_data2Noc_51"
       ],
-      "instances": [
-        "cfifo0"
-      ],
+      "instances": [],
       "source_refs": [
         {
           "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 67,
-          "line_end": 70
+          "line_start": 86,
+          "line_end": 96
+        },
+        {
+          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
+          "line_start": 169,
+          "line_end": 169
         }
       ],
       "evidence_refs": [
@@ -2298,10 +2371,10 @@
       "review_status": "needs_review"
     },
     {
-      "subject": "延迟链参数",
-      "summary": "延迟链由三个级联延迟单元组成具体延迟深度由各延迟单元名称隐含。",
-      "explanation": "从切片4（第111-113行）可见，延迟链由 delay64U（64个延迟单元）、delay32U（32个延迟单元）和 delay8U（8个延迟单元）三级级联而成，总延迟深度为64+32+8=104个单位。此外切片3（第101行）有一个独立的 delay16U 用于其他逻辑。",
-      "certainty": "ai_inferred",
+      "subject": "延迟链组件（delay8/9/10/11）的实现细节",
+      "summary": "延迟链由delay64U、delay32U、delay8U三级串联组成，仅知输入输出关系，无周期数与触发条件细节。",
+      "explanation": "切片4明确例化了delay64U、delay32U、delay8U三个延迟单元，连接顺序为w_drv2Noc_delay -> delay8 -> w_drv2Noc_delay1 -> delay9 -> w_drv2Noc_delay2 -> delay10 -> o_drv2Noc。但切片未给出内部延迟周期数（64/32/8的具体含义）或时钟触发条件（如是否为CLOCK上升沿）。",
+      "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
         "rtl_source",
@@ -2323,11 +2396,6 @@
           "file": "rtl/rtl/IONet/UART/NoCUART1.v",
           "line_start": 111,
           "line_end": 113
-        },
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 101,
-          "line_end": 101
         }
       ],
       "evidence_refs": [
@@ -2335,40 +2403,40 @@
         "ev:NoCUART1:semantic_flow:flow_000_NoCUART1_i_drvFNoc",
         "ev:NoCUART1:flow:flow_000_NoCUART1_i_drvFNoc"
       ],
-      "review_status": "ready"
+      "review_status": "needs_review"
     },
     {
-      "subject": "pmtAck同步逻辑",
-      "summary": "当前切片未提及pmtAck信号或其同步机制。",
-      "explanation": "提供的RTL切片（第21-45、66-70、99-115行）中未出现pmtAck信号名称，无法确认其同步行为或与UART数据的交互。",
+      "subject": "semantic_flow.i_drvFNoc",
+      "summary": "i_drvFNoc直连cfifo2的i_drive端口，经延迟链后产生o_drv2Noc，但途中数据通路与状态更新逻辑不完整。",
+      "explanation": "从切片2可知i_drvFNoc直接连接到cfifo0的i_drive；切片4显示从w_drv2Noc_delay经三级延迟得到o_drv2Noc。但中间无任何关于w_drv2Noc_delay与其他寄存器（如r_dataFNoc_51、r_X、r_Y）关联的代码，数据如何被捕获并打包到输出o_data2Noc_51的完整路径不明确。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
         "rtl_source",
         "manual_context"
       ],
-      "signals": [],
-      "instances": [],
+      "signals": [
+        "i_drvFNoc",
+        "o_drv2Noc",
+        "w_drv2Noc_delay",
+        "o_data2Noc_51"
+      ],
+      "instances": [
+        "cfifo0",
+        "delay8",
+        "delay9",
+        "delay10"
+      ],
       "source_refs": [
         {
           "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 21,
-          "line_end": 45
-        },
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 66,
+          "line_start": 68,
           "line_end": 70
         },
         {
           "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 99,
-          "line_end": 103
-        },
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 109,
-          "line_end": 115
+          "line_start": 111,
+          "line_end": 113
         }
       ],
       "evidence_refs": [
@@ -2382,7 +2450,7 @@
   "source_review_report": {
     "status": "reviewed",
     "claim_count": 3,
-    "open_question_count": 1,
+    "open_question_count": 3,
     "source_file": "rtl/rtl/IONet/UART/NoCUART1.v",
     "report_file": "source_review_report.json"
   }

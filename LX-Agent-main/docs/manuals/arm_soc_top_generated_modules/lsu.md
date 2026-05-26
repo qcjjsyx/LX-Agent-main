@@ -1,8 +1,8 @@
 # 模块 `lsu`
 
 - 源文件：`rtl/rtl/Lsu/lsu.v`。
-- 职责：AI 推断：加载存储单元，负责仲裁来自执行单元、通用寄存器文件、数据路由和指令缓存的访存请求，并分发至写回、异常、发射等下游模块。。
-- 说明：模块接收来自执行单元、通用寄存器文件、数据路由和指令缓存的驱动事件，通过内部Fifo、MutexMerge、SelSplit等组件进行仲裁和分发，最终输出到写回、异常、发射、通用寄存器文件、数据路由和指令缓存等多个下游模块，并管理对应的释放信号。
+- 职责：AI 推断：加载存储单元，负责执行内存访问指令（加载/存储）并管理数据在处理器核心与内存/外设之间的传输。。
+- 说明：模块接收来自执行单元（exe）、通用寄存器组（grf）、数据路由（dataRout）和指令缓存（icache）的驱动事件，并产生多个输出事件以驱动数据路由、异常处理、写回、寄存器读写等模块。其内部包含多个FIFO、MutexMerge、SelSplit等组件，用于处理多周期加载/存储、地址计算、数据对齐和异常检测。
 
 ## 1. 层级位置
 
@@ -110,7 +110,7 @@ lsu
 - Payload：`i_dataRoutDriveToLsu_1` -> `i_exeToLsuData_163 [162:0]`, `i_dataRoutDriveToLsu_1` -> `i_grfToLsuData_64 [63:0]`, `o_lsuDriveToLaunch_1` -> `o_lsuToLaunchData_64 [63:0]`。
 - 输出/影响：`o_lsuDriveToLaunch_1`。
 - 结构复杂度：branch=4，join=5，blocking=5。
-- AI 推断：数据路由事件携带执行单元和通用寄存器文件的数据负载，驱动后续处理。
+- AI 推断：最终手册应重点描述数据路由事件从输入到输出的完整路径，包括关键分支和合并点的作用。
 
 ### `i_exeDriveToLsu_1`
 
@@ -118,7 +118,7 @@ lsu
 - Payload：`i_exeDriveToLsu_1` -> `i_exeToLsuData_163 [162:0]`, `o_lsuDriveToExcp_1` -> `o_lsuToDataRoutData_104 [103:0]`, `o_lsuDriveToExcp_1` -> `o_lsuToIcacheData_104 [103:0]`, `o_lsuDriveToExcp_1` -> `o_lsuToLaunchData_64 [63:0]`, `o_lsuDriveToRGrf_1` -> `o_lsuToRGrfData_8 [7:0]`, `o_lsuDriveToWGrf_1` -> `o_lsuToDataRoutData_104 [103:0]`, `o_lsuDriveToWGrf_1` -> `o_lsuToIcacheData_104 [103:0]`, `o_lsuDriveToWGrf_1` -> `o_lsuToLaunchData_64 [63:0]`。
 - 输出/影响：`o_lsuDriveToExcp_1`, `o_lsuDriveToWGrf_1`, `o_lsuDriveToRGrf_1`。
 - 结构复杂度：branch=5，join=4，blocking=5。
-- AI 推断：手册应重点描述执行事件在LSU内部的扇出分发结构，包括各选择器/分离器的选择逻辑和互斥合并器的仲裁机制。
+- AI 推断：文档应重点描述该流从输入到三个输出端点的完整路径，包括各分支点和合并点的作用。
 
 ### `i_grfDriveToLsu_1`
 
@@ -126,7 +126,7 @@ lsu
 - Payload：`i_grfDriveToLsu_1` -> `i_grfToLsuData_64 [63:0]`, `o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_104 [103:0]`, `o_lsuDriveToIcache_1` -> `o_lsuToIcacheData_104 [103:0]`。
 - 输出/影响：`o_lsuDriveToDataRout_1`, `o_lsuDriveToIcache_1`。
 - 结构复杂度：branch=2，join=2，blocking=2。
-- AI 推断：最终手册应重点描述 GRF 驱动事件如何通过 grfSelector 分叉，以及后续的合并和最终分发逻辑。
+- AI 推断：文档应重点描述 GRF 驱动事件如何通过分叉和合并路径最终分发，以及各组件在路径选择中的作用。
 
 ### `i_icacheDriveToLsu_1`
 
@@ -134,7 +134,7 @@ lsu
 - Payload：`i_icacheDriveToLsu_1` -> `i_exeToLsuData_163 [162:0]`, `i_icacheDriveToLsu_1` -> `i_grfToLsuData_64 [63:0]`, `i_icacheDriveToLsu_1` -> `i_icacheData_64 [63:0]`, `o_lsuDriveToLaunch_1` -> `o_lsuToLaunchData_64 [63:0]`。
 - 输出/影响：`o_lsuDriveToLaunch_1`。
 - 结构复杂度：branch=4，join=5，blocking=5。
-- AI 推断：o_lsuFreeToIcache_1是i_icacheDriveToLsu_1事件的空闲/反压信号。
+- AI 推断：icache提供的64位数据通过流中的互斥合并、延迟、分发和最终合并，最终作为发射数据输出。
 
 
 ## 5. 内部组件与 assign 影响
@@ -161,12 +161,14 @@ lsu
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_8` | control_path | `w_grfToLsuData_64` | (w_isMultiLS_1 \| i_wen_2 == 2'b11) ? i_grfToLsuData_64 : {i_grfToLsuData_64[31:0],i_grfToLsuD... | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | data_path | `w_address_32` | w_P_1 == 1'b1 ? w_data_64[31:0] : w_data_64[63:32] | AI 推断：根据P位（w_P_1）选择数据的高32位或低32位作为内存访问地址。 |
+| `assign_8` | control_path | `w_grfToLsuData_64` | (w_isMultiLS_1 \| i_wen_2 == 2'b11) ? i_grfToLsuData_64 : {i_grfToLsuData_64[31:0],i_grfToLsuD... | AI 推断：根据是否为多加载/存储指令和写使能信号，对来自通用寄存器组的数据进行字交换（word swap）。 |
 | `assign_14` | control_path | `w_dataTmp_64` | i_wen_2 == 2'b11 ? w_data_64 : {w_data_64[31:0],w_data_64[63:32]} | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_15` | data_path | `o_lsuToWriteBackData_103` | {w_dHi_4,w_dLo_4,r_lsuToWriteBackData_74,w_S_1,w_writeBackIdentifyData_15,w_nzcv_4,w_writeRd_1} | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_17` | control_path | `w_icacheFlag_1` | (w_lsuToDataRoutData_104[103:72]>=32'h01200 && w_lsuToDataRoutData_104[103:72]<=32'h211ff) ? ... | AI 推断：检测数据路由输出地址是否落在指令缓存地址范围（0x01200-0x211ff）内。 |
 | `assign_18` | data_path | `o_exception_36` | {w_currentPc_32,4'b1111} | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_19` | control_path | `o_endFlag_1` | w_endLoadFlag_1 \| w_endStoreFlag_1 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_20` | control_path | `o_multiLoadOrStoreOver` | w_multiLoadSelectorOver1_1 \| w_multiStoreSelectorOver_1 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_21` | control_path | `o_lsuFreeToExe_1` | i_lsuFreeFromLaunch_1 \| o_multiLoadOrStoreOver \| w_stateUpdateSelectorOver_1 \| w_bitOpSelecto... | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_21` | control_path | `o_lsuFreeToExe_1` | i_lsuFreeFromLaunch_1 \| o_multiLoadOrStoreOver \| w_stateUpdateSelectorOver_1 \| w_bitOpSelecto... | AI 推断：组合多个完成信号，向执行单元发送释放信号，表示lsu已处理完当前指令。 |
 | `assign_22` | control_path | `o_loadEndFlag` | w_stateValid_12[11] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_23` | control_path | `o_loadEndDrive` | w_loadOver_1 | 证据不足：No Semantic Layer assignment interpretation is available. |

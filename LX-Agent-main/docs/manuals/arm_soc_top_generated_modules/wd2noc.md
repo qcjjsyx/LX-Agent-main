@@ -1,8 +1,8 @@
 # 模块 `wd2noc`
 
 - 源文件：`rtl/rtl/IONet/Watchdog/wd2noc.v`。
-- 职责：AI 推断：看门狗中断与复位信号到片上网络（NoC）的桥接与同步模块。
-- 说明：模块将来自看门狗实例utt_wd的中断和复位信号，通过7级Fifo1链进行同步和延迟，最终输出到NoC域。输入事件i_drive驱动消息i_msg，经过Fifo链后输出o_drive和o_msg。复位信号Noc_RES同步到所有Fifo实例。自由信号i_free从NoC域输入，经过Fifo链后输出o_free。
+- 职责：AI 推断：看门狗中断与复位信号到NoC的同步与分发桥接模块。
+- 说明：模块将看门狗子模块utt_wd产生的中断和复位信号，通过7级Fifo1链同步后，转换为NoC兼容的驱动事件和消息输出。i_drive/i_msg输入事件携带看门狗状态，经Fifo链流水传递后由o_drive/o_msg输出；i_free/o_free构成独立的释放握手。o_INT和o_RES直接映射看门狗原始中断和复位输出。
 
 ## 1. 层级位置
 
@@ -69,7 +69,7 @@ wd2noc
 - Payload：`i_drive` -> `i_msg [50:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：文档应强调 i_drive 是一个未解析的内部事件流，并建议通过 RTL 源码审查确认其实际用途。
+- AI 推断：最终手册应强调 i_drive 输入在 wd2noc 模块内部的处理路径不明确，需要 RTL 源码审查。
 
 
 ## 5. 内部组件与 assign 影响

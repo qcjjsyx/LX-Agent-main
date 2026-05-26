@@ -66,16 +66,11 @@
         "module": "nodeTop",
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
-      "summary": "本地注入事件通过路由和仲裁，分发到五个方向输出端口的内部驱动流",
+      "summary": "本地注入事件经路由与仲裁后分发至五个方向输出",
       "subject": "flow_001_nodeTop_i_driveLocal",
-      "explanation": "该流从顶层输入端口 i_driveLocal 进入，经 localRouteMsg 实例路由后，生成五个方向的路由请求信号，分别送入对应的 arbMsg 仲裁器，最终输出到五个方向的事件驱动端口",
+      "explanation": "该流描述从模块输入端口 i_driveLocal 发起的事件，先由 localRouteMsg 实例根据路由决策将事件分发到五个方向（东、本地、北、南、西）的仲裁器，再由各方向仲裁器（eastArbMsg、localArbMsg、northArbMsg、southArbMsg、westArbMsg）仲裁后输出至对应方向端口。",
       "signals": [
         "i_driveLocal",
-        "w_local2eastR",
-        "w_local2localR",
-        "w_local2northR",
-        "w_local2southR",
-        "w_local2westR",
         "o_driveEast",
         "o_driveLocal",
         "o_driveNorth",
@@ -113,8 +108,8 @@
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
       "subject": "localRouteMsg",
-      "summary": "本地事件路由分发器，将输入事件按目标方向拆分为五路并行请求",
-      "explanation": "该实例接收 i_driveLocal 事件，根据内部路由逻辑生成五个方向的路由请求信号，分别连接到五个 arbMsg 仲裁器的对应输入端口",
+      "summary": "本地事件路由分发器，将输入事件按目标方向扇出至五个仲裁器",
+      "explanation": "localRouteMsg 实例接收 i_driveLocal 事件，根据路由逻辑将事件复制或选择性地发送到五个方向（东、本地、北、南、西）的仲裁器输入，是流的分支点。",
       "signals": [
         "i_driveLocal",
         "w_local2eastR",
@@ -149,8 +144,8 @@
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
       "subject": "eastArbMsg, localArbMsg, northArbMsg, southArbMsg, westArbMsg",
-      "summary": "五个方向的事件仲裁器，从多个路由源中选择一个事件输出",
-      "explanation": "每个 arbMsg 实例接收来自五个方向路由器的请求信号（包括 localRouteMsg 的输出），仲裁后输出到对应的顶层事件驱动端口",
+      "summary": "各方向仲裁器，从多个路由源中选择一个事件输出",
+      "explanation": "每个方向仲裁器（如 eastArbMsg）接收来自五个路由源（东、本地、北、南、西）的事件，仲裁后输出一个事件到对应方向端口。在 flow_001 中，localRouteMsg 的输出是其中一个输入源。",
       "signals": [
         "w_local2eastR",
         "w_local2localR",
@@ -192,9 +187,9 @@
         "module": "nodeTop",
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
-      "subject": "无相关赋值",
-      "summary": "该流完全通过实例连接实现，无组合赋值参与",
-      "explanation": "提供的上下文中 related_assign_dependencies 为空，表明该流的数据路径由实例端口直连构成，无需额外组合逻辑",
+      "subject": "(无相关赋值)",
+      "summary": "该流无直接赋值依赖",
+      "explanation": "提供的上下文中 related_assign_dependencies 为空，表明该流的信号连接由实例端口直连实现，无中间组合逻辑赋值。",
       "doc_priority": "reference",
       "requires_rtl_source_review": false,
       "confidence": "high",
@@ -213,9 +208,9 @@
         "module": "nodeTop",
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
-      "summary": "输入事件 i_driveLocal 携带 51 位数据载荷 i_localInMsg_51 进入流",
-      "subject": "i_localInMsg_51 与 i_driveLocal 的耦合",
-      "explanation": "接口契约显示 i_driveLocal 事件与 i_localInMsg_51 数据信号关联，该载荷经 localRouteMsg 路由后，最终由 arbMsg 输出到对应方向的 o_*Msg_51 端口",
+      "summary": "事件驱动信号与 51 位数据载荷并行传输",
+      "subject": "i_driveLocal 与 i_localInMsg_51",
+      "explanation": "i_driveLocal 作为事件驱动信号，伴随 51 位数据载荷 i_localInMsg_51 输入。该载荷经 localRouteMsg 路由后，由各方向仲裁器输出为对应方向的 51 位消息（如 o_eastMsg_51）。",
       "signals": [
         "i_driveLocal",
         "i_localInMsg_51",
@@ -240,6 +235,10 @@
         {
           "source": "knowledge_ir/modules/nodeTop.json",
           "path": "interface_data_contract"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/nodeTop.json",
+          "path": "interface"
         }
       ],
       "id": "semantic:flow:nodeTop:flow_001_nodeTop_i_driveLocal:data_control_effect:001"
@@ -251,10 +250,11 @@
         "module": "nodeTop",
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
-      "summary": "每个输出事件端口关联一个输入反压信号，但流内部无反压传递路径",
-      "subject": "流完成与反压信号",
-      "explanation": "接口显示 o_driveEast 关联 i_freeEast，o_driveLocal 关联 i_freeLocal 等，但提供的上下文中未显示这些反压信号如何连接到内部实例，无法确认流内部的反压机制",
+      "summary": "各方向有独立空闲信号，但流中未体现反压机制",
+      "subject": "空闲/反压信号",
+      "explanation": "接口显示每个方向有独立空闲信号（如 o_freeLocal、i_freeEast），但 flow_001 的步骤和连接中未包含这些信号，无法确定反压如何影响该流。",
       "signals": [
+        "o_freeLocal",
         "i_freeEast",
         "i_freeLocal",
         "i_freeNorth",
@@ -279,16 +279,21 @@
         "module": "nodeTop",
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
-      "summary": "手册应重点描述本地事件如何经路由后分发到五个方向仲裁器，以及仲裁器的输入源竞争关系",
-      "subject": "本地事件分发与仲裁路径",
-      "explanation": "该流的核心是 localRouteMsg 的分发功能和五个 arbMsg 的仲裁选择，手册需清晰说明每个方向仲裁器的五个输入源（本地、东、北、南、西）及其优先级或仲裁策略",
+      "summary": "强调本地事件的路由扇出与仲裁合并过程",
+      "subject": "flow_001_nodeTop_i_driveLocal 手册重点",
+      "explanation": "手册应重点描述 i_driveLocal 事件如何经 localRouteMsg 路由到五个方向，以及各方向仲裁器如何从多个源中选择事件。同时需说明数据载荷（51 位消息）与事件驱动信号的关联。",
       "signals": [
         "i_driveLocal",
         "w_local2eastR",
         "w_local2localR",
         "w_local2northR",
         "w_local2southR",
-        "w_local2westR"
+        "w_local2westR",
+        "o_driveEast",
+        "o_driveLocal",
+        "o_driveNorth",
+        "o_driveSouth",
+        "o_driveWest"
       ],
       "instances": [
         "localRouteMsg",
@@ -303,6 +308,10 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/nodeTop.json",
+          "path": "internal_event_flow"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/nodeTop.json",
           "path": "connection_graph"
         }
@@ -316,10 +325,11 @@
         "module": "nodeTop",
         "flow_id": "flow_001_nodeTop_i_driveLocal"
       },
-      "reason": "接口契约显示反压信号存在，但上下文中未提供其与内部实例的连接关系，需查看 RTL 源确认",
-      "subject": "反压信号连接路径",
-      "needed_source_slice": "实例连接或 always 块",
+      "reason": "接口显示空闲信号，但流步骤中未体现，需 RTL 源确认反压是否影响事件传输",
+      "subject": "反压信号与流的关系",
+      "needed_source_slice": "always block 或 assign 中涉及 i_free* 和 o_free* 的逻辑",
       "signals": [
+        "o_freeLocal",
         "i_freeEast",
         "i_freeLocal",
         "i_freeNorth",
@@ -327,6 +337,7 @@
         "i_freeWest"
       ],
       "instances": [
+        "localRouteMsg",
         "eastArbMsg",
         "localArbMsg",
         "northArbMsg",
@@ -347,8 +358,12 @@
   ],
   "evidence_gaps": [
     {
-      "field": "反压信号连接",
-      "reason": "接口契约列出反压信号，但未提供其与内部 arbMsg 实例的连接关系，无法确认流内部的反压机制"
+      "field": "路由逻辑细节",
+      "reason": "localRouteMsg 的路由决策逻辑（如基于目标地址选择方向）未在上下文中提供，需 RTL 源补充"
+    },
+    {
+      "field": "仲裁器优先级",
+      "reason": "各方向仲裁器的仲裁算法（如固定优先级、轮询）未在上下文中提供，需 RTL 源补充"
     }
   ]
 }

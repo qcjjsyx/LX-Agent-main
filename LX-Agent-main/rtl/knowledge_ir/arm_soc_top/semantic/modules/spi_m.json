@@ -46,13 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 9,
     "by_type": {
       "assignment_interpretation": 4,
       "documentation_focus": 1,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -63,13 +63,13 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "SPI主设备控制器，负责管理SPI总线上的数据传输、CRC校验和状态指示",
+      "summary": "SPI主设备控制器，负责管理SPI总线的发送、接收和CRC校验时序",
       "subject": "spi_m",
-      "explanation": "模块通过data_in和TXCRC接收数据，输出data_out，并通过busy、rx_done、tx_done、crc_done等信号指示传输状态，表明其核心功能是控制SPI主设备的数据收发和CRC计算",
+      "explanation": "模块通过TXCRC、data_in和data_out数据接口以及busy、rx_done、tx_done、crc_done状态信号，实现SPI主设备的数据传输控制，包括发送完成、接收完成和CRC校验完成等关键时序事件",
       "signals": [
+        "TXCRC",
         "data_in",
         "data_out",
-        "TXCRC",
         "busy",
         "rx_done",
         "tx_done",
@@ -94,21 +94,21 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "根据SPI模式（CPHA、DFF）和计数器状态，生成接收、发送和CRC传输完成标志",
-      "subject": "传输完成指示",
-      "explanation": "rx_done、tx_done和crc_done的赋值逻辑依赖于CPHA、DFF以及对应的计数器（rx_cnt、tx_cnt、crc_cnt）和缓冲计数信号（cnt_buf_rx、cnt_buf_tx、cnt_buf_crc），表明模块内部实现了基于SPI时钟相位和数据帧格式的传输完成检测",
+      "summary": "根据CPHA和DFF配置，控制SPI总线的发送、接收和CRC校验的位计数和完成标志生成",
+      "subject": "SPI主设备数据传输控制",
+      "explanation": "通过assign_dependencies中的rx_done、tx_done和crc_done表达式，模块根据CPHA和DFF参数选择不同的位计数阈值，实现不同SPI模式下的数据帧长度控制",
       "signals": [
         "rx_done",
         "tx_done",
         "crc_done",
-        "CPHA",
-        "DFF",
         "rx_cnt",
         "tx_cnt",
         "crc_cnt",
         "cnt_buf_rx",
         "cnt_buf_tx",
-        "cnt_buf_crc"
+        "cnt_buf_crc",
+        "CPHA",
+        "DFF"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -127,17 +127,20 @@
         "module": "spi_m"
       },
       "subject": "busy",
-      "summary": "忙状态信号，由使能、发送缓冲空标志和CRC使能共同驱动",
-      "explanation": "busy = enable | !TXE | crc_en，表明模块在使能、发送缓冲非空或CRC使能时进入忙状态，用于外部系统判断SPI模块是否正在工作",
+      "summary": "模块忙状态标志，由使能信号、发送缓冲空标志和CRC使能共同驱动",
+      "explanation": "busy信号通过enable、TXE和crc_en的组合逻辑生成，指示模块当前是否处于活动状态，用于外部同步控制",
       "signals": [
         "busy",
         "enable",
         "TXE",
         "crc_en"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "related_assignments": [
+        "0"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/spi_m.json"
@@ -152,8 +155,8 @@
         "module": "spi_m"
       },
       "subject": "rx_done",
-      "summary": "接收完成标志，根据rxonly和DFF模式选择不同的计数阈值",
-      "explanation": "赋值逻辑表明接收完成条件依赖于rxonly、DFF和rx_cnt的特定比特位，暗示模块支持多种数据帧长度（8位、16位）和仅接收模式",
+      "summary": "接收完成标志，根据rxonly和DFF配置选择不同的位计数阈值",
+      "explanation": "当rxonly有效时，接收完成条件由DFF决定使用rx_cnt[4]或rx_cnt[2]；否则使用rx_cnt[3]作为阈值，实现不同SPI模式下的接收帧长度控制",
       "signals": [
         "rx_done",
         "rxonly",
@@ -161,7 +164,10 @@
         "rx_cnt",
         "cnt_buf_rx"
       ],
-      "doc_priority": "secondary",
+      "related_assignments": [
+        "1"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -178,8 +184,8 @@
         "module": "spi_m"
       },
       "subject": "tx_done",
-      "summary": "发送完成标志，根据CPHA和DFF模式选择不同的计数阈值",
-      "explanation": "赋值逻辑表明发送完成条件依赖于CPHA、DFF和tx_cnt的特定比特位，暗示模块支持SPI时钟相位（CPHA=0/1）和数据帧格式（DFF=0/1）的配置",
+      "summary": "发送完成标志，根据CPHA和DFF配置选择不同的位计数阈值",
+      "explanation": "当CPHA与DFF异或结果为真时，使用tx_cnt[3]作为阈值；否则根据DFF选择tx_cnt[4]或tx_cnt[2]，实现不同SPI模式下的发送帧长度控制",
       "signals": [
         "tx_done",
         "CPHA",
@@ -187,7 +193,10 @@
         "tx_cnt",
         "cnt_buf_tx"
       ],
-      "doc_priority": "secondary",
+      "related_assignments": [
+        "2"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -204,8 +213,8 @@
         "module": "spi_m"
       },
       "subject": "crc_done",
-      "summary": "CRC传输完成标志，根据CPHA和DFF模式选择不同的计数阈值",
-      "explanation": "赋值逻辑与tx_done类似，但使用crc_cnt和cnt_buf_crc，表明CRC传输独立于数据发送，可能用于SPI协议中的CRC校验阶段",
+      "summary": "CRC校验完成标志，根据CPHA和DFF配置选择不同的位计数阈值",
+      "explanation": "与tx_done逻辑结构相同，使用crc_cnt和cnt_buf_crc实现CRC校验的位计数完成检测，确保CRC计算与数据传输同步",
       "signals": [
         "crc_done",
         "CPHA",
@@ -213,7 +222,10 @@
         "crc_cnt",
         "cnt_buf_crc"
       ],
-      "doc_priority": "secondary",
+      "related_assignments": [
+        "3"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -229,17 +241,22 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "16位并行数据输入输出接口，支持数据发送和CRC注入",
-      "subject": "数据接口组",
-      "explanation": "data_in和data_out为16位数据端口，TXCRC为16位CRC输入，表明模块支持16位数据帧的SPI传输，并允许外部注入CRC值",
+      "summary": "通过TXCRC、data_in和data_out实现SPI数据帧的输入输出，其中TXCRC可能用于CRC校验值输入",
+      "subject": "SPI主设备数据接口",
+      "explanation": "模块具有两个16位数据输入（TXCRC和data_in）和一个16位数据输出（data_out），TXCRC可能作为CRC校验的参考值或初始值输入，data_in为待发送数据，data_out为接收数据",
       "signals": [
+        "TXCRC",
         "data_in",
-        "data_out",
-        "TXCRC"
+        "data_out"
+      ],
+      "related_payload": [
+        "TXCRC",
+        "data_in",
+        "data_out"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_m.json"
@@ -253,19 +270,18 @@
         "type": "module",
         "module": "spi_m"
       },
-      "summary": "手册应重点说明CPHA、DFF、rxonly等配置信号如何影响rx_done、tx_done和crc_done的生成逻辑",
-      "subject": "SPI模式配置与传输完成条件",
-      "explanation": "赋值依赖显示传输完成条件与SPI时钟相位、数据帧格式和仅接收模式强相关，这是理解模块时序行为的关键",
+      "summary": "手册应重点说明CPHA和DFF参数如何影响发送、接收和CRC校验的位计数阈值选择",
+      "subject": "SPI模式配置与位计数逻辑",
+      "explanation": "从assign_dependencies可见，rx_done、tx_done和crc_done的生成逻辑高度依赖CPHA和DFF配置，这是理解模块时序行为的关键",
       "signals": [
         "CPHA",
         "DFF",
-        "rxonly",
-        "rx_done",
-        "tx_done",
-        "crc_done",
         "rx_cnt",
         "tx_cnt",
-        "crc_cnt"
+        "crc_cnt",
+        "cnt_buf_rx",
+        "cnt_buf_tx",
+        "cnt_buf_crc"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -283,36 +299,9 @@
         "type": "module",
         "module": "spi_m"
       },
-      "reason": "紧凑上下文未提供rx_cnt、tx_cnt、crc_cnt、cnt_buf_rx、cnt_buf_tx、cnt_buf_crc的生成逻辑，无法确定计数阈值和缓冲机制",
-      "subject": "内部计数器与缓冲计数信号",
-      "needed_source_slice": "always block",
-      "signals": [
-        "rx_cnt",
-        "tx_cnt",
-        "crc_cnt",
-        "cnt_buf_rx",
-        "cnt_buf_tx",
-        "cnt_buf_crc"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/spi_m.json"
-        }
-      ],
-      "id": "semantic:module:spi_m:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "spi_m"
-      },
-      "reason": "紧凑上下文未提供这些控制信号的来源和配置方式，无法确定它们是由寄存器编程还是外部输入",
-      "subject": "控制信号enable、TXE、crc_en、rxonly、CPHA、DFF",
-      "needed_source_slice": "module declaration",
+      "reason": "当前上下文缺少内部事件流、关键组件连接和实例信息，无法推断模块的完整状态机行为和数据路径控制逻辑",
+      "subject": "SPI主设备内部状态机与数据路径",
+      "needed_source_slice": "always block, instance connections, connection_graph",
       "signals": [
         "enable",
         "TXE",
@@ -323,23 +312,26 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_m.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/spi_m.json"
         }
       ],
-      "id": "semantic:module:spi_m:source_review_request:002"
+      "id": "semantic:module:spi_m:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
       "field": "内部事件流",
-      "reason": "紧凑上下文中internal_event_flow_refs为空，无法推断模块内部的状态机或事件驱动逻辑"
+      "reason": "缺少event_flow_refs和key_component_connections，无法确定模块内部状态机或数据路径控制逻辑"
     },
     {
-      "field": "关键组件连接",
-      "reason": "紧凑上下文中key_component_connections为空，无法确定模块内部子模块或寄存器的连接关系"
+      "field": "关键组件实例",
+      "reason": "缺少key_instances和component_families，无法确定模块内部使用的子模块或功能单元"
     }
   ]
 }

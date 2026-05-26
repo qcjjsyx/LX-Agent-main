@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 13,
+    "count": 14,
     "by_type": {
       "assignment_interpretation": 3,
       "component_role": 4,
       "documentation_focus": 1,
-      "interface_intent": 1,
+      "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 2,
       "structural_responsibility": 1
@@ -64,16 +64,25 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "中断与异常出栈调度器，将来自DR和Top的驱动事件分发到SP、DR、WGRF、WPSR四个目标，并管理对应的数据路径和释放信号。",
+      "summary": "中断与异常出栈调度器，负责将来自DR和Top的驱动事件分发为指向SP、DR、WGRF、WPSR的出栈操作，并管理对应的数据地址生成与释放反馈。",
       "subject": "intAndExc_pop",
-      "explanation": "模块接收两个输入驱动事件（i_driveFromDR和i_driveFromTop），通过内部组件（Splitter、Selector、MutexMerge）和延迟链，将事件分发到四个输出驱动，同时处理对应的数据（SP地址偏移、DR地址选择、WGRF/WPSR数据）和释放信号。",
+      "explanation": "模块接收两个输入驱动事件（i_driveFromDR和i_driveFromTop），通过内部组件链（Splitter、Selector、MutexMerge）将其路由到四个输出驱动事件，同时基于输入SP值计算DR地址和更新SP值，并处理来自下游的释放信号以完成握手。",
       "signals": [
         "i_driveFromDR",
         "i_driveFromTop",
-        "o_driveToSP",
         "o_driveToDR",
+        "o_driveToSP",
         "o_driveToWGRF",
-        "o_driveToWPSR"
+        "o_driveToWPSR",
+        "i_SP_32",
+        "o_SP_32",
+        "o_addrToDR_32",
+        "i_freeFromDR",
+        "i_freeFromSP",
+        "i_freeFromWGRF",
+        "i_freeFromWPSR",
+        "o_freeToDR",
+        "o_freeToTop"
       ],
       "instances": [
         "u0_cSplitter2_NoData_intAndExc_pop",
@@ -90,10 +99,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:intAndExc_pop:module_role:001"
@@ -104,29 +119,33 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "模块将单个入栈驱动事件（来自DR）拆分为两条路径，一条经延迟后驱动WGRF和WPSR，另一条驱动SP并反馈到MutexMerge；同时将来自Top的驱动事件与反馈事件合并后驱动DR。",
-      "subject": "中断/异常出栈事件分发与数据路径管理",
-      "explanation": "i_driveFromDR通过Splitter分为w_drive0和w_drive1。w_drive0经两级延迟后驱动Selector2_73b，输出到WGRF和WPSR；w_drive1驱动Selector2_1b，输出到SP和反馈路径w_drive2。w_drive2与i_driveFromTop通过MutexMerge合并后驱动DR。数据路径上，SP地址偏移32后输出，并根据r_outNum_2选择四个预计算地址之一输出到DR。",
+      "summary": "模块将单个入栈驱动事件（来自DR）拆分为两条路径，一条经延迟后驱动WGRF和WPSR的出栈，另一条经选择后驱动SP出栈并反馈至DR路径；来自Top的驱动事件则直接与反馈路径合并后驱动DR出栈。",
+      "subject": "中断与异常出栈事件分发与数据路径生成",
+      "explanation": "i_driveFromDR通过Splitter分为w_drive0和w_drive1；w_drive0经两级延迟后驱动Selector2_73b，产生o_driveToWGRF和o_driveToWPSR；w_drive1驱动Selector2_1b，产生o_driveToSP和反馈信号w_drive2；w_drive2与i_driveFromTop通过MutexMerge合并后产生o_driveToDR。数据路径上，基于i_SP_32生成四个候选DR地址（偏移0/8/16/24），由r_outNum_2选择输出o_addrToDR_32，同时输出更新后的SP值o_SP_32 = i_SP_32 + 32。",
       "signals": [
         "i_driveFromDR",
         "i_driveFromTop",
         "w_drive0",
         "w_drive1",
-        "w_drive2",
         "w_drive0Delay",
         "w_drive0Delay1",
-        "o_driveToSP",
+        "w_drive2",
         "o_driveToDR",
+        "o_driveToSP",
         "o_driveToWGRF",
         "o_driveToWPSR",
+        "i_SP_32",
         "o_SP_32",
-        "o_addrToDR_32"
+        "o_addrToDR_32",
+        "r_outNum_2"
       ],
       "instances": [
         "u0_cSplitter2_NoData_intAndExc_pop",
         "u0_cSelector2_1b_intAndExc_pop",
         "u0_cSelector2_73b_intAndExc_pop",
-        "u0_cMutexMerge2_NoData_intAndExc_pop"
+        "u0_cMutexMerge2_NoData_intAndExc_pop",
+        "Delay0",
+        "Delay1"
       ],
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR",
@@ -137,10 +156,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:intAndExc_pop:structural_responsibility:001"
@@ -152,8 +177,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cSplitter2_NoData_intAndExc_pop",
-      "summary": "事件扇出器，将来自DR的单个驱动事件拆分为两条并行路径。",
-      "explanation": "接收i_driveFromDR，输出w_drive0（经延迟后驱动WGRF/WPSR）和w_drive1（驱动SP和反馈路径）。无数据路径，仅事件分发。",
+      "summary": "事件扇出器，将来自DR的单个驱动事件拆分为两条并行路径，分别导向SP/WGRF/WPSR出栈路径和反馈路径。",
+      "explanation": "该组件接收i_driveFromDR，输出w_drive0（经延迟后驱动WGRF和WPSR）和w_drive1（驱动SP出栈并产生反馈）。无数据路径，仅事件分发。",
       "signals": [
         "i_driveFromDR",
         "w_drive0",
@@ -170,7 +195,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:module:intAndExc_pop:component_role:001"
@@ -182,8 +212,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cSelector2_1b_intAndExc_pop",
-      "summary": "事件选择器，将来自Splitter的w_drive1事件分发到SP和反馈路径。",
-      "explanation": "接收w_drive1，输出o_driveToSP（驱动SP）和w_drive2（反馈到MutexMerge）。无数据路径。",
+      "summary": "事件选择器，将来自Splitter的w_drive1路由为SP出栈事件和反馈至DR路径的事件。",
+      "explanation": "该组件接收w_drive1，输出o_driveToSP（驱动SP出栈）和w_drive2（反馈至MutexMerge与i_driveFromTop合并后驱动DR出栈）。无数据路径。",
       "signals": [
         "w_drive1",
         "o_driveToSP",
@@ -200,7 +230,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:module:intAndExc_pop:component_role:002"
@@ -212,8 +247,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cSelector2_73b_intAndExc_pop",
-      "summary": "事件选择器，将延迟后的w_drive0Delay1事件分发到WGRF和WPSR，并携带对应的数据。",
-      "explanation": "接收w_drive0Delay1，输出o_driveToWGRF（携带o_dataToWGRF_72）和o_driveToWPSR（携带o_dataToWPSR_32）。数据路径与事件同步。",
+      "summary": "事件与数据选择器，将延迟后的w_drive0Delay1路由为WGRF和WPSR的出栈事件，并携带对应的数据载荷。",
+      "explanation": "该组件接收w_drive0Delay1，输出o_driveToWGRF（携带o_dataToWGRF_72）和o_driveToWPSR（携带o_dataToWPSR_32）。数据路径来自内部或上游，但当前上下文未明确数据来源。",
       "signals": [
         "w_drive0Delay1",
         "o_driveToWGRF",
@@ -228,11 +263,16 @@
         "flow_000_intAndExc_pop_i_driveFromDR"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:module:intAndExc_pop:component_role:003"
@@ -244,8 +284,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "u0_cMutexMerge2_NoData_intAndExc_pop",
-      "summary": "互斥合并器，将来自Top的驱动事件与反馈事件合并后驱动DR。",
-      "explanation": "接收i_driveFromTop和w_drive2（来自Selector2_1b的反馈），输出o_driveToDR。确保两个输入事件不会同时驱动DR，实现互斥访问。",
+      "summary": "互斥合并器，将来自Top的驱动事件与SP出栈反馈事件合并，确保两者不会同时驱动DR出栈。",
+      "explanation": "该组件接收i_driveFromTop和w_drive2，输出o_driveToDR。互斥机制防止两个事件同时触发DR出栈操作。无数据路径。",
       "signals": [
         "i_driveFromTop",
         "w_drive2",
@@ -263,7 +303,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:module:intAndExc_pop:component_role:004"
@@ -275,26 +320,27 @@
         "module": "intAndExc_pop"
       },
       "subject": "w_fire0",
-      "summary": "驱动DR的触发信号，由i_driveFromTop和w_drive2（反馈）通过或逻辑组合。",
-      "explanation": "该信号用于控制MutexMerge的输入选择或内部状态，确保来自Top的直接驱动和来自DR的反馈驱动都能触发DR操作。",
+      "summary": "组合逻辑，将来自Top的驱动事件与SP出栈反馈事件合并为DR出栈的触发条件。",
+      "explanation": "assign w_fire0 = i_driveFromTop | w_drive2，该信号作为MutexMerge的输入或内部触发，表示DR出栈可由外部Top事件或内部SP出栈反馈事件发起。",
       "signals": [
-        "w_fire0",
         "i_driveFromTop",
-        "w_drive2"
+        "w_drive2",
+        "w_fire0"
       ],
       "related_assignments": [
         "0"
       ],
       "related_flows": [
-        "flow_000_intAndExc_pop_i_driveFromDR",
-        "flow_001_intAndExc_pop_i_driveFromTop"
+        "flow_001_intAndExc_pop_i_driveFromTop",
+        "flow_000_intAndExc_pop_i_driveFromDR"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:module:intAndExc_pop:assignment_interpretation:001"
@@ -306,16 +352,16 @@
         "module": "intAndExc_pop"
       },
       "subject": "o_addrToDR_32",
-      "summary": "根据r_outNum_2选择四个预计算地址之一输出到DR，地址基于SP偏移0、8、16、24。",
-      "explanation": "四个预计算地址w_addrToDR0_32到w_addrToDR3_32分别对应i_SP_32、i_SP_32+8、i_SP_32+16、i_SP_32+24。最终输出由r_outNum_2（2位寄存器）选择，实现不同出栈位置的地址生成。",
+      "summary": "基于r_outNum_2从四个候选地址中选择DR出栈的目标地址，候选地址由i_SP_32加上固定偏移（0/8/16/24）生成。",
+      "explanation": "四个候选地址w_addrToDR0_32至w_addrToDR3_32分别对应i_SP_32、i_SP_32+8、i_SP_32+16、i_SP_32+24，由r_outNum_2（2位寄存器）选择输出。这表明一次DR出栈可能涉及多个数据项，地址步进为8字节。",
       "signals": [
         "o_addrToDR_32",
+        "i_SP_32",
         "r_outNum_2",
         "w_addrToDR0_32",
         "w_addrToDR1_32",
         "w_addrToDR2_32",
-        "w_addrToDR3_32",
-        "i_SP_32"
+        "w_addrToDR3_32"
       ],
       "related_assignments": [
         "1",
@@ -332,7 +378,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:module:intAndExc_pop:assignment_interpretation:002"
@@ -344,8 +391,8 @@
         "module": "intAndExc_pop"
       },
       "subject": "o_SP_32",
-      "summary": "SP更新输出，将输入SP加32，表示出栈后SP递增。",
-      "explanation": "每次出栈操作后，SP增加32字节，对应一个中断/异常帧的大小。",
+      "summary": "出栈操作后更新栈指针，将输入SP值增加32字节。",
+      "explanation": "assign o_SP_32 = i_SP_32 + 32，表示每次出栈操作消耗32字节的栈空间，与DR地址步进8字节（最多4项）一致。",
       "signals": [
         "o_SP_32",
         "i_SP_32"
@@ -361,7 +408,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:module:intAndExc_pop:assignment_interpretation:003"
@@ -372,9 +420,9 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "每个输出驱动事件（o_driveTo*）对应一个输入释放信号（i_freeFrom*），形成请求-确认握手协议。",
-      "subject": "驱动事件与释放信号配对",
-      "explanation": "输出驱动事件（如o_driveToDR）触发下游模块操作，下游完成后通过对应的释放信号（如i_freeFromDR）返回确认，模块据此释放内部资源。输入驱动事件（i_driveFromDR、i_driveFromTop）则对应输出释放信号（o_freeToDR、o_freeToTop）。",
+      "summary": "每个输出驱动事件（o_driveTo*）对应一个输入释放信号（i_freeFrom*），构成点对点握手协议，确保下游完成处理后释放资源。",
+      "subject": "驱动事件与释放信号握手",
+      "explanation": "输出事件o_driveToDR、o_driveToSP、o_driveToWGRF、o_driveToWPSR分别对应输入释放信号i_freeFromDR、i_freeFromSP、i_freeFromWGRF、i_freeFromWPSR。释放信号反馈至内部组件（MutexMerge、Selector），用于控制事件流。输入驱动事件i_driveFromDR和i_driveFromTop分别对应输出释放信号o_freeToDR和o_freeToTop，形成完整握手。",
       "signals": [
         "o_driveToDR",
         "i_freeFromDR",
@@ -397,16 +445,54 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "interface_data_contract"
         }
       ],
       "id": "semantic:module:intAndExc_pop:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc_pop"
+      },
+      "summary": "输出驱动事件o_driveToDR、o_driveToSP、o_driveToWGRF、o_driveToWPSR分别携带对应的数据载荷，构成事件-数据对。",
+      "subject": "数据载荷与驱动事件关联",
+      "explanation": "o_driveToDR携带o_addrToDR_32（DR地址），o_driveToSP携带o_SP_32（更新后的SP），o_driveToWGRF携带o_dataToWGRF_72，o_driveToWPSR携带o_dataToWPSR_32。输入驱动事件i_driveFromDR和i_driveFromTop无数据载荷。",
+      "signals": [
+        "o_driveToDR",
+        "o_addrToDR_32",
+        "o_driveToSP",
+        "o_SP_32",
+        "o_driveToWGRF",
+        "o_dataToWGRF_72",
+        "o_driveToWPSR",
+        "o_dataToWPSR_32"
+      ],
+      "related_payload": [
+        "o_addrToDR_32",
+        "o_SP_32",
+        "o_dataToWGRF_72",
+        "o_dataToWPSR_32"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "interface_data_contract"
+        }
+      ],
+      "id": "semantic:module:intAndExc_pop:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -414,26 +500,33 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "summary": "文档应重点描述从输入驱动事件到输出驱动事件的分发路径，以及数据（地址、SP更新、WGRF/WPSR数据）如何与事件同步。",
-      "subject": "出栈事件流与数据路径同步",
-      "explanation": "模块核心是事件驱动的出栈调度，包含两条主要路径（DR->SP+反馈->DR，DR->延迟->WGRF/WPSR）和一条直接路径（Top->DR）。数据路径（地址选择、SP更新）与事件流紧密耦合，需明确时序关系。",
+      "summary": "手册应重点描述从输入驱动事件到输出驱动事件的分发路径、延迟链、互斥合并机制，以及基于SP的地址生成和SP更新逻辑。",
+      "subject": "出栈事件流与数据路径",
+      "explanation": "模块核心功能是中断/异常出栈调度，事件流路径（Splitter->Selector->MutexMerge）和延迟链（Delay0/Delay1）是关键控制结构。数据路径中DR地址的多路选择（基于r_outNum_2）和SP更新（+32）是文档重点。释放信号握手协议需清晰说明。",
       "signals": [
         "i_driveFromDR",
         "i_driveFromTop",
-        "o_driveToSP",
+        "w_drive0",
+        "w_drive1",
+        "w_drive0Delay",
+        "w_drive0Delay1",
+        "w_drive2",
         "o_driveToDR",
+        "o_driveToSP",
         "o_driveToWGRF",
         "o_driveToWPSR",
+        "i_SP_32",
         "o_SP_32",
         "o_addrToDR_32",
-        "o_dataToWGRF_72",
-        "o_dataToWPSR_32"
+        "r_outNum_2"
       ],
       "instances": [
         "u0_cSplitter2_NoData_intAndExc_pop",
         "u0_cSelector2_1b_intAndExc_pop",
         "u0_cSelector2_73b_intAndExc_pop",
-        "u0_cMutexMerge2_NoData_intAndExc_pop"
+        "u0_cMutexMerge2_NoData_intAndExc_pop",
+        "Delay0",
+        "Delay1"
       ],
       "related_flows": [
         "flow_000_intAndExc_pop_i_driveFromDR",
@@ -444,10 +537,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "internal_event_flow"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:intAndExc_pop:documentation_focus:001"
@@ -458,9 +557,43 @@
         "type": "module",
         "module": "intAndExc_pop"
       },
-      "reason": "上下文仅显示r_outNum_2用于地址选择，但未提供其更新条件（何时递增、复位值等），需查看RTL源文件中的always块。",
-      "subject": "r_outNum_2 寄存器更新逻辑",
-      "needed_source_slice": "always block",
+      "reason": "当前上下文未明确o_dataToWGRF_72和o_dataToWPSR_32的数据来源，需要RTL源文件确认这些数据是来自内部寄存器、输入数据还是其他组件。",
+      "subject": "u0_cSelector2_73b_intAndExc_pop的数据来源",
+      "needed_source_slice": "assign block, instance connections",
+      "signals": [
+        "o_dataToWGRF_72",
+        "o_dataToWPSR_32"
+      ],
+      "instances": [
+        "u0_cSelector2_73b_intAndExc_pop"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_pop_i_driveFromDR"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "key_instances"
+        },
+        {
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "interface"
+        }
+      ],
+      "id": "semantic:module:intAndExc_pop:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc_pop"
+      },
+      "reason": "当前上下文仅显示r_outNum_2用于选择DR地址，但未提供其赋值来源（如状态机或计数器），需要RTL源文件确认其更新逻辑。",
+      "subject": "r_outNum_2的赋值逻辑",
+      "needed_source_slice": "always block, assign block",
       "signals": [
         "r_outNum_2"
       ],
@@ -472,38 +605,8 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc_pop:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc_pop"
-      },
-      "reason": "上下文显示w_drive0经两级延迟后驱动Selector2_73b，但未提供延迟单元的触发条件、延迟周期数或复位行为，需查看RTL源文件。",
-      "subject": "延迟链（Delay0、Delay1）实现细节",
-      "needed_source_slice": "instance connections, always block",
-      "signals": [
-        "w_drive0",
-        "w_drive0Delay",
-        "w_drive0Delay1"
-      ],
-      "instances": [
-        "Delay0",
-        "Delay1"
-      ],
-      "related_flows": [
-        "flow_000_intAndExc_pop_i_driveFromDR"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc_pop.json"
+          "source": "knowledge_ir/modules/intAndExc_pop.json",
+          "path": "assignment_facts"
         }
       ],
       "id": "semantic:module:intAndExc_pop:source_review_request:002"

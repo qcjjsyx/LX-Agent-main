@@ -1,8 +1,8 @@
 # 模块 `SPI02NoC`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI0/SPI02NoC.v`。
-- 职责：AI 推断：w_fire_2 是一个 2 位线网，其每一位分别由两个 cFifo 实例的 o_fire_1 输出驱动。。
-- 说明：根据切片 4 第 68 行，cFifo1 实例的 .o_fire_1 连接至 w_fire_2[0]；根据切片 5 第 80 行，cFifo2 实例的 .o_fire_1 连接至 w_fire_2[1]。
+- 职责：AI 推断：作为SPI模块与片上网络(NoC)之间的桥接与数据转换接口，负责将NoC的驱动事件和数据转换为SPI Flash控制器的读写操作，并将结果返回NoC。。
+- 说明：模块接收来自Mesh的驱动事件(i_driveFrmMesh)和NoC数据(i_dataFrmNoc)，通过内部FIFO和延迟单元进行流水线控制，最终输出驱动事件(o_driveNextToMesh)和数据(o_data2Noc)到Mesh。同时，模块内部实例化flash_state控制器(u_flash)处理SPI Flash协议，并输出SPI接口信号(sclk, mosi, cs_n)和状态信号(busy, startRead)。
 
 ## 1. 层级位置
 
@@ -61,7 +61,7 @@ SPI02NoC
 - Payload：`i_driveFrmMesh` -> `i_dataFrmNoc [50:0]`。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：输入事件i_driveFrmMesh携带一个51位的数据负载i_dataFrmNoc。
+- AI 推断：最终手册应重点描述事件如何通过两级FIFO和延迟单元传递，并强调cFifo1和cFifo2作为潜在阻塞点的作用。
 
 
 ## 5. 内部组件与 assign 影响
@@ -78,7 +78,7 @@ SPI02NoC
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | data_path | `w_SR` | {dataReady,w_TXE,busy,w_finish,4'b0} | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `w_data2noc` | (address[3:0] == CR) ? {24'b0,r_CR} : (address[3:0] == SR) ? {24'b0,w_SR} : (address[3:0] == ... | AI 推断：根据地址译码结果，从内部寄存器中选择数据，用于构建返回 NoC 的数据包。 |
-| `assign_5` | unknown | `startRead_fire` | ((address[3:0] == TDR) & w_en) ? w_fire_2[1] : 1'b0 | AI 推断：当向发送数据寄存器 (TDR) 写入数据时，触发 SPI Flash 读取操作。 |
+| `assign_2` | data_path | `w_data2noc` | (address[3:0] == CR) ? {24'b0,r_CR} : (address[3:0] == SR) ? {24'b0,w_SR} : (address[3:0] == ... | AI 推断：根据地址选择内部寄存器值，组合成返回NoC的数据。 |
+| `assign_5` | unknown | `startRead_fire` | ((address[3:0] == TDR) & w_en) ? w_fire_2[1] : 1'b0 | AI 推断：当写使能且地址为TDR时，生成触发信号启动Flash读操作。 |
 | `assign_6` | unknown | `w_en_tmp` | w_en & (address == 8'h64) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | data_path | `address` | i_dataFrmNoc[49:42] | AI 推断：从 NoC 输入数据中提取 SPI 寄存器地址。 |
+| `assign_0` | data_path | `address` | i_dataFrmNoc[49:42] | AI 推断：从NoC输入数据中提取地址字段，用于内部寄存器选择和Flash操作寻址。 |

@@ -32,6 +32,7 @@ def run_knowledge_tool(
     semantic_model: str = "",
     semantic_base_url: str = "",
     semantic_api_key: str = "",
+    no_semantic_cache: bool = False,
     timeout: int | None = None,
 ) -> str:
     """Run the new Knowledge IR -> Manual Context pipeline.
@@ -94,6 +95,8 @@ def run_knowledge_tool(
         cmd.extend(["--semantic-base-url", semantic_base_url.strip()])
     if semantic_api_key.strip():
         cmd.extend(["--semantic-api-key", semantic_api_key.strip()])
+    if no_semantic_cache:
+        cmd.append("--no-semantic-cache")
 
     pipeline_timeout = timeout or env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 3600)
     try:
@@ -292,6 +295,7 @@ def main() -> int:
     parser.add_argument("--semantic-model", default="")
     parser.add_argument("--semantic-base-url", default="")
     parser.add_argument("--semantic-api-key", default="")
+    parser.add_argument("--no-semantic-cache", action="store_true", help="Do not preserve existing Semantic Layer cards during a clean pipeline run.")
     parser.add_argument("--timeout", type=int, default=0, help="Timeout in seconds for knowledge.pipeline. Defaults to RTL_MANUAL_KNOWLEDGE_TIMEOUT or 3600.")
     args = parser.parse_args()
 
@@ -308,6 +312,7 @@ def main() -> int:
             semantic_model=args.semantic_model,
             semantic_base_url=args.semantic_base_url,
             semantic_api_key=args.semantic_api_key,
+            no_semantic_cache=args.no_semantic_cache,
             timeout=args.timeout or None,
         )
     )

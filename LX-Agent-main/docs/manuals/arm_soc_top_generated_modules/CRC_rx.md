@@ -1,8 +1,8 @@
 # 模块 `CRC_rx`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/CRC_rx.v`。
-- 职责：AI 推断：该模块根据输入数据流和多项式计算CRC校验值，并输出16位CRC结果。。
-- 说明：模块接收16位数据输入datain和16位多项式poly，通过内部寄存器CRC16_reg和CRC8_reg计算CRC，最终通过CRC_out输出。assign依赖显示输出由DFF选择CRC16_reg或CRC8_reg，表明支持16位和8位两种CRC模式。
+- 职责：AI 推断：该模块根据输入数据计算并输出CRC校验值，支持16位和8位两种模式。。
+- 说明：模块接收16位数据输入datain和多项式poly，通过内部寄存器CRC16_reg和CRC8_reg计算CRC，最终根据DFF信号选择输出16位或8位结果。
 
 ## 1. 层级位置
 
@@ -51,4 +51,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `CRC_out` | DFF ? CRC16_reg : {8'b0,CRC8_reg} | AI 推断：根据DFF信号选择CRC16_reg或CRC8_reg作为最终CRC输出。 |
+| `assign_0` | unknown | `CRC_out` | DFF ? CRC16_reg : {8'b0,CRC8_reg} | AI 推断：该赋值实现CRC输出模式选择，根据DFF信号决定输出16位或8位结果。 |

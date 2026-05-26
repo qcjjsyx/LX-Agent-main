@@ -202,8 +202,8 @@
         "w_drv2Pmt"
       ],
       "role_in_flow": {
-        "value": "流的第一级 FIFO 缓冲，接收外部驱动事件 i_drvFNoc 并输出到 w_drv2Pmt。",
-        "explanation": "作为事件流的入口缓冲，cfifo0 可以暂存输入事件，并在下游未就绪时提供背压，防止数据丢失。",
+        "value": "流入口处的第一级 FIFO 缓冲器，用于暂存输入事件并可能进行跨时钟域或速率匹配。",
+        "explanation": "cfifo0 接收来自模块输入端口 i_drvFNoc 的事件，其输出 w_drv2Pmt 驱动下一级 pmtAck。作为 fifo_stage，它可能引入背压或等待条件。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -227,8 +227,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "instances.connections"
           }
         ]
       },
@@ -251,8 +250,8 @@
         "w_drv2fifo1"
       ],
       "role_in_flow": {
-        "value": "流的第二级 FIFO 缓冲，接收 w_drv2Pmt 并输出到 w_drv2fifo1。",
-        "explanation": "作为中间缓冲级，pmtAck 可能用于处理握手或确认逻辑，进一步平滑事件流。",
+        "value": "握手确认 FIFO 级，用于在事件传播前确保前级数据已被正确接收或确认。",
+        "explanation": "pmtAck 接收 cfifo0 的输出 w_drv2Pmt，其输出 w_drv2fifo1 驱动延迟单元 delay11。作为 PmtFifo1 类型，它可能实现特定的握手协议或流量控制。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -269,15 +268,14 @@
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "instances.connections"
           }
         ]
       },
@@ -300,35 +298,13 @@
         "w_drv2fifo1_delay"
       ],
       "role_in_flow": {
-        "value": "位于 pmtAck 和 cfifo1 之间的透明延迟单元，对事件信号 w_drv2fifo1 进行固定延迟。",
-        "explanation": "该延迟单元用于调整事件到达 cfifo1 的时间，可能用于满足时序约束或对齐数据路径。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:component_role:003",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_drv2fifo1",
-          "w_drv2fifo1_delay"
-        ],
-        "instances": [
-          "delay11"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -349,8 +325,8 @@
         "w_drv2Noc_delay"
       ],
       "role_in_flow": {
-        "value": "流的第三级 FIFO 缓冲，接收延迟后的事件 w_drv2fifo1_delay 并输出到 w_drv2Noc_delay。",
-        "explanation": "作为输出前的最后一级 FIFO，cfifo1 提供额外的缓冲和背压能力，确保事件稳定传递到延迟链。",
+        "value": "延迟链后的第二级 FIFO 缓冲器，用于重新同步延迟后的事件并驱动最终输出路径。",
+        "explanation": "cfifo1 接收 delay11 延迟后的信号 w_drv2fifo1_delay，其输出 w_drv2Noc_delay 进入后续延迟链。作为 fifo_stage，它可能提供额外的缓冲或流量控制。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -374,8 +350,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "instances.connections"
           }
         ]
       },
@@ -539,21 +514,29 @@
     }
   ],
   "semantic_meaning": {
-    "value": "事件流 i_drvFNoc 到 o_drv2Noc 的传播与数据流 o_data2Noc_51 的生成是并行的，但数据流依赖于内部寄存器状态。",
-    "explanation": "事件流通过 FIFO 和延迟链传递，而数据流 o_data2Noc_51 由赋值 0 独立生成，其源信号 (r_dataFNoc_51, r_dataHigh 等) 可能由其他逻辑更新。事件流本身不直接修改数据，但数据在事件到达输出端口时被采样。",
+    "value": "最终手册应重点描述事件从输入到输出的串行传播路径，包括 FIFO 缓冲和延迟链的时序对齐作用，以及数据载荷的打包过程。",
+    "explanation": "该流的核心特征是纯串行、无分支，且包含多个延迟单元。手册应强调延迟链如何调整事件时序以满足 NoC 接口要求，并说明赋值 0 中数据打包的字段含义。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:data_control_effect:001",
+    "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:documentation_focus:001",
     "doc_priority": "primary",
     "signals": [
       "i_drvFNoc",
       "o_drv2Noc",
       "o_data2Noc_51"
     ],
-    "instances": [],
+    "instances": [
+      "cfifo0",
+      "pmtAck",
+      "delay11",
+      "cfifo1",
+      "delay8",
+      "delay9",
+      "delay10"
+    ],
     "related_flows": [],
     "related_assignments": [
       "0"
@@ -566,69 +549,19 @@
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_ports",
-        "path": "knowledge_ir/modules/NoCUART0.json"
+        "source": "instances.connections"
       },
       {
-        "source": "interface.data_ports",
-        "path": "knowledge_ir/modules/NoCUART0.json"
+        "source": "transparent_flows"
+      },
+      {
+        "source": "interface_related"
       }
     ],
     "supporting_claims": [
       {
-        "value": "手册应重点描述从 i_drvFNoc 到 o_drv2Noc 的串行流水线结构，以及 o_data2Noc_51 的数据打包方式。",
-        "explanation": "该流的核心是事件通过 FIFO 和延迟链的传播，以及输出数据的组合逻辑。手册应说明每个 FIFO 和延迟单元的作用，以及数据字段 (r_dataFNoc_51, r_dataHigh 等) 的语义。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:documentation_focus:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFNoc",
-          "o_drv2Noc",
-          "o_data2Noc_51",
-          "w_drv2Pmt",
-          "w_drv2fifo1",
-          "w_drv2fifo1_delay",
-          "w_drv2Noc_delay",
-          "w_drv2Noc_delay1",
-          "w_drv2Noc_delay2"
-        ],
-        "instances": [
-          "cfifo0",
-          "pmtAck",
-          "delay11",
-          "cfifo1",
-          "delay8",
-          "delay9",
-          "delay10"
-        ],
-        "related_flows": [],
-        "related_assignments": [
-          "0"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc",
-          "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
-          },
-          {
-            "source": "interface_related",
-            "path": "knowledge_ir/modules/NoCUART0.json"
-          }
-        ]
-      },
-      {
-        "value": "从输入事件驱动信号 i_drvFNoc 到输出事件驱动信号 o_drv2Noc 的串行流水线，用于将 UART 驱动数据经过 FIFO 缓冲和延迟链后发送至片上网络 (NoC)。",
-        "explanation": "该流描述了从外部输入的驱动事件经过两级 FIFO (cfifo0, pmtAck) 和一级 FIFO (cfifo1) 的缓冲，以及三段不同深度的延迟单元 (delay11, delay8, delay9, delay10) 的透明延迟，最终输出到 NoC 的完整路径。FIFO 提供了事件门控和背压能力，延迟链则用于时序对齐。",
+        "value": "从输入事件 i_drvFNoc 到输出事件 o_drv2Noc 的单向驱动流，经过 FIFO 缓冲、握手确认和延迟链，最终将数据打包输出到片上网络。",
+        "explanation": "该流由单个输入事件驱动，经过 cfifo0 缓冲、pmtAck 握手确认、delay11 延迟、cfifo1 再次缓冲，以及 delay8/delay9/delay10 三级延迟链，最终到达输出端口。流中无分支或合并点，属于纯串行事件传播路径。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -638,13 +571,7 @@
         "doc_priority": "primary",
         "signals": [
           "i_drvFNoc",
-          "o_drv2Noc",
-          "w_drv2Pmt",
-          "w_drv2fifo1",
-          "w_drv2fifo1_delay",
-          "w_drv2Noc_delay",
-          "w_drv2Noc_delay1",
-          "w_drv2Noc_delay2"
+          "o_drv2Noc"
         ],
         "instances": [
           "cfifo0",
@@ -667,18 +594,55 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "instances.connections"
           },
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "transparent_flows"
           }
         ]
       },
       {
-        "value": "流中的三个 FIFO (cfifo0, pmtAck, cfifo1) 可能提供背压机制，但具体实现未在上下文中明确。",
-        "explanation": "FIFO 通常具有满/空标志，用于控制上游是否继续发送事件。然而，当前上下文未提供这些标志信号或连接，因此无法确认背压是否实际作用于输入端口 i_drvFNoc。",
+        "value": "输入事件 i_drvFNoc 携带 51 位数据载荷 i_dataFNoc_51，该载荷在流中经过缓冲和延迟后，最终被重新打包为输出载荷 o_data2Noc_51。",
+        "explanation": "输入接口定义了 i_drvFNoc 事件及其伴随数据 i_dataFNoc_51。输出接口定义了 o_drv2Noc 事件及其伴随数据 o_data2Noc_51。赋值 0 显示了数据从内部寄存器到输出载荷的映射关系，但输入数据到内部寄存器的具体路径未在上下文中明确。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:data_control_effect:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drvFNoc",
+          "i_dataFNoc_51",
+          "o_drv2Noc",
+          "o_data2Noc_51"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [
+          "0"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:NoCUART0:flow:flow_000_NoCUART0_i_drvFNoc",
+          "ev:NoCUART0:semantic_flow:flow_000_NoCUART0_i_drvFNoc"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface.event_ports"
+          },
+          {
+            "source": "interface.data_ports"
+          },
+          {
+            "source": "interface_related"
+          }
+        ]
+      },
+      {
+        "value": "流中存在三个 FIFO 级 (cfifo0, pmtAck, cfifo1) 可能引入背压，但具体背压信号和完成握手协议未在上下文中提供。",
+        "explanation": "上下文将 cfifo0、pmtAck 和 cfifo1 标记为阻塞点，表明它们可能因满状态而阻止事件传播。然而，未提供 free_signal 或 backpressure 信号，因此无法确定具体的背压机制或事件完成条件。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -686,11 +650,7 @@
         ],
         "semantic_claim_id": "semantic:flow:NoCUART0:flow_000_NoCUART0_i_drvFNoc:completion_backpressure:001",
         "doc_priority": "secondary",
-        "signals": [
-          "i_drvFNoc",
-          "w_drv2Pmt",
-          "w_drv2fifo1_delay"
-        ],
+        "signals": [],
         "instances": [
           "cfifo0",
           "pmtAck",
@@ -706,8 +666,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART0.json"
+            "source": "blocking_points"
           }
         ]
       }

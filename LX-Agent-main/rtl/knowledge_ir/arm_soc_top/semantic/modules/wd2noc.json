@@ -64,17 +64,16 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "看门狗中断与复位信号到片上网络（NoC）的桥接与同步模块",
+      "summary": "看门狗中断与复位信号到NoC的同步与分发桥接模块",
       "subject": "wd2noc",
-      "explanation": "模块将来自看门狗实例utt_wd的中断和复位信号，通过7级Fifo1链进行同步和延迟，最终输出到NoC域。输入事件i_drive驱动消息i_msg，经过Fifo链后输出o_drive和o_msg。复位信号Noc_RES同步到所有Fifo实例。自由信号i_free从NoC域输入，经过Fifo链后输出o_free。",
+      "explanation": "模块将看门狗子模块utt_wd产生的中断和复位信号，通过7级Fifo1链同步后，转换为NoC兼容的驱动事件和消息输出。i_drive/i_msg输入事件携带看门狗状态，经Fifo链流水传递后由o_drive/o_msg输出；i_free/o_free构成独立的释放握手。o_INT和o_RES直接映射看门狗原始中断和复位输出。",
       "signals": [
         "i_drive",
-        "o_drive",
         "i_msg",
+        "o_drive",
         "o_msg",
         "i_free",
         "o_free",
-        "Noc_RES",
         "o_INT",
         "o_RES"
       ],
@@ -108,12 +107,6 @@
           "source": "interface.data_outputs"
         },
         {
-          "source": "interface.free_inputs"
-        },
-        {
-          "source": "interface.free_outputs"
-        },
-        {
           "source": "key_component_connections"
         },
         {
@@ -131,21 +124,17 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "将看门狗模块utt_wd产生的复位和中断信号，通过Fifo链同步到NoC时钟域，并输出到NoC接口。",
-      "subject": "看门狗信号到NoC的同步与传递",
-      "explanation": "模块内部实例化cmsdk_apb_watchdog看门狗模块utt_wd，其输出wdogint和复位信号经过处理，通过assign赋值到o_INT和o_RES。同时，输入事件i_drive和消息i_msg通过7级Fifo1链（fifo0至fifo6）进行流水线同步，最终输出o_drive和o_msg。复位信号Noc_RES连接到所有Fifo实例的复位端。自由信号i_free从NoC域输入，经过Fifo链后输出o_free。",
+      "summary": "将utt_wd的看门狗事件通过7级Fifo1链同步后，产生NoC驱动事件o_drive及关联消息o_msg",
+      "subject": "看门狗事件同步与NoC驱动生成",
+      "explanation": "i_drive事件触发后，通过fifo0至fifo6的级联驱动链（o_driveNext[0]至o_driveNext[5]）逐级传递，最终由fifo6输出o_drive。i_msg作为i_drive的载荷，经同步后映射为o_msg。i_free直接注入fifo6的释放端口，o_free从fifo0输出，构成独立的释放路径。",
       "signals": [
-        "o_INT",
-        "o_RES",
-        "wdogint",
-        "o_res_sync2",
         "i_drive",
-        "o_drive",
         "i_msg",
+        "o_drive",
         "o_msg",
         "i_free",
         "o_free",
-        "Noc_RES"
+        "o_driveNext[0:5]"
       ],
       "instances": [
         "fifo0",
@@ -154,8 +143,7 @@
         "fifo3",
         "fifo4",
         "fifo5",
-        "fifo6",
-        "utt_wd"
+        "fifo6"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -165,13 +153,19 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies"
-        },
-        {
           "source": "key_component_connections"
         },
         {
-          "source": "key_instances"
+          "source": "interface.event_inputs"
+        },
+        {
+          "source": "interface.event_outputs"
+        },
+        {
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "interface.data_outputs"
         }
       ],
       "id": "semantic:module:wd2noc:structural_responsibility:001"
@@ -182,15 +176,15 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "subject": "Fifo1链 (fifo0-fifo6)",
-      "summary": "7级事件与消息同步流水线",
-      "explanation": "7个cFifo1_pwm实例串联形成流水线，用于将输入事件i_drive和消息i_msg从看门狗时钟域同步到NoC时钟域。每个Fifo实例的o_driveNext连接到下一个Fifo的i_drive，形成链式传递。最后一个Fifo实例fifo6的o_driveNext直接输出到模块的o_drive。所有Fifo实例共享同一个复位信号Noc_RES。",
+      "subject": "fifo0至fifo6（Fifo1链）",
+      "summary": "7级事件同步流水线，用于将看门狗事件从源时钟域同步到NoC时钟域",
+      "explanation": "每个fifo实例（cFifo1_pwm）通过o_driveNext驱动下一级，形成深度为7的同步链。i_drive从fifo0输入，经6级传递后由fifo6输出o_drive。所有fifo共享Noc_RES复位。i_free直接注入fifo6，o_free从fifo0输出，表明释放信号反向穿越同步链。",
       "signals": [
         "i_drive",
         "o_drive",
-        "i_msg",
-        "o_msg",
         "o_driveNext[0:5]",
+        "i_free",
+        "o_free",
         "Noc_RES"
       ],
       "instances": [
@@ -207,7 +201,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "key_component_connections"
@@ -227,15 +221,17 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "subject": "utt_wd (cmsdk_apb_watchdog)",
-      "summary": "看门狗定时器核心",
-      "explanation": "实例化ARM标准看门狗模块cmsdk_apb_watchdog，产生中断信号wdogint和复位信号。其复位输入PRESETn由模块的rst_finish信号驱动，时钟WDOGCLK由wd_clk驱动。该模块的输出是o_INT和o_RES信号的来源。",
+      "subject": "utt_wd（cmsdk_apb_watchdog）",
+      "summary": "看门狗定时器核心，产生中断和复位信号",
+      "explanation": "utt_wd接收rst_finish作为复位输入（PRESETn），wd_clk作为时钟（WDOGCLK）。其输出wdogint和内部复位逻辑分别通过assign映射到o_INT和o_RES。该实例是看门狗功能的源头，但APB接口（pwdata/prdata）在上下文中未显示连接细节。",
       "signals": [
-        "wdogint",
-        "PRESETn",
-        "WDOGCLK",
         "rst_finish",
-        "wd_clk"
+        "wd_clk",
+        "wdogint",
+        "o_RES",
+        "o_INT",
+        "pwdata",
+        "prdata"
       ],
       "instances": [
         "utt_wd"
@@ -243,7 +239,7 @@
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -266,14 +262,14 @@
         "module": "wd2noc"
       },
       "subject": "o_msg",
-      "summary": "将内部寄存器o_msg_reg的值直接赋值给输出消息o_msg。",
-      "explanation": "这是一个直接的接口赋值，将经过Fifo链同步后的消息数据输出到NoC域。o_msg_reg很可能由Fifo链中的某个实例驱动。",
+      "summary": "将同步后的消息寄存器直接输出到NoC消息端口",
+      "explanation": "assign o_msg = o_msg_reg，表明o_msg_reg是经过Fifo链同步后的消息寄存器，直接驱动模块输出。该赋值是数据路径的终点，连接了内部同步逻辑与NoC接口。",
       "signals": [
         "o_msg",
         "o_msg_reg"
       ],
       "related_assignments": [
-        "assign 2"
+        "index 2"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
@@ -295,19 +291,19 @@
         "module": "wd2noc"
       },
       "subject": "o_INT",
-      "summary": "将看门狗中断信号wdogint直接赋值给输出o_INT。",
-      "explanation": "这是一个直接的接口赋值，将看门狗模块utt_wd产生的中断信号输出到NoC域。表明中断信号未经过Fifo链同步，而是直接输出。",
+      "summary": "将看门狗中断信号直接输出到NoC中断端口",
+      "explanation": "assign o_INT = wdogint，将utt_wd的看门狗中断输出直接映射到模块中断输出端口，未经过同步链处理。",
       "signals": [
         "o_INT",
         "wdogint"
       ],
       "related_assignments": [
-        "assign 3"
+        "index 3"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
@@ -324,19 +320,19 @@
         "module": "wd2noc"
       },
       "subject": "o_RES",
-      "summary": "将内部复位同步信号o_res_sync2取反后输出到o_RES。",
-      "explanation": "这是一个复位信号输出，表明模块内部对看门狗复位信号进行了两级同步（o_res_sync2），然后取反输出。o_RES是低电平有效的复位信号。",
+      "summary": "将看门狗复位信号取反后输出到NoC复位端口",
+      "explanation": "assign o_RES = ~o_res_sync2，表明看门狗复位信号经过两级同步（o_res_sync2）后取反输出，提供NoC域的有效低复位。",
       "signals": [
         "o_RES",
         "o_res_sync2"
       ],
       "related_assignments": [
-        "assign 4"
+        "index 4"
       ],
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
@@ -352,9 +348,9 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "事件信号i_drive和o_drive分别与消息信号i_msg和o_msg绑定，形成事件-消息对。",
-      "subject": "事件-消息绑定 (i_drive & i_msg, o_drive & o_msg)",
-      "explanation": "输入事件i_drive触发时，携带消息i_msg；输出事件o_drive触发时，携带消息o_msg。这表明模块传递的是带数据的看门狗事件。",
+      "summary": "输入驱动事件携带看门狗状态消息，构成同步触发接口",
+      "subject": "i_drive/i_msg事件-载荷对",
+      "explanation": "i_drive作为事件触发，i_msg作为其51位载荷，共同构成看门狗状态到NoC的输入接口。该对经过Fifo链同步后，由o_drive/o_msg输出。事件与载荷的绑定关系由接口命名和宽度匹配推断。",
       "signals": [
         "i_drive",
         "i_msg",
@@ -370,6 +366,18 @@
       "confidence": "low",
       "evidence": [
         {
+          "source": "interface.event_inputs"
+        },
+        {
+          "source": "interface.data_inputs"
+        },
+        {
+          "source": "interface.event_outputs"
+        },
+        {
+          "source": "interface.data_outputs"
+        },
+        {
           "source": "event_payload_contracts"
         }
       ],
@@ -381,14 +389,10 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "自由信号i_free和o_free构成独立的自由事件路径。",
-      "subject": "自由信号 (i_free, o_free)",
-      "explanation": "i_free从NoC域输入，直接连接到fifo6的i_freeNext，然后通过Fifo链反向传递，最终从fifo0的o_free输出到o_free。这表明存在一个从NoC到看门狗域的自由事件路径，可能与流控或状态反馈有关。",
+      "summary": "独立的释放信号接口，用于控制同步链的释放操作",
+      "subject": "i_free/o_free释放握手对",
+      "explanation": "i_free直接连接到fifo6的i_freeNext，o_free从fifo0输出，表明释放信号从链尾注入，从链头输出，形成与驱动事件方向相反的释放路径。该接口独立于驱动事件，可能用于背压或复位同步。",
       "signals": [
-        "i_free",
-        "o_free"
-      ],
-      "related_payload": [
         "i_free",
         "o_free"
       ],
@@ -397,13 +401,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "key_component_connections"
-        },
-        {
           "source": "interface.free_inputs"
         },
         {
           "source": "interface.free_outputs"
+        },
+        {
+          "source": "key_component_connections"
         }
       ],
       "id": "semantic:module:wd2noc:interface_intent:002"
@@ -414,18 +418,17 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "summary": "文档应重点描述看门狗中断、复位和事件消息如何从看门狗域同步到NoC域。",
-      "subject": "看门狗信号同步与传递路径",
-      "explanation": "模块的核心功能是桥接和同步。需要详细说明中断信号o_INT的直接输出路径、复位信号o_RES的同步取反输出路径，以及事件-消息对(i_drive/i_msg到o_drive/o_msg)通过7级Fifo链的同步路径。同时，自由信号i_free到o_free的反向路径也需要说明。",
+      "summary": "文档应重点说明7级Fifo1链的同步作用、驱动事件与释放信号的反向路径，以及中断/复位信号的直接输出",
+      "subject": "看门狗事件同步链的深度与方向",
+      "explanation": "模块核心功能是将看门狗事件通过深度为7的同步链传递到NoC域，同时提供独立的释放路径。o_INT和o_RES直接输出未经过同步链，需明确其时钟域归属。i_drive的流分析未追踪到模块输出，需RTL源码确认。",
       "signals": [
-        "o_INT",
-        "o_RES",
         "i_drive",
         "o_drive",
-        "i_msg",
-        "o_msg",
         "i_free",
-        "o_free"
+        "o_free",
+        "o_INT",
+        "o_RES",
+        "o_driveNext[0:5]"
       ],
       "instances": [
         "fifo0",
@@ -445,13 +448,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies"
-        },
-        {
           "source": "key_component_connections"
         },
         {
-          "source": "interface"
+          "source": "assign_dependencies"
+        },
+        {
+          "source": "evidence_gaps"
         }
       ],
       "id": "semantic:module:wd2noc:documentation_focus:001"
@@ -462,12 +465,13 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "reason": "当前上下文未提供o_msg_reg和o_res_sync2的驱动源，需要查看RTL源代码以确定它们是由哪个Fifo实例或逻辑块驱动的。",
-      "subject": "内部信号o_msg_reg和o_res_sync2的来源",
-      "needed_source_slice": "assign block, always block, instance connections",
+      "reason": "上下文中的事件流分析未追踪到i_drive到达任何模块输出端点，无法确认驱动事件在Fifo链中的完整传递路径",
+      "subject": "i_drive内部事件流",
+      "needed_source_slice": "always block; assign block; instance connections",
       "signals": [
-        "o_msg_reg",
-        "o_res_sync2"
+        "i_drive",
+        "o_driveNext[0:5]",
+        "o_drive"
       ],
       "instances": [
         "fifo0",
@@ -486,10 +490,10 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "internal_event_flow_refs"
         },
         {
-          "source": "key_instances"
+          "source": "evidence_gaps"
         }
       ],
       "id": "semantic:module:wd2noc:source_review_request:001"
@@ -500,13 +504,12 @@
         "type": "module",
         "module": "wd2noc"
       },
-      "reason": "当前上下文仅显示o_RES由~o_res_sync2赋值，但未说明o_res_sync2是如何从看门狗模块utt_wd的复位输出产生的。需要查看RTL源代码以了解复位同步链的具体实现。",
-      "subject": "看门狗复位信号处理逻辑",
-      "needed_source_slice": "always block, assign block",
+      "reason": "上下文未显示utt_wd的APB接口（pwdata/prdata）如何连接到模块内部，无法确认看门狗配置路径",
+      "subject": "utt_wd的APB接口连接",
+      "needed_source_slice": "instance connections; module declaration",
       "signals": [
-        "o_RES",
-        "o_res_sync2",
-        "wdogint"
+        "pwdata",
+        "prdata"
       ],
       "instances": [
         "utt_wd"
@@ -514,12 +517,12 @@
       "related_flows": [
         "flow_000_wd2noc_i_drive"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "key_instances"
         },
         {
           "source": "key_component_connections"
@@ -531,7 +534,11 @@
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_drive",
-      "reason": "当前上下文未提供从i_drive到任何模块内部事件输出的完整事件流路径，仅有一个空的flow引用。需要查看RTL源代码以确认i_drive如何驱动Fifo链以及是否产生内部事件。"
+      "reason": "未追踪到i_drive到达任何模块输出端点"
+    },
+    {
+      "field": "utt_wd APB接口连接",
+      "reason": "未显示pwdata/prdata的模块内部连接"
     }
   ]
 }

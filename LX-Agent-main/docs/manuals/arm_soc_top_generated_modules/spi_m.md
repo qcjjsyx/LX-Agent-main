@@ -1,8 +1,8 @@
 # 模块 `spi_m`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/spi_m.v`。
-- 职责：AI 推断：SPI主设备控制器，负责管理SPI总线上的数据传输、CRC校验和状态指示。
-- 说明：模块通过data_in和TXCRC接收数据，输出data_out，并通过busy、rx_done、tx_done、crc_done等信号指示传输状态，表明其核心功能是控制SPI主设备的数据收发和CRC计算
+- 职责：AI 推断：SPI主设备控制器，负责管理SPI总线的发送、接收和CRC校验时序。
+- 说明：模块通过TXCRC、data_in和data_out数据接口以及busy、rx_done、tx_done、crc_done状态信号，实现SPI主设备的数据传输控制，包括发送完成、接收完成和CRC校验完成等关键时序事件
 
 ## 1. 层级位置
 
@@ -51,7 +51,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `rx_done` | (rxonly^DFF) ? (DFF ? ((~rx_cnt[4]) & cnt_buf_rx) : (~rx_cnt[2]) & cnt_buf_rx) : ((~rx_cnt[3]... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | unknown | `tx_done` | (CPHA^DFF) ? ((~tx_cnt[3]) & cnt_buf_tx) : (DFF ? ((~tx_cnt[4]) & cnt_buf_tx) : (~tx_cnt[2]) ... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | unknown | `crc_done` | (CPHA^DFF) ? ((~crc_cnt[3]) & cnt_buf_crc) : (DFF ? ((~crc_cnt[4]) & cnt_buf_crc) : (~crc_cnt... | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | unknown | `busy` | enable \| !TXE \| crc_en | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | unknown | `rx_done` | (rxonly^DFF) ? (DFF ? ((~rx_cnt[4]) & cnt_buf_rx) : (~rx_cnt[2]) & cnt_buf_rx) : ((~rx_cnt[3]... | AI 推断：接收完成标志，根据rxonly和DFF配置选择不同的位计数阈值 |
+| `assign_2` | unknown | `tx_done` | (CPHA^DFF) ? ((~tx_cnt[3]) & cnt_buf_tx) : (DFF ? ((~tx_cnt[4]) & cnt_buf_tx) : (~tx_cnt[2]) ... | AI 推断：发送完成标志，根据CPHA和DFF配置选择不同的位计数阈值 |
+| `assign_3` | unknown | `crc_done` | (CPHA^DFF) ? ((~crc_cnt[3]) & cnt_buf_crc) : (DFF ? ((~crc_cnt[4]) & cnt_buf_crc) : (~crc_cnt... | AI 推断：CRC校验完成标志，根据CPHA和DFF配置选择不同的位计数阈值 |
+| `assign_0` | unknown | `busy` | enable \| !TXE \| crc_en | AI 推断：模块忙状态标志，由使能信号、发送缓冲空标志和CRC使能共同驱动 |

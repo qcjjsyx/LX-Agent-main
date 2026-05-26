@@ -220,8 +220,8 @@
         "w_drv2Merge"
       ],
       "role_in_flow": {
-        "value": "FIFO缓冲级，可能对事件进行排队或门控。",
-        "explanation": "该 cFifo3_fetch 实例接收延迟后的事件 w_drvFICache，输出 w_drv2Merge。作为FIFO，它可能实现事件缓冲、背压处理或条件门控，是流中唯一的潜在阻塞点。",
+        "value": "FIFO缓冲级，可能对事件进行排队或流控，是流中唯一的阻塞点。",
+        "explanation": "该 cFifo3_fetch 实例接收延迟后的事件 w_drvFICache，输出 w_drv2Merge。作为FIFO，它可能实现事件缓冲、背压或顺序保持，其满/空状态可能影响事件传播。这是流中唯一可能阻塞事件传递的组件。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -245,12 +245,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/instSplit.json",
-            "path": "internal_event_flow"
+            "source": "instances.connections",
+            "path": "modules/instSplit.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/instSplit.json",
-            "path": "connection_graph"
+            "source": "blocking_points",
+            "path": "modules/instSplit.json"
           }
         ]
       },
@@ -273,8 +273,8 @@
         "o_drv2Merge"
       ],
       "role_in_flow": {
-        "value": "输出级透明延迟缓冲器，对FIFO输出进行最后一级延迟。",
-        "explanation": "该 delay4U 实例将FIFO输出 w_drv2Merge 延迟一个时钟周期后，驱动到模块输出端口 o_drv2Merge，完成事件传递。",
+        "value": "输出级透明延迟缓冲器，对FIFO输出事件进行最后一级延迟后送出模块。",
+        "explanation": "该 delay4U 实例将FIFO输出 w_drv2Merge 延迟4个时钟周期后，作为模块输出 o_drv2Merge。它可能用于对齐输出事件到下游模块的时序要求。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -298,12 +298,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/instSplit.json",
-            "path": "internal_event_flow"
+            "source": "instances.connections",
+            "path": "modules/instSplit.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/instSplit.json",
-            "path": "connection_graph"
+            "source": "transparent_flows",
+            "path": "modules/instSplit.json"
           }
         ]
       },
@@ -349,30 +349,20 @@
     }
   ],
   "semantic_meaning": {
-    "value": "手册应重点描述该流的三级延迟缓冲加FIFO的流水线结构，以及其作为纯事件驱动的单向传递特性。",
-    "explanation": "该流结构清晰，由延迟缓冲和FIFO串联组成，无分支或数据关联。手册应强调其延迟级数、FIFO的潜在门控作用，以及事件信号命名约定。",
+    "value": "该流仅传递事件信号，无关联的数据负载或控制信号，属于纯事件驱动路径。",
+    "explanation": "接口负载契约显示 i_drvFICache 和 o_drv2Merge 均无关联的 payload 信号或 free 信号，且流步骤中所有信号均为事件驱动类型。因此该流不携带数据，仅用于事件同步或触发。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:documentation_focus:001",
+    "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
       "i_drvFICache",
-      "w_drvFICache_t",
-      "w_drvFICache_t1",
-      "w_drvFICache",
-      "w_drv2Merge",
       "o_drv2Merge"
     ],
-    "instances": [
-      "fetchFifoDelay_in1",
-      "fetchFifoDelay_in2",
-      "fetchFifoDelay_in3",
-      "fetchFifo",
-      "fetchFifoDelay1"
-    ],
+    "instances": [],
     "related_flows": [],
     "related_assignments": [],
     "requires_rtl_source_review": false,
@@ -383,13 +373,61 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/instSplit.json",
-        "path": "internal_event_flow"
+        "source": "interface.event_ports",
+        "path": "modules/instSplit.json"
+      },
+      {
+        "source": "interface.data_ports",
+        "path": "modules/instSplit.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "该驱动流将输入事件 i_drvFICache 通过三级延迟缓冲后送入一个FIFO，再经一级延迟缓冲输出为 o_drv2Merge，实现从ICache驱动到合并级的事件传递与同步。",
+        "value": "手册应重点描述三级延迟链和FIFO如何协同实现事件传递的时序控制，并指出背压和负载信息缺失。",
+        "explanation": "该流的核心结构是延迟链加FIFO，用于将输入事件延迟并缓冲后输出。手册应解释每个延迟级的延迟量（8U vs 4U）和FIFO的深度（3），以及它们对事件时序的影响。同时需注明无数据负载和背压信号，建议RTL审查确认FIFO的流控行为。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:documentation_focus:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drvFICache",
+          "w_drvFICache_t",
+          "w_drvFICache_t1",
+          "w_drvFICache",
+          "w_drv2Merge",
+          "o_drv2Merge"
+        ],
+        "instances": [
+          "fetchFifoDelay_in1",
+          "fetchFifoDelay_in2",
+          "fetchFifoDelay_in3",
+          "fetchFifo",
+          "fetchFifoDelay1"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:flow:flow_000_instSplit_i_drvFICache",
+          "ev:instSplit:semantic_flow:flow_000_instSplit_i_drvFICache"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "instances.connections",
+            "path": "modules/instSplit.json"
+          },
+          {
+            "source": "transparent_flows",
+            "path": "modules/instSplit.json"
+          }
+        ]
+      },
+      {
+        "value": "该驱动流将输入事件 i_drvFICache 通过三级延迟缓冲后送入一个FIFO，再经一级延迟缓冲输出为 o_drv2Merge，实现从ICache驱动到合并阶段的事件传递与同步。",
         "explanation": "流从模块输入端口 i_drvFICache 开始，依次经过三个 delay8U 实例（fetchFifoDelay_in1、_in2、_in3）形成三级流水延迟，然后进入 cFifo3_fetch 实例 fetchFifo 进行FIFO缓冲，最后通过一个 delay4U 实例 fetchFifoDelay1 输出到模块端口 o_drv2Merge。整个流是纯事件驱动的单向传递，无分支或合并点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
@@ -423,52 +461,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/instSplit.json",
-            "path": "internal_event_flow"
+            "source": "instances.connections",
+            "path": "modules/instSplit.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/instSplit.json",
-            "path": "flow_graph"
+            "source": "transparent_flows",
+            "path": "modules/instSplit.json"
           }
         ]
       },
       {
-        "value": "该流仅传递事件信号，无显式载荷或控制信号关联。",
-        "explanation": "接口载荷契约显示 i_drvFICache 和 o_drv2Merge 均无关联载荷信号，free_signal 也为空。流中所有信号均为纯事件驱动，不携带数据或控制信息。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:data_control_effect:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFICache",
-          "o_drv2Merge"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:instSplit:flow:flow_000_instSplit_i_drvFICache",
-          "ev:instSplit:semantic_flow:flow_000_instSplit_i_drvFICache"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/instSplit.json",
-            "path": "interface_data_contract"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/instSplit.json",
-            "path": "interface"
-          }
-        ]
-      },
-      {
-        "value": "当前上下文未提供背压或完成信号信息，无法做出可靠声明。",
-        "explanation": "接口载荷契约中 free_signal 为空，且流中无相关信号或实例表明背压机制。FIFO实例 fetchFifo 可能隐含背压，但无证据支持。",
+        "value": "当前上下文未提供 free 信号或背压机制，无法确认流控细节。",
+        "explanation": "接口负载契约中 free_signal 为空，且流步骤中无背压相关信号。FIFO实例 fetchFifo 可能内部实现流控，但无证据表明其输出背压信号到上游。最终手册应注明背压信息缺失。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -490,8 +494,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/instSplit.json",
-            "path": "interface_data_contract"
+            "source": "interface.event_ports",
+            "path": "modules/instSplit.json"
           }
         ]
       }

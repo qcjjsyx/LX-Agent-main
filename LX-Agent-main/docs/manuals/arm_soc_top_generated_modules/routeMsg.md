@@ -78,7 +78,7 @@ routeMsg
 - Payload：`i_drive` -> `i_msg_51 [50:0]`。
 - 输出/影响：`o_driveEArb`, `o_driveLArb`, `o_driveNArb`, `o_driveSArb`, `o_driveWArb`。
 - 结构复杂度：branch=1，join=0，blocking=6。
-- AI 推断：最终手册应重点描述事件从 i_drive 到五个方向输出端口的完整路径，以及 dirFork 的方向选择机制。
+- AI 推断：手册应重点描述事件从输入到五个方向输出的完整路径，以及 dirFork 的方向选择机制。
 
 
 ## 5. 内部组件与 assign 影响
@@ -99,8 +99,11 @@ routeMsg
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_16` | unknown | `o_westMsg_51` | r_wMsg_51 | AI 推断：方向消息输出，直接连接到对应的内部寄存器信号。 |
-| `assign_17` | unknown | `o_localMsg_51` | r_lMsg_51 | AI 推断：方向消息输出，直接连接到对应的内部寄存器信号。 |
-| `assign_18` | unknown | `o_eastMsg_51` | r_eMsg_51 | AI 推断：方向消息输出，直接连接到对应的内部寄存器信号。 |
-| `assign_19` | unknown | `o_northMsg_51` | r_nMsg_51 | AI 推断：方向消息输出，直接连接到对应的内部寄存器信号。 |
-| `assign_20` | unknown | `o_southMsg_51` | r_sMsg_51 | AI 推断：方向消息输出，直接连接到对应的内部寄存器信号。 |
+| `assign_6` | control_path | `w_northVld` | w_northVldSN & ~(w_eastVld \| w_westVld) | AI 推断：方向valid信号的生成逻辑，实现了基于东西方向优先级的仲裁。 |
+| `assign_8` | control_path | `w_southVld` | w_southVldNS & ~(w_eastVld \| w_westVld) | AI 推断：方向valid信号的生成逻辑，实现了基于东西方向优先级的仲裁。 |
+| `assign_9` | control_path | `w_localVld` | ~(w_westVld \| w_eastVld \| w_southVld \| w_northVld) | AI 推断：方向valid信号的生成逻辑，实现了基于东西方向优先级的仲裁。 |
+| `assign_16` | unknown | `o_westMsg_51` | r_wMsg_51 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_17` | unknown | `o_localMsg_51` | r_lMsg_51 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_18` | unknown | `o_eastMsg_51` | r_eMsg_51 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_19` | unknown | `o_northMsg_51` | r_nMsg_51 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_20` | unknown | `o_southMsg_51` | r_sMsg_51 | 证据不足：No Semantic Layer assignment interpretation is available. |

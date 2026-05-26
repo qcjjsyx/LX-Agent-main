@@ -29,6 +29,7 @@ class OpenAICompatibleLLMClient:
         _load_dotenv_if_available()
         self.model = (
             model
+            or os.getenv("DEEPSEEK_MODEL")
             or os.getenv("KNOWLEDGE_IR_SEMANTIC_MODEL")
             or os.getenv("OPENAI_MODEL")
             or "deepseek-chat"

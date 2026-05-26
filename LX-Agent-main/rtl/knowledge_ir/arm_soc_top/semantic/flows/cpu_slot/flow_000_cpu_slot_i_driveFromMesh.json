@@ -65,9 +65,9 @@
         "module": "cpu_slot",
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
-      "summary": "从Mesh输入的事件驱动信号，经数据选择器(data_mux)分发至CPU核心和内存槽，最终通过data_mux回传至Mesh输出。",
+      "summary": "从Mesh输入的事件驱动信号经数据选择器(data_mux)分发至CPU核心或内存槽，最终由data_mux选择后输出回Mesh。",
       "subject": "flow_000_cpu_slot_i_driveFromMesh",
-      "explanation": "该流以i_driveFromMesh为起点，data_mux作为核心分发节点，将事件分别导向u_cpu_core和u_memory_slot，两者处理后通过回传路径汇聚回data_mux，最终由o_driveToMesh输出至Mesh。",
+      "explanation": "该流以i_driveFromMesh为起点，data_mux作为核心分发节点，将事件导向u_cpu_core或u_memory_slot，两者处理后返回data_mux，最终由o_driveToMesh输出。流经三个实例，形成闭环路径。",
       "signals": [
         "i_driveFromMesh",
         "o_driveToMesh"
@@ -81,7 +81,7 @@
         "(无)"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
@@ -103,15 +103,15 @@
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
       "subject": "data_mux",
-      "summary": "事件分发与汇聚的核心选择器。",
-      "explanation": "data_mux接收来自Mesh的输入事件(i_driveFromMesh)、Dcache回传事件(w_driveDcache2Mux)以及CPU核心的LSU驱动事件(w_lsuDriveToDataRout_1)，通过内部选择逻辑将事件输出至Mesh(o_driveToMesh)、CPU核心(w_dataRoutDriveToLsu_1)和Dcache(w_driveMux2Dcache)。同时，它也是事件回传路径的汇聚点。",
+      "summary": "事件分发与仲裁节点，接收来自Mesh、Dcache和CPU核心的驱动信号，选择后输出至Mesh、CPU核心或Dcache。",
+      "explanation": "data_mux作为多路选择器，从i_driveFromMesh、w_driveDcache2Mux和w_lsuDriveToDataRout_1三个输入中选择，输出至o_driveToMesh、w_dataRoutDriveToLsu_1和w_driveMux2Dcache，控制事件流向。",
       "signals": [
         "i_driveFromMesh",
+        "w_driveDcache2Mux",
+        "w_lsuDriveToDataRout_1",
         "o_driveToMesh",
         "w_dataRoutDriveToLsu_1",
-        "w_driveMux2Dcache",
-        "w_driveDcache2Mux",
-        "w_lsuDriveToDataRout_1"
+        "w_driveMux2Dcache"
       ],
       "instances": [
         "data_mux"
@@ -138,13 +138,14 @@
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
       "subject": "u_cpu_core",
-      "summary": "事件处理与生成的核心单元。",
-      "explanation": "u_cpu_core接收来自data_mux的数据路由事件(w_dataRoutDriveToLsu_1)和来自指令缓存的事件(w_drvIcache2CPU)，处理后生成LSU驱动事件(w_lsuDriveToDataRout_1)回传至data_mux，并生成指令缓存请求事件(w_drvCpu2Icache)发送至u_memory_slot。",
+      "summary": "事件处理与生成节点，接收来自data_mux和Icache的驱动信号，输出至Icache和data_mux。",
+      "explanation": "u_cpu_core从w_dataRoutDriveToLsu_1、w_driveFromStart_1和w_drvIcache2CPU接收事件，处理后通过w_drvCpu2Icache和w_lsuDriveToDataRout_1输出，参与数据路径和指令缓存路径。",
       "signals": [
         "w_dataRoutDriveToLsu_1",
+        "w_driveFromStart_1",
         "w_drvIcache2CPU",
-        "w_lsuDriveToDataRout_1",
-        "w_drvCpu2Icache"
+        "w_drvCpu2Icache",
+        "w_lsuDriveToDataRout_1"
       ],
       "instances": [
         "u_cpu_core"
@@ -171,8 +172,8 @@
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
       "subject": "u_memory_slot",
-      "summary": "数据与指令缓存处理单元。",
-      "explanation": "u_memory_slot接收来自data_mux的数据缓存请求(w_driveMux2Dcache)和来自CPU核心的指令缓存请求(w_drvCpu2Icache)，处理后生成数据缓存回传事件(w_driveDcache2Mux)至data_mux，并生成指令缓存回传事件(w_drvIcache2CPU)至u_cpu_core。",
+      "summary": "缓存访问节点，接收来自data_mux和CPU核心的驱动信号，输出至data_mux和CPU核心。",
+      "explanation": "u_memory_slot从w_driveMux2Dcache和w_drvCpu2Icache接收事件，处理后通过w_driveDcache2Mux和w_drvIcache2CPU输出，实现数据缓存和指令缓存访问。",
       "signals": [
         "w_driveMux2Dcache",
         "w_drvCpu2Icache",
@@ -203,11 +204,11 @@
         "module": "cpu_slot",
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
-      "summary": "o_data2Mesh是o_driveToMesh事件的关联数据负载。",
-      "subject": "o_data2Mesh 与 o_driveToMesh",
-      "explanation": "接口负载契约显示，o_driveToMesh事件输出时，伴随一个50位宽的o_data2Mesh数据信号。这表明该事件流不仅传递控制信号，还携带了从data_mux输出的数据负载。",
+      "summary": "i_driveFromMesh事件驱动信号与o_data2Mesh数据负载相关联，但无直接赋值依赖。",
+      "subject": "i_driveFromMesh 与 o_data2Mesh",
+      "explanation": "接口显示o_driveToMesh事件输出伴随o_data2Mesh[50:0]数据负载，但上下文中无赋值依赖说明数据如何从输入事件映射到输出数据，需RTL源码确认。",
       "signals": [
-        "o_driveToMesh",
+        "i_driveFromMesh",
         "o_data2Mesh"
       ],
       "related_payload": [
@@ -221,7 +222,11 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface_data_contract",
+          "source": "interface.event_ports",
+          "path": "modules/cpu_slot.json"
+        },
+        {
+          "source": "interface.data_ports",
           "path": "modules/cpu_slot.json"
         }
       ],
@@ -234,21 +239,21 @@
         "module": "cpu_slot",
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
-      "summary": "当前上下文未提供任何完成或反压信号信息。",
+      "summary": "上下文中无free/backpressure信号，无法推断流完成或反压机制。",
       "subject": "流完成与反压",
-      "explanation": "接口负载契约中free_signal字段为空，且流步骤和连接图中未提及任何握手或反压机制。因此，无法对该流的完成或反压行为做出任何声明。",
+      "explanation": "接口payload_contracts中free_signal为空，且无相关赋值或连接，表明该流可能为纯事件驱动，无显式反压，或反压由其他机制处理。",
       "signals": [
         "(无)"
       ],
       "instances": [
         "(无)"
       ],
-      "doc_priority": "reference",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface_data_contract",
+          "source": "interface.event_ports",
           "path": "modules/cpu_slot.json"
         }
       ],
@@ -261,18 +266,16 @@
         "module": "cpu_slot",
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
-      "summary": "手册应重点描述data_mux作为核心分发节点的选择逻辑，以及事件在CPU核心和内存槽之间的回传路径。",
-      "subject": "事件分发与回传路径",
-      "explanation": "该流的核心结构是data_mux将输入事件分发至u_cpu_core和u_memory_slot，两者处理后通过回传路径汇聚回data_mux。手册需阐明这一双向交互机制，但避免猜测具体选择条件或仲裁逻辑。",
+      "summary": "手册应重点描述i_driveFromMesh事件如何经data_mux分发至CPU核心和内存槽，以及最终输出回Mesh的路径。",
+      "subject": "事件分发路径",
+      "explanation": "该流核心是data_mux的分发与仲裁，需明确各输入输出的选择条件，以及u_cpu_core和u_memory_slot的参与角色。",
       "signals": [
         "i_driveFromMesh",
         "o_driveToMesh",
         "w_dataRoutDriveToLsu_1",
         "w_driveMux2Dcache",
         "w_driveDcache2Mux",
-        "w_lsuDriveToDataRout_1",
-        "w_drvCpu2Icache",
-        "w_drvIcache2CPU"
+        "w_lsuDriveToDataRout_1"
       ],
       "instances": [
         "data_mux",
@@ -300,14 +303,16 @@
         "module": "cpu_slot",
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
-      "reason": "当前上下文仅提供连接关系，未包含data_mux内部的选择条件或仲裁逻辑，无法确定事件分发和汇聚的具体规则。",
-      "subject": "data_mux内部选择逻辑",
-      "needed_source_slice": "assign block, always block",
+      "reason": "上下文未提供data_mux的选择条件或仲裁逻辑，需RTL源码确认。",
+      "subject": "data_mux 选择逻辑",
+      "needed_source_slice": "always block 或 assign 块",
       "signals": [
         "i_driveFromMesh",
-        "o_driveToMesh",
         "w_driveDcache2Mux",
-        "w_lsuDriveToDataRout_1"
+        "w_lsuDriveToDataRout_1",
+        "o_driveToMesh",
+        "w_dataRoutDriveToLsu_1",
+        "w_driveMux2Dcache"
       ],
       "instances": [
         "data_mux"
@@ -333,15 +338,15 @@
         "module": "cpu_slot",
         "flow_id": "flow_000_cpu_slot_i_driveFromMesh"
       },
-      "reason": "当前上下文未提供任何反压或完成信号，需要RTL源文件确认是否存在握手机制。",
-      "subject": "接口负载契约中的free_signal",
-      "needed_source_slice": "interface port list, always block",
+      "reason": "上下文未说明o_data2Mesh数据如何从输入事件或内部逻辑生成，需RTL源码确认。",
+      "subject": "o_data2Mesh 数据负载映射",
+      "needed_source_slice": "assign 块或 always 块",
       "signals": [
-        "i_driveFromMesh",
-        "o_driveToMesh"
+        "o_data2Mesh",
+        "i_driveFromMesh"
       ],
       "instances": [
-        "(无)"
+        "data_mux"
       ],
       "related_assignments": [
         "(无)"
@@ -351,7 +356,7 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface_data_contract",
+          "source": "interface.data_ports",
           "path": "modules/cpu_slot.json"
         }
       ],
@@ -360,12 +365,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "流步骤中的选择/仲裁逻辑",
-      "reason": "上下文仅列出分支点和汇聚点，未提供data_mux、u_cpu_core或u_memory_slot内部的选择或仲裁条件。"
-    },
-    {
-      "field": "完成与反压信号",
-      "reason": "接口负载契约中free_signal字段为空，无法确认是否存在握手机制。"
+      "field": "赋值依赖",
+      "reason": "上下文中related_assign_dependencies为空，无法确认信号间的组合逻辑关系。"
     }
   ]
 }

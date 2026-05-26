@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/memory/uart_rx.v`。
 - 职责：AI 推断：UART接收模块，负责将串行输入数据转换为并行数据并输出。
-- 说明：模块接收rx_data_ready作为数据输入，输出8位并行数据rx_data和有效信号rx_data_valid，符合UART接收器的基本功能定义
+- 说明：模块接收rx_data_ready信号作为数据输入，输出8位并行数据rx_data和有效标志rx_data_valid，符合UART接收器的基本功能定义
 
 ## 1. 层级位置
 

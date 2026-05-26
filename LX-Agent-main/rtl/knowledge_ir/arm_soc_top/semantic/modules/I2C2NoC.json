@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 13,
     "by_type": {
-      "assignment_interpretation": 1,
+      "assignment_interpretation": 2,
       "component_role": 3,
-      "documentation_focus": 1,
-      "interface_intent": 1,
+      "documentation_focus": 2,
+      "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 2,
       "structural_responsibility": 1
@@ -64,13 +64,13 @@
         "type": "module",
         "module": "I2C2NoC"
       },
-      "summary": "该模块作为I2C主控制器（mi2cv2）与片上网络（NoC）之间的桥接与数据格式转换单元。",
+      "summary": "该模块作为I2C主控制器（mi2cv2）与片上网络（NoC）之间的桥接与数据同步模块，负责将I2C总线事件转换为NoC兼容的驱动事件，并管理数据路径的延迟与同步。",
       "subject": "I2C2NoC",
-      "explanation": "模块接收来自NoC的驱动事件（i_drvFNoc）及其关联的51位数据载荷（i_dataFNoc_51），经过内部FIFO和延迟链处理后，将数据重新打包并输出驱动事件（o_drv2Noc）和51位数据（o_data2Noc_51）至NoC。同时，模块内部实例化了I2C主控制器（U1/mi2cv2），表明其负责将NoC的请求转换为I2C总线协议，并将I2C的响应数据（WDATA, w_rdata）回传至NoC数据路径。",
+      "explanation": "模块通过事件驱动接口（i_drvFNoc/o_drv2Noc）与NoC交互，内部使用多个延迟单元（delay*）和FIFO（cfifo1/cfifo2/cfifo3_0）对I2C主控制器（U1）的驱动事件进行流水线延迟和同步，最终输出到NoC。数据路径（i_dataFNoc_51/o_data2Noc_51）通过组合逻辑重组（assign index 2）实现数据映射。",
       "signals": [
         "i_drvFNoc",
-        "i_dataFNoc_51",
         "o_drv2Noc",
+        "i_dataFNoc_51",
         "o_data2Noc_51",
         "i_freeFNoc",
         "o_free2Noc"
@@ -93,6 +93,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/IIC/I2C2NoC.v"
         }
       ],
       "id": "semantic:module:I2C2NoC:module_role:001"
@@ -103,27 +106,56 @@
         "type": "module",
         "module": "I2C2NoC"
       },
-      "summary": "模块将输入的51位数据（i_dataFNoc_51）拆解并重组为包含I2C读数据（RDATA）的新51位数据包（o_data2Noc_51）。",
-      "subject": "数据路径重排与转发",
-      "explanation": "赋值依赖（assign index 2）显示输出数据o_data2Noc_51由输入数据的高位（r_dataFNoc[50], r_dataFNoc[49:42]）、一个24位中间值（r_middle_24）、I2C读数据（RDATA）和一个10位尾部值（r_last_10）拼接而成。这表明模块的核心功能之一是解析NoC数据包，提取I2C地址/命令，执行I2C操作，并将读取的数据（RDATA）插入到输出数据包的特定位置。",
+      "summary": "模块通过三级FIFO和多个延迟单元构建事件驱动流水线，将I2C主控制器的驱动事件同步到NoC时钟域，并管理事件释放（free）信号。",
+      "subject": "事件驱动流水线",
+      "explanation": "输入事件i_drvFNoc经cfifo3_0进入延迟链（delay1至delay18），最终通过cfifo1/cfifo2和延迟链（delay2_2/delay2_7/delay2_3）输出到o_drv2Noc。释放信号i_freeFNoc通过cfifo2和cfifo1形成释放链（w_freeFfifo2），确保事件与释放的同步。",
       "signals": [
-        "i_dataFNoc_51",
-        "o_data2Noc_51",
-        "RDATA",
-        "r_dataFNoc",
-        "r_middle_24",
-        "r_last_10"
+        "i_drvFNoc",
+        "o_drv2Noc",
+        "i_freeFNoc",
+        "o_free2Noc",
+        "w_drv2delay1",
+        "w_drv2Noc1",
+        "w_drv2Noc2",
+        "w_drv2Noc3",
+        "w_freeFfifo2"
       ],
       "instances": [
-        "U1"
+        "cfifo1",
+        "cfifo2",
+        "cfifo3_0",
+        "delay1",
+        "delay2",
+        "delay2_2",
+        "delay2_3",
+        "delay2_7",
+        "delay3",
+        "delay4",
+        "delay5",
+        "delay6",
+        "delay7",
+        "delay8",
+        "delay9",
+        "delay10",
+        "delay11",
+        "delay12",
+        "delay13",
+        "delay14",
+        "delay15",
+        "delay16",
+        "delay17",
+        "delay18"
       ],
       "related_flows": [
         "flow_000_I2C2NoC_i_drvFNoc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }
@@ -136,9 +168,54 @@
         "type": "module",
         "module": "I2C2NoC"
       },
+      "subject": "U1 (mi2cv2)",
+      "summary": "I2C主控制器核心，负责I2C总线协议处理，提供数据输出（w_rdata）和驱动事件，并接收复位信号（rst_finish）和时钟/控制信号。",
+      "explanation": "U1是模块的I2C功能核心，通过接口信号（ISCL/ISDA/OSCL/OSDA等）与外部I2C总线交互，输出数据到w_rdata，并可能通过内部逻辑产生驱动事件。其复位由rst_finish控制，时钟由CLOCK提供。",
+      "signals": [
+        "w_rdata",
+        "rst_finish",
+        "CLOCK",
+        "ISCL",
+        "ISDA",
+        "OSCL",
+        "OSDA",
+        "INTR",
+        "ENDRV",
+        "FSEN",
+        "HSEN",
+        "IFSDA",
+        "CKISO",
+        "DAISO",
+        "DAGND"
+      ],
+      "instances": [
+        "U1"
+      ],
+      "related_flows": [
+        "flow_000_I2C2NoC_i_drvFNoc"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
+        }
+      ],
+      "id": "semantic:module:I2C2NoC:component_role:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "I2C2NoC"
+      },
       "subject": "cfifo3_0 (cFifo3_I2C_1)",
-      "summary": "作为输入事件（i_drvFNoc）的同步与缓冲单元，将NoC驱动事件转换为内部延迟链的起始事件。",
-      "explanation": "关键连接显示，输入事件i_drvFNoc直接连接到cfifo3_0的i_drive端口，其输出o_driveNext则连接到延迟链的起点（delay1.inR）。这表明cfifo3_0负责对来自NoC的异步或跨时钟域事件进行同步和缓冲，确保内部处理流程的稳定性。",
+      "summary": "输入事件FIFO，缓冲来自NoC的驱动事件（i_drvFNoc），并输出到延迟链起点（w_drv2delay1）。",
+      "explanation": "cfifo3_0作为模块的输入事件缓冲器，接收NoC的驱动事件，确保事件在进入延迟链前被稳定捕获，避免事件丢失。",
       "signals": [
         "i_drvFNoc",
         "w_drv2delay1"
@@ -154,37 +231,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
-        }
-      ],
-      "id": "semantic:module:I2C2NoC:component_role:001"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "I2C2NoC"
-      },
-      "subject": "cfifo1 (cFifo1) 和 cfifo2 (cFifo3_I2C)",
-      "summary": "作为内部事件流中的重同步与流量控制节点，连接两条不同的延迟链并最终驱动输出。",
-      "explanation": "关键连接显示，一条延迟链（delay1至delay16）的输出w_drv2fifo1驱动cfifo1，其输出w_drv2delay16再进入另一条延迟链（delay17, delay18）。另一条延迟链（delay2_2至delay2_7）的输出w_drv2fifo2驱动cfifo2，其输出w_drv2Noc1最终经过延迟后成为输出事件o_drv2Noc。这种结构表明cfifo1和cfifo2用于管理不同处理路径上的事件时序，并可能实现握手或背压机制。",
-      "signals": [
-        "w_drv2fifo1",
-        "w_drv2delay16",
-        "w_drv2fifo2",
-        "w_drv2Noc1"
-      ],
-      "instances": [
-        "cfifo1",
-        "cfifo2"
-      ],
-      "related_flows": [
-        "flow_000_I2C2NoC_i_drvFNoc"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }
@@ -197,28 +245,30 @@
         "type": "module",
         "module": "I2C2NoC"
       },
-      "subject": "U1 (mi2cv2)",
-      "summary": "作为I2C主控制器，执行实际的I2C总线协议，并返回读取的数据。",
-      "explanation": "该实例是模块中唯一的非FIFO组件，其输入数据WDATA和输出数据w_rdata表明它负责处理I2C总线上的读写操作。其输入信号（如ISCL, ISDA, IFSDA）和输出信号（OSCL, OSDA, INTR）直接连接到模块边界，表明它直接驱动或采样I2C总线。模块的数据重排逻辑（assign index 2）将RDATA（很可能来自w_rdata）插入输出数据包，证实了其作为数据源的角色。",
+      "subject": "cfifo1/cfifo2 (Fifo1家族)",
+      "summary": "输出事件FIFO，分别缓冲来自延迟链的驱动事件，并输出到最终延迟链（delay2_2/delay2_7/delay2_3）以产生输出事件o_drv2Noc。",
+      "explanation": "cfifo1接收延迟链末端事件（w_drv2fifo1），输出到延迟链（delay17/delay18）后进入cfifo2；cfifo2输出到延迟链（delay2_2/delay2_7/delay2_3）最终产生o_drv2Noc。同时cfifo2的释放信号（o_free）通过cfifo1形成释放链。",
       "signals": [
-        "WDATA",
-        "w_rdata",
-        "ISCL",
-        "ISDA",
-        "OSCL",
-        "OSDA",
-        "INTR"
+        "w_drv2fifo1",
+        "w_drv2delay16",
+        "w_drv2fifo2",
+        "w_drv2Noc1",
+        "w_freeFfifo2"
       ],
       "instances": [
-        "U1"
+        "cfifo1",
+        "cfifo2"
       ],
       "related_flows": [
         "flow_000_I2C2NoC_i_drvFNoc"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }
@@ -232,8 +282,8 @@
         "module": "I2C2NoC"
       },
       "subject": "o_data2Noc_51",
-      "summary": "该赋值是模块的核心数据路径操作，将I2C读取的数据（RDATA）整合到NoC输出数据包中。",
-      "explanation": "赋值将输入数据的高位、一个中间常量、I2C读数据和一个尾部常量拼接。这表明模块解析了输入数据包的结构，提取了I2C操作所需的地址/命令，并将I2C操作的结果（RDATA）放置在输出数据包的特定字段中。此操作是模块作为桥接器的关键证据。",
+      "summary": "输出数据重组，将内部数据信号（r_dataFNoc, r_middle_24, RDATA, r_last_10）按位拼接为51位输出数据。",
+      "explanation": "该赋值将I2C主控制器数据（RDATA）与NoC输入数据（r_dataFNoc）的特定字段（高位、中间24位、最后10位）组合，形成输出数据o_data2Noc_51，实现数据路径的映射与同步。",
       "signals": [
         "o_data2Noc_51",
         "r_dataFNoc",
@@ -252,10 +302,45 @@
       "confidence": "medium",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }
       ],
       "id": "semantic:module:I2C2NoC:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "I2C2NoC"
+      },
+      "subject": "o_free2Noc",
+      "summary": "输出释放信号，直接由内部释放链信号w_freeFfifo2驱动。",
+      "explanation": "该赋值将cfifo2的释放输出（w_freeFfifo2）直接连接到模块输出o_free2Noc，确保NoC侧能正确接收事件释放信号，实现事件与释放的同步。",
+      "signals": [
+        "o_free2Noc",
+        "w_freeFfifo2"
+      ],
+      "related_assignments": [
+        "1"
+      ],
+      "related_flows": [
+        "flow_000_I2C2NoC_i_drvFNoc"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
+        }
+      ],
+      "id": "semantic:module:I2C2NoC:assignment_interpretation:002"
     },
     {
       "claim_type": "interface_intent",
@@ -263,16 +348,12 @@
         "type": "module",
         "module": "I2C2NoC"
       },
-      "summary": "模块与NoC的接口遵循一个三线协议：驱动事件（drv）携带数据载荷（data），并由独立的释放信号（free）管理资源。",
-      "subject": "事件-数据-释放（Event-Data-Free）协议",
-      "explanation": "接口包含成对的输入/输出事件（i_drvFNoc/o_drv2Noc）、数据（i_dataFNoc_51/o_data2Noc_51）和释放信号（i_freeFNoc/o_free2Noc）。释放信号（i_freeFNoc）连接到cfifo2的i_freeNext端口，表明它用于通知下游FIFO可以释放当前处理的数据槽位。这种协议常见于基于信用或令牌的流控系统中。",
+      "summary": "模块与NoC之间的握手事件接口，用于触发数据同步和传输。",
+      "subject": "事件驱动接口（i_drvFNoc/o_drv2Noc）",
+      "explanation": "i_drvFNoc作为输入事件，触发模块内部延迟链和FIFO处理，最终产生输出事件o_drv2Noc，表示数据已准备好被NoC读取。该接口遵循事件-数据-释放协议，确保数据一致性。",
       "signals": [
         "i_drvFNoc",
-        "i_dataFNoc_51",
-        "i_freeFNoc",
-        "o_drv2Noc",
-        "o_data2Noc_51",
-        "o_free2Noc"
+        "o_drv2Noc"
       ],
       "related_payload": [
         "i_dataFNoc_51",
@@ -292,30 +373,96 @@
       "id": "semantic:module:I2C2NoC:interface_intent:001"
     },
     {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "I2C2NoC"
+      },
+      "summary": "事件释放信号接口，用于管理事件驱动流水线的资源释放。",
+      "subject": "释放接口（i_freeFNoc/o_free2Noc）",
+      "explanation": "i_freeFNoc输入释放信号，通过cfifo2和cfifo1形成释放链（w_freeFfifo2），最终输出o_free2Noc，确保事件处理完成后资源被正确释放，避免死锁。",
+      "signals": [
+        "i_freeFNoc",
+        "o_free2Noc"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
+        }
+      ],
+      "id": "semantic:module:I2C2NoC:interface_intent:002"
+    },
+    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "I2C2NoC"
       },
-      "summary": "手册应重点描述输入数据包（i_dataFNoc_51）的字段定义，以及它们如何映射到I2C主控制器的操作（如起始条件、从机地址、读写位、数据字节）。",
-      "subject": "数据包格式与I2C操作映射",
-      "explanation": "模块的核心功能是数据格式转换。理解输入数据包的哪些位用于I2C地址、命令和数据，以及输出数据包的哪些位包含I2C读取的结果，是使用该模块的关键。当前上下文仅显示了数据重排的存在，但未提供字段的具体含义，因此需要RTL源码审查来明确此映射关系。",
+      "summary": "文档应重点描述事件驱动流水线的结构，包括FIFO和延迟单元的级联关系，以及延迟链的时序意义。",
+      "subject": "事件驱动流水线结构与延迟链",
+      "explanation": "模块的核心功能是通过延迟链和FIFO实现事件同步，延迟单元的数量和连接关系直接影响数据同步的时序。文档需明确延迟链的级联顺序和每个延迟单元的作用。",
       "signals": [
-        "i_dataFNoc_51",
-        "o_data2Noc_51",
-        "WDATA",
-        "w_rdata"
+        "w_drv2delay1",
+        "w_drv2delay2",
+        "w_drv2delay3",
+        "w_drv2delay4",
+        "w_drv2delay5",
+        "w_drv2delay6",
+        "w_drv2delay7",
+        "w_drv2delay8",
+        "w_drv2delay9",
+        "w_drv2delay10",
+        "w_drv2delay11",
+        "w_drv2delay12",
+        "w_drv2delay13",
+        "w_drv2delay14",
+        "w_drv2delay15",
+        "w_drv2delay16",
+        "w_drv2delay17",
+        "w_drv2delay18",
+        "w_drv2Noc1",
+        "w_drv2Noc2",
+        "w_drv2Noc3"
       ],
       "instances": [
-        "U1"
+        "delay1",
+        "delay2",
+        "delay2_2",
+        "delay2_3",
+        "delay2_7",
+        "delay3",
+        "delay4",
+        "delay5",
+        "delay6",
+        "delay7",
+        "delay8",
+        "delay9",
+        "delay10",
+        "delay11",
+        "delay12",
+        "delay13",
+        "delay14",
+        "delay15",
+        "delay16",
+        "delay17",
+        "delay18"
       ],
       "related_flows": [
         "flow_000_I2C2NoC_i_drvFNoc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }
@@ -323,22 +470,62 @@
       "id": "semantic:module:I2C2NoC:documentation_focus:001"
     },
     {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "I2C2NoC"
+      },
+      "summary": "文档应详细说明输出数据o_data2Noc_51的位重组逻辑，包括各字段（r_dataFNoc, r_middle_24, RDATA, r_last_10）的来源和意义。",
+      "subject": "数据路径重组与映射",
+      "explanation": "数据重组是模块的关键功能，将I2C主控制器数据（RDATA）与NoC输入数据（r_dataFNoc）的特定字段组合，形成NoC兼容的输出数据。文档需明确每个字段的位宽和来源。",
+      "signals": [
+        "o_data2Noc_51",
+        "r_dataFNoc",
+        "r_middle_24",
+        "RDATA",
+        "r_last_10"
+      ],
+      "related_flows": [
+        "flow_000_I2C2NoC_i_drvFNoc"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
+        }
+      ],
+      "id": "semantic:module:I2C2NoC:documentation_focus:002"
+    },
+    {
       "claim_type": "source_review_request",
       "scope": {
         "type": "module",
         "module": "I2C2NoC"
       },
-      "reason": "当前上下文仅显示了数据重排的存在和I2C主控制器的实例化，但未提供输入数据包（i_dataFNoc_51）的位字段定义，以及这些字段如何控制I2C主控制器（U1）的操作序列（如启动、发送地址、读写数据、停止）。需要审查RTL源码中的assign块和状态机逻辑来明确此映射。",
-      "subject": "数据包字段定义与I2C操作序列",
-      "needed_source_slice": "assign block, always block, comments",
+      "reason": "紧凑上下文未提供U1的内部逻辑细节，无法确定其如何产生驱动事件和数据输出（w_rdata），以及其与延迟链的交互方式。",
+      "subject": "U1 (mi2cv2) 内部逻辑与事件产生",
+      "needed_source_slice": "module declaration, always block, assign block",
       "signals": [
-        "i_dataFNoc_51",
-        "o_data2Noc_51",
-        "WDATA",
         "w_rdata",
-        "r_dataFNoc",
-        "r_middle_24",
-        "r_last_10"
+        "rst_finish",
+        "CLOCK",
+        "ISCL",
+        "ISDA",
+        "OSCL",
+        "OSDA",
+        "INTR",
+        "ENDRV",
+        "FSEN",
+        "HSEN",
+        "IFSDA",
+        "CKISO",
+        "DAISO",
+        "DAGND"
       ],
       "instances": [
         "U1"
@@ -351,6 +538,9 @@
       "confidence": "medium",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }
       ],
@@ -362,33 +552,25 @@
         "type": "module",
         "module": "I2C2NoC"
       },
-      "reason": "模块内部包含两条由多个delay单元组成的链（delay1至delay16，以及delay2_2至delay2_7）。当前上下文未解释这些延迟链的时序目的（例如，是用于I2C协议时序生成、数据同步，还是用于等待I2C操作完成）。需要审查RTL源码来理解这些延迟的配置和功能。",
-      "subject": "延迟链的时序目的",
-      "needed_source_slice": "instance connections, always block, comments",
+      "reason": "紧凑上下文未提供r_dataFNoc、r_middle_24、r_last_10等内部寄存器的赋值逻辑，无法确定其数据来源和更新时机。",
+      "subject": "数据重组字段来源（r_dataFNoc, r_middle_24, r_last_10）",
+      "needed_source_slice": "assign block, always block",
       "signals": [
-        "w_drv2delay1",
-        "w_drv2delay16",
-        "w_drv2Noc1",
-        "w_drv2Noc2",
-        "w_drv2Noc3"
-      ],
-      "instances": [
-        "delay1",
-        "delay2",
-        "delay2_2",
-        "delay2_3",
-        "delay2_7",
-        "delay16",
-        "delay17",
-        "delay18"
+        "r_dataFNoc",
+        "r_middle_24",
+        "r_last_10",
+        "i_dataFNoc_51"
       ],
       "related_flows": [
         "flow_000_I2C2NoC_i_drvFNoc"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/I2C2NoC.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/I2C2NoC.json"
         }

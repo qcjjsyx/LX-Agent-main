@@ -46,14 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 14,
+    "count": 11,
     "by_type": {
       "assignment_interpretation": 2,
-      "component_role": 3,
-      "documentation_focus": 2,
-      "interface_intent": 2,
+      "component_role": 4,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
       "structural_responsibility": 2
     }
   },
@@ -66,7 +65,7 @@
       },
       "summary": "CPU2NoC 是 CPU 与 NoC 之间的双向事件驱动桥接模块，负责将 CPU 发起的请求分发到两个 NoC 通道，并将两个 NoC 通道的响应合并后返回给 CPU。",
       "subject": "CPU2NoC",
-      "explanation": "模块具有对称的接口：一个 CPU 侧接口和两个 NoC 通道接口。内部事件流显示 CPU 输入事件 (i_drvFCPU) 被分发到两个 NoC 通道输出 (o_drv2NoCChanel0/1)，而两个 NoC 通道输入事件 (i_drvFNoCChannel0/1) 被合并到 CPU 输出 (o_drv2CPU)。这表明模块执行双向的请求分发和响应合并。",
+      "explanation": "模块通过事件驱动接口与 CPU 和 NoC 通道交互。输入事件 i_drvFCPU 经过内部 fifo 和选择器后，可分发到两个 NoC 通道输出；而两个 NoC 通道的输入事件则通过互斥合并后，最终输出到 CPU。这表明模块的核心作用是双向桥接和流量分发/合并。",
       "signals": [
         "i_drvFCPU",
         "o_drv2NoCChanel0",
@@ -108,9 +107,6 @@
         },
         {
           "source": "key_component_connections"
-        },
-        {
-          "source": "key_instances"
         }
       ],
       "id": "semantic:module:CPU2NoC:module_role:001"
@@ -121,23 +117,25 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "summary": "模块接收来自 CPU 的单个请求事件，通过内部选择器 (select0) 和分路器 (splitterChannel0/1) 将其分发到两个 NoC 通道之一。",
-      "subject": "CPU到NoC通道的请求分发",
-      "explanation": "事件流 flow_000_CPU2NoC_i_drvFCPU 显示 i_drvFCPU 经过 cfifo0 和 cfifo2 后到达 select0，select0 根据内部状态将事件导向 splitterChannel0 或 splitterChannel1，最终输出到对应的 NoC 通道。这表明模块内部实现了基于某种选择逻辑的请求路由。",
+      "summary": "将来自 CPU 的单个请求事件 (i_drvFCPU) 及其关联的 51 位数据，通过内部流水线分发到两个 NoC 通道之一。",
+      "subject": "CPU到NoC的请求分发",
+      "explanation": "事件 i_drvFCPU 进入 cfifo0 缓存，经过延迟后触发 cfifo2，再驱动 select0 选择器。select0 根据内部状态将事件分发到 splitterChannel0 或 splitterChannel1，最终通过延迟单元输出到 o_drv2NoCChanel0 或 o_drv2NoCChanel1。数据路径通过 select0 和 splitter 组件与事件同步。",
       "signals": [
         "i_drvFCPU",
+        "i_dataFCPU_51",
         "o_drv2NoCChanel0",
         "o_drv2NoCChanel1",
-        "w_drvSelect0",
-        "w_drv2Channel0",
-        "w_drv2Channel1"
+        "o_data2NoCChanel0_51",
+        "o_data2NoCChanel1_51"
       ],
       "instances": [
         "cfifo0",
         "cfifo2",
         "select0",
         "splitterChannel0",
-        "splitterChannel1"
+        "splitterChannel1",
+        "delay18",
+        "delay20"
       ],
       "related_flows": [
         "flow_000_CPU2NoC_i_drvFCPU"
@@ -147,13 +145,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "internal_event_flow_refs"
+          "source": "internal_event_flow_refs (flow_000_CPU2NoC_i_drvFCPU)"
         },
         {
           "source": "key_component_connections"
-        },
-        {
-          "source": "key_instances"
         }
       ],
       "id": "semantic:module:CPU2NoC:structural_responsibility:001"
@@ -164,15 +159,16 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "summary": "模块接收来自两个 NoC 通道的响应事件，通过互斥合并器 (mutexRead) 仲裁后，经 FIFO 队列 (cfifo1, cfifoOut) 输出到 CPU。",
+      "summary": "将来自两个 NoC 通道的请求事件 (i_drvFNoCChannel0, i_drvFNoCChannel1) 及其关联的 51 位数据，通过互斥合并后，作为单个响应事件返回给 CPU。",
       "subject": "NoC通道到CPU的响应合并",
-      "explanation": "事件流 flow_001_CPU2NoC_i_drvFNoCChannel0 和 flow_002_CPU2NoC_i_drvFNoCChannel1 显示两个 NoC 通道的输入事件都连接到 mutexRead，其输出经过 cfifo1 和 cfifoOut 后到达 o_drv2CPU。这表明 mutexRead 负责仲裁两个通道的响应，确保一次只有一个响应被转发给 CPU。",
+      "explanation": "两个 NoC 通道的输入事件分别驱动 mutexRead 的两个输入端口。mutexRead 实现互斥合并，输出一个事件到 cfifo1，再经 cfifoOut 最终输出到 o_drv2CPU。数据路径通过 mutexRead 的输入数据端口和内部寄存器 r_data2CPU_51 同步。",
       "signals": [
         "i_drvFNoCChannel0",
         "i_drvFNoCChannel1",
+        "i_dataFNoCChannel0_51",
+        "i_dataFNoCChannel1_51",
         "o_drv2CPU",
-        "w_drvMutexRead2select1",
-        "w_drvCPULoad"
+        "o_data2CPU_51"
       ],
       "instances": [
         "mutexRead",
@@ -192,9 +188,6 @@
         },
         {
           "source": "key_component_connections"
-        },
-        {
-          "source": "key_instances"
         }
       ],
       "id": "semantic:module:CPU2NoC:structural_responsibility:002"
@@ -205,9 +198,9 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "subject": "mutexRead",
-      "summary": "mutexRead 是一个互斥合并器，用于仲裁来自两个 NoC 通道的响应事件，确保同一时刻只有一个响应被传递给 CPU 侧。",
-      "explanation": "mutexRead 接收来自两个 NoC 通道的输入事件 (i_drvFNoCChannel0/1) 和对应的数据 (i_dataFNoCChannel0_51/1_51)，并输出一个合并后的事件 (w_drvMutexRead2select1) 和数据 (w_dataMutexRead)。其输出连接到 cfifo1，表明它解决了两个通道同时响应时的冲突。",
+      "subject": "mutexRead (cMutexMerge2_51b)",
+      "summary": "作为 NoC 通道到 CPU 路径的入口仲裁器，互斥地选择来自两个 NoC 通道的请求，确保同一时刻只有一个通道的请求被处理。",
+      "explanation": "mutexRead 接收两个 NoC 通道的输入事件和数据，输出一个合并后的事件和数据。其互斥特性避免了两个通道同时请求时的冲突，是响应合并路径的关键组件。",
       "signals": [
         "i_drvFNoCChannel0",
         "i_drvFNoCChannel1",
@@ -228,13 +221,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "key_instances"
+          "source": "key_instances (mutexRead)"
         },
         {
           "source": "key_component_connections"
-        },
-        {
-          "source": "internal_event_flow_refs"
         }
       ],
       "id": "semantic:module:CPU2NoC:component_role:001"
@@ -245,15 +235,15 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "subject": "select0",
-      "summary": "select0 是一个选择器，根据内部状态 (如 r_IOAddr 或 r_flag) 决定将 CPU 请求路由到哪个 NoC 通道。",
-      "explanation": "select0 接收来自 cfifo2 的输入事件 (w_drvSelect0) 和包含地址/标志的数据，并输出两个事件 (w_drv2Channel0/1) 分别导向 splitterChannel0 和 splitterChannel1。这表明它基于数据中的信息进行通道选择。",
+      "subject": "select0 (cSelector2_41b)",
+      "summary": "作为 CPU 到 NoC 路径的分发决策点，根据内部状态将来自 CPU 的请求路由到两个 NoC 通道之一。",
+      "explanation": "select0 接收来自 cfifo2 的事件，并根据内部寄存器（如 r_channelChoose）决定将事件和数据分发到 splitterChannel0 或 splitterChannel1。其输入数据包含通道选择信号和地址/数据字段。",
       "signals": [
         "w_drvSelect0",
         "w_drv2Channel0",
         "w_drv2Channel1",
-        "r_IOAddr",
-        "r_flag"
+        "w_data2Channel0",
+        "w_data2Channel1"
       ],
       "instances": [
         "select0"
@@ -261,12 +251,12 @@
       "related_flows": [
         "flow_000_CPU2NoC_i_drvFCPU"
       ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "key_instances"
+          "source": "key_instances (select0)"
         },
         {
           "source": "key_component_connections"
@@ -280,33 +270,34 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "subject": "splitterChannel0 / splitterChannel1",
-      "summary": "分路器，将来自 select0 的请求事件和数据进一步拆分为两个路径：一个直接输出到 NoC 通道，另一个通过 select2/select3 和 mutexWrite 反馈回 CPU 侧，用于写回操作。",
-      "explanation": "splitterChannel0 和 splitterChannel1 的输入事件来自 select0，输出事件有两个：一个 (w_drv2NoCChanel0/1) 经过延迟后输出到 NoC 通道，另一个 (w_drv2select2/3) 经过 select2/select3 和 mutexWrite 后，最终通过 cfifoOut 返回给 CPU。这表明模块支持某种写回或确认机制。",
+      "subject": "splitterChannel0 / splitterChannel1 (cSplitter2_51b)",
+      "summary": "作为每个 NoC 通道的出口分流器，将来自 CPU 的请求事件和数据分别导向 NoC 输出和内部写回路径。",
+      "explanation": "每个 splitter 接收来自 select0 的事件和数据，产生两个输出：一个直接驱动 NoC 通道输出 (o_drv2NoCChanel0/1)，另一个驱动内部写回路径 (select2/3)，用于将数据写回 CPU 的存储空间。",
       "signals": [
         "w_drv2Channel0",
         "w_drv2Channel1",
         "w_drv2NoCChanel0",
         "w_drv2NoCChanel1",
         "w_drv2select2",
-        "w_drv2select3"
+        "w_drv2select3",
+        "o_data2NoCChanel0_51",
+        "o_data2NoCChanel1_51",
+        "w_data2MutexWriteChannel0",
+        "w_data2Mutex0Channel1_51"
       ],
       "instances": [
         "splitterChannel0",
-        "splitterChannel1",
-        "select2",
-        "select3",
-        "mutexWrite"
+        "splitterChannel1"
       ],
       "related_flows": [
         "flow_000_CPU2NoC_i_drvFCPU"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "key_instances"
+          "source": "key_instances (splitterChannel0, splitterChannel1)"
         },
         {
           "source": "key_component_connections"
@@ -315,52 +306,40 @@
       "id": "semantic:module:CPU2NoC:component_role:003"
     },
     {
-      "claim_type": "interface_intent",
+      "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "CPU2NoC"
       },
-      "summary": "CPU侧接口采用请求-响应握手协议，其中 i_drvFCPU 是请求事件，o_drv2CPU 是响应事件，o_free2CPU 与 o_drv2CPU 关联，表示响应完成后的释放信号。",
-      "subject": "CPU侧接口 (i_drvFCPU / o_drv2CPU)",
-      "explanation": "事件输入 i_drvFCPU 与数据输入 i_dataFCPU_51 关联，事件输出 o_drv2CPU 与数据输出 o_data2CPU_51 关联。assign_dependencies 显示 o_free2CPU 直接赋值于 o_drv2CPU，表明释放信号与驱动信号同步，形成完整的请求-响应-释放协议。",
+      "subject": "mutexWrite (cMutexMerge2_51b)",
+      "summary": "作为 CPU 到 NoC 路径的写回仲裁器，互斥地合并来自两个 NoC 通道的写回数据，最终返回给 CPU。",
+      "explanation": "mutexWrite 接收来自 splitterChannel0 和 splitterChannel1 的写回事件和数据，合并后输出一个事件到延迟单元，最终驱动 o_drv2CPU。其互斥特性确保了写回路径的正确性。",
       "signals": [
-        "i_drvFCPU",
-        "i_dataFCPU_51",
-        "o_drv2CPU",
-        "o_data2CPU_51",
-        "o_free2CPU"
+        "w_drv2Mutex0Channel0",
+        "w_drv2Mutex0Channel1",
+        "w_data2Mutex0Channel1_51",
+        "w_data2MutexWriteChannel0",
+        "w_drv2CPUStore_dalay1",
+        "w_dataMutexWrite"
       ],
-      "related_payload": [
-        "i_dataFCPU_51",
-        "o_data2CPU_51"
+      "instances": [
+        "mutexWrite"
       ],
-      "doc_priority": "primary",
+      "related_flows": [
+        "flow_000_CPU2NoC_i_drvFCPU"
+      ],
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface.event_inputs"
+          "source": "key_instances (mutexWrite)"
         },
         {
-          "source": "interface.event_outputs"
-        },
-        {
-          "source": "interface.data_inputs"
-        },
-        {
-          "source": "interface.data_outputs"
-        },
-        {
-          "source": "interface.free_outputs"
-        },
-        {
-          "source": "assign_dependencies"
-        },
-        {
-          "source": "event_payload_contracts"
+          "source": "key_component_connections"
         }
       ],
-      "id": "semantic:module:CPU2NoC:interface_intent:001"
+      "id": "semantic:module:CPU2NoC:component_role:004"
     },
     {
       "claim_type": "interface_intent",
@@ -368,34 +347,33 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "summary": "NoC通道接口采用请求-释放协议，其中 i_drvFNoCChannelX 是请求事件，o_drv2NoCChanelX 是响应事件，i_freeFNoCChanelX 是释放信号，用于指示模块可以接收新的请求。",
-      "subject": "NoC通道接口 (Channel0/1)",
-      "explanation": "对于输出到 NoC 通道的事件 o_drv2NoCChanel0/1，其关联的释放信号是 i_freeFNoCChanel0/1。这表明 NoC 通道通过释放信号来控制背压，模块在收到释放信号后才能发送下一个请求。",
+      "summary": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
+      "subject": "事件-数据-释放信号契约",
+      "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
       "signals": [
-        "i_drvFNoCChannel0",
-        "i_drvFNoCChannel1",
+        "i_drvFCPU",
+        "i_dataFCPU_51",
         "o_drv2NoCChanel0",
-        "o_drv2NoCChanel1",
+        "o_data2NoCChanel0_51",
         "i_freeFNoCChanel0",
-        "i_freeFNoCChanel1",
-        "o_free2NocChannel0",
-        "o_free2NocChannel1"
+        "o_drv2NoCChanel1",
+        "o_data2NoCChanel1_51",
+        "i_freeFNoCChanel1"
       ],
       "related_payload": [
-        "i_dataFNoCChannel0_51",
-        "i_dataFNoCChannel1_51",
+        "i_dataFCPU_51",
         "o_data2NoCChanel0_51",
         "o_data2NoCChanel1_51"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "interface.event_inputs"
         },
         {
-          "source": "interface.event_outputs"
+          "source": "interface.data_inputs"
         },
         {
           "source": "interface.free_inputs"
@@ -407,7 +385,7 @@
           "source": "event_payload_contracts"
         }
       ],
-      "id": "semantic:module:CPU2NoC:interface_intent:002"
+      "id": "semantic:module:CPU2NoC:interface_intent:001"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -416,14 +394,14 @@
         "module": "CPU2NoC"
       },
       "subject": "o_free2CPU",
-      "summary": "o_free2CPU 直接跟随 o_drv2CPU 信号，表明 CPU 侧的释放信号与驱动信号同步，用于通知 CPU 响应已就绪。",
-      "explanation": "assign_dependencies 显示 o_free2CPU 的赋值依赖于 o_drv2CPU。这意味着每当模块向 CPU 输出一个驱动事件时，同时也会输出一个释放事件，形成一个简单的就绪指示。",
+      "summary": "将输出事件 o_drv2CPU 直接赋值给释放信号 o_free2CPU，表明 CPU 的释放信号与输出事件同步。",
+      "explanation": "赋值 o_free2CPU = o_drv2CPU 表明，当模块向 CPU 输出事件时，同时会拉高释放信号，通知 CPU 可以释放相关资源。这是一种简化的释放机制。",
       "signals": [
         "o_free2CPU",
         "o_drv2CPU"
       ],
       "related_assignments": [
-        "0"
+        "assign 0"
       ],
       "related_flows": [
         "flow_001_CPU2NoC_i_drvFNoCChannel0",
@@ -431,10 +409,10 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "assign_dependencies (index 0)"
         }
       ],
       "id": "semantic:module:CPU2NoC:assignment_interpretation:001"
@@ -446,25 +424,25 @@
         "module": "CPU2NoC"
       },
       "subject": "o_data2CPU_51",
-      "summary": "o_data2CPU_51 直接来自内部寄存器 r_data2CPU_51，表明 CPU 侧输出数据由内部状态驱动，而非组合逻辑。",
-      "explanation": "assign_dependencies 显示 o_data2CPU_51 的赋值依赖于 r_data2CPU_51。这表明输出数据是寄存的，可能来自 mutexWrite 或 splitter 的输出数据。",
+      "summary": "将内部寄存器 r_data2CPU_51 的值直接赋值给输出数据端口，表明 CPU 的输出数据由内部状态保持。",
+      "explanation": "赋值 o_data2CPU_51 = r_data2CPU_51 表明，模块内部有一个寄存器用于暂存要发送给 CPU 的数据，该寄存器由内部逻辑更新。",
       "signals": [
         "o_data2CPU_51",
         "r_data2CPU_51"
       ],
       "related_assignments": [
-        "1"
+        "assign 1"
       ],
       "related_flows": [
         "flow_001_CPU2NoC_i_drvFNoCChannel0",
         "flow_002_CPU2NoC_i_drvFNoCChannel1"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "assign_dependencies"
+          "source": "assign_dependencies (index 1)"
         }
       ],
       "id": "semantic:module:CPU2NoC:assignment_interpretation:002"
@@ -475,9 +453,9 @@
         "type": "module",
         "module": "CPU2NoC"
       },
-      "summary": "文档应重点描述 CPU 请求如何通过 select0 和 splitter 分发到 NoC 通道，以及 NoC 响应如何通过 mutexRead 和 FIFO 合并回 CPU。",
-      "subject": "请求分发与响应合并的详细路径",
-      "explanation": "模块的核心功能是双向桥接，其内部路径涉及多个组件 (FIFO, 选择器, 分路器, 互斥合并器)。文档需要清晰描述这些路径，包括选择逻辑、延迟和写回机制。",
+      "summary": "手册应重点描述 CPU 到 NoC 的请求分发路径和 NoC 到 CPU 的响应合并路径，包括关键组件 (fifo, mutex, selector, splitter) 的角色和交互。",
+      "subject": "双向事件流和内部流水线",
+      "explanation": "模块的核心功能是双向桥接，其内部流水线由多个 fifo、选择器、分流器和互斥合并器组成。理解这些组件的连接和事件流是理解模块行为的关键。",
       "signals": [
         "i_drvFCPU",
         "o_drv2NoCChanel0",
@@ -519,138 +497,6 @@
         }
       ],
       "id": "semantic:module:CPU2NoC:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "CPU2NoC"
-      },
-      "summary": "文档应详细说明 CPU 侧和 NoC 通道侧的接口协议，包括事件、数据和释放信号之间的时序关系。",
-      "subject": "接口协议细节",
-      "explanation": "接口协议是模块与外部交互的关键。CPU 侧使用请求-响应-释放协议，NoC 通道侧使用请求-释放协议。文档需要明确这些信号的时序和依赖关系。",
-      "signals": [
-        "i_drvFCPU",
-        "i_dataFCPU_51",
-        "o_drv2CPU",
-        "o_data2CPU_51",
-        "o_free2CPU",
-        "i_drvFNoCChannel0",
-        "i_drvFNoCChannel1",
-        "i_dataFNoCChannel0_51",
-        "i_dataFNoCChannel1_51",
-        "o_drv2NoCChanel0",
-        "o_drv2NoCChanel1",
-        "i_freeFNoCChanel0",
-        "i_freeFNoCChanel1",
-        "o_free2NocChannel0",
-        "o_free2NocChannel1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "interface.event_inputs"
-        },
-        {
-          "source": "interface.event_outputs"
-        },
-        {
-          "source": "interface.data_inputs"
-        },
-        {
-          "source": "interface.data_outputs"
-        },
-        {
-          "source": "interface.free_inputs"
-        },
-        {
-          "source": "interface.free_outputs"
-        },
-        {
-          "source": "event_payload_contracts"
-        },
-        {
-          "source": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:CPU2NoC:documentation_focus:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "CPU2NoC"
-      },
-      "reason": "当前上下文仅显示 select0 接收包含 r_IOAddr 和 r_flag 的数据，但未提供选择逻辑的具体实现。需要查看 RTL 源代码以确定选择条件。",
-      "subject": "select0 的选择逻辑",
-      "needed_source_slice": "always block or assign block for select0",
-      "signals": [
-        "w_drvSelect0",
-        "w_drv2Channel0",
-        "w_drv2Channel1",
-        "r_IOAddr",
-        "r_flag"
-      ],
-      "instances": [
-        "select0"
-      ],
-      "related_flows": [
-        "flow_000_CPU2NoC_i_drvFCPU"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "key_instances"
-        },
-        {
-          "source": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:CPU2NoC:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "CPU2NoC"
-      },
-      "reason": "当前上下文显示 splitterChannel0/1 的输出事件有一个分支通过 select2/select3 和 mutexWrite 返回 CPU，但未说明写回路径的触发条件和数据内容。需要查看 RTL 源代码以理解写回机制。",
-      "subject": "splitter 的写回路径",
-      "needed_source_slice": "always block or assign block for splitterChannel0 and splitterChannel1",
-      "signals": [
-        "w_drv2select2",
-        "w_drv2select3",
-        "w_drv2Mutex0Channel0",
-        "w_drv2Mutex0Channel1",
-        "w_data2MutexWriteChannel0",
-        "w_data2Mutex0Channel1_51"
-      ],
-      "instances": [
-        "splitterChannel0",
-        "splitterChannel1",
-        "select2",
-        "select3",
-        "mutexWrite"
-      ],
-      "related_flows": [
-        "flow_000_CPU2NoC_i_drvFCPU"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "key_instances"
-        },
-        {
-          "source": "key_component_connections"
-        }
-      ],
-      "id": "semantic:module:CPU2NoC:source_review_request:002"
     }
   ],
   "evidence_gaps": []

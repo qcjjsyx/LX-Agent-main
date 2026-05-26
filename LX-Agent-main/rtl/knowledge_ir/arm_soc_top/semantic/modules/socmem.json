@@ -46,15 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 11,
     "by_type": {
-      "assignment_interpretation": 2,
-      "component_role": 1,
-      "documentation_focus": 1,
-      "interface_intent": 2,
+      "assignment_interpretation": 3,
+      "component_role": 2,
+      "documentation_focus": 2,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
-      "structural_responsibility": 1
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -64,16 +63,14 @@
         "type": "module",
         "module": "socmem"
       },
-      "summary": "片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并管理IF和LSU接口的驱动与释放握手。",
+      "summary": "片上存储器子系统，仲裁并路由指令和数据访问到缓存、ROM和栈存储器",
       "subject": "socmem",
-      "explanation": "模块通过事件驱动接口（i_driveFrmIf/i_driveFrmLsu）接收来自IF和LSU的访问请求，内部路由到ICache、DCache、ROM或stack组件，并通过延迟链和FIFO组件管理输出驱动信号（o_driveNextToIf/o_driveNextToLsu）和释放信号（o_freeToIf/o_freeToLsu），实现流水线化的存储访问。",
+      "explanation": "模块接收来自IF和LSU的驱动事件，通过FIFO和延迟链进行流水线化，并将数据访问路由到DCache、ICache、ROM和stack实例，基于地址选择输出数据",
       "signals": [
         "i_driveFrmIf",
         "i_driveFrmLsu",
         "o_driveNextToIf",
-        "o_driveNextToLsu",
-        "o_freeToIf",
-        "o_freeToLsu"
+        "o_driveNextToLsu"
       ],
       "instances": [
         "cFifo2_If",
@@ -106,55 +103,14 @@
         "type": "module",
         "module": "socmem"
       },
-      "summary": "根据地址范围将数据访问路由到DCache或stack，将指令访问路由到ICache或ROM，并选择正确的读数据输出。",
-      "subject": "存储访问路由与数据选择",
-      "explanation": "数据读输出o_ddataR_64通过地址r_daddress_32与0x00041200比较，选择来自DCache（o_ddataR_t_64）或stack（o_ddataR_tStack_64）的数据。指令读输出o_idataR_65通过routeSelect信号选择来自ICache（o_idataR_t_64）或ROM（w_idataROM_64）的数据，并附加进位位r_iaddrcarry。",
+      "summary": "将来自IF和LSU的驱动事件通过FIFO和延迟链进行流水线化，产生输出驱动事件",
+      "subject": "事件驱动的存储器访问流水线",
+      "explanation": "i_driveFrmIf通过delay_6UIcache和cFifo2_If后，经三级延迟链(delay_IF1/2/3)产生o_driveNextToIf；i_driveFrmLsu通过cFifo2_Lsu后，经两级延迟链(delay_LSU1/2)产生o_driveNextToLsu",
       "signals": [
-        "o_ddataR_64",
-        "o_idataR_65",
-        "r_daddress_32",
-        "routeSelect",
-        "r_iaddrcarry"
-      ],
-      "instances": [
-        "DCache",
-        "ICache",
-        "ROM",
-        "stack"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        },
-        {
-          "source": "rtl/rtl/memory/socmem.v"
-        }
-      ],
-      "id": "semantic:module:socmem:structural_responsibility:001"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "subject": "cFifo2_If 和 cFifo2_Lsu",
-      "summary": "作为IF和LSU访问路径上的事件同步与缓冲FIFO，管理驱动信号的传递和释放信号的反馈。",
-      "explanation": "cFifo2_If接收来自IF的延迟驱动信号w_driveFrmIfDelay_1，输出w_driveNextToIf[0]到延迟链；cFifo2_Lsu直接接收i_driveFrmLsu，输出w_driveNextToLsu[0]到延迟链。它们通过i_freeNext输入接收来自下游的释放信号，实现握手控制。",
-      "signals": [
-        "w_driveFrmIfDelay_1",
-        "w_driveNextToIf[0]",
+        "i_driveFrmIf",
         "i_driveFrmLsu",
-        "w_driveNextToLsu[0]",
-        "i_freeNextFrmIf",
-        "i_freeNextFrmLsu"
+        "o_driveNextToIf",
+        "o_driveNextToLsu"
       ],
       "instances": [
         "cFifo2_If",
@@ -169,13 +125,131 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json"
         },
         {
+          "source": "parser_pipeline_rtl/modules/socmem.json"
+        }
+      ],
+      "id": "semantic:module:socmem:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "socmem"
+      },
+      "summary": "根据地址范围从不同存储器实例中选择读取数据",
+      "subject": "数据读取地址路由与多路选择",
+      "explanation": "指令读取数据通过routeSelect选择ICache输出或ROM输出；数据读取数据通过r_daddress_32地址比较选择DCache输出或stack输出",
+      "signals": [
+        "o_idataR_65",
+        "o_ddataR_64",
+        "r_daddress_32",
+        "routeSelect"
+      ],
+      "instances": [
+        "DCache",
+        "ICache",
+        "ROM",
+        "stack"
+      ],
+      "related_flows": [
+        "flow_000_socmem_i_driveFrmIf",
+        "flow_001_socmem_i_driveFrmLsu"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
           "source": "knowledge_ir/modules/socmem.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/socmem.json"
+        }
+      ],
+      "id": "semantic:module:socmem:structural_responsibility:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "socmem"
+      },
+      "subject": "cFifo2_If, cFifo2_Lsu",
+      "summary": "事件流水线中的FIFO缓冲器，用于同步和缓冲驱动事件",
+      "explanation": "这两个FIFO实例分别处理来自IF和LSU的驱动事件，接收输入事件并产生输出事件，同时接收来自下游的释放信号(i_freeNextFrmIf/i_freeNextFrmLsu)以控制流水线背压",
+      "signals": [
+        "i_driveFrmIf",
+        "i_driveFrmLsu",
+        "i_freeNextFrmIf",
+        "i_freeNextFrmLsu",
+        "w_driveFrmIfDelay_1",
+        "w_driveNextToIf[0]",
+        "w_driveNextToLsu[0]"
+      ],
+      "instances": [
+        "cFifo2_If",
+        "cFifo2_Lsu"
+      ],
+      "related_flows": [
+        "flow_000_socmem_i_driveFrmIf",
+        "flow_001_socmem_i_driveFrmLsu"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/socmem.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/socmem.json"
         }
       ],
       "id": "semantic:module:socmem:component_role:001"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "socmem"
+      },
+      "subject": "DCache, ICache, stack, ROM",
+      "summary": "存储器后端实例，提供数据存储和读取功能",
+      "explanation": "DCache和stack接收写数据i_ddataW_64，输出读数据o_ddataR_t_64和o_ddataR_tStack_64；ICache接收写数据i_idataW_64和写使能i_iwen_8，输出读数据o_idataR_t_64；ROM输出固定指令数据w_idataROM_64",
+      "signals": [
+        "i_ddataW_64",
+        "i_idataW_64",
+        "i_iwen_8",
+        "o_ddataR_t_64",
+        "o_ddataR_tStack_64",
+        "o_idataR_t_64",
+        "w_idataROM_64"
+      ],
+      "instances": [
+        "DCache",
+        "ICache",
+        "stack",
+        "ROM"
+      ],
+      "related_flows": [
+        "flow_000_socmem_i_driveFrmIf",
+        "flow_001_socmem_i_driveFrmLsu"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/socmem.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/socmem.json"
+        }
+      ],
+      "id": "semantic:module:socmem:component_role:002"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -183,9 +257,9 @@
         "type": "module",
         "module": "socmem"
       },
-      "subject": "o_freeToIf 和 o_freeToLsu",
-      "summary": "释放信号直接跟随对应的驱动输出信号，表明释放信号是驱动信号的组合逻辑副本。",
-      "explanation": "assign o_freeToIf = o_driveNextToIf 和 assign o_freeToLsu = o_driveNextToLsu 表明释放信号与驱动信号同步，用于通知上游当前驱动已被下游接收，可以发送下一个请求。",
+      "subject": "o_freeToIf, o_freeToLsu",
+      "summary": "释放信号直接跟随对应的驱动输出事件",
+      "explanation": "assign o_freeToIf = o_driveNextToIf 和 o_freeToLsu = o_driveNextToLsu 表明释放信号与驱动输出事件同步，用于指示下游可以接收新事件",
       "signals": [
         "o_freeToIf",
         "o_driveNextToIf",
@@ -205,6 +279,9 @@
       "confidence": "high",
       "evidence": [
         {
+          "source": "knowledge_ir/modules/socmem.json"
+        },
+        {
           "source": "parser_pipeline_rtl/modules/socmem.json"
         }
       ],
@@ -216,28 +293,29 @@
         "type": "module",
         "module": "socmem"
       },
-      "subject": "o_ddataR_64 和 o_idataR_65",
-      "summary": "数据输出多路选择器，根据地址或选择信号从不同存储组件中选取读数据。",
-      "explanation": "o_ddataR_64 根据地址范围选择DCache或stack的数据；o_idataR_65 根据routeSelect选择ICache或ROM的数据，并附加进位位。这些选择逻辑定义了存储器的地址映射和访问优先级。",
+      "subject": "o_idataR_65",
+      "summary": "指令读取数据多路选择，根据routeSelect选择ICache或ROM输出",
+      "explanation": "当routeSelect为1时输出ICache数据o_idataR_t_64，否则输出ROM数据w_idataROM_64，同时附加地址进位位r_iaddrcarry",
       "signals": [
-        "o_ddataR_64",
         "o_idataR_65",
-        "r_daddress_32",
         "routeSelect",
+        "o_idataR_t_64",
+        "w_idataROM_64",
         "r_iaddrcarry"
       ],
       "related_assignments": [
-        "3",
-        "5"
+        "3"
       ],
       "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
+        "flow_000_socmem_i_driveFrmIf"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
+        {
+          "source": "knowledge_ir/modules/socmem.json"
+        },
         {
           "source": "parser_pipeline_rtl/modules/socmem.json"
         }
@@ -245,23 +323,64 @@
       "id": "semantic:module:socmem:assignment_interpretation:002"
     },
     {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "socmem"
+      },
+      "subject": "o_ddataR_64",
+      "summary": "数据读取数据多路选择，根据地址范围选择DCache或stack输出",
+      "explanation": "当r_daddress_32小于0x41200时输出DCache数据o_ddataR_t_64，否则输出stack数据o_ddataR_tStack_64",
+      "signals": [
+        "o_ddataR_64",
+        "r_daddress_32",
+        "o_ddataR_t_64",
+        "o_ddataR_tStack_64"
+      ],
+      "related_assignments": [
+        "5"
+      ],
+      "related_flows": [
+        "flow_001_socmem_i_driveFrmLsu"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/socmem.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/socmem.json"
+        }
+      ],
+      "id": "semantic:module:socmem:assignment_interpretation:003"
+    },
+    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "socmem"
       },
-      "summary": "实现IF与socmem之间的驱动-释放握手协议，用于指令访问请求的流水线控制。",
-      "subject": "IF接口组 (i_driveFrmIf, o_driveNextToIf, o_freeToIf, i_freeNextFrmIf)",
-      "explanation": "i_driveFrmIf触发指令访问，经过内部延迟链后输出o_driveNextToIf，同时o_freeToIf跟随o_driveNextToIf，i_freeNextFrmIf从下游反馈释放信号。该协议确保每个请求被处理后才允许下一个请求进入。",
+      "summary": "每个驱动事件输入/输出对都有一个对应的释放信号，形成请求-确认握手协议",
+      "subject": "事件-释放握手接口",
+      "explanation": "i_driveFrmIf与o_freeToIf配对，i_driveFrmLsu与o_freeToLsu配对，o_driveNextToIf与i_freeNextFrmIf配对，o_driveNextToLsu与i_freeNextFrmLsu配对，表明模块使用事件驱动握手进行流水线控制",
       "signals": [
         "i_driveFrmIf",
-        "o_driveNextToIf",
         "o_freeToIf",
-        "i_freeNextFrmIf"
+        "i_driveFrmLsu",
+        "o_freeToLsu",
+        "o_driveNextToIf",
+        "i_freeNextFrmIf",
+        "o_driveNextToLsu",
+        "i_freeNextFrmLsu"
       ],
       "related_payload": [
+        "i_daddress_32",
+        "i_ddataW_64",
         "i_iaddress_33",
         "i_idataW_64",
+        "o_ddataR_64",
         "o_idataR_65"
       ],
       "doc_priority": "primary",
@@ -278,25 +397,27 @@
       "id": "semantic:module:socmem:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
+      "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "socmem"
       },
-      "summary": "实现LSU与socmem之间的驱动-释放握手协议，用于数据访问请求的流水线控制。",
-      "subject": "LSU接口组 (i_driveFrmLsu, o_driveNextToLsu, o_freeToLsu, i_freeNextFrmLsu)",
-      "explanation": "i_driveFrmLsu触发数据访问，经过内部延迟链后输出o_driveNextToLsu，同时o_freeToLsu跟随o_driveNextToLsu，i_freeNextFrmLsu从下游反馈释放信号。该协议确保每个数据请求被处理后才允许下一个请求进入。",
+      "summary": "应重点描述IF和LSU两条事件流水线的路径、延迟级数和FIFO缓冲行为",
+      "subject": "事件流水线路径与延迟链",
+      "explanation": "IF路径有6级延迟(delay_6UIcache)加3级延迟链(delay_IF1/2/3)，LSU路径有2级延迟链(delay_LSU1/2)，这些延迟链的级数和功能对理解模块时序至关重要",
       "signals": [
+        "i_driveFrmIf",
         "i_driveFrmLsu",
-        "o_driveNextToLsu",
-        "o_freeToLsu",
-        "i_freeNextFrmLsu"
+        "o_driveNextToIf",
+        "o_driveNextToLsu"
       ],
-      "related_payload": [
-        "i_daddress_32",
-        "i_ddataW_64",
-        "o_ddataR_64",
-        "i_dwen_8"
+      "instances": [
+        "cFifo2_If",
+        "cFifo2_Lsu"
+      ],
+      "related_flows": [
+        "flow_000_socmem_i_driveFrmIf",
+        "flow_001_socmem_i_driveFrmLsu"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -309,7 +430,7 @@
           "source": "parser_pipeline_rtl/modules/socmem.json"
         }
       ],
-      "id": "semantic:module:socmem:interface_intent:002"
+      "id": "semantic:module:socmem:documentation_focus:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -317,12 +438,12 @@
         "type": "module",
         "module": "socmem"
       },
-      "summary": "手册应重点描述地址范围如何决定数据访问路由到DCache或stack，以及指令访问路由到ICache或ROM的选择逻辑。",
-      "subject": "存储地址映射与数据选择逻辑",
-      "explanation": "从assign依赖中可见，数据读输出依赖于地址比较（r_daddress_32<32'h00041200），指令读输出依赖于routeSelect信号。这些选择逻辑定义了存储器的地址映射，是理解模块行为的关键。",
+      "summary": "应详细说明指令和数据读取的地址路由条件及对应的存储器实例",
+      "subject": "地址路由与存储器选择逻辑",
+      "explanation": "指令读取通过routeSelect选择ICache或ROM，数据读取通过地址比较选择DCache或stack，这些路由条件直接影响模块的功能正确性",
       "signals": [
-        "o_ddataR_64",
         "o_idataR_65",
+        "o_ddataR_64",
         "r_daddress_32",
         "routeSelect"
       ],
@@ -337,86 +458,27 @@
         "flow_001_socmem_i_driveFrmLsu"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
-        }
-      ],
-      "id": "semantic:module:socmem:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "reason": "当前上下文未提供routeSelect信号的来源和生成逻辑，无法确定指令访问路由到ICache或ROM的具体条件。",
-      "subject": "routeSelect信号生成逻辑",
-      "needed_source_slice": "always block|assign block",
-      "signals": [
-        "routeSelect"
-      ],
-      "instances": [
-        "ICache",
-        "ROM"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/socmem.json"
+          "source": "knowledge_ir/modules/socmem.json"
         },
         {
-          "source": "rtl/rtl/memory/socmem.v"
-        }
-      ],
-      "id": "semantic:module:socmem:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "socmem"
-      },
-      "reason": "当前上下文仅提供了延迟链的连接关系，未提供这些组件的内部实现或延迟周期数，无法确定流水线深度和时序。",
-      "subject": "延迟链组件 (delay_6UIcache, delay_IF1, delay_IF2, delay_IF3, delay_LSU1, delay_LSU2)",
-      "needed_source_slice": "module declaration|instance connections",
-      "signals": [
-        "w_driveFrmIfDelay_1",
-        "w_driveNextToIf[0:2]",
-        "w_driveNextToLsu[0:1]"
-      ],
-      "instances": [
-        "delay_6UIcache",
-        "delay_IF1",
-        "delay_IF2",
-        "delay_IF3",
-        "delay_LSU1",
-        "delay_LSU2"
-      ],
-      "related_flows": [
-        "flow_000_socmem_i_driveFrmIf",
-        "flow_001_socmem_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
           "source": "parser_pipeline_rtl/modules/socmem.json"
-        },
-        {
-          "source": "rtl/rtl/memory/socmem.v"
         }
       ],
-      "id": "semantic:module:socmem:source_review_request:002"
+      "id": "semantic:module:socmem:documentation_focus:002"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "延迟链模块(delay_6UIcache, delay_IF1/2/3, delay_LSU1/2)的内部实现",
+      "reason": "上下文未提供这些延迟链模块的详细行为描述，无法确定其延迟级数和具体功能"
+    },
+    {
+      "field": "写数据路径的详细时序",
+      "reason": "上下文仅显示写数据连接到存储器实例，但未描述写使能信号(i_dwen_8, i_iwen_8)与驱动事件的时序关系"
+    }
+  ]
 }

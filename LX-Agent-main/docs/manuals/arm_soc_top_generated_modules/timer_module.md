@@ -1,8 +1,8 @@
 # 模块 `timer_module`
 
 - 源文件：`rtl/rtl/IONet/Timer/timer_module.v`。
-- 职责：AI 推断：该模块是一个基于内存映射寄存器（MMIO）的定时器单元，提供可编程的计时、计数和软件中断功能。。
-- 说明：模块通过 addr_i 和 data_i 进行寄存器读写，输出 data_o 为读回数据，int_sig_o 输出中断信号。assign 依赖显示内部有 timer_value、timer_count、timer_ctrl、msip_value 等寄存器，支持多组定时器值和 MSIP（软件中断）功能。
+- 职责：AI 推断：该模块是一个基于内存映射寄存器接口的定时器单元，提供可编程定时计数和软件中断功能。。
+- 说明：模块通过 addr_i 和 data_i 接收地址和数据，通过 data_o 输出寄存器读取结果，并通过 int_sig_o 输出中断信号。assign 依赖显示其内部包含 timer_value、timer_ctrl、timer_count 和 msip_value 等寄存器，支持定时值、控制、计数和软件中断寄存器访问。
 
 ## 1. 层级位置
 
@@ -51,5 +51,5 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `data_o` | (addr_i[7:0] == REG_VALUE_L) ? timer_value[31:0]: (addr_i[7:0] == REG_VALUE_H) ? timer_value[... | AI 推断：数据输出通过地址译码选择内部寄存器值，实现 MMIO 读操作。 |
-| `assign_0` | unknown | `int_sig_o` | {&msip_value[31:24],&msip_value[23:16],&msip_value[15:8],&msip_value[7:0],int_sig_r} | AI 推断：中断输出信号由 msip_value 的每个字节的归约与结果和 int_sig_r 组合而成，用于指示软件中断或定时器中断。 |
+| `assign_1` | data_path | `data_o` | (addr_i[7:0] == REG_VALUE_L) ? timer_value[31:0]: (addr_i[7:0] == REG_VALUE_H) ? timer_value[... | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | unknown | `int_sig_o` | {&msip_value[31:24],&msip_value[23:16],&msip_value[15:8],&msip_value[7:0],int_sig_r} | 证据不足：No Semantic Layer assignment interpretation is available. |

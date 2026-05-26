@@ -7,11 +7,11 @@ from typing import Any
 
 try:
     from .context_manager import maybe_compress_context
-    from .manual_workflow import handle_manual_workflow, should_handle_manual_workflow
+    from .manual_workflow import handle_manual_workflow_structured, should_handle_manual_workflow
     from .tools import select_tools_for_task
 except ImportError:  # pragma: no cover - supports direct script execution
     from context_manager import maybe_compress_context
-    from manual_workflow import handle_manual_workflow, should_handle_manual_workflow
+    from manual_workflow import handle_manual_workflow_structured, should_handle_manual_workflow
     from tools import select_tools_for_task
 
 
@@ -19,6 +19,8 @@ except ImportError:  # pragma: no cover - supports direct script execution
 class AgentSession:
     messages: list[Any] = field(default_factory=list)
     manual_workflow_state: dict[str, Any] | None = None
+    last_manual_intent: dict[str, Any] | None = None
+    current_manual_plan: dict[str, Any] | None = None
 
 
 @dataclass
@@ -26,6 +28,8 @@ class AgentRunResult:
     reply: str
     messages: list[Any]
     manual_workflow_state: dict[str, Any] | None
+    last_manual_intent: dict[str, Any] | None = None
+    current_manual_plan: dict[str, Any] | None = None
     skills: list[str] = field(default_factory=list)
     used_tools: list[str] = field(default_factory=list)
 
@@ -160,10 +164,14 @@ class AgentRunner:
                 reply="Please enter a message.",
                 messages=self.ensure_messages(session.messages),
                 manual_workflow_state=session.manual_workflow_state,
+                last_manual_intent=session.last_manual_intent,
+                current_manual_plan=session.current_manual_plan,
             )
 
         messages = self.ensure_messages(session.messages)
         manual_state = session.manual_workflow_state
+        last_manual_intent = session.last_manual_intent
+        current_manual_plan = session.current_manual_plan
         log_event = event_logger or (lambda _event_type, **_payload: None)
 
         log_event("chat_request", message=user_input)
@@ -173,6 +181,8 @@ class AgentRunner:
                 user_input=user_input,
                 messages=messages,
                 manual_state=manual_state,
+                last_manual_intent=last_manual_intent,
+                current_manual_plan=current_manual_plan,
                 conversation_id=conversation_id,
                 log_event=log_event,
             )
@@ -181,10 +191,21 @@ class AgentRunner:
             user_input=user_input,
             messages=messages,
             manual_state=manual_state,
+            last_manual_intent=last_manual_intent,
+            current_manual_plan=current_manual_plan,
             log_event=log_event,
         )
 
-    def _run_manual_workflow(self, user_input, messages, manual_state, conversation_id, log_event):
+    def _run_manual_workflow(
+        self,
+        user_input,
+        messages,
+        manual_state,
+        last_manual_intent,
+        current_manual_plan,
+        conversation_id,
+        log_event,
+    ):
         log_event(
             "skill_selected",
             skill="rtl-manual-generation",
@@ -197,7 +218,7 @@ class AgentRunner:
             "content": user_input,
         })
 
-        reply, manual_state = handle_manual_workflow(
+        reply, manual_state, last_manual_intent, current_manual_plan = handle_manual_workflow_structured(
             user_input=user_input,
             state=manual_state,
             base_dir=self.base_dir,
@@ -223,11 +244,21 @@ class AgentRunner:
             reply=reply,
             messages=messages,
             manual_workflow_state=manual_state,
+            last_manual_intent=last_manual_intent,
+            current_manual_plan=current_manual_plan,
             skills=["rtl-manual-generation"],
             used_tools=[],
         )
 
-    def _run_tool_calling_agent(self, user_input, messages, manual_state, log_event):
+    def _run_tool_calling_agent(
+        self,
+        user_input,
+        messages,
+        manual_state,
+        last_manual_intent,
+        current_manual_plan,
+        log_event,
+    ):
         (
             active_tools,
             active_handlers,
@@ -319,6 +350,8 @@ class AgentRunner:
                     reply=final_reply,
                     messages=messages,
                     manual_workflow_state=manual_state,
+                    last_manual_intent=last_manual_intent,
+                    current_manual_plan=current_manual_plan,
                     skills=list(active_skill_names),
                     used_tools=used_tools,
                 )
@@ -339,6 +372,8 @@ class AgentRunner:
                     reply=final_reply,
                     messages=messages,
                     manual_workflow_state=manual_state,
+                    last_manual_intent=last_manual_intent,
+                    current_manual_plan=current_manual_plan,
                     skills=list(active_skill_names),
                     used_tools=used_tools,
                 )

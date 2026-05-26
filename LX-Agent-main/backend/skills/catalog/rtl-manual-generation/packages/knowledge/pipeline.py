@@ -45,6 +45,7 @@ def run_knowledge_pipeline(
     semantic_model: str | None = None,
     semantic_base_url: str | None = None,
     semantic_api_key: str | None = None,
+    reuse_semantic_cache: bool = True,
 ) -> Dict[str, Any]:
     """Run Knowledge IR, AI Context, Semantic Layer, and Manual Context."""
 
@@ -59,7 +60,7 @@ def run_knowledge_pipeline(
     steps: List[Dict[str, Any]] = []
     semantic_cache_root = preserve_semantic_cache(
         knowledge_root,
-        enabled=clean and not skip_semantic and not semantic_dry_run,
+        enabled=clean and reuse_semantic_cache and not skip_semantic and not semantic_dry_run,
     )
 
     knowledge_manifest = build_knowledge_ir(
@@ -227,6 +228,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--semantic-model", default=None)
     parser.add_argument("--semantic-base-url", default=None)
     parser.add_argument("--semantic-api-key", default=None)
+    parser.add_argument("--no-semantic-cache", action="store_true", help="Do not preserve existing Semantic Layer cards during a clean run.")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     report = run_knowledge_pipeline(
@@ -245,6 +247,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         semantic_model=args.semantic_model,
         semantic_base_url=args.semantic_base_url,
         semantic_api_key=args.semantic_api_key,
+        reuse_semantic_cache=not args.no_semantic_cache,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report.get("status") in {"passed", "passed_without_semantic"} else 1

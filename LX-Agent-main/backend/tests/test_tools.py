@@ -48,6 +48,22 @@ class ToolsTimeoutTest(unittest.TestCase):
         timeout_index = captured["args"].index("--timeout")
         self.assertEqual(captured["args"][timeout_index + 1], "1800")
 
+    def test_knowledge_tool_force_disables_semantic_cache(self):
+        captured = {}
+
+        def fake_run_skill_script(script_name, args, timeout):
+            captured["script_name"] = script_name
+            captured["args"] = args
+            captured["timeout"] = timeout
+            return "ok"
+
+        with patch.object(tools, "run_skill_script", fake_run_skill_script):
+            result = tools.run_knowledge_tool(project_root=".", top_module="top", force=True)
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(captured["script_name"], "run_knowledge_tool.py")
+        self.assertIn("--no-semantic-cache", captured["args"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/Lsu/multiLoadDataUpate.v`。
 - 职责：AI 推断：多加载数据更新与写回控制模块，负责从加载数据路由中选择并组合数据，生成写回使能、结束标志及下一轮地址/寄存器列表。。
-- 说明：模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志及下一轮地址和寄存器列表。
+- 说明：模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志及下一轮地址和寄存器列表。无事件接口，纯数据驱动。
 
 ## 1. 层级位置
 
@@ -52,9 +52,9 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `o_dLo_4` | r_j_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `o_wbackData_64` | num==2'b10 ? i_fromDataRoutData_64 : (num==2'b01 ? (r_count_2 == 2'b10 ? {32'b0,i_fromDataRou... | AI 推断：根据num和r_count_2从i_fromDataRoutData_64中选择并组合32位数据，形成64位写回数据。 |
-| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：根据num生成写回使能信号，num==2'b01时使能低2位，num==2'b10时使能全部2位，否则不使能。 |
-| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：当r_registerList_16全零时输出1，表示多加载操作结束。 |
+| `assign_2` | data_path | `o_wbackData_64` | num==2'b10 ? i_fromDataRoutData_64 : (num==2'b01 ? (r_count_2 == 2'b10 ? {32'b0,i_fromDataRou... | AI 推断：根据num和r_count_2选择写回数据，支持64位或32位数据组合。 |
+| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：根据num生成写回使能，支持单字节或双字节写回。 |
+| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：当寄存器列表全零时，输出结束标志。 |
 | `assign_5` | data_path | `o_nextAddress_32` | r_nextAddress_32 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_6` | unknown | `o_nextRegisterList_16` | r_registerList_16 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | ... | ... | ... | ... | 其余 1 条 assign 省略 |

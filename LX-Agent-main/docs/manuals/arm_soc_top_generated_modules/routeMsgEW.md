@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/IONet/IONetwork_9.24/routeMsgEW.v`。
 - 职责：AI 推断：坐标有效性检测与消息有效信号生成模块。
-- 说明：该模块仅有一个4位坐标输入i_coord_4和一个输出o_msgVld，通过组合逻辑对坐标所有位进行或运算，判断坐标是否非零，从而生成消息有效标志。
+- 说明：该模块仅有一个数据输入i_coord_4和一个输出o_msgVld，通过组合逻辑对输入坐标进行按位或运算，判断坐标是否非零，从而生成消息有效标志。
 
 ## 1. 层级位置
 
@@ -49,4 +49,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `o_msgVld` | i_coord_4[3]\|i_coord_4[2]\|i_coord_4[1]\|i_coord_4[0] | AI 推断：坐标非零检测，生成消息有效指示信号 |
+| `assign_0` | unknown | `o_msgVld` | i_coord_4[3]\|i_coord_4[2]\|i_coord_4[1]\|i_coord_4[0] | 证据不足：No Semantic Layer assignment interpretation is available. |

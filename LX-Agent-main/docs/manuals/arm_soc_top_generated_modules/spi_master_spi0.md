@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI0/spi_master_spi0.v`。
 - 职责：AI 推断：SPI主控制器模块，负责生成SPI时钟、片选信号并完成数据收发。。
-- 说明：模块通过内部时钟分频器实例clk_div_u生成SPI时钟和片选，并通过assign逻辑根据CPOL/CPHA配置调整输出时钟极性，同时产生收发完成标志。
+- 说明：模块通过内部时钟分频器实例clk_div_u生成SCLK和NSS，并通过组合逻辑根据CPOL/CPHA配置调整输出时钟极性，同时产生收发完成标志。
 
 ## 1. 层级位置
 
@@ -60,6 +60,6 @@ spi_master_spi0
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `rx_done` | (~rx_cnt[5]) & cnt_buf_rx | AI 推断：根据接收计数器和缓冲标志产生接收完成信号。 |
-| `assign_2` | unknown | `tx_done` | CPHA ? (~tx_cnt[5]) & cnt_buf_tx : (~tx_cnt[4]) & cnt_buf_tx | AI 推断：根据CPHA和发送计数器产生发送完成信号，支持两种SPI模式。 |
-| `assign_0` | unknown | `sclk_out` | CPOL ? ~sclk_out_div : sclk_out_div | AI 推断：根据CPOL极性选择输出SPI时钟，实现时钟极性配置。 |
+| `assign_1` | unknown | `rx_done` | (~rx_cnt[5]) & cnt_buf_rx | AI 推断：接收完成标志，由接收计数器高位和缓冲使能共同决定。 |
+| `assign_2` | unknown | `tx_done` | CPHA ? (~tx_cnt[5]) & cnt_buf_tx : (~tx_cnt[4]) & cnt_buf_tx | AI 推断：发送完成标志，根据CPHA相位选择不同的计数器位宽判断。 |
+| `assign_0` | unknown | `sclk_out` | CPOL ? ~sclk_out_div : sclk_out_div | AI 推断：根据CPOL极性选择输出时钟极性，控制SPI时钟空闲电平。 |

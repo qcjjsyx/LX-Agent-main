@@ -20,8 +20,8 @@
     "review_needed": true
   },
   "purpose": {
-    "value": "flash_state 是 SPI 闪存协议的状态控制器，负责管理 SPI 主设备与外部闪存之间的读写操作序列。",
-    "explanation": "该模块通过实例化 spi_master_spi0 并驱动其控制信号（如 w_spi_en、w_spi_cs_n）来发起 SPI 事务。其内部状态机（由 r_state 信号指示）决定了何时启动读（READ）或页编程（PAGE_PRO）操作，并基于 i_startRead 和 r_start_spi 等信号生成 SPI 使能信号。输出 o_finish 直接关联到 SPI 片选信号 w_spi_cs_n，表明事务完成。",
+    "value": "flash_state 是 SPI 主控制器与外部 Flash 存储器之间的状态驱动桥接模块，负责管理 SPI 事务的启动、数据路由和完成指示。",
+    "explanation": "该模块通过内部状态机（r_state）控制 SPI 主控制器实例（u_spi_master）的使能信号（w_spi_en），并将 SPI 主控制器的数据输出（data_out）直接映射到模块输出（o_dataFspi）。其行为由输入控制信号（i_ctl）和读标志（i_readflag）驱动，并通过输出 o_finish 指示事务完成。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -31,10 +31,9 @@
     "doc_priority": "primary",
     "signals": [
       "i_ctl",
-      "i_data2spi",
-      "o_dataFspi",
       "i_readflag",
-      "o_finish"
+      "o_finish",
+      "o_dataFspi"
     ],
     "instances": [
       "u_spi_master"
@@ -475,7 +474,7 @@
     "components": 0,
     "assignments": 3,
     "evidence_gaps": 0,
-    "review_questions": 3
+    "review_questions": 2
   },
   "source_review_context": {
     "module": "flash_state",
@@ -501,5 +500,96 @@
   "evidence_refs": [
     "ev:flash_state:knowledge_module",
     "ev:flash_state:parser_module"
-  ]
+  ],
+  "source_review_claims": [
+    {
+      "subject": "semantic:module:flash_state:module_role:001",
+      "summary": "flash_state 通过状态机控制 SPI 主控制器使能并桥接数据输出。",
+      "explanation": "模块实例化 u_spi_master（第95-114行），状态机 r_state（第116-212行）在复位后进入 IDLE，根据 i_startRead 和指令码（r_cmd）跳转到 R_BUSY、READ、W_EN 等状态。w_spi_en 在 READ 或 PAGE_PRO 状态下由 i_startRead 或 r_start_spi 上升沿生成，否则仅由 r_start_spi 上升沿生成（第83-84行）。o_dataFspi 直接连接 u_spi_master 的 data_out（第105行）。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "w_spi_en",
+        "o_dataFspi",
+        "i_ctl",
+        "i_readflag",
+        "r_state",
+        "r_start_spi",
+        "i_startRead"
+      ],
+      "instances": [
+        "u_spi_master"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+          "line_start": 95,
+          "line_end": 114
+        },
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+          "line_start": 116,
+          "line_end": 212
+        },
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+          "line_start": 83,
+          "line_end": 84
+        }
+      ],
+      "evidence_refs": [
+        "ev:flash_state:semantic_module"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "semantic:module:flash_state:structural_responsibility:001",
+      "summary": "w_spi_en 生成逻辑与状态相关，o_finish 直接跟随 w_spi_cs_n。",
+      "explanation": "w_spi_en 在 READ 或 PAGE_PRO 状态下由 i_startRead 或 r_start_spi 上升沿触发，否则仅由 r_start_spi 上升沿触发（第83-84行）。o_finish 直接赋值 w_spi_cs_n（第92行），w_spi_cs_n 由 u_spi_master 的 nss_out 驱动（第101行），而 r_spi_cs_n_buf 通过时钟上升沿采样 w_spi_cs_n（第87-90行），w_spi_cs_n_rise 检测其上升沿（第91行）。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "w_spi_en",
+        "o_finish",
+        "w_spi_cs_n",
+        "i_startRead",
+        "r_start_spi",
+        "w_spi_cs_n_rise"
+      ],
+      "instances": [
+        "u_spi_master"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+          "line_start": 83,
+          "line_end": 84
+        },
+        {
+          "file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+          "line_start": 87,
+          "line_end": 92
+        }
+      ],
+      "evidence_refs": [
+        "ev:flash_state:semantic_module"
+      ],
+      "review_status": "needs_review"
+    }
+  ],
+  "source_review_report": {
+    "status": "reviewed",
+    "claim_count": 2,
+    "open_question_count": 2,
+    "source_file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+    "report_file": "source_review_report.json"
+  }
 }

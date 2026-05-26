@@ -1,8 +1,8 @@
 # 模块 `timer_slot`
 
 - 源文件：`rtl/rtl/IONet/Timer/timer_slot.v`。
-- 职责：AI 推断：作为片上网络(NoC)中定时器外设的槽位封装模块，负责将定时器模块接入Mesh网络的事件驱动与数据通道。。
-- 说明：模块通过事件驱动接口(i_driveFrmMesh/o_driveNextToMesh)和数据接口(data_from/data_to)与Mesh网络交互，内部实例化perip_slot_timer和timer_module，构成定时器外设在Mesh中的标准槽位。
+- 职责：AI 推断：作为定时器外设的槽位封装层，负责将网格驱动事件路由到内部定时器外设并返回结果。。
+- 说明：模块通过 i_driveFrmMesh 接收网格驱动事件，将 payload data_from 传递给内部 slot 实例 (perip_slot_timer)，并将处理后的 data_to 和中断信号 int_sig_o 输出。同时通过 o_freeToMesh 和 i_freeNextFrmMesh 实现事件释放握手。
 
 ## 1. 层级位置
 
@@ -57,7 +57,7 @@ timer_slot
 - Payload：`i_driveFrmMesh` -> `data_from [50:0]`。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：最终手册应强调该流为简单的直通驱动事件路径，无数据处理或控制逻辑，并指出数据载荷 data_from 的路径需单独说明。
+- AI 推断：最终手册应强调该流是简单的直通路径，并指出负载 data_from 的传递关系需要 RTL 源码确认。
 
 
 ## 5. 内部组件与 assign 影响

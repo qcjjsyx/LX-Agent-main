@@ -1,8 +1,8 @@
 # 模块 `socmem`
 
 - 源文件：`rtl/rtl/memory/socmem.v`。
-- 职责：AI 推断：片上存储器子系统，为指令和数据访问提供缓存、ROM和栈存储，并管理IF和LSU接口的驱动与释放握手。。
-- 说明：模块通过事件驱动接口（i_driveFrmIf/i_driveFrmLsu）接收来自IF和LSU的访问请求，内部路由到ICache、DCache、ROM或stack组件，并通过延迟链和FIFO组件管理输出驱动信号（o_driveNextToIf/o_driveNextToLsu）和释放信号（o_freeToIf/o_freeToLsu），实现流水线化的存储访问。
+- 职责：AI 推断：片上存储器子系统，仲裁并路由指令和数据访问到缓存、ROM和栈存储器。
+- 说明：模块接收来自IF和LSU的驱动事件，通过FIFO和延迟链进行流水线化，并将数据访问路由到DCache、ICache、ROM和stack实例，基于地址选择输出数据
 
 ## 1. 层级位置
 
@@ -67,7 +67,7 @@ socmem
 - Payload：未记录。
 - 输出/影响：`o_driveNextToIf`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应重点描述该流的事件传播路径、各延迟单元的延迟值以及 FIFO 的缓冲作用。
+- AI 推断：该驱动流将输入事件信号i_driveFrmIf经过一个6拍延迟、一个FIFO缓冲和三个16拍延迟后，输出为o_driveNextToIf，构成一个单向、无分支的事件传播路径。
 
 ### `i_driveFrmLsu`
 
@@ -75,7 +75,7 @@ socmem
 - Payload：未记录。
 - 输出/影响：`o_driveNextToLsu`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：文档应强调该流是固定延迟的事件传播路径，而非数据通路
+- AI 推断：手册应重点描述FIFO缓冲的阻塞条件和延迟单元的延迟周期，以及释放信号的生成逻辑
 
 
 ## 5. 内部组件与 assign 影响
@@ -91,7 +91,7 @@ socmem
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | control_path | `o_freeToIf` | o_driveNextToIf | AI 推断：释放信号直接跟随对应的驱动输出信号，表明释放信号是驱动信号的组合逻辑副本。 |
-| `assign_3` | control_path | `o_idataR_65` | (routeSelect==1) ? {o_idataR_t_64,r_iaddrcarry} : {w_idataROM_64,r_iaddrcarry} | AI 推断：数据输出多路选择器，根据地址或选择信号从不同存储组件中选取读数据。 |
-| `assign_4` | control_path | `o_freeToLsu` | o_driveNextToLsu | AI 推断：释放信号直接跟随对应的驱动输出信号，表明释放信号是驱动信号的组合逻辑副本。 |
-| `assign_5` | control_path | `o_ddataR_64` | (r_daddress_32<32'h00041200) ? o_ddataR_t_64 : o_ddataR_tStack_64 | AI 推断：数据输出多路选择器，根据地址或选择信号从不同存储组件中选取读数据。 |
+| `assign_2` | control_path | `o_freeToIf` | o_driveNextToIf | AI 推断：释放信号直接跟随对应的驱动输出事件 |
+| `assign_3` | control_path | `o_idataR_65` | (routeSelect==1) ? {o_idataR_t_64,r_iaddrcarry} : {w_idataROM_64,r_iaddrcarry} | AI 推断：指令读取数据多路选择，根据routeSelect选择ICache或ROM输出 |
+| `assign_4` | control_path | `o_freeToLsu` | o_driveNextToLsu | AI 推断：释放信号直接跟随对应的驱动输出事件 |
+| `assign_5` | data_path | `o_ddataR_64` | (r_daddress_32<32'h00041200) ? o_ddataR_t_64 : o_ddataR_tStack_64 | AI 推断：数据读取数据多路选择，根据地址范围选择DCache或stack输出 |

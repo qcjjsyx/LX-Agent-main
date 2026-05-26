@@ -48,12 +48,12 @@
   "claim_summary": {
     "count": 9,
     "by_type": {
-      "assignment_interpretation": 2,
+      "assignment_interpretation": 1,
       "component_role": 2,
       "documentation_focus": 1,
       "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1,
+      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -66,12 +66,20 @@
       },
       "summary": "该模块是SoC内存子系统的槽位，负责仲裁来自IF和LSU的驱动事件，并将数据/地址/写使能信号转发给内部socmem实例。",
       "subject": "memory_slot",
-      "explanation": "模块接收两个事件输入i_driveFrmIf和i_driveFrmLsu，输出两个事件o_driveNextToIf和o_driveNextToLsu，表明其作为事件驱动的内存访问仲裁点。数据输入i_dbus_*和i_ibus_*通过assign依赖被选择性地转发给socmem，同时存在u_data_init实例用于初始化数据注入。",
+      "explanation": "模块接收两个事件输入i_driveFrmIf和i_driveFrmLsu，输出两个事件o_driveNextToIf和o_driveNextToLsu，表明它作为事件驱动的仲裁点。数据输入i_dbus_*和i_ibus_*通过assign选择后送入socmem，输出数据直接来自socmem。u_data_init实例提供初始化数据路径，通过init_sig_temp2选择器覆盖正常数据流。",
       "signals": [
         "i_driveFrmIf",
         "i_driveFrmLsu",
         "o_driveNextToIf",
-        "o_driveNextToLsu"
+        "o_driveNextToLsu",
+        "i_dbus_addr",
+        "i_dbus_data",
+        "i_dbus_we",
+        "i_ibus_addr",
+        "i_ibus_data",
+        "i_ibus_we",
+        "o_dbus_data",
+        "o_ibus_data"
       ],
       "instances": [
         "socmem",
@@ -91,11 +99,11 @@
         },
         {
           "source": "knowledge_ir/modules/memory_slot.json",
-          "path": "internal_event_flow"
+          "path": "key_instances"
         },
         {
           "source": "knowledge_ir/modules/memory_slot.json",
-          "path": "key_instances"
+          "path": "internal_event_flow"
         }
       ],
       "id": "semantic:module:memory_slot:module_role:001"
@@ -106,19 +114,23 @@
         "type": "module",
         "module": "memory_slot"
       },
-      "summary": "memory_slot根据事件输入选择性地将IF或LSU的地址/数据/写使能信号转发给socmem，并输出驱动完成事件。",
-      "subject": "事件驱动的内存访问仲裁与转发",
-      "explanation": "两个事件输入i_driveFrmIf和i_driveFrmLsu分别对应IF和LSU的驱动请求。assign依赖显示，当init_sig_temp2为假时，memory_*信号直接来自i_*信号，表明正常模式下事件驱动数据转发。输出事件o_driveNextToIf和o_driveNextToLsu指示转发完成。",
+      "summary": "memory_slot根据事件输入选择正常数据或初始化数据，并将选中的数据/地址/写使能转发给socmem，同时将socmem的输出数据直接传递到模块输出。",
+      "subject": "事件驱动的数据路径仲裁与转发",
+      "explanation": "assign依赖显示memory_ibus_we、memory_ibus_addr_i、memory_ibus_data_i、memory_dbus_we、memory_dbus_addr_i、memory_dbus_data_i均通过init_sig_temp2选择器在正常输入(i_ibus_we等)和初始化输入(init_ibus_we等)之间切换。o_ibus_data和o_dbus_data直接来自socmem的输出memory_ibus_data_o和memory_dbus_data_o。事件流表明i_driveFrmIf和i_driveFrmLsu驱动socmem，socmem输出o_driveNextToIf和o_driveNextToLsu。",
       "signals": [
-        "i_driveFrmIf",
-        "i_driveFrmLsu",
-        "o_driveNextToIf",
-        "o_driveNextToLsu",
         "memory_ibus_we",
-        "memory_dbus_we"
+        "memory_ibus_addr_i",
+        "memory_ibus_data_i",
+        "memory_dbus_we",
+        "memory_dbus_addr_i",
+        "memory_dbus_data_i",
+        "o_ibus_data",
+        "o_dbus_data",
+        "init_sig_temp2"
       ],
       "instances": [
-        "socmem"
+        "socmem",
+        "u_data_init"
       ],
       "related_flows": [
         "flow_000_memory_slot_i_driveFrmIf",
@@ -126,15 +138,15 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/memory_slot.json",
-          "path": "internal_event_flow"
+          "path": "assign_dependencies"
         },
         {
           "source": "knowledge_ir/modules/memory_slot.json",
-          "path": "assign_dependencies"
+          "path": "key_instances"
         }
       ],
       "id": "semantic:module:memory_slot:structural_responsibility:001"
@@ -146,9 +158,13 @@
         "module": "memory_slot"
       },
       "subject": "socmem",
-      "summary": "核心内存控制器实例，接收来自memory_slot的地址/数据/写使能信号，并返回读取数据。",
-      "explanation": "socmem是memory_slot的主要负载实例，其输入事件i_driveFrmIf和i_driveFrmLsu直接来自模块顶层，输出事件o_driveNextToIf和o_driveNextToLsu直接输出。数据输入memory_dbus_data_i和memory_ibus_data_i来自assign转发，数据输出memory_dbus_data_o和memory_ibus_data_o直接赋值给o_dbus_data和o_ibus_data。",
+      "summary": "核心内存控制器实例，接收来自IF和LSU的驱动事件，处理数据访问，并输出驱动完成事件。",
+      "explanation": "socmem是memory_slot的主要负载，它接收i_driveFrmIf和i_driveFrmLsu作为事件输入，输出o_driveNextToIf和o_driveNextToLsu。它接收经过选择的数据/地址/写使能信号(memory_dbus_data_i等)，并输出数据(memory_dbus_data_o等)。这表明socmem执行实际的内存读写操作。",
       "signals": [
+        "i_driveFrmIf",
+        "i_driveFrmLsu",
+        "o_driveNextToIf",
+        "o_driveNextToLsu",
         "memory_dbus_data_i",
         "memory_ibus_data_i",
         "memory_dbus_data_o",
@@ -171,7 +187,7 @@
         },
         {
           "source": "knowledge_ir/modules/memory_slot.json",
-          "path": "assign_dependencies"
+          "path": "key_component_connections"
         }
       ],
       "id": "semantic:module:memory_slot:component_role:001"
@@ -183,22 +199,20 @@
         "module": "memory_slot"
       },
       "subject": "u_data_init",
-      "summary": "数据初始化模块实例，用于在初始化模式下向socmem注入预定义的地址/数据/写使能信号。",
-      "explanation": "u_data_init输出init_dbus_data、init_ibus_data等信号，这些信号在assign依赖中与init_sig_temp2条件结合，用于覆盖正常的数据输入。这表明memory_slot支持通过UART接口进行初始化配置。",
+      "summary": "数据初始化模块，提供初始化数据路径，用于在初始化模式下覆盖正常的数据/地址/写使能信号。",
+      "explanation": "u_data_init输出init_dbus_data、init_ibus_data等信号，这些信号通过assign选择器(由init_sig_temp2控制)在初始化模式下替换正常输入。它通过uart_rx/uart_tx与外部通信，表明它可能通过UART加载初始化数据。",
       "signals": [
         "init_dbus_data",
         "init_ibus_data",
         "init_dbus_addr",
         "init_ibus_addr",
         "init_dbus_we",
-        "init_ibus_we"
+        "init_ibus_we",
+        "init_rx",
+        "init_tx"
       ],
       "instances": [
         "u_data_init"
-      ],
-      "related_flows": [
-        "flow_000_memory_slot_i_driveFrmIf",
-        "flow_001_memory_slot_i_driveFrmLsu"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -221,23 +235,17 @@
         "type": "module",
         "module": "memory_slot"
       },
-      "subject": "memory_ibus_we, memory_dbus_we, memory_ibus_addr_i, memory_dbus_addr_i, memory_ibus_data_i, memory_dbus_data_i",
-      "summary": "这些assign实现正常模式与初始化模式之间的数据路径选择。",
-      "explanation": "当init_sig_temp2为真时，使用u_data_init提供的初始化数据；否则使用来自IF或LSU的输入数据。这构成了一个多路选择器，由初始化状态控制。",
+      "subject": "init_sig_temp2选择器",
+      "summary": "控制数据路径在正常模式和初始化模式之间切换的关键选择信号。",
+      "explanation": "多个assign依赖(索引1-6)使用init_sig_temp2作为条件选择器。当init_sig_temp2为真时，使用初始化数据(init_ibus_we等)；否则使用正常输入(i_ibus_we等)。这表明memory_slot支持两种操作模式：正常模式和初始化模式。",
       "signals": [
         "init_sig_temp2",
-        "i_ibus_we",
-        "i_dbus_we",
-        "i_ibus_addr",
-        "i_dbus_addr",
-        "i_ibus_data",
-        "i_dbus_data",
-        "init_ibus_we",
-        "init_dbus_we",
-        "init_ibus_addr",
-        "init_dbus_addr",
-        "init_ibus_data",
-        "init_dbus_data"
+        "memory_ibus_we",
+        "memory_ibus_addr_i",
+        "memory_ibus_data_i",
+        "memory_dbus_we",
+        "memory_dbus_addr_i",
+        "memory_dbus_data_i"
       ],
       "related_assignments": [
         "1",
@@ -247,13 +255,9 @@
         "5",
         "6"
       ],
-      "related_flows": [
-        "flow_000_memory_slot_i_driveFrmIf",
-        "flow_001_memory_slot_i_driveFrmLsu"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/memory_slot.json",
@@ -263,48 +267,14 @@
       "id": "semantic:module:memory_slot:assignment_interpretation:001"
     },
     {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "memory_slot"
-      },
-      "subject": "o_ibus_data, o_dbus_data",
-      "summary": "将socmem的读取数据直接输出到模块顶层。",
-      "explanation": "o_ibus_data和o_dbus_data分别直接赋值给memory_ibus_data_o和memory_dbus_data_o，表明读取数据路径是直通的。",
-      "signals": [
-        "o_ibus_data",
-        "o_dbus_data",
-        "memory_ibus_data_o",
-        "memory_dbus_data_o"
-      ],
-      "related_assignments": [
-        "7",
-        "8"
-      ],
-      "related_flows": [
-        "flow_000_memory_slot_i_driveFrmIf",
-        "flow_001_memory_slot_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/memory_slot.json",
-          "path": "assign_dependencies"
-        }
-      ],
-      "id": "semantic:module:memory_slot:assignment_interpretation:002"
-    },
-    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "memory_slot"
       },
-      "summary": "每个驱动事件输入对应一个释放信号输出，构成请求-确认握手协议。",
-      "subject": "事件-释放信号对",
-      "explanation": "i_driveFrmIf对应o_freeToIf，i_driveFrmLsu对应o_freeToLsu，表明驱动完成后释放资源。类似地，输出事件o_driveNextToIf和o_driveNextToLsu对应输入释放信号i_freeNextFrmIf和i_freeNextFrmLsu，表明下游模块释放后本模块才能继续。",
+      "summary": "每个驱动事件输入对应一个释放输出，形成请求-完成握手，用于控制数据路径的占用和释放。",
+      "subject": "事件-释放握手协议",
+      "explanation": "事件输入i_driveFrmIf对应释放输出o_freeToIf，事件输入i_driveFrmLsu对应释放输出o_freeToLsu。同样，事件输出o_driveNextToIf对应释放输入i_freeNextFrmIf，o_driveNextToLsu对应i_freeNextFrmLsu。这表明每个驱动事件在完成时通过释放信号通知上游，实现流水线控制。",
       "signals": [
         "i_driveFrmIf",
         "o_freeToIf",
@@ -315,15 +285,9 @@
         "o_driveNextToLsu",
         "i_freeNextFrmLsu"
       ],
-      "related_payload": [
-        "i_dbus_addr",
-        "i_dbus_data",
-        "i_ibus_addr",
-        "i_ibus_data"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/memory_slot.json",
@@ -342,27 +306,22 @@
         "type": "module",
         "module": "memory_slot"
       },
-      "summary": "手册应重点描述事件输入如何触发数据转发，以及初始化模式如何通过u_data_init覆盖正常数据路径。",
-      "subject": "事件驱动的数据路径选择与初始化模式",
-      "explanation": "模块的核心功能是事件驱动的内存访问仲裁，同时支持通过UART初始化。assign依赖显示初始化模式会替换所有地址/数据/写使能信号，这是关键行为。",
+      "summary": "手册应重点说明初始化模式如何通过u_data_init和init_sig_temp2选择器覆盖正常数据流，以及两种模式的触发条件和行为差异。",
+      "subject": "初始化模式与正常模式的数据路径切换",
+      "explanation": "assign依赖显示数据路径存在明确的初始化覆盖机制，但上下文未提供init_sig_temp2的生成逻辑或初始化模式的触发条件。这需要RTL源码审查来完整描述。",
       "signals": [
-        "i_driveFrmIf",
-        "i_driveFrmLsu",
         "init_sig_temp2",
+        "init_sig",
+        "init_sig_temp",
         "memory_ibus_we",
         "memory_dbus_we"
       ],
       "instances": [
-        "socmem",
         "u_data_init"
       ],
-      "related_flows": [
-        "flow_000_memory_slot_i_driveFrmIf",
-        "flow_001_memory_slot_i_driveFrmLsu"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/memory_slot.json",
@@ -381,35 +340,53 @@
         "type": "module",
         "module": "memory_slot"
       },
-      "reason": "当前上下文仅显示assign依赖中存在init_sig_temp2条件，但未提供init_sig_temp2的生成逻辑，无法确定初始化模式的触发条件和状态机。",
-      "subject": "u_data_init初始化控制逻辑",
-      "needed_source_slice": "always block, assign block",
+      "reason": "上下文仅显示init_sig_temp2作为选择器使用，但未提供其生成逻辑或初始化模式的触发条件。需要RTL源码中的assign或always块来理解初始化模式的完整控制流程。",
+      "subject": "init_sig_temp2生成逻辑",
+      "needed_source_slice": "assign block, always block",
       "signals": [
         "init_sig_temp2",
         "init_sig",
         "init_sig_temp"
       ],
-      "instances": [
-        "u_data_init"
-      ],
-      "related_flows": [
-        "flow_000_memory_slot_i_driveFrmIf",
-        "flow_001_memory_slot_i_driveFrmLsu"
-      ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/memory_slot.json",
           "path": "assign_dependencies"
-        },
+        }
+      ],
+      "id": "semantic:module:memory_slot:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "memory_slot"
+      },
+      "reason": "上下文仅显示u_data_init的接口连接和输出信号，但未提供其内部逻辑或初始化数据的加载机制。需要RTL源码来理解初始化数据的来源和加载过程。",
+      "subject": "u_data_init内部逻辑",
+      "needed_source_slice": "module declaration, always block, assign block",
+      "signals": [
+        "init_rx",
+        "init_tx",
+        "init_dbus_data",
+        "init_ibus_data"
+      ],
+      "instances": [
+        "u_data_init"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
         {
           "source": "knowledge_ir/modules/memory_slot.json",
           "path": "key_instances"
         }
       ],
-      "id": "semantic:module:memory_slot:source_review_request:001"
+      "id": "semantic:module:memory_slot:source_review_request:002"
     }
   ],
   "evidence_gaps": []

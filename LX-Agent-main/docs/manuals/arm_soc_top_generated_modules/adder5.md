@@ -1,8 +1,8 @@
 # 模块 `adder5`
 
 - 源文件：`rtl/rtl/Execute/adder5.v`。
-- 职责：AI 推断：5位加法器模块，支持有符号/无符号加法模式选择，并生成进位和溢出标志。
-- 说明：模块通过输入oprand1和oprand2进行5位加法，由symbol信号选择无符号或有符号加法模式，输出result、carry_out和overflow标志。无内部事件流或实例化子模块，为纯组合逻辑单元。
+- 职责：AI 推断：5位加法器模块，支持有符号和无符号加法运算，并生成进位和溢出标志。。
+- 说明：模块通过输入oprand1和oprand2进行加法，根据symbol信号选择有符号或无符号模式，输出结果result、进位carry_out和溢出overflow。
 
 ## 1. 层级位置
 
@@ -50,8 +50,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `signedSum` | $signed({oprand1[4], oprand1}) + $signed({oprand2[4], oprand2}) + $signed({1'b0,carry_in}) | AI 推断：有符号扩展加法中间结果，用于符号模式下的和计算 |
-| `assign_2` | data_path | `result` | symbol ? unsignedSum[4:0] : signedSum[4:0] | AI 推断：有符号扩展加法中间结果，用于符号模式下的和计算 |
-| `assign_3` | unknown | `carry_out` | symbol ? unsignedSum[5] : 1'b0 | AI 推断：无符号模式下的进位输出，符号模式下恒为0 |
-| `assign_4` | data_path | `overflow` | symbol ? 1'b0 : (oprand1[4] == oprand2[4]) && (oprand1[4] != result[4]) | AI 推断：符号模式下的溢出标志，无符号模式下恒为0 |
-| `assign_0` | data_path | `unsignedSum` | {1'b0, oprand1} + {1'b0, oprand2} + carry_in | AI 推断：无符号扩展加法中间结果，用于无符号模式下的和与进位计算 |
+| `assign_1` | data_path | `signedSum` | $signed({oprand1[4], oprand1}) + $signed({oprand2[4], oprand2}) + $signed({1'b0,carry_in}) | AI 推断：有符号加法中间结果，用于有符号模式下的结果计算。 |
+| `assign_2` | data_path | `result` | symbol ? unsignedSum[4:0] : signedSum[4:0] | AI 推断：有符号加法中间结果，用于有符号模式下的结果计算。 |
+| `assign_3` | data_path | `carry_out` | symbol ? unsignedSum[5] : 1'b0 | AI 推断：无符号加法中间结果，用于无符号模式下的结果和进位计算。 |
+| `assign_4` | data_path | `overflow` | symbol ? 1'b0 : (oprand1[4] == oprand2[4]) && (oprand1[4] != result[4]) | AI 推断：有符号模式下的溢出标志。 |
+| `assign_0` | data_path | `unsignedSum` | {1'b0, oprand1} + {1'b0, oprand2} + carry_in | AI 推断：无符号加法中间结果，用于无符号模式下的结果和进位计算。 |

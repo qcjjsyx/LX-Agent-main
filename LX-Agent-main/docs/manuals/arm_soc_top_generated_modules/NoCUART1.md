@@ -1,8 +1,8 @@
 # 模块 `NoCUART1`
 
 - 源文件：`rtl/rtl/IONet/UART/NoCUART1.v`。
-- 职责：AI 推断：延迟链由三个级联延迟单元组成具体延迟深度由各延迟单元名称隐含。。
-- 说明：从切片4（第111-113行）可见，延迟链由 delay64U（64个延迟单元）、delay32U（32个延迟单元）和 delay8U（8个延迟单元）三级级联而成，总延迟深度为64+32+8=104个单位。此外切片3（第101行）有一个独立的 delay16U 用于其他逻辑。
+- 职责：AI 推断：该模块是UART实例与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC侧的驱动事件经FIFO和确认管道转发至UART，并将UART的响应数据打包回NoC。。
+- 说明：模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck确认后送入cfifo1，再经三级延迟链(delay8/9/10)输出o_drv2Noc；同时将内部寄存器r_dataFNoc_51、r_dataHigh、ReceiveData等拼接为o_data2Noc_51返回NoC。uart_instance作为纯数据终端，其BAUD/IRQ/SIN/SOUT等信号直通模块边界。
 
 ## 1. 层级位置
 
@@ -65,7 +65,7 @@ NoCUART1
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
 - 输出/影响：`o_drv2Noc`。
 - 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：手册应强调事件流是纯控制路径，数据打包通过独立赋值完成，两者在时序上可能对齐但逻辑上解耦。
+- AI 推断：最终手册应重点描述事件流如何从输入驱动传播到输出驱动，以及数据负载在传播过程中如何被整形。
 
 
 ## 5. 内部组件与 assign 影响
@@ -82,4 +82,4 @@ NoCUART1
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | AI 推断：将UART内部数据(ReceiveData, r_dataHigh, r_X, r_Y)与输入数据(r_dataFNoc_51)打包为51位NoC数据输出。 |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | 证据不足：No Semantic Layer assignment interpretation is available. |

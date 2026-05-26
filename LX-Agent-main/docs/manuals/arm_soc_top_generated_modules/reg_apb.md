@@ -1,8 +1,8 @@
 # 模块 `reg_apb`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/reg_apb.v`。
-- 职责：AI 推断：该模块是APB从接口与SPI寄存器文件的桥接器，负责将APB总线协议转换为内部寄存器读写选通信号。。
-- 说明：模块通过assign将APB控制信号（PSEL、PWRITE、PENABLE）解码为内部读写选通（read、write），并基于地址（PADDR）生成各寄存器的独立读写选通（SR_r、DR_r、CR1_r、DR_w、CR1_w），同时将内部读数据（rdata）驱动到PRDATA上。PSLVERR和PREADY被固定为常量，表明该从设备始终就绪且无错误。
+- 职责：AI 推断：reg_apb 是 SPI 模块的 APB 从接口寄存器桥，负责将 APB 总线协议转换为 SPI 内部寄存器读写控制信号。。
+- 说明：模块通过 APB 接口信号（PADDR、PWDATA、PSEL、PENABLE、PWRITE）生成内部读写选通信号（read、write），并基于地址译码产生各寄存器（SPI_SR、SPI_DR、SPI_CR1）的读写使能信号（SR_r、DR_r、CR1_r、DR_w、CR1_w），同时输出 SPI 配置参数（BR、CRCPOLY、TDR）和状态数据（PRDATA）。
 
 ## 1. 层级位置
 
@@ -52,10 +52,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `PSLVERR` | 1'b0 | AI 推断：PREADY和PSLVERR被固定为常量，表明该APB从设备始终就绪且无传输错误。 |
-| `assign_2` | control_path | `read` | PSEL & (!PWRITE) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | control_path | `write` | PENABLE & PSEL & PWRITE | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | unknown | `PREADY` | 1'b1 | AI 推断：PREADY和PSLVERR被固定为常量，表明该APB从设备始终就绪且无传输错误。 |
+| `assign_1` | unknown | `PSLVERR` | 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | control_path | `read` | PSEL & (!PWRITE) | AI 推断：生成 APB 读选通信号，用于控制寄存器读取操作。 |
+| `assign_3` | control_path | `write` | PENABLE & PSEL & PWRITE | AI 推断：生成 APB 写选通信号，用于控制寄存器写入操作。 |
+| `assign_4` | unknown | `PREADY` | 1'b1 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_5` | unknown | `SR_r` | ( read & ( addr == SPI_SR ) ) ? 1'b1 : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_6` | unknown | `DR_r` | ( read && ( addr == SPI_DR ) ) ? 1'b1 : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | ... | ... | ... | ... | 其余 5 条 assign 省略 |

@@ -64,14 +64,16 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "数据初始化模块，通过UART接口接收配置数据并驱动指令总线(ibus)和数据总线(dbus)的初始化写入",
+      "summary": "数据初始化模块，通过UART接口接收配置数据并驱动指令总线(ibus)和数据总线(dbus)进行初始化写入。",
       "subject": "data_init",
-      "explanation": "模块无事件输入，仅有四个数据输出端口(dbus_addr_o, dbus_data_o, ibus_addr_o, ibus_data_o)，表明其角色是主动向总线发送初始化数据。内部实例化uart_rx和uart_tx，表明通过UART串口接收外部配置，并可能通过UART回传状态。assign依赖显示ibus_we/dbus_we写使能信号由内部寄存器驱动，且数据输出存在字节交换({r_ibus_data_o[31:0], r_ibus_data_o[63:32]})，暗示了端序转换或数据重组逻辑。",
+      "explanation": "模块无事件输入，仅有数据输出到ibus和dbus，且内部实例化uart_rx和uart_tx，表明其通过UART串口接收外部初始化数据，然后转换为总线写操作。assign依赖显示ibus_we、dbus_we等写使能信号由内部寄存器驱动，且数据输出有字节交换（{r_ibus_data_o[31:0], r_ibus_data_o[63:32]}），暗示了端序或数据对齐处理。",
       "signals": [
-        "dbus_addr_o",
-        "dbus_data_o",
         "ibus_addr_o",
         "ibus_data_o",
+        "dbus_addr_o",
+        "dbus_data_o",
+        "ibus_we",
+        "dbus_we",
         "uart_rx",
         "uart_tx"
       ],
@@ -88,10 +90,6 @@
           "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
-        },
-        {
           "source": "rtl/rtl/memory/data_init.v",
           "path": "module_source"
         }
@@ -104,17 +102,19 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "通过UART接收初始化配置，生成指令总线和数据总线的地址、数据及写使能信号，完成存储器的初始化写入",
-      "subject": "总线初始化驱动",
-      "explanation": "模块输出ibus_addr_o/ibus_data_o和dbus_addr_o/dbus_data_o两组总线接口，配合ibus_we/dbus_we写使能信号，构成完整的存储器写操作。UART接收实例(uart_rx_inst)提供外部数据输入通道，UART发送实例(uart_tx_inst)可能用于握手或状态反馈。assign依赖中d_finish信号由first、size、number、c_state、WAITSEND、tx_data_ready组合产生，表明存在状态机控制初始化完成条件。",
+      "summary": "模块将UART接收的串行数据解析后，生成指令总线和数据总线的地址、数据及写使能信号，完成初始化写入序列。",
+      "subject": "UART到总线桥接与初始化序列控制",
+      "explanation": "uart_rx_inst接收外部串行数据（rx_data），uart_tx_inst可能用于握手或状态反馈（tx_data_ready）。assign依赖中d_finish信号由first、size、number、c_state和tx_data_ready组合产生，表明存在有限状态机控制初始化完成条件。ibus和dbus的输出数据均来自内部寄存器r_ibus_data_o和r_dbus_data_o，且进行了32位字交换，暗示数据在内部以特定格式存储。",
       "signals": [
+        "d_finish",
+        "init_sig",
+        "first",
+        "size",
+        "number",
+        "c_state",
+        "tx_data_ready",
         "ibus_we",
-        "dbus_we",
-        "ibus_addr_o",
-        "ibus_data_o",
-        "dbus_addr_o",
-        "dbus_data_o",
-        "d_finish"
+        "dbus_we"
       ],
       "instances": [
         "uart_rx_inst",
@@ -125,12 +125,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "assignment_facts"
         },
         {
-          "source": "knowledge_ir/modules/data_init.json",
-          "path": "interface"
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:structural_responsibility:001"
@@ -142,8 +142,8 @@
         "module": "data_init"
       },
       "subject": "uart_rx_inst",
-      "summary": "UART接收实例，作为外部配置数据的串行输入通道",
-      "explanation": "实例化uart_rx模块，连接顶层uart_rx引脚，输出rx_data。该实例是模块获取外部初始化数据的唯一入口，其输出数据将驱动内部状态机和总线写操作。",
+      "summary": "串行数据接收器，将外部UART输入转换为并行数据供初始化控制逻辑使用。",
+      "explanation": "uart_rx_inst的rx_pin连接至顶层uart_rx端口，输出rx_data。该数据应包含初始化命令或数据载荷，被内部逻辑解析后驱动总线写操作。无事件输入输出，表明其为纯数据接收路径。",
       "signals": [
         "uart_rx",
         "rx_data"
@@ -151,13 +151,13 @@
       "instances": [
         "uart_rx_inst"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "instances"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "key_instances"
         },
         {
           "source": "rtl/rtl/memory/data_init.v",
@@ -173,8 +173,8 @@
         "module": "data_init"
       },
       "subject": "uart_tx_inst",
-      "summary": "UART发送实例，可能用于回传初始化状态或握手确认",
-      "explanation": "实例化uart_tx模块，输入tx_data，输出tx_pin连接顶层uart_tx引脚，并产生tx_data_ready信号。tx_data_ready被d_finish赋值引用，表明发送完成状态参与初始化结束判定。",
+      "summary": "串行数据发送器，可能用于发送初始化状态或握手响应信号。",
+      "explanation": "uart_tx_inst的tx_pin连接至顶层uart_tx端口，输入tx_data，输出tx_data_ready。tx_data_ready被d_finish组合逻辑使用，表明发送完成状态影响初始化序列的终止条件。其具体发送内容（如确认帧或状态码）需RTL源码确认。",
       "signals": [
         "uart_tx",
         "tx_data",
@@ -188,12 +188,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "instances"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "key_instances"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:component_role:002"
@@ -205,8 +205,8 @@
         "module": "data_init"
       },
       "subject": "ibus_data_o",
-      "summary": "指令总线数据输出，内部寄存器数据经过32位半字交换后输出",
-      "explanation": "assign ibus_data_o = {r_ibus_data_o[31:0], r_ibus_data_o[63:32]}，将内部64位寄存器的低32位和高32位交换后输出。这种字节序调整可能对应外部存储器或CPU的端序要求。",
+      "summary": "指令总线数据输出，内部寄存器数据经过32位字交换后输出。",
+      "explanation": "assign ibus_data_o = {r_ibus_data_o[31:0], r_ibus_data_o[63:32]}表明内部存储的64位数据在输出时高低32位互换。这可能是因为内部寄存器存储顺序与总线协议要求的字节序不同，或为适应特定初始化数据格式。",
       "signals": [
         "ibus_data_o",
         "r_ibus_data_o"
@@ -219,8 +219,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:assignment_interpretation:001"
@@ -232,8 +236,8 @@
         "module": "data_init"
       },
       "subject": "dbus_data_o",
-      "summary": "数据总线数据输出，内部寄存器数据经过32位半字交换后输出",
-      "explanation": "assign dbus_data_o = {r_dbus_data_o[31:0], r_dbus_data_o[63:32]}，与ibus_data_o采用相同的字节交换策略，表明模块对两组总线数据统一进行端序转换。",
+      "summary": "数据总线数据输出，内部寄存器数据经过32位字交换后输出。",
+      "explanation": "assign dbus_data_o = {r_dbus_data_o[31:0], r_dbus_data_o[63:32]}与ibus_data_o处理方式相同，表明数据总线也采用相同的字节序转换策略，可能为统一的数据格式要求。",
       "signals": [
         "dbus_data_o",
         "r_dbus_data_o"
@@ -246,8 +250,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:assignment_interpretation:002"
@@ -259,8 +267,8 @@
         "module": "data_init"
       },
       "subject": "d_finish",
-      "summary": "初始化完成标志，由状态机、计数器及UART发送就绪信号共同判定",
-      "explanation": "assign d_finish = (first[9:0] == (size-1)) & (number == 6'h01) & c_state == WAITSEND & tx_data_ready，表明初始化完成条件包括：地址计数器first达到size-1、编号number为1、当前状态为WAITSEND、且UART发送就绪。该信号可能用于触发状态转移或输出完成指示。",
+      "summary": "初始化完成标志信号，由状态机、计数器及UART发送就绪信号组合产生。",
+      "explanation": "d_finish = (first[9:0] == (size-1)) & (number == 6'h01) & c_state == WAITSEND & tx_data_ready表明初始化完成条件包括：地址计数器first达到size-1、number字段为特定值、状态机处于WAITSEND状态且UART发送器就绪。这暗示初始化序列包含多个数据包，且需等待UART发送完成。",
       "signals": [
         "d_finish",
         "first",
@@ -278,8 +286,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:assignment_interpretation:003"
@@ -290,9 +302,9 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "指令总线和数据总线的地址/数据/写使能构成一组完整的存储器写操作接口",
-      "subject": "总线写接口组",
-      "explanation": "模块输出ibus_addr_o、ibus_data_o、ibus_we和dbus_addr_o、dbus_data_o、dbus_we，分别对应指令存储器和数据存储器的写操作。两组接口结构对称，表明模块同时初始化两个独立的存储空间。",
+      "summary": "模块通过指令总线和数据总线输出初始化数据，支持独立的地址、数据和写使能信号。",
+      "subject": "ibus/dbus输出接口",
+      "explanation": "输出接口包含ibus_addr_o、ibus_data_o、ibus_we以及dbus_addr_o、dbus_data_o、dbus_we，分别对应指令总线和数据总线的写操作。无读接口，表明模块仅执行初始化写入，不进行读取验证。写使能信号由内部寄存器驱动，表明写操作受内部控制逻辑调度。",
       "signals": [
         "ibus_addr_o",
         "ibus_data_o",
@@ -306,7 +318,7 @@
         "dbus_data_o"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
@@ -314,8 +326,8 @@
           "path": "interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:module:data_init:interface_intent:001"
@@ -326,12 +338,48 @@
         "type": "module",
         "module": "data_init"
       },
-      "summary": "文档应重点描述通过UART接收配置数据、内部状态机控制、以及向双总线写入初始化数据的完整流程",
-      "subject": "初始化流程与状态机",
-      "explanation": "模块核心功能是初始化，但当前上下文缺少内部状态机定义、UART协议解析、数据缓冲机制等关键细节。d_finish赋值中出现的c_state、WAITSEND、first、size、number等信号表明存在复杂的状态机和计数器逻辑，需要RTL源码补充。",
+      "summary": "手册应重点描述UART接收数据的协议格式、状态机转换、以及如何映射到ibus/dbus写操作。",
+      "subject": "初始化序列与UART协议解析",
+      "explanation": "模块核心功能是通过UART接收外部初始化数据并写入总线，但当前上下文缺少UART数据帧格式、状态机定义（如WAITSEND状态）以及first/size/number等计数器的具体含义。这些是理解初始化序列的关键，需RTL源码补充。",
+      "signals": [
+        "uart_rx",
+        "uart_tx",
+        "first",
+        "size",
+        "number",
+        "c_state",
+        "d_finish"
+      ],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "assignment_facts"
+        },
+        {
+          "source": "rtl/rtl/memory/data_init.v",
+          "path": "module_source"
+        }
+      ],
+      "id": "semantic:module:data_init:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "data_init"
+      },
+      "reason": "当前上下文缺少状态机状态定义（如WAITSEND）、UART数据帧格式（如number字段含义）以及first/size计数器的具体行为，无法完整描述初始化序列。",
+      "subject": "状态机定义与UART协议格式",
+      "needed_source_slice": "always block, module declaration, comments",
       "signals": [
         "c_state",
-        "WAITSEND",
         "first",
         "size",
         "number",
@@ -347,59 +395,29 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
+          "source": "knowledge_ir/modules/data_init.json",
+          "path": "assignment_facts"
         },
         {
           "source": "rtl/rtl/memory/data_init.v",
           "path": "module_source"
-        }
-      ],
-      "id": "semantic:module:data_init:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "data_init"
-      },
-      "reason": "当前上下文仅提供assign依赖和实例连接，缺少always块、状态机定义、寄存器赋值逻辑等关键RTL细节，无法完整推断初始化协议和内部数据流",
-      "subject": "内部状态机与数据路径",
-      "needed_source_slice": "always block, module declaration, assign block",
-      "signals": [
-        "c_state",
-        "WAITSEND",
-        "first",
-        "size",
-        "number",
-        "r_ibus_we",
-        "r_dbus_we",
-        "r_ibus_addr_o",
-        "r_ibus_data_o",
-        "r_dbus_addr_o",
-        "r_dbus_data_o",
-        "r_init_1",
-        "init_sig"
-      ],
-      "instances": [
-        "uart_rx_inst",
-        "uart_tx_inst"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/memory/data_init.v",
-          "path": "module_source"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/data_init.json",
-          "path": "assignments"
         }
       ],
       "id": "semantic:module:data_init:source_review_request:001"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "内部状态机定义",
+      "reason": "缺少状态编码、状态转换条件和初始化序列的完整描述。"
+    },
+    {
+      "field": "UART数据协议格式",
+      "reason": "缺少UART接收数据的帧结构、命令类型和参数解析方式。"
+    },
+    {
+      "field": "初始化完成条件",
+      "reason": "d_finish信号中number字段和first计数器的具体含义未明确。"
+    }
+  ]
 }

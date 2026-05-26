@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/CRC_tx.v`。
 - 职责：AI 推断：该模块根据输入数据计算并输出CRC校验值，支持16位和8位两种模式。。
-- 说明：模块接收16位数据输入datain和多项式poly，输出16位CRC结果CRC_out。通过assign依赖项中的条件选择器（DFF ? CRC16_reg : {8'b0,CRC8_reg}）推断模块内部存在16位和8位两种CRC计算路径，由信号DFF选择输出。
+- 说明：模块接收16位数据输入datain和多项式poly，输出16位CRC结果CRC_out。通过assign依赖中DFF信号选择CRC16_reg或CRC8_reg，表明模块内部存在一个16位/8位CRC计算状态机或寄存器组，由DFF信号控制输出模式。
 
 ## 1. 层级位置
 

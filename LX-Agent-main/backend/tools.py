@@ -338,6 +338,7 @@ def run_knowledge_tool(
     section_id: str = "",
     enrich: bool = True,
     enrich_modules: str = "",
+    force: bool = False,
 ):
     """
     Knowledge Tool：
@@ -369,6 +370,8 @@ def run_knowledge_tool(
         args.append("--enrich")
         if enrich_modules:
             args.extend(["--enrich-modules", enrich_modules])
+    if force:
+        args.append("--no-semantic-cache")
 
     knowledge_timeout = env_int("RTL_MANUAL_KNOWLEDGE_TIMEOUT", 3600)
     args.extend(["--timeout", str(knowledge_timeout)])

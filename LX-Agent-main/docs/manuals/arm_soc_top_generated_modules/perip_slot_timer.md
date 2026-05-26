@@ -1,8 +1,8 @@
 # 模块 `perip_slot_timer`
 
 - 源文件：`rtl/rtl/IONet/IONetwork_9.24/perip_slot_timer.v`。
-- 职责：AI 推断：该模块作为外围设备槽位定时器，负责在网格网络中延迟和转发驱动事件，并管理对应的释放信号。。
-- 说明：模块接收来自网格的驱动事件 `i_driveFrmMesh`，通过两级 FIFO (`cFifo_1`, `cFifo_2`) 和两级延迟单元 (`delay0`, `delay1`) 进行流水线延迟处理后，输出驱动事件 `o_driveNextToMesh`。同时，它处理对应的释放信号 `i_freeNextFrmMesh` 和 `o_freeToMesh`，形成完整的驱动-释放握手协议。
+- 职责：AI 推断：该模块作为外围设备槽位定时器，在IONet网络中负责驱动事件的延迟与转发控制。。
+- 说明：模块接收来自Mesh的驱动事件（i_driveFrmMesh），经过内部FIFO和延迟链处理后，输出驱动事件（o_driveNextToMesh）到下一级Mesh。同时，通过空闲信号（i_freeNextFrmMesh, o_freeToMesh）实现流控握手。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ perip_slot_timer
 - Payload：未记录。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：文档应强调该流为纯事件传输，无数据负载，重点描述FIFO缓冲和固定延迟链的时序特性
+- AI 推断：手册应强调该流为纯事件传递流，具有固定延迟（96单位）和两级FIFO门控，但需说明FIFO门控条件和空闲信号耦合关系需从RTL源码确认
 
 
 ## 5. 内部组件与 assign 影响
@@ -75,4 +75,4 @@ perip_slot_timer
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `we` | (!we_r) & rise | AI 推断：该赋值生成一个写使能信号 `we`，用于控制数据写入。 |
+| `assign_0` | unknown | `we` | (!we_r) & rise | AI 推断：该赋值生成写使能信号，用于控制数据写入。 |

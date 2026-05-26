@@ -202,8 +202,8 @@
         "w_drv2Pmt"
       ],
       "role_in_flow": {
-        "value": "输入事件的第一级 FIFO 缓冲，用于暂存来自 i_drvFNoc 的事件。",
-        "explanation": "cfifo0 是 cFifo2 类型的 FIFO 实例，位于流的最前端，直接接收输入事件 i_drvFNoc。其输出 w_drv2Pmt 驱动下一个组件 pmtAck。作为 FIFO 阶段，它可能提供背压或事件门控功能。",
+        "value": "输入事件的第一级 FIFO 缓冲，用于暂存来自模块外部的驱动事件。",
+        "explanation": "cfifo0 是 cFifo2 类型的 FIFO 实例，位于流的最前端，接收 i_drvFNoc 并输出 w_drv2Pmt。它作为事件传播的入口缓冲，可能处理背压或速率匹配。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -228,7 +228,7 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+            "path": "knowledge_ir/modules/NoCUART1.json"
           }
         ]
       },
@@ -251,8 +251,8 @@
         "w_drv2fifo1"
       ],
       "role_in_flow": {
-        "value": "事件确认握手 FIFO 阶段，用于在事件传递前进行确认或同步。",
-        "explanation": "pmtAck 是 cPmtFifo1 类型的 FIFO 实例，接收来自 cfifo0 的 w_drv2Pmt 信号，输出 w_drv2fifo1。其名称暗示可能包含确认（ack）逻辑，用于确保事件在进入后续延迟链之前得到正确握手。",
+        "value": "确认握手 FIFO 级，在 cfifo0 之后提供事件确认机制。",
+        "explanation": "pmtAck 是 cPmtFifo1 类型的 FIFO 实例，接收 w_drv2Pmt 并输出 w_drv2fifo1。其名称暗示它可能实现某种确认协议，确保事件在进入后续延迟链前已被确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -277,7 +277,7 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+            "path": "knowledge_ir/modules/NoCUART1.json"
           }
         ]
       },
@@ -328,7 +328,7 @@
       ],
       "role_in_flow": {
         "value": "延迟链后的第二级 FIFO 缓冲，用于重新同步事件。",
-        "explanation": "cfifo1 是 cFifo1 类型的 FIFO 实例，接收来自 delay11 的延迟信号 w_drv2fifo1_delay，输出 w_drv2Noc_delay 到后续延迟链。它可能在延迟链后提供额外的缓冲或事件门控。",
+        "explanation": "cfifo1 是 cFifo1 类型的 FIFO 实例，接收延迟后的 w_drv2fifo1_delay 并输出 w_drv2Noc_delay。它位于延迟链和输出延迟之间，可能用于吸收延迟链输出的抖动或提供额外的缓冲。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -353,7 +353,7 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+            "path": "knowledge_ir/modules/NoCUART1.json"
           }
         ]
       },
@@ -517,8 +517,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "手册应强调事件流是纯控制路径，数据打包通过独立赋值完成，两者在时序上可能对齐但逻辑上解耦。",
-    "explanation": "当前上下文显示事件流经过 FIFO 和延迟链，而数据打包直接来自内部寄存器。手册应说明事件流不携带数据，数据通过并行总线输出，并指出事件可能作为数据有效的使能信号。",
+    "value": "最终手册应重点描述事件流如何从输入驱动传播到输出驱动，以及数据负载在传播过程中如何被整形。",
+    "explanation": "该流的核心是串行事件传播，但 assign 0 显示输出数据由多个内部寄存器拼接而成。手册应解释这些寄存器的来源（如是否来自输入数据、内部状态或控制逻辑），以及它们与事件传播的时序关系。同时，应说明 FIFO 和延迟链的作用，但避免过度推测背压细节。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -529,6 +529,7 @@
     "signals": [
       "i_drvFNoc",
       "o_drv2Noc",
+      "i_dataFNoc_51",
       "o_data2Noc_51"
     ],
     "instances": [
@@ -552,7 +553,7 @@
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_ports",
+        "source": "instances.connections",
         "path": "knowledge_ir/modules/NoCUART1.json"
       },
       {
@@ -562,8 +563,8 @@
     ],
     "supporting_claims": [
       {
-        "value": "从输入事件 i_drvFNoc 到输出事件 o_drv2Noc 的单驱动内部事件流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据打包输出。",
-        "explanation": "该流是 NoCUART1 模块内部唯一的事件驱动路径，从输入端口 i_drvFNoc 开始，经过 cfifo0、pmtAck、delay11、cfifo1、delay8、delay9、delay10 七个阶段，最终到达输出端口 o_drv2Noc。所有阶段均为单输入单输出，无分支或合并点，形成一条清晰的流水线。",
+        "value": "从输入事件驱动 i_drvFNoc 到输出事件驱动 o_drv2Noc 的串行流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据整形后发送至片上网络。",
+        "explanation": "该流由单个输入事件 i_drvFNoc 触发，经过 cfifo0 缓冲、pmtAck 确认、delay11 延迟、cfifo1 再次缓冲，再经 delay8/delay9/delay10 三级延迟后输出。流中无分支或合并点，是纯串行事件传播路径。assign 0 显示输出数据 o_data2Noc_51 由内部寄存器 r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y 拼接而成，表明该流在传播过程中携带并整形了数据负载。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -597,7 +598,7 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+            "path": "knowledge_ir/modules/NoCUART1.json"
           },
           {
             "source": "transparent_flows",
@@ -606,17 +607,19 @@
         ]
       },
       {
-        "value": "事件流 o_drv2Noc 与数据总线 o_data2Noc_51 并行输出，事件触发数据采样，但数据打包独立于事件路径。",
-        "explanation": "事件流从 i_drvFNoc 到 o_drv2Noc 经过 FIFO 和延迟链，而数据总线 o_data2Noc_51 由内部寄存器直接组合生成。事件流可能作为数据有效的指示信号，但当前上下文未显示直接耦合。",
+        "value": "事件流 i_drvFNoc 到 o_drv2Noc 的传播伴随着数据负载的整形，但数据负载的更新时机与事件传播的精确关系未在上下文中明确。",
+        "explanation": "输入事件 i_drvFNoc 携带数据 i_dataFNoc_51，输出事件 o_drv2Noc 携带数据 o_data2Noc_51。assign 0 显示输出数据由多个内部寄存器拼接而成，但这些寄存器（如 r_dataFNoc_51、ReceiveData）的更新是否与事件流同步，或由其他独立逻辑控制，当前上下文未提供证据。因此，数据负载的更新与事件传播的耦合程度需进一步确认。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:data_control_effect:001",
-        "doc_priority": "secondary",
+        "doc_priority": "primary",
         "signals": [
+          "i_drvFNoc",
           "o_drv2Noc",
+          "i_dataFNoc_51",
           "o_data2Noc_51"
         ],
         "instances": [],
@@ -642,15 +645,15 @@
         ]
       },
       {
-        "value": "cfifo0、pmtAck、cfifo1 作为 FIFO 阶段可能提供背压，但当前上下文未提供具体信号。",
-        "explanation": "这三个 FIFO 实例可能具有满/空标志或就绪信号，用于控制事件流。但当前上下文未列出任何 free 或 backpressure 信号，因此无法确认背压机制的具体实现。",
+        "value": "流中存在三个 FIFO 级（cfifo0、pmtAck、cfifo1），它们可能因满状态而阻塞事件传播，但背压信号未在上下文中明确。",
+        "explanation": "上下文将 cfifo0、pmtAck、cfifo1 标记为阻塞点，但未提供它们的满/空状态信号或背压路径。因此，背压机制的存在是合理的推断，但具体实现（如是否使用 ready/valid 握手）无法从当前证据确认。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:completion_backpressure:001",
-        "doc_priority": "reference",
+        "doc_priority": "secondary",
         "signals": [],
         "instances": [
           "cfifo0",
@@ -667,8 +670,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/NoCUART1.json"
+            "source": "transparent_flows",
+            "path": "knowledge_ir/modules/NoCUART1.json"
           }
         ]
       }

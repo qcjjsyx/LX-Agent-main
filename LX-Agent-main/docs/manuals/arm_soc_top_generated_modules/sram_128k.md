@@ -1,8 +1,8 @@
 # 模块 `sram_128k`
 
 - 源文件：`rtl/rtl/memory/sram_128k.v`。
-- 职责：AI 推断：该模块是一个128KB的同步SRAM控制器，通过地址高位解码将访问请求分发到四个32KB的SRAM子bank。。
-- 说明：模块通过地址位[13:12]解码生成四个片选信号csb_0至csb_3，分别对应四个子bank，并将64位数据输出从对应子bank的数据总线中选出。无事件接口，表明是纯数据存储访问。
+- 职责：AI 推断：该模块是一个128KB的同步SRAM控制器，通过地址高位解码将访问请求分发到四个32KB的子存储体。。
+- 说明：模块通过i_addr_14[13:12]进行地址解码，生成四个片选信号csb_0至csb_3，分别对应四个子存储体。输出数据o_data_64根据地址高位从四个子存储体的数据总线中选择。
 
 ## 1. 层级位置
 
@@ -50,8 +50,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `csb_1` | (i_addr_14[13:12] == 2'b01) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | unknown | `csb_2` | (i_addr_14[13:12] == 2'b10) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | unknown | `csb_3` | (i_addr_14[13:12] == 2'b11) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | data_path | `o_data_64` | (i_addr_14[13:12] == 2'b00) ? w_data_64_s0 : (i_addr_14[13:12] == 2'b01) ? w_data_64_s1 : (i_... | AI 推断：该assign根据地址位[13:12]的值，从四个子bank的64位数据总线中选择一个作为模块输出。 |
-| `assign_0` | unknown | `csb_0` | (i_addr_14[13:12] == 2'b00) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | unknown | `csb_1` | (i_addr_14[13:12] == 2'b01) | AI 推断：这四个赋值语句将地址高位解码为四个互斥的片选信号，用于激活对应的32KB子存储体。 |
+| `assign_2` | unknown | `csb_2` | (i_addr_14[13:12] == 2'b10) | AI 推断：这四个赋值语句将地址高位解码为四个互斥的片选信号，用于激活对应的32KB子存储体。 |
+| `assign_3` | unknown | `csb_3` | (i_addr_14[13:12] == 2'b11) | AI 推断：这四个赋值语句将地址高位解码为四个互斥的片选信号，用于激活对应的32KB子存储体。 |
+| `assign_4` | data_path | `o_data_64` | (i_addr_14[13:12] == 2'b00) ? w_data_64_s0 : (i_addr_14[13:12] == 2'b01) ? w_data_64_s1 : (i_... | AI 推断：输出数据通过多路选择器从四个子存储体的数据总线中选取，选择逻辑与地址高位解码一致。 |
+| `assign_0` | unknown | `csb_0` | (i_addr_14[13:12] == 2'b00) | AI 推断：这四个赋值语句将地址高位解码为四个互斥的片选信号，用于激活对应的32KB子存储体。 |

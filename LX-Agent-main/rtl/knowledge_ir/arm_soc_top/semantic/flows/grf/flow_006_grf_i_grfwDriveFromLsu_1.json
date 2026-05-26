@@ -67,7 +67,7 @@
       },
       "summary": "LSU写回事件驱动流，通过互斥合并器与FIFO缓冲后写入GRF寄存器堆",
       "subject": "flow_006_grf_i_grfwDriveFromLsu_1",
-      "explanation": "该流从LSU模块发出的写回事件信号i_grfwDriveFromLsu_1开始，经过cMutexMerge3_end_74b互斥合并器与其他两个写回事件源（执行单元、写回阶段）仲裁合并，再通过cLastFifo1_grf FIFO缓冲后到达写操作目标，是GRF寄存器堆写回路径中的一条竞争性事件通道",
+      "explanation": "该流从LSU模块发出的写回事件信号i_grfwDriveFromLsu_1开始，经过cMutexMerge3_end_74b互斥合并器与其他写回事件源（执行单元、写回阶段）仲裁合并，再通过cLastFifo1_grf单级FIFO缓冲后形成最终写使能信号w_driveToWrite，驱动GRF寄存器写入操作",
       "signals": [
         "i_grfwDriveFromLsu_1",
         "w_driveToWrite"
@@ -78,7 +78,7 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "instances.connections",
@@ -99,8 +99,8 @@
         "flow_id": "flow_006_grf_i_grfwDriveFromLsu_1"
       },
       "subject": "cMutexMerge3_end_74b",
-      "summary": "三输入互斥合并器，仲裁来自LSU、执行单元和写回阶段的写事件",
-      "explanation": "该实例接收三个写回事件输入（i_grfwDriveFromExp_1、i_grfwDriveFromLsu_1、i_grfwDriveFromWB_1），通过互斥机制选择其中一个事件传递到输出w_driveToWrite，同时携带对应的数据负载（如i_lsuDataToGrf_64），是写回路径的仲裁节点",
+      "summary": "三输入互斥合并器，仲裁来自LSU、执行单元和写回阶段的写事件请求",
+      "explanation": "该实例接收三个写事件输入（i_grfwDriveFromExp_1、i_grfwDriveFromLsu_1、i_grfwDriveFromWB_1），通过互斥仲裁机制选择其中一个事件传递到输出w_driveToWrite，同时携带对应的数据负载（如i_lsuDataToGrf_64）。合并器可能实现优先级或轮询仲裁策略，确保同一时刻只有一个写事件被处理",
       "signals": [
         "i_grfwDriveFromLsu_1",
         "i_grfwDriveFromExp_1",
@@ -113,14 +113,14 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
+          "source": "component_connection",
           "path": "modules/grf.json"
         },
         {
-          "source": "component_connection",
+          "source": "event_flow",
           "path": "modules/grf.json"
         }
       ],
@@ -134,24 +134,24 @@
         "flow_id": "flow_006_grf_i_grfwDriveFromLsu_1"
       },
       "subject": "cLastFifo1_grf",
-      "summary": "单级FIFO缓冲，暂存合并后的写事件以匹配写操作时序",
-      "explanation": "该实例接收cMutexMerge3_end_74b输出的w_driveToWrite事件，提供一级流水缓冲，可能用于处理写端口忙或写冲突时的背压，是写回路径的时序适配节点",
+      "summary": "单级FIFO缓冲器，暂存合并后的写事件以应对写端口冲突",
+      "explanation": "该实例接收cMutexMerge3_end_74b输出的写事件w_driveToWrite，提供一级缓冲能力。当GRF写端口被占用时，FIFO可暂存一个待写事件，避免事件丢失。由于是单级FIFO，缓冲深度为1，仅能处理短暂的写端口忙状态",
       "signals": [
         "w_driveToWrite"
       ],
       "instances": [
         "cLastFifo1_grf"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections",
+          "source": "component_connection",
           "path": "modules/grf.json"
         },
         {
-          "source": "transparent_flows",
+          "source": "event_flow",
           "path": "modules/grf.json"
         }
       ],
@@ -164,12 +164,12 @@
         "module": "grf",
         "flow_id": "flow_006_grf_i_grfwDriveFromLsu_1"
       },
-      "summary": "LSU写数据作为事件驱动的伴随负载，通过互斥合并器与事件同步传递",
+      "summary": "LSU写数据作为事件驱动流的伴随负载，与写事件信号同步传递",
       "subject": "i_lsuDataToGrf_64与i_grfwDriveFromLsu_1",
-      "explanation": "i_lsuDataToGrf_64是LSU写回的数据负载，通过cMutexMerge3_end_74b的i_data0_74端口输入，与事件信号i_grfwDriveFromLsu_1绑定，在事件被仲裁选中时同步传递到写路径，形成事件-数据对",
+      "explanation": "i_lsuDataToGrf_64是64位写数据信号，通过cMutexMerge3_end_74b的i_data0_74数据输入端口与写事件i_grfwDriveFromLsu_1关联。当LSU写事件被仲裁选中时，对应的写数据被传递到合并器输出，最终写入GRF寄存器。数据与控制信号在合并器内部保持同步关系",
       "signals": [
-        "i_grfwDriveFromLsu_1",
-        "i_lsuDataToGrf_64"
+        "i_lsuDataToGrf_64",
+        "i_grfwDriveFromLsu_1"
       ],
       "related_payload": [
         "i_lsuDataToGrf_64"
@@ -179,11 +179,11 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports",
+          "source": "interface.data_ports",
           "path": "modules/grf.json"
         },
         {
-          "source": "interface.data_ports",
+          "source": "component_connection",
           "path": "modules/grf.json"
         }
       ],
@@ -196,12 +196,16 @@
         "module": "grf",
         "flow_id": "flow_006_grf_i_grfwDriveFromLsu_1"
       },
-      "summary": "存在空闲信号o_grfFreeToLsu_1表明LSU写事件可能受背压控制",
+      "summary": "LSU写空闲信号o_grfFreeToLsu_1可能作为反压指示，但具体机制需RTL确认",
       "subject": "o_grfFreeToLsu_1与i_grfwDriveFromLsu_1",
-      "explanation": "接口契约显示i_grfwDriveFromLsu_1事件伴随空闲信号o_grfFreeToLsu_1，暗示LSU在发送写事件前需检查GRF是否可接收，但当前流上下文未提供该信号在内部流中的连接或使用方式，无法确定背压机制的具体实现",
+      "explanation": "接口契约显示o_grfFreeToLsu_1是i_grfwDriveFromLsu_1对应的空闲信号，可能用于指示GRF是否可接收新的LSU写事件。该信号可能由cLastFifo1_grf的满状态或cMutexMerge3_end_74b的仲裁状态生成，但当前上下文未提供具体连接关系，无法确定反压路径",
       "signals": [
-        "i_grfwDriveFromLsu_1",
-        "o_grfFreeToLsu_1"
+        "o_grfFreeToLsu_1",
+        "i_grfwDriveFromLsu_1"
+      ],
+      "instances": [
+        "cMutexMerge3_end_74b",
+        "cLastFifo1_grf"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -209,10 +213,6 @@
       "evidence": [
         {
           "source": "interface.event_ports",
-          "path": "modules/grf.json"
-        },
-        {
-          "source": "interface.data_ports",
           "path": "modules/grf.json"
         }
       ],
@@ -225,11 +225,12 @@
         "module": "grf",
         "flow_id": "flow_006_grf_i_grfwDriveFromLsu_1"
       },
-      "summary": "应重点描述LSU写事件在互斥合并器中的仲裁优先级和FIFO缓冲的深度",
-      "subject": "flow_006_grf_i_grfwDriveFromLsu_1",
-      "explanation": "该流的核心语义是LSU写事件与其他写源在cMutexMerge3_end_74b中的互斥仲裁，以及cLastFifo1_grf的缓冲行为，但当前上下文缺少仲裁优先级、FIFO满/空状态、背压信号连接等关键细节，需补充RTL源码分析",
+      "summary": "文档应重点描述LSU写事件如何通过互斥合并和FIFO缓冲最终写入GRF，以及数据负载的同步传递",
+      "subject": "LSU写回事件流",
+      "explanation": "该流是GRF模块中LSU写回路径的核心，涉及事件仲裁、数据同步和缓冲机制。文档需明确：1) 三个写事件源的仲裁策略；2) 写数据与写事件的同步关系；3) FIFO缓冲的深度和用途；4) 反压信号o_grfFreeToLsu_1的生成逻辑。由于当前上下文缺少赋值依赖和完整端点信息，需结合RTL源码补充",
       "signals": [
         "i_grfwDriveFromLsu_1",
+        "i_lsuDataToGrf_64",
         "w_driveToWrite",
         "o_grfFreeToLsu_1"
       ],
@@ -239,14 +240,14 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "instances.connections",
           "path": "modules/grf.json"
         },
         {
-          "source": "transparent_flows",
+          "source": "interface.data_ports",
           "path": "modules/grf.json"
         }
       ],
@@ -259,15 +260,14 @@
         "module": "grf",
         "flow_id": "flow_006_grf_i_grfwDriveFromLsu_1"
       },
-      "reason": "当前上下文未提供互斥合并器的仲裁优先级、数据选择逻辑和空闲信号连接，无法确定LSU写事件的优先级和背压机制",
-      "subject": "cMutexMerge3_end_74b仲裁逻辑",
-      "needed_source_slice": "cMutexMerge3_end_74b实例的always块或assign块，特别是输入选择条件和输出驱动逻辑",
+      "reason": "当前上下文未提供合并器的内部仲裁策略（优先级/轮询）以及反压信号o_grfFreeToLsu_1的生成逻辑，这些关键信息需从RTL源码的always块或assign语句中获取",
+      "subject": "cMutexMerge3_end_74b的仲裁逻辑和反压生成",
+      "needed_source_slice": "always block for arbitration logic; assign block for o_grfFreeToLsu_1 generation",
       "signals": [
         "i_grfwDriveFromLsu_1",
         "i_grfwDriveFromExp_1",
         "i_grfwDriveFromWB_1",
-        "w_driveToWrite",
-        "i_lsuDataToGrf_64"
+        "o_grfFreeToLsu_1"
       ],
       "instances": [
         "cMutexMerge3_end_74b"
@@ -281,7 +281,7 @@
           "path": "modules/grf.json"
         },
         {
-          "source": "transparent_flows",
+          "source": "interface.event_ports",
           "path": "modules/grf.json"
         }
       ],
@@ -290,16 +290,16 @@
   ],
   "evidence_gaps": [
     {
-      "field": "流终点",
-      "reason": "当前流上下文未提供从cLastFifo1_grf输出的终点信号或目标寄存器，无法确定写事件最终写入哪个寄存器堆端口"
+      "field": "流端点",
+      "reason": "当前流步骤显示cLastFifo1_grf的输出驱动为空，未到达任何模块输出或内部寄存器，流路径不完整"
     },
     {
-      "field": "仲裁优先级",
-      "reason": "未提供cMutexMerge3_end_74b的仲裁策略（固定优先级、轮询或其他），无法确定LSU写事件与其他写源的相对优先级"
+      "field": "赋值依赖",
+      "reason": "相关赋值依赖列表为空，无法确认信号之间的组合逻辑关系"
     },
     {
-      "field": "背压实现",
-      "reason": "接口契约显示存在o_grfFreeToLsu_1空闲信号，但未提供其在内部流中的连接或使用方式，无法确定背压机制的具体实现"
+      "field": "反压机制",
+      "reason": "o_grfFreeToLsu_1的生成逻辑和连接关系未在上下文中提供，无法确定反压路径"
     }
   ]
 }

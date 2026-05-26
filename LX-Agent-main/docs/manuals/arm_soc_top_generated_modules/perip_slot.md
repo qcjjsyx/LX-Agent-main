@@ -1,8 +1,8 @@
 # 模块 `perip_slot`
 
 - 源文件：`rtl/rtl/IONet/GPIO/perip_slot.v`。
-- 职责：AI 推断：外围设备插槽模块，负责在Mesh网络与外围设备之间进行驱动事件和释放事件的流水线缓冲与延迟同步。。
-- 说明：模块通过两个cFifo1实例（cFifo_1和cFifo_2）以及两级延迟单元（delay0、delay1）构成驱动事件链，将来自Mesh的输入驱动事件（i_driveFrmMesh）经过缓冲和延迟后输出到Mesh（o_driveNextToMesh）。释放事件路径则直接通过cFifo_1和cFifo_2的释放端口（o_freeToMesh、i_freeNextFrmMesh）实现。数据路径（data_from、data_to、addr_i、data_i、data_o）表明模块同时承担数据转发功能，但事件与数据的精确耦合关系尚不明确。
+- 职责：AI 推断：外围设备插槽模块，通过两级FIFO和延迟链实现Mesh网络驱动的流水线转发与释放同步。。
+- 说明：模块接收来自Mesh的驱动事件i_driveFrmMesh，经过cFifo_1、delay0、delay1两级延迟后，由cFifo_2转发为o_driveNextToMesh；同时通过i_freeNextFrmMesh和o_freeToMesh实现释放信号的同步回传，构成完整的驱动-释放握手协议。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ perip_slot
 - Payload：未记录。
 - 输出/影响：`o_driveNextToMesh`。
 - 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：手册应重点描述该流作为单向事件管道的拓扑结构、延迟单元的作用以及FIFO的潜在阻塞行为。
+- AI 推断：从Mesh输入事件驱动，经过两级FIFO缓冲和两级延迟单元，最终输出到Mesh的事件传播路径
 
 
 ## 5. 内部组件与 assign 影响
@@ -75,4 +75,4 @@ perip_slot
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `we` | (!we_r) & rise | AI 推断：写使能信号生成逻辑，基于上升沿检测和延迟版本信号产生脉冲。 |
+| `assign_0` | control_path | `we` | (!we_r) & rise | AI 推断：写使能信号，由驱动事件上升沿触发，用于控制数据路径的写入操作。 |

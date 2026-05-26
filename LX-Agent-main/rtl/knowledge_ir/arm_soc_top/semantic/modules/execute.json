@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 9,
+    "count": 12,
     "by_type": {
       "assignment_interpretation": 3,
-      "component_role": 2,
-      "documentation_focus": 1,
-      "interface_intent": 1,
+      "component_role": 3,
+      "documentation_focus": 2,
+      "interface_intent": 2,
       "module_role": 1,
       "structural_responsibility": 1
     }
@@ -63,9 +63,9 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "执行模块是处理器流水线的执行阶段，负责接收来自发射阶段（Launch）的指令，从通用寄存器组（GRF）和加载存储单元（LSU）获取操作数，执行算术逻辑运算，并将结果写回或转发。",
+      "summary": "执行模块是处理器流水线的执行阶段，负责接收来自发射（Launch）、通用寄存器堆（GRF）和加载存储单元（LSU）的指令与数据，完成算术逻辑运算，并将结果写回或转发。",
       "subject": "execute",
-      "explanation": "模块通过事件驱动接口接收来自发射、GRF和LSU的驱动信号，并输出驱动信号到发射、异常处理、GRF和LSU。内部包含大量用于操作数选择、运算执行和结果合并的组件，符合执行阶段的功能定位。",
+      "explanation": "模块通过事件驱动接口接收来自发射、GRF和LSU的请求，并输出事件到发射、异常处理、GRF和LSU。内部包含大量运算单元（加法器、乘法器、移位器等）和数据选择/合并逻辑，表明其核心功能是指令执行。",
       "signals": [
         "i_launchDriveToExecute_1",
         "i_grfDriveToExecute_1",
@@ -76,14 +76,13 @@
         "o_executeDriveToLsu_1"
       ],
       "instances": [
-        "exeFifo2",
-        "executeSplitter",
-        "exeSelector",
         "adder",
         "muller",
         "shifter",
-        "resMutexMerge",
-        "finalWaitMerge"
+        "satQ",
+        "reverse",
+        "exeSelector",
+        "resMutexMerge"
       ],
       "related_flows": [
         "flow_000_execute_i_launchDriveToExecute_1",
@@ -98,7 +97,7 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:module_role:001"
@@ -109,21 +108,21 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "模块接收来自发射阶段的指令数据，解析出操作码、操作数和路径信息，通过多级选择器和运算单元执行，最终将结果合并并分发到目标单元。",
+      "summary": "模块接收解码后的指令操作数和操作码，根据指令类型分发到对应的运算单元，并将运算结果合并后输出。",
       "subject": "指令执行与结果分发",
-      "explanation": "从i_launchDataToExe_207解析出大量控制信号和操作数（w_op1_32, w_op2_32, w_op3_32等），通过executeSplitter和exeSelector分发到不同的运算单元（adder, muller, shifter等），运算结果通过resMutexMerge汇总，再通过finalWaitMerge和ExcSplitter等分发到LSU、异常处理单元和发射阶段。",
+      "explanation": "从i_launchDataToExe_207中解析出操作数（w_op1_32, w_op2_32, w_op3_32）和路径码（w_pathCode_8），通过exeSelector和secondExeSelector等选择器分发到加法、逻辑、移位、乘法等运算单元。运算结果通过resMutexMerge合并，最终通过ExcSplitter和grfSplitter等分发到LSU、异常处理单元和GRF。",
       "signals": [
         "i_launchDataToExe_207",
+        "w_pathCode_8",
         "o_exeToLaunchData_96",
         "o_executeDataToLsu_163",
         "o_exeToExcpData_36",
         "o_executeToGrfData_8"
       ],
       "instances": [
-        "executeSplitter",
         "exeSelector",
+        "secondExeSelector",
         "resMutexMerge",
-        "finalWaitMerge",
         "ExcSplitter",
         "grfSplitter"
       ],
@@ -138,7 +137,7 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:structural_responsibility:001"
@@ -149,36 +148,20 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "操作数准备与转发网络 (rele* 和 rs*Merge/Selector)",
-      "summary": "负责从GRF和LSU获取源操作数（rs1, rs2），并根据释放顺序（rele）进行仲裁和选择，最终将选定的操作数传递给后续的运算单元。",
-      "explanation": "grfResSplitter和lsuDelay0分别接收来自GRF和LSU的驱动事件和数据。rele0Merge/rele1Merge/rele2Merge/rele3Merge及其对应的Selector组件构成了一个四路释放选择网络，用于仲裁来自GRF和LSU的源操作数。rs1Merge和rs2Merge将仲裁后的操作数合并，传递给regMerge。",
+      "subject": "exeSelector",
+      "summary": "主执行选择器，根据路径码将操作数分发到不同的运算单元。",
+      "explanation": "接收来自executeSplitter的68位数据（包含两个32位操作数和4位路径码），根据路径码将数据分发到加法器、乘法器、移位器、逻辑运算单元等。这是指令执行路径的关键分发节点。",
       "signals": [
-        "i_grfDriveToExecute_1",
-        "i_LsuDriveToExe_1",
-        "i_grfToExecuteData_64",
-        "i_lsuToExeData_64",
-        "w_grfRs1Data_32",
-        "w_lsuRs1Data_32",
-        "w_lastRs1Data_32"
+        "w_executeDataToExeSelctor_68",
+        "w_exeSelectorToAddData_64",
+        "w_exeSelectorToMulData_64",
+        "w_exeSelectorToShiftData_64"
       ],
       "instances": [
-        "grfResSplitter",
-        "lsuDelay0",
-        "rele0Merge",
-        "rele1Merge",
-        "rele2Merge",
-        "rele3Merge",
-        "rele0Selector",
-        "rele1Selector",
-        "rele2Selector",
-        "rele3Selector",
-        "rs1Merge",
-        "rs2Merge",
-        "regMerge"
+        "exeSelector"
       ],
       "related_flows": [
-        "flow_001_execute_i_grfDriveToExecute_1",
-        "flow_002_execute_i_LsuDriveToExe_1"
+        "flow_000_execute_i_launchDriveToExecute_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -188,7 +171,7 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:component_role:001"
@@ -199,29 +182,13 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "运算执行单元簇 (adder, muller, shifter, satQ, reverse, and, eor, or)",
-      "summary": "一组并行的功能单元，分别执行加法、乘法、移位、饱和运算、位反转、按位与、按位异或和按位或等不同类型的算术逻辑运算。",
-      "explanation": "这些单元通过exeSelector和secondExeSelector接收操作数，其输出通过各自的Fifo（如addFifo, mulFifo, shiftFifo）进行流水线缓冲，然后通过MutexMerge（如addMutexMerge, resMutexMerge）进行结果仲裁和合并。这表明模块支持多种指令类型的并行执行。",
+      "subject": "resMutexMerge",
+      "summary": "结果互斥合并器，汇集所有运算单元的结果，选择最终结果。",
+      "explanation": "接收来自加法、逻辑、乘法、除法、饱和运算等10个数据源的运算结果，通过互斥选择机制输出最终的64位结果。这是执行阶段结果汇聚的核心节点。",
       "signals": [
-        "w_exeSelectorToAddData_64",
-        "w_exeSelectorToMulData_64",
-        "w_exeSelectorToShiftData_64",
-        "w_addMutexMergeToAddData_128",
         "w_resMutexMergeToFinalWaitMergeData_64"
       ],
       "instances": [
-        "adder",
-        "muller",
-        "shifter",
-        "satQ",
-        "reverse",
-        "andFifo",
-        "eorFifo",
-        "orFifo",
-        "addFifo",
-        "mulFifo",
-        "shiftFifo",
-        "addMutexMerge",
         "resMutexMerge"
       ],
       "related_flows": [
@@ -235,10 +202,48 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:component_role:002"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "subject": "寄存器数据释放路径 (rele0Selector, rele1Selector, rele2Selector, rele3Selector)",
+      "summary": "负责从LSU或GRF返回的数据中选择正确的寄存器写回数据。",
+      "explanation": "每个选择器接收来自LSU或GRF的数据，通过内部反馈机制（w_releXSelectorDriveToMe_1）实现等待，直到数据准备好后释放到rs1Merge或rs2Merge。这实现了寄存器重命名或数据转发功能。",
+      "signals": [
+        "w_lsuRs1Data_32",
+        "w_grfRs1Data_32",
+        "w_lsuRs2Data_32",
+        "w_grfRs2Data_32"
+      ],
+      "instances": [
+        "rele0Selector",
+        "rele1Selector",
+        "rele2Selector",
+        "rele3Selector"
+      ],
+      "related_flows": [
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/execute.v"
+        }
+      ],
+      "id": "semantic:module:execute:component_role:003"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -246,18 +251,15 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "i_launchDataToExe_207 解析",
-      "summary": "将207位宽的发射数据包解析为多个独立的控制信号和操作数，用于后续的指令执行流程。",
-      "explanation": "该赋值将发射阶段传入的宽数据包拆解为操作码、操作数、路径选择、标志位等细粒度信号，是执行阶段指令解码和操作数准备的基础。",
+      "subject": "assign 1 (i_launchDataToExe_207 解包)",
+      "summary": "将207位发射数据包解包为多个控制信号和操作数。",
+      "explanation": "该赋值将发射阶段传来的207位宽数据包分解为指令执行所需的各个字段，包括操作数（w_op1_32, w_op2_32, w_op3_32）、路径码（w_insPath_8）、控制标志（w_load_1, w_writeRd_1等）和立即数等。这是指令解码的关键步骤。",
       "signals": [
         "i_launchDataToExe_207",
         "w_op1_32",
         "w_op2_32",
         "w_op3_32",
-        "w_pathCode_8",
-        "w_pc_32",
-        "w_load_1",
-        "w_writeRd_1"
+        "w_insPath_8"
       ],
       "related_assignments": [
         "1"
@@ -273,7 +275,7 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:assignment_interpretation:001"
@@ -284,9 +286,9 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "o_exeToLaunchData_96 生成",
-      "summary": "将执行结果（64位）和条件标志（nzcv）打包成96位数据，通过旁路路径（ByPath）返回给发射阶段。",
-      "explanation": "该赋值将最终的执行结果r_resMutexMergeToFinalWaitMergeData_64和条件标志w_nzcv_4组合，形成反馈给发射阶段的数据，用于支持数据旁路和条件码更新。",
+      "subject": "assign 53 (o_exeToLaunchData_96 组装)",
+      "summary": "将执行结果和条件码组装成96位数据，通过旁路路径送回发射阶段。",
+      "explanation": "将64位执行结果（r_resMutexMergeToFinalWaitMergeData_64）和4位条件码（w_nzcv_4）拼接成96位数据，通过o_exeByPathDriveToLaunch_1事件驱动送回发射阶段，用于后续指令的依赖解析或预测恢复。",
       "signals": [
         "o_exeToLaunchData_96",
         "r_resMutexMergeToFinalWaitMergeData_64",
@@ -306,7 +308,7 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:assignment_interpretation:002"
@@ -317,9 +319,9 @@
         "type": "module",
         "module": "execute"
       },
-      "subject": "o_exeToExcpData_36 生成",
-      "summary": "将当前PC值和异常编号打包，发送给异常处理单元。",
-      "explanation": "该赋值将w_pc_32和w_excNum_4组合成36位数据，用于向异常处理单元报告指令地址和异常类型。",
+      "subject": "assign 58 (o_exeToExcpData_36 组装)",
+      "summary": "将PC值和异常编号组装成36位异常数据。",
+      "explanation": "将32位当前PC值（w_pc_32）和4位异常编号（w_excNum_4）拼接成36位数据，通过o_exeDriveToExcp_1事件驱动发送到异常处理单元。",
       "signals": [
         "o_exeToExcpData_36",
         "w_pc_32",
@@ -339,7 +341,7 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:assignment_interpretation:003"
@@ -350,19 +352,49 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "模块与外部单元（发射、GRF、LSU、异常处理）之间的通信遵循事件驱动、载荷伴随、释放确认的握手协议。",
-      "subject": "事件-载荷-释放 (Event-Payload-Free) 握手协议",
-      "explanation": "每个输入事件（如i_launchDriveToExecute_1）都伴随一个数据载荷（如i_launchDataToExe_207），并且有一个对应的释放信号（如o_executeFreeToLaunch_1）用于确认处理完成。输出事件（如o_executeDriveToLsu_1）也遵循相同模式。这表明模块采用了一种基于握手的数据流控制机制。",
+      "summary": "从发射阶段接收指令执行请求，包含完整的指令解码信息。",
+      "subject": "发射接口 (i_launchDriveToExecute_1 / i_launchDrive_1)",
+      "explanation": "两个事件输入都携带相同的207位数据载荷（i_launchDataToExe_207），表明可能存在两条不同的发射路径（例如，正常路径和旁路路径）。对应的释放信号为o_executeFreeToLaunch_1，构成完整的请求-应答握手协议。",
       "signals": [
         "i_launchDriveToExecute_1",
+        "i_launchDrive_1",
         "i_launchDataToExe_207",
-        "o_executeFreeToLaunch_1",
-        "o_executeDriveToLsu_1",
-        "o_executeDataToLsu_163",
-        "i_executeFreeFromLsu_1"
+        "o_executeFreeToLaunch_1"
       ],
       "related_payload": [
-        "i_launchDataToExe_207",
+        "i_launchDataToExe_207"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/execute.v"
+        }
+      ],
+      "id": "semantic:module:execute:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "与加载存储单元的双向数据交互接口。",
+      "subject": "LSU接口 (i_LsuDriveToExe_1 / o_executeDriveToLsu_1)",
+      "explanation": "从LSU接收加载返回数据（i_lsuToExeData_64），并向LSU发送存储数据和访存请求（o_executeDataToLsu_163）。释放信号o_lsuFreeFromExecute_1用于通知LSU执行模块已处理完数据。",
+      "signals": [
+        "i_LsuDriveToExe_1",
+        "i_lsuToExeData_64",
+        "o_executeDriveToLsu_1",
+        "o_executeDataToLsu_163",
+        "o_lsuFreeFromExecute_1"
+      ],
+      "related_payload": [
+        "i_lsuToExeData_64",
         "o_executeDataToLsu_163"
       ],
       "doc_priority": "primary",
@@ -373,10 +405,10 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
-      "id": "semantic:module:execute:interface_intent:001"
+      "id": "semantic:module:execute:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -384,25 +416,23 @@
         "type": "module",
         "module": "execute"
       },
-      "summary": "手册应重点描述从指令输入到结果输出的完整数据流路径，特别是操作数准备网络（rele*）和结果合并网络（MutexMerge）的交互逻辑。",
-      "subject": "内部数据流与组件交互",
-      "explanation": "模块内部组件众多，且通过事件驱动和握手信号紧密耦合。理解数据如何从发射接口流入，经过操作数选择、运算单元、结果合并，最终分发到各个输出接口，是理解模块行为的关键。rele*网络和MutexMerge网络是数据流的核心仲裁点。",
+      "summary": "手册应重点描述指令从发射到执行完成的完整数据流和控制流。",
+      "subject": "指令执行流水线",
+      "explanation": "模块内部包含复杂的运算单元选择、数据转发和结果汇聚逻辑。文档应清晰说明指令如何通过exeSelector分发到不同运算单元，以及结果如何通过resMutexMerge汇聚并分发到不同目标。",
       "signals": [
         "i_launchDataToExe_207",
-        "w_lastRs1Data_32",
-        "w_resMutexMergeToFinalWaitMergeData_64",
+        "w_pathCode_8",
+        "o_exeToLaunchData_96",
         "o_executeDataToLsu_163"
       ],
       "instances": [
-        "rele0Selector",
-        "rs1Merge",
+        "exeSelector",
+        "secondExeSelector",
         "resMutexMerge",
-        "finalWaitMerge"
+        "ExcSplitter"
       ],
       "related_flows": [
-        "flow_000_execute_i_launchDriveToExecute_1",
-        "flow_001_execute_i_grfDriveToExecute_1",
-        "flow_002_execute_i_LsuDriveToExe_1"
+        "flow_000_execute_i_launchDriveToExecute_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -412,28 +442,68 @@
           "source": "knowledge_ir/modules/execute.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/execute.json"
+          "source": "rtl/rtl/Execute/execute.v"
         }
       ],
       "id": "semantic:module:execute:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "execute"
+      },
+      "summary": "手册应解释从LSU和GRF返回的数据如何通过释放选择器（releSelector）转发到执行单元。",
+      "subject": "寄存器数据转发机制",
+      "explanation": "模块通过rele0Selector到rele3Selector实现了从LSU和GRF返回数据的等待和选择机制。文档应说明这些选择器如何与rs1Merge和rs2Merge协同工作，实现寄存器数据的正确转发。",
+      "signals": [
+        "w_lsuRs1Data_32",
+        "w_grfRs1Data_32",
+        "w_lsuRs2Data_32",
+        "w_grfRs2Data_32"
+      ],
+      "instances": [
+        "rele0Selector",
+        "rele1Selector",
+        "rele2Selector",
+        "rele3Selector",
+        "rs1Merge",
+        "rs2Merge"
+      ],
+      "related_flows": [
+        "flow_001_execute_i_grfDriveToExecute_1",
+        "flow_002_execute_i_LsuDriveToExe_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/execute.json"
+        },
+        {
+          "source": "rtl/rtl/Execute/execute.v"
+        }
+      ],
+      "id": "semantic:module:execute:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_LsuDriveToExe_1",
-      "reason": "从i_LsuDriveToExe_1出发的事件流未到达任何模块事件输出，其最终去向和影响不明确。"
+      "reason": "从i_LsuDriveToExe_1出发的事件流未到达任何模块事件输出，无法确定其最终影响。"
     },
     {
       "field": "internal_event_flow.i_grfDriveToExecute_1",
-      "reason": "从i_grfDriveToExecute_1出发的事件流未到达任何模块事件输出，其最终去向和影响不明确。"
+      "reason": "从i_grfDriveToExecute_1出发的事件流未到达任何模块事件输出，无法确定其最终影响。"
     },
     {
       "field": "internal_event_flow.i_launchDriveToExecute_1",
-      "reason": "从i_launchDriveToExecute_1出发的事件流未到达任何模块事件输出，其最终去向和影响不明确。"
+      "reason": "从i_launchDriveToExecute_1出发的事件流未到达任何模块事件输出，无法确定其最终影响。"
     },
     {
       "field": "internal_event_flow.i_launchDrive_1",
-      "reason": "从i_launchDrive_1出发的事件流步数为0，其作用和连接关系完全未知。"
+      "reason": "从i_launchDrive_1出发的事件流未到达任何模块事件输出，无法确定其最终影响。"
     }
   ]
 }

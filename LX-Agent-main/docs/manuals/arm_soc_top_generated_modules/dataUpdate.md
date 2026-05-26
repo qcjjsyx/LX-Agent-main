@@ -1,8 +1,8 @@
 # 模块 `dataUpdate`
 
 - 源文件：`rtl/rtl/Lsu/dataUpate.v`。
-- 职责：AI 推断：数据更新模块，负责在 LSU 内部对加载和存储操作进行数据选择、字节对齐、合并，并生成最终的内存访问请求和写回数据。。
-- 说明：该模块接收来自 LSU 的加载/存储请求、内存数据、存储数据以及状态信息，通过内部选择器、FIFO 和合并器流水线，将不同大小和类型的加载数据（lb/lhw/lw/ldw）对齐为写回数据，并将存储数据（sb/sh/sw/sd）转换为内存写请求。其输出包括驱动内存的请求和驱动写回的数据。
+- 职责：AI 推断：数据更新模块，负责将加载数据按类型（lb/lhw/lw/ldw/lwm/lhwm/ldwm）对齐并合并，同时处理存储数据的字节选通和地址偏移，最终向存储器和写回通路输出驱动事件。。
+- 说明：模块接收来自 LSU 的加载/存储请求，通过 dataUpdateSelector 分流，loadSelector 将加载请求分发至 8 个加载 FIFO，storeSelector 将存储请求分发至 4 个存储 FIFO。加载数据经 lbMerge 合并后驱动写回通路，存储数据经 outMerge 合并后驱动存储器接口。
 
 ## 1. 层级位置
 
@@ -113,9 +113,7 @@ dataUpdate
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `w_lbGrfData_32` | i_addrFromPeripheralFlag_1 ? {24'b0,w_lbData_64[7:0]} : (w_lbAddr_32[2:0] == 3'b000 ? w_lbLoa... | AI 推断：根据地址和外围标志，从 64 位内存数据中提取并符号扩展一个字节的加载数据。 |
-| `assign_4` | control_path | `w_lwGrfData_32` | i_addrFromPeripheralFlag_1 ? w_lwData_64[31:0] : (w_lwMisaligned_1 ? (w_lwAddr_32[2:0] == 3'b... | AI 推断：根据地址、外围标志和对齐情况，从 64 位内存数据中提取并组合一个字的加载数据。 |
+| `assign_1` | control_path | `w_lbGrfData_32` | i_addrFromPeripheralFlag_1 ? {24'b0,w_lbData_64[7:0]} : (w_lbAddr_32[2:0] == 3'b000 ? w_lbLoa... | AI 推断：根据地址和符号标志从 64 位存储器数据中提取并符号扩展/零扩展一个字节。 |
+| `assign_4` | control_path | `w_lwGrfData_32` | i_addrFromPeripheralFlag_1 ? w_lwData_64[31:0] : (w_lwMisaligned_1 ? (w_lwAddr_32[2:0] == 3'b... | AI 推断：根据地址、未对齐标志和外围设备标志从 64 位存储器数据中提取并组合一个字。 |
 | `assign_10` | control_path | `w_storeValid_4` | i_stateValid_12[3:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_12` | control_path | `w_swMemWen_8` | w_swMemAddr_32[2:0] == 3'b100 ? 8'b0000_0000 : w_swMemAddr_32[2:0] == 3'b101 ? 8'b0000_0001 :... | AI 推断：根据存储地址的低 3 位，生成 sw 存储指令的字节写使能。 |
-| `assign_16` | data_path | `w_swMemData_64` | w_swMemAddr_32[2:0] == 3'b100 ? 64'b0: w_swMemAddr_32[2:0] == 3'b101 ? {56'b0,w_storeData_64[... | AI 推断：根据存储地址的低 3 位，将 32 位存储数据放置到 64 位内存数据总线的正确字节位置。 |
 | `assign_0` | control_path | `w_loadValid_8` | i_stateValid_12[11:4] | 证据不足：No Semantic Layer assignment interpretation is available. |

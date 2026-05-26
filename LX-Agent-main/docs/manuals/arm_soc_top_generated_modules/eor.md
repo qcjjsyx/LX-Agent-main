@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/Execute/eor.v`。
 - 职责：AI 推断：执行按位异或运算的组合逻辑模块。
-- 说明：模块仅包含一个组合赋值语句 result = oprand1 ^ oprand2，无时序逻辑、无内部状态、无控制信号，表明其纯粹是一个数据通路中的按位异或运算单元。
+- 说明：模块通过组合赋值 result = oprand1 ^ oprand2 实现两个32位操作数的按位异或，无时钟或控制信号介入，属于纯组合数据通路单元
 
 ## 1. 层级位置
 
@@ -50,4 +50,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `result` | oprand1^oprand2 | AI 推断：将两个输入操作数按位异或的结果直接驱动到输出端口 |
+| `assign_0` | data_path | `result` | oprand1^oprand2 | AI 推断：组合赋值实现异或运算，无时序或控制依赖 |

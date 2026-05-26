@@ -96,8 +96,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "入栈数据合并与选择模块，负责将来自RGRF和RPSR的驱动事件及数据合并，并依据选择逻辑输出到SPDec或回送至RGRF/RPSR。",
-      "explanation": "模块通过dataMerge合并来自RGRF和RPSR的驱动事件与数据，生成224位栈数据；再通过inStackSele和dataSpli进行选择分发，最终输出到SPDec或回送至RGRF/RPSR。同时管理多个自由信号以协调模块间握手。",
+      "value": "入栈数据打包与地址计算模块，负责将来自RGRF和RPSR的寄存器数据与PC值合并，并基于SP计算四个入栈槽位的地址，最终通过选择器输出一组96位数据（64位数据+32位地址）。",
+      "explanation": "模块接收来自RGRF和RPSR的驱动事件，通过dataMerge（WaitMerge）将192位GRF数据和32位PSR数据合并为224位栈数据，再通过assign将PC值与栈数据拼接形成四个64位数据块，同时基于SP计算四个递减的32位地址。最终通过多路选择器（由w_inNum_2选择）输出一组96位数据（64位数据+32位地址）。模块还包含inStackMerge（MutexMerge）和inStackSele（SelSplit）用于驱动事件的选择与合并，以及dataSpli（SelSplit）用于将输入驱动分发到RGRF和RPSR的输出驱动。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -108,11 +108,10 @@
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
-        "o_driveFromSPDec",
-        "o_driveToRGRF_1",
-        "o_driveToRPSR_1",
+        "i_SP_32",
         "i_grfData_192",
         "i_psrData_32",
+        "i_pc_32",
         "o_data_96",
         "o_SP_32"
       ],
@@ -139,13 +138,16 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/inStack.json"
+        },
+        {
+          "source": "rtl/rtl/int/inStack.v"
         }
       ]
     },
     "responsibility_claims": [
       {
-        "value": "入栈数据合并与选择模块，负责将来自RGRF和RPSR的驱动事件及数据合并，并依据选择逻辑输出到SPDec或回送至RGRF/RPSR。",
-        "explanation": "模块通过dataMerge合并来自RGRF和RPSR的驱动事件与数据，生成224位栈数据；再通过inStackSele和dataSpli进行选择分发，最终输出到SPDec或回送至RGRF/RPSR。同时管理多个自由信号以协调模块间握手。",
+        "value": "入栈数据打包与地址计算模块，负责将来自RGRF和RPSR的寄存器数据与PC值合并，并基于SP计算四个入栈槽位的地址，最终通过选择器输出一组96位数据（64位数据+32位地址）。",
+        "explanation": "模块接收来自RGRF和RPSR的驱动事件，通过dataMerge（WaitMerge）将192位GRF数据和32位PSR数据合并为224位栈数据，再通过assign将PC值与栈数据拼接形成四个64位数据块，同时基于SP计算四个递减的32位地址。最终通过多路选择器（由w_inNum_2选择）输出一组96位数据（64位数据+32位地址）。模块还包含inStackMerge（MutexMerge）和inStackSele（SelSplit）用于驱动事件的选择与合并，以及dataSpli（SelSplit）用于将输入驱动分发到RGRF和RPSR的输出驱动。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -156,11 +158,10 @@
         "signals": [
           "i_driveFromRGRF_1",
           "i_driveFromRPSR_1",
-          "o_driveFromSPDec",
-          "o_driveToRGRF_1",
-          "o_driveToRPSR_1",
+          "i_SP_32",
           "i_grfData_192",
           "i_psrData_32",
+          "i_pc_32",
           "o_data_96",
           "o_SP_32"
         ],
@@ -187,12 +188,15 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
       {
-        "value": "将来自RGRF和RPSR的驱动事件与数据合并为224位栈数据，然后根据选择逻辑输出96位数据（64位数据+32位地址）到外部，并更新SP值。",
-        "explanation": "dataMerge合并i_grfData_192和i_psrData_32为w_stackData_224；assign 0-3从w_stackData_224提取4个64位数据块；assign 4-7计算4个地址（基于i_SP_32递减）；assign 10根据w_inNum_2选择一组64位数据+32位地址输出为o_data_96；assign 11将r_SP_32输出为o_SP_32。",
+        "value": "将输入的GRF数据、PSR数据和PC值打包成四个64位数据块，并基于SP计算四个递减的32位地址，最终通过选择器输出一组96位数据。",
+        "explanation": "通过assign 0-3将224位栈数据（来自dataMerge）拆分为四个64位数据块（w_inData0_64至w_inData3_64），其中w_inData0_64由PC值与栈数据高位拼接而成。通过assign 4-7基于SP计算四个递减地址（SP-8, SP-16, SP-24, SP-32）。assign 10通过w_inNum_2选择输出一组96位数据（64位数据+32位地址）。assign 11将内部寄存器r_SP_32输出为o_SP_32。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -201,7 +205,6 @@
         "semantic_claim_id": "semantic:module:inStack:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "w_stackData_224",
           "w_inData0_64",
           "w_inData1_64",
           "w_inData2_64",
@@ -212,8 +215,7 @@
           "w_inData3Addr_32",
           "w_inNum_2",
           "o_data_96",
-          "o_SP_32",
-          "r_SP_32"
+          "o_SP_32"
         ],
         "instances": [
           "dataMerge"
@@ -234,14 +236,17 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       }
     ],
     "documentation_focus": [
       {
-        "value": "文档应重点描述从RGRF/RPSR驱动事件到数据合并、选择输出到SPDec或回送的全流程。",
-        "explanation": "模块核心功能是合并RGRF和RPSR的入栈请求，生成224位栈数据，然后根据选择逻辑输出96位数据到SPDec或回送至RGRF/RPSR。dataMerge、dataSpli、inStackMerge、inStackSele的协作关系是理解模块的关键。",
+        "value": "文档应重点描述数据打包过程（PC+GRF+PSR合并为四个64位数据块）和地址计算（基于SP递减8字节）。",
+        "explanation": "这是模块的核心功能，通过assign 0-7和10实现。数据打包将PC值与栈数据拼接，地址计算基于SP生成四个递减地址，最终通过选择器输出。这些逻辑直接决定了入栈数据的格式和存储位置。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -250,15 +255,65 @@
         "semantic_claim_id": "semantic:module:inStack:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
+          "w_inData0_64",
+          "w_inData1_64",
+          "w_inData2_64",
+          "w_inData3_64",
+          "w_inData0Addr_32",
+          "w_inData1Addr_32",
+          "w_inData2Addr_32",
+          "w_inData3Addr_32",
+          "o_data_96"
+        ],
+        "instances": [
+          "dataMerge"
+        ],
+        "related_flows": [
+          "flow_000_inStack_i_driveFromRGRF_1",
+          "flow_001_inStack_i_driveFromRPSR_1"
+        ],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:inStack:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/inStack.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
+          }
+        ]
+      },
+      {
+        "value": "文档应强调驱动事件与释放信号的配对关系，以及组件间的驱动事件流。",
+        "explanation": "模块内部通过驱动事件和释放信号实现流控，dataMerge、dataSpli、inStackMerge和inStackSele之间的驱动事件连接形成了完整的请求-释放握手路径。理解这些事件流对于正确使用模块至关重要。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:inStack:documentation_focus:002",
+        "doc_priority": "primary",
+        "signals": [
           "i_driveFromRGRF_1",
           "i_driveFromRPSR_1",
-          "i_grfData_192",
-          "i_psrData_32",
-          "o_data_96",
-          "o_SP_32",
           "o_driveFromSPDec",
           "o_driveToRGRF_1",
-          "o_driveToRPSR_1"
+          "o_driveToRPSR_1",
+          "i_freeFromDR_1",
+          "i_freeFromRGRF_1",
+          "i_freeFromRPSR_1",
+          "i_freeFromSPDec",
+          "o_freeFromInStack",
+          "o_freeFrominStackSele_1",
+          "o_freeToRGRF_1",
+          "o_freeToRPSR_1"
         ],
         "instances": [
           "dataMerge",
@@ -282,6 +337,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       }
@@ -501,21 +559,19 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_inStack_i_driveFromRGRF_1.json",
       "reader_takeaway": {
-        "value": "最终手册应强调该流无明确端点，需RTL源码确认",
-        "explanation": "当前上下文显示该流未到达任何模块输出或已知内部端点，仅终止于w_inStackDriToDR_1。手册应说明该流可能继续传播到下游模块或终止于内部逻辑，并建议查阅RTL源码确认。",
+        "value": "该流无明确数据载荷，可能为纯控制事件流",
+        "explanation": "接口载荷契约显示i_driveFromRGRF_1的载荷列表为空，表明该事件可能不携带数据，仅作为控制信号传递。流经dataMerge和inStackMerge时，可能仅传递事件有效性，而不涉及数据路径。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "w_inStackDriToDR_1"
+          "i_driveFromRGRF_1"
         ],
-        "instances": [
-          "inStackMerge"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -526,14 +582,48 @@
         ],
         "semantic_evidence": [
           {
-            "source": "flow.warnings",
-            "path": "knowledge_ir/modules/inStack.json"
+            "source": "interface_payload_contracts",
+            "path": "modules/inStack.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "来自RGRF的驱动事件流，经过两级合并器后形成内部堆栈写入请求",
-            "explanation": "该流从模块输入端口i_driveFromRGRF_1发起，首先进入dataMerge（cWaitMerge2_224b_int）与来自RPSR的驱动事件合并，然后通过w_dataMerDriveToInMer_1进入inStackMerge（cMutexMerge2_1b）与来自inStackSele的驱动事件进行互斥合并，最终输出w_inStackDriToDR_1。流中无明确端点，表明该流可能终止于内部逻辑或需要进一步追踪。",
+            "value": "最终手册应强调该流无明确端点，需通过RTL源码确认完整路径",
+            "explanation": "当前流上下文警告“no module event output reached from i_driveFromRGRF_1”，表明该流在模块内部未追踪到最终输出。手册应说明该流可能为内部中间路径，或需要结合其他流（如inStackSele相关流）才能形成完整事件链。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "w_inStackDriToDR_1"
+            ],
+            "instances": [
+              "dataMerge",
+              "inStackMerge"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "8"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
+              "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "flow.warnings",
+                "path": "modules/inStack.json"
+              }
+            ]
+          },
+          {
+            "value": "来自RGRF的驱动事件流，经过两级合并器后输出到下游",
+            "explanation": "该流从模块输入端口i_driveFromRGRF_1发起，首先进入dataMerge（cWaitMerge2_224b_int）与来自RPSR的驱动事件合并，然后通过w_dataMerDriveToInMer_1进入inStackMerge（cMutexMerge2_1b）与来自inStackSele的驱动事件进行互斥合并，最终输出为w_inStackDriToDR_1。流中无明确端点，表明该流可能为内部事件传递路径的一部分。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -552,7 +642,7 @@
             ],
             "related_flows": [],
             "related_assignments": [
-              "assign 8"
+              "8"
             ],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
@@ -563,26 +653,25 @@
             "semantic_evidence": [
               {
                 "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/inStack.json"
+                "path": "modules/inStack.json"
               },
               {
                 "source": "transparent_flows",
-                "path": "knowledge_ir/modules/inStack.json"
+                "path": "modules/inStack.json"
               }
             ]
           },
           {
-            "value": "该驱动事件无明确数据载荷，可能为纯控制信号",
-            "explanation": "接口载荷契约显示i_driveFromRGRF_1的payloads列表为空，表明该事件可能不携带数据，仅作为控制触发信号。其free信号为o_freeToRGRF_1，可能用于背压或完成指示。",
+            "value": "可能存在反压信号，但当前证据不足以确认其与流的直接关系",
+            "explanation": "接口载荷契约显示i_driveFromRGRF_1关联了空闲信号o_freeToRGRF_1，表明可能存在反压机制。但当前流上下文未提供该信号在流中的具体连接或使用方式，无法确定其是否直接作用于dataMerge或inStackMerge的传播。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:data_control_effect:001",
+            "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
-              "i_driveFromRGRF_1",
               "o_freeToRGRF_1"
             ],
             "instances": [],
@@ -597,39 +686,7 @@
             "semantic_evidence": [
               {
                 "source": "interface_payload_contracts",
-                "path": "knowledge_ir/modules/inStack.json"
-              }
-            ]
-          },
-          {
-            "value": "该free信号可能表示RGRF驱动事件的完成或背压状态",
-            "explanation": "接口载荷契约中i_driveFromRGRF_1关联了free信号o_freeToRGRF_1，但无进一步证据说明其具体语义。可能用于指示dataMerge是否准备好接收新事件，或表示事件处理完成。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:completion_backpressure:001",
-            "doc_priority": "reference",
-            "signals": [
-              "i_driveFromRGRF_1",
-              "o_freeToRGRF_1"
-            ],
-            "instances": [
-              "dataMerge"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
-              "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface_payload_contracts",
-                "path": "knowledge_ir/modules/inStack.json"
+                "path": "modules/inStack.json"
               }
             ]
           }
@@ -648,20 +705,22 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_inStack_i_driveFromRPSR_1.json",
       "reader_takeaway": {
-        "value": "该驱动事件无关联数据负载，仅作为控制事件传播",
-        "explanation": "接口负载契约显示i_driveFromRPSR_1的payloads为空，表明该事件不携带数据负载，仅作为纯控制信号驱动内部合并逻辑。其free信号o_freeToRPSR_1可能用于背压控制。",
+        "value": "最终手册应强调该流程未到达模块输出端点，可能内部终止或需要进一步追踪",
+        "explanation": "流程上下文中明确警告\"no module event output reached from i_driveFromRPSR_1\"，且endpoints为空。这表明该驱动事件在inStackMerge输出后未连接到任何模块输出端口，可能用于内部状态更新或控制逻辑。手册应说明这一限制，并建议通过RTL源码审查确认实际终点。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_driveFromRPSR_1",
-          "o_freeToRPSR_1"
+          "w_inStackDriToDR_1"
         ],
-        "instances": [],
+        "instances": [
+          "dataMerge",
+          "inStackMerge"
+        ],
         "related_flows": [],
         "related_assignments": [
           "8"
@@ -674,54 +733,14 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/inStack.json",
-            "path": "interface_payload_contracts"
+            "source": "flow.warnings",
+            "path": "knowledge_ir/modules/inStack.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "文档应强调该流在模块内部终止，未到达输出端点，并说明两级合并器的语义差异",
-            "explanation": "该流的关键特征是：1) 从输入到内部合并后未连接到模块输出，可能用于内部状态更新或作为其他流的子路径；2) dataMerge(WaitMerge)和inStackMerge(MutexMerge)具有不同的合并语义，文档应解释其行为差异；3) 需要RTL源码确认w_inStackDriToDR_1的最终去向。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFromRPSR_1",
-              "w_dataMerDriveToInMer_1",
-              "w_inStackDriToDR_1"
-            ],
-            "instances": [
-              "dataMerge",
-              "inStackMerge"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "8"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:inStack:flow:flow_001_inStack_i_driveFromRPSR_1",
-              "ev:inStack:semantic_flow:flow_001_inStack_i_driveFromRPSR_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/inStack.json",
-                "path": "internal_event_flow"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/inStack.json",
-                "path": "flow_graph.assignment_dependencies"
-              }
-            ]
-          },
-          {
-            "value": "来自RPSR的驱动事件通过两级合并器(dataMerge和inStackMerge)向内部堆栈合并，但最终未到达模块输出端点",
-            "explanation": "该流从模块输入i_driveFromRPSR_1开始，首先进入dataMerge(WaitMerge类型)与来自RGRF的驱动事件合并，输出w_dataMerDriveToInMer_1；然后进入inStackMerge(MutexMerge类型)与来自inStackSele的驱动事件合并，输出w_inStackDriToDR_1。但上下文未显示该输出连接到任何模块输出端点，流在模块内部终止。",
+            "value": "来自RPSR的驱动事件通过两级合并器(dataMerge和inStackMerge)向内部堆栈传递，但最终未到达模块输出端点",
+            "explanation": "该流程从模块输入i_driveFromRPSR_1开始，首先进入dataMerge(与来自RGRF的驱动事件合并)，然后通过w_dataMerDriveToInMer_1进入inStackMerge(与来自inStackSele的驱动事件合并)，输出为w_inStackDriToDR_1。但流程上下文中未列出任何模块输出端点，表明该事件流可能在内部终止或需要进一步追踪。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -750,32 +769,30 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/inStack.json",
-                "path": "internal_event_flow"
+                "source": "instances.connections",
+                "path": "parser_pipeline_rtl/modules/inStack.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/inStack.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "transparent_flows",
+                "path": "knowledge_ir/modules/inStack.json"
               }
             ]
           },
           {
-            "value": "该free信号可能用于向RPSR指示模块可接收新事件，但具体机制不明确",
-            "explanation": "接口负载契约显示i_driveFromRPSR_1关联free信号o_freeToRPSR_1，表明存在背压机制。但上下文未提供该free信号的驱动逻辑或与内部合并器的连接关系，无法确定其与dataMerge或inStackMerge的阻塞关系。",
+            "value": "输入驱动事件i_driveFromRPSR_1与空闲信号o_freeToRPSR_1构成控制耦合，但具体关系不明确",
+            "explanation": "接口负载契约显示i_driveFromRPSR_1的free_signal为o_freeToRPSR_1，表明该输入事件可能受空闲信号控制。但契约置信度为low，且无payload信号关联，无法确定是握手协议、背压机制还是其他控制关系。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:completion_backpressure:001",
+            "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:data_control_effect:001",
             "doc_priority": "secondary",
             "signals": [
-              "o_freeToRPSR_1",
-              "i_driveFromRPSR_1"
+              "i_driveFromRPSR_1",
+              "o_freeToRPSR_1"
             ],
-            "instances": [
-              "(none)"
-            ],
+            "instances": [],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -786,8 +803,42 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/inStack.json",
-                "path": "interface_payload_contracts"
+                "source": "interface.event_ports",
+                "path": "knowledge_ir/modules/inStack.json"
+              },
+              {
+                "source": "interface.data_ports",
+                "path": "knowledge_ir/modules/inStack.json"
+              }
+            ]
+          },
+          {
+            "value": "空闲信号o_freeToRPSR_1可能表示背压或就绪状态，但无法确定具体语义",
+            "explanation": "接口负载契约将o_freeToRPSR_1列为i_driveFromRPSR_1的free_signal，但未提供握手协议细节。可能表示RPSR可以发送新事件(空闲)，或表示inStack可以接收新事件(就绪)。由于缺乏payload和具体协议信息，无法做出更精确的推断。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:completion_backpressure:001",
+            "doc_priority": "reference",
+            "signals": [
+              "i_driveFromRPSR_1",
+              "o_freeToRPSR_1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:inStack:flow:flow_001_inStack_i_driveFromRPSR_1",
+              "ev:inStack:semantic_flow:flow_001_inStack_i_driveFromRPSR_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports",
+                "path": "knowledge_ir/modules/inStack.json"
               }
             ]
           }
@@ -821,8 +872,8 @@
       ],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "等待合并器，将来自RGRF和RPSR的驱动事件与数据合并为224位栈数据。",
-        "explanation": "dataMerge（cWaitMerge2_224b_int）接收i_driveFromRGRF_1和i_driveFromRPSR_1作为输入事件，i_grfData_192和i_psrData_32作为输入数据，合并后输出w_stackData_224和驱动事件w_dataMerDriveToInMer_1。这是入栈数据流的核心合并点。",
+        "value": "作为WaitMerge，将来自RGRF和RPSR的驱动事件与数据合并，输出224位栈数据。",
+        "explanation": "dataMerge（cWaitMerge2_224b_int）接收来自RGRF的192位数据和来自RPSR的32位数据，以及对应的驱动事件i_driveFromRGRF_1和i_driveFromRPSR_1。当两个事件都到达后，将数据合并为224位栈数据（w_stackData_224）并输出驱动事件w_dataMerDriveToInMer_1。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -857,6 +908,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -877,8 +931,8 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "互斥合并器，将来自dataMerge和inStackSele的驱动事件合并为一个输出。",
-        "explanation": "inStackMerge（cMutexMerge2_1b）接收w_dataMerDriveToInMer_1和w_inStackDri_1作为输入事件，合并后输出到dataSpli。同时接收i_freeFromDR_1作为自由信号。",
+        "value": "作为MutexMerge，仲裁来自dataMerge和inStackSele的驱动事件，确保互斥访问。",
+        "explanation": "inStackMerge（cMutexMerge2_1b）接收来自dataMerge的驱动事件w_dataMerDriveToInMer_1和来自inStackSele的驱动事件w_inStackDri_1，进行互斥仲裁后输出。同时接收来自DR的释放信号i_freeFromDR_1。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -910,6 +964,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -933,22 +990,22 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "选择分裂器，根据输入数据i_inOutDriToDataSpli_1将驱动事件分发到RGRF或RPSR。",
-        "explanation": "dataSpli（cSplitter2_1b_Nodata）接收i_inOutDriToDataSpli_1作为选择信号，将来自inStackMerge的驱动事件分发到o_driveToRGRF_1或o_driveToRPSR_1。同时管理自由信号o_freeFromInStack和i_freeFromRGRF_1/i_freeFromRPSR_1。",
+        "value": "作为SelSplit，将输入驱动事件分发到RGRF和RPSR的输出驱动路径。",
+        "explanation": "dataSpli（cSplitter2_1b_Nodata）接收输入驱动i_inOutDriToDataSpli_1，并根据选择将其分发为o_driveToRGRF_1和o_driveToRPSR_1两个输出驱动事件。同时接收来自RGRF和RPSR的释放信号i_freeFromRGRF_1和i_freeFromRPSR_1，并输出释放信号o_freeFromInStack。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:inStack:component_role:002",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "i_inOutDriToDataSpli_1",
           "o_driveToRGRF_1",
           "o_driveToRPSR_1",
-          "o_freeFromInStack",
           "i_freeFromRGRF_1",
-          "i_freeFromRPSR_1"
+          "i_freeFromRPSR_1",
+          "o_freeFromInStack"
         ],
         "instances": [
           "dataSpli"
@@ -969,6 +1026,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -992,14 +1052,14 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。",
-        "explanation": "assign 4-7从i_SP_32减去固定偏移量（8,16,24,32）生成四个32位地址，用于后续输出选择。这表明入栈操作将数据存储到SP递减的连续地址空间。",
+        "value": "基于SP计算四个递减的入栈地址，间隔8字节。",
+        "explanation": "assign 4-7分别计算四个入栈槽位的地址：SP-8, SP-16, SP-24, SP-32。地址间隔为8字节（64位），与64位数据块大小一致，表明每个槽位存储一个64位数据块。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:001",
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
           "i_SP_32",
@@ -1030,6 +1090,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -1056,14 +1119,14 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。",
-        "explanation": "assign 4-7从i_SP_32减去固定偏移量（8,16,24,32）生成四个32位地址，用于后续输出选择。这表明入栈操作将数据存储到SP递减的连续地址空间。",
+        "value": "基于SP计算四个递减的入栈地址，间隔8字节。",
+        "explanation": "assign 4-7分别计算四个入栈槽位的地址：SP-8, SP-16, SP-24, SP-32。地址间隔为8字节（64位），与64位数据块大小一致，表明每个槽位存储一个64位数据块。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:001",
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
           "i_SP_32",
@@ -1094,6 +1157,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -1120,14 +1186,14 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。",
-        "explanation": "assign 4-7从i_SP_32减去固定偏移量（8,16,24,32）生成四个32位地址，用于后续输出选择。这表明入栈操作将数据存储到SP递减的连续地址空间。",
+        "value": "基于SP计算四个递减的入栈地址，间隔8字节。",
+        "explanation": "assign 4-7分别计算四个入栈槽位的地址：SP-8, SP-16, SP-24, SP-32。地址间隔为8字节（64位），与64位数据块大小一致，表明每个槽位存储一个64位数据块。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:001",
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
           "i_SP_32",
@@ -1158,6 +1224,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -1184,14 +1253,14 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。",
-        "explanation": "assign 4-7从i_SP_32减去固定偏移量（8,16,24,32）生成四个32位地址，用于后续输出选择。这表明入栈操作将数据存储到SP递减的连续地址空间。",
+        "value": "基于SP计算四个递减的入栈地址，间隔8字节。",
+        "explanation": "assign 4-7分别计算四个入栈槽位的地址：SP-8, SP-16, SP-24, SP-32。地址间隔为8字节（64位），与64位数据块大小一致，表明每个槽位存储一个64位数据块。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:001",
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:002",
         "doc_priority": "primary",
         "signals": [
           "i_SP_32",
@@ -1222,6 +1291,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -1256,14 +1328,14 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "根据w_inNum_2选择一组64位数据+32位地址输出，实现入栈数据的选择输出。",
-        "explanation": "assign 10使用多路选择器，根据w_inNum_2的值（00/01/10/11）从四组数据中选出一组，每组包含64位数据（w_inDataX_64）和32位地址（w_inDataXAddr_32），拼接为96位输出。这是入栈数据输出的核心选择逻辑。",
+        "value": "通过多路选择器输出一组96位数据（64位数据+32位地址）。",
+        "explanation": "assign 10根据w_inNum_2的值从四个数据块中选择一组输出。每个数据块由64位数据（w_inDataX_64）和32位地址（w_inDataXAddr_32）拼接而成，形成96位输出。w_inNum_2的选择逻辑表明模块支持四个入栈槽位。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:003",
         "doc_priority": "primary",
         "signals": [
           "w_inNum_2",
@@ -1296,6 +1368,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -1353,17 +1428,49 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将PC值与栈数据高位拼接，形成第一个入栈数据块。",
+        "explanation": "assign 0将32位PC值（i_pc_32）与224位栈数据的高32位（w_stackData_224[223:192]）拼接为64位数据块w_inData0_64。这表明PC值被作为入栈数据的一部分，与GRF/PSR数据一起打包。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_pc_32",
+          "w_stackData_224",
+          "w_inData0_64"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_inStack_i_driveFromRGRF_1",
+          "flow_001_inStack_i_driveFromRPSR_1"
+        ],
+        "related_assignments": [
+          "0"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:inStack:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/inStack.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:inStack:assignments"
@@ -1474,14 +1581,14 @@
       "impact_area": "control_path",
       "doc_priority": "secondary",
       "interpretation": {
-        "value": "合并两个驱动事件源，用于控制入栈数据项计数。",
-        "explanation": "assign 8将w_inStackDri_1和w_inStackSeleToMe_1进行或运算，生成w_inNumPose_1。该信号可能用于触发w_inNum_2的更新，以控制o_data_96的选择。",
+        "value": "合并两个驱动事件，用于触发地址计算或选择逻辑。",
+        "explanation": "assign 8将来自inStackSele的驱动事件w_inStackDri_1和w_inStackSeleToMe_1进行或运算，生成w_inNumPose_1。该信号可能用于触发w_inNum_2的更新或地址计算逻辑。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:003",
+        "semantic_claim_id": "semantic:module:inStack:assignment_interpretation:004",
         "doc_priority": "secondary",
         "signals": [
           "w_inStackDri_1",
@@ -1507,6 +1614,9 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/inStack.json"
+          },
+          {
+            "source": "rtl/rtl/int/inStack.v"
           }
         ]
       },
@@ -1555,7 +1665,7 @@
       "signal": "i_driveFromRGRF_1",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 26,
+      "importance_score": 30,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1572,7 +1682,7 @@
       "signal": "i_driveFromRPSR_1",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 26,
+      "importance_score": 30,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1589,22 +1699,6 @@
       "signal": "o_data_96",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 22,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_driveToRGRF_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
       "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -1618,34 +1712,18 @@
       ]
     },
     {
-      "signal": "o_driveToRPSR_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_driveFromSPDec",
-      "kind": "interface_or_inferred",
-      "width_text": "",
+      "signal": "w_inData0_64",
+      "kind": "wire",
+      "width_text": "[63:0]",
       "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
+        "parse",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:inStack:interface",
+        "ev:inStack:parser_module",
         "ev:inStack:semantic_module"
       ]
     },
@@ -1746,22 +1824,6 @@
       ]
     },
     {
-      "signal": "o_SP_32",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
       "signal": "w_dataMerDriveToInMer_1",
       "kind": "wire",
       "width_text": "1",
@@ -1776,22 +1838,6 @@
       "evidence_refs": [
         "ev:inStack:parser_module",
         "ev:inStack:knowledge_module",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_inData0_64",
-      "kind": "wire",
-      "width_text": "[63:0]",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:parser_module",
         "ev:inStack:semantic_module"
       ]
     },
@@ -1844,7 +1890,87 @@
       ]
     },
     {
+      "signal": "o_driveToRGRF_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_driveToRPSR_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
       "signal": "i_freeFromRGRF_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeFromRPSR_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeFromSPDec",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_SP_32",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 10,
@@ -1860,7 +1986,23 @@
       ]
     },
     {
-      "signal": "i_freeFromRPSR_1",
+      "signal": "i_pc_32",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_SP_32",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 10,
@@ -1894,18 +2036,50 @@
       ]
     },
     {
-      "signal": "w_stackData_224",
-      "kind": "wire",
-      "width_text": "[223:0]",
-      "importance_score": 8,
+      "signal": "o_freeToRGRF_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "parse",
+        "knowledge_ir",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:inStack:parser_module",
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeToRPSR_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_driveFromSPDec",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 10,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
         "ev:inStack:semantic_module"
       ]
     },
@@ -1926,7 +2100,55 @@
       ]
     },
     {
-      "signal": "i_freeFromSPDec",
+      "signal": "w_stackData_224",
+      "kind": "wire",
+      "width_text": "[223:0]",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:parser_module",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeFromInStack",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeFromDR_1",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:inStack:interface",
+        "ev:inStack:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeFrominStackSele_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 8,
@@ -1943,102 +2165,6 @@
     },
     {
       "signal": "i_inOutDriToDataSpli_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeFromInStack",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_SP_32",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToRGRF_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToRPSR_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_SP_32",
-      "kind": "reg",
-      "width_text": "[31:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:parser_module",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_freeFromDR_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 4,
@@ -2070,18 +2196,18 @@
       ]
     },
     {
-      "signal": "o_freeFrominStackSele_1",
-      "kind": "interface_or_inferred",
-      "width_text": "",
+      "signal": "w_inStackSeleToMe_1",
+      "kind": "wire",
+      "width_text": "1",
       "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
+        "parse",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:inStack:interface",
+        "ev:inStack:parser_module",
         "ev:inStack:semantic_module"
       ]
     },
@@ -2102,22 +2228,6 @@
       ]
     },
     {
-      "signal": "w_inStackSeleToMe_1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:inStack:parser_module",
-        "ev:inStack:semantic_module"
-      ]
-    },
-    {
       "signal": "w_inNumPose_1",
       "kind": "wire",
       "width_text": "1",
@@ -2134,7 +2244,7 @@
       ]
     },
     {
-      "signal": "i_pc_32",
+      "signal": "o_w_inStackDriToDR_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -2149,20 +2259,6 @@
     },
     {
       "signal": "rst",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:inStack:interface"
-      ]
-    },
-    {
-      "signal": "o_w_inStackDriToDR_1",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -2386,8 +2482,8 @@
       "review_needed": true
     },
     "purpose": {
-      "value": "入栈数据合并与选择模块，负责将来自RGRF和RPSR的驱动事件及数据合并，并依据选择逻辑输出到SPDec或回送至RGRF/RPSR。",
-      "explanation": "模块通过dataMerge合并来自RGRF和RPSR的驱动事件与数据，生成224位栈数据；再通过inStackSele和dataSpli进行选择分发，最终输出到SPDec或回送至RGRF/RPSR。同时管理多个自由信号以协调模块间握手。",
+      "value": "入栈数据打包与地址计算模块，负责将来自RGRF和RPSR的寄存器数据与PC值合并，并基于SP计算四个入栈槽位的地址，最终通过选择器输出一组96位数据（64位数据+32位地址）。",
+      "explanation": "模块接收来自RGRF和RPSR的驱动事件，通过dataMerge（WaitMerge）将192位GRF数据和32位PSR数据合并为224位栈数据，再通过assign将PC值与栈数据拼接形成四个64位数据块，同时基于SP计算四个递减的32位地址。最终通过多路选择器（由w_inNum_2选择）输出一组96位数据（64位数据+32位地址）。模块还包含inStackMerge（MutexMerge）和inStackSele（SelSplit）用于驱动事件的选择与合并，以及dataSpli（SelSplit）用于将输入驱动分发到RGRF和RPSR的输出驱动。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -2398,11 +2494,10 @@
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
-        "o_driveFromSPDec",
-        "o_driveToRGRF_1",
-        "o_driveToRPSR_1",
+        "i_SP_32",
         "i_grfData_192",
         "i_psrData_32",
+        "i_pc_32",
         "o_data_96",
         "o_SP_32"
       ],
@@ -2429,6 +2524,9 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/inStack.json"
+        },
+        {
+          "source": "rtl/rtl/int/inStack.v"
         }
       ]
     },
@@ -2994,21 +3092,19 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_inStack_i_driveFromRGRF_1.json",
         "reader_takeaway": {
-          "value": "最终手册应强调该流无明确端点，需RTL源码确认",
-          "explanation": "当前上下文显示该流未到达任何模块输出或已知内部端点，仅终止于w_inStackDriToDR_1。手册应说明该流可能继续传播到下游模块或终止于内部逻辑，并建议查阅RTL源码确认。",
+          "value": "该流无明确数据载荷，可能为纯控制事件流",
+          "explanation": "接口载荷契约显示i_driveFromRGRF_1的载荷列表为空，表明该事件可能不携带数据，仅作为控制信号传递。流经dataMerge和inStackMerge时，可能仅传递事件有效性，而不涉及数据路径。",
           "certainty": "ai_inferred",
           "confidence": "low",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:documentation_focus:001",
+          "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:data_control_effect:001",
           "doc_priority": "primary",
           "signals": [
-            "w_inStackDriToDR_1"
+            "i_driveFromRGRF_1"
           ],
-          "instances": [
-            "inStackMerge"
-          ],
+          "instances": [],
           "related_flows": [],
           "related_assignments": [],
           "requires_rtl_source_review": true,
@@ -3019,14 +3115,48 @@
           ],
           "semantic_evidence": [
             {
-              "source": "flow.warnings",
-              "path": "knowledge_ir/modules/inStack.json"
+              "source": "interface_payload_contracts",
+              "path": "modules/inStack.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "来自RGRF的驱动事件流，经过两级合并器后形成内部堆栈写入请求",
-              "explanation": "该流从模块输入端口i_driveFromRGRF_1发起，首先进入dataMerge（cWaitMerge2_224b_int）与来自RPSR的驱动事件合并，然后通过w_dataMerDriveToInMer_1进入inStackMerge（cMutexMerge2_1b）与来自inStackSele的驱动事件进行互斥合并，最终输出w_inStackDriToDR_1。流中无明确端点，表明该流可能终止于内部逻辑或需要进一步追踪。",
+              "value": "最终手册应强调该流无明确端点，需通过RTL源码确认完整路径",
+              "explanation": "当前流上下文警告“no module event output reached from i_driveFromRGRF_1”，表明该流在模块内部未追踪到最终输出。手册应说明该流可能为内部中间路径，或需要结合其他流（如inStackSele相关流）才能形成完整事件链。",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:documentation_focus:001",
+              "doc_priority": "primary",
+              "signals": [
+                "w_inStackDriToDR_1"
+              ],
+              "instances": [
+                "dataMerge",
+                "inStackMerge"
+              ],
+              "related_flows": [],
+              "related_assignments": [
+                "8"
+              ],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
+                "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "flow.warnings",
+                  "path": "modules/inStack.json"
+                }
+              ]
+            },
+            {
+              "value": "来自RGRF的驱动事件流，经过两级合并器后输出到下游",
+              "explanation": "该流从模块输入端口i_driveFromRGRF_1发起，首先进入dataMerge（cWaitMerge2_224b_int）与来自RPSR的驱动事件合并，然后通过w_dataMerDriveToInMer_1进入inStackMerge（cMutexMerge2_1b）与来自inStackSele的驱动事件进行互斥合并，最终输出为w_inStackDriToDR_1。流中无明确端点，表明该流可能为内部事件传递路径的一部分。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -3045,7 +3175,7 @@
               ],
               "related_flows": [],
               "related_assignments": [
-                "assign 8"
+                "8"
               ],
               "requires_rtl_source_review": true,
               "review_status": "needs_review",
@@ -3056,26 +3186,25 @@
               "semantic_evidence": [
                 {
                   "source": "instances.connections",
-                  "path": "parser_pipeline_rtl/modules/inStack.json"
+                  "path": "modules/inStack.json"
                 },
                 {
                   "source": "transparent_flows",
-                  "path": "knowledge_ir/modules/inStack.json"
+                  "path": "modules/inStack.json"
                 }
               ]
             },
             {
-              "value": "该驱动事件无明确数据载荷，可能为纯控制信号",
-              "explanation": "接口载荷契约显示i_driveFromRGRF_1的payloads列表为空，表明该事件可能不携带数据，仅作为控制触发信号。其free信号为o_freeToRGRF_1，可能用于背压或完成指示。",
+              "value": "可能存在反压信号，但当前证据不足以确认其与流的直接关系",
+              "explanation": "接口载荷契约显示i_driveFromRGRF_1关联了空闲信号o_freeToRGRF_1，表明可能存在反压机制。但当前流上下文未提供该信号在流中的具体连接或使用方式，无法确定其是否直接作用于dataMerge或inStackMerge的传播。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
-              "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:data_control_effect:001",
+              "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:completion_backpressure:001",
               "doc_priority": "secondary",
               "signals": [
-                "i_driveFromRGRF_1",
                 "o_freeToRGRF_1"
               ],
               "instances": [],
@@ -3090,39 +3219,7 @@
               "semantic_evidence": [
                 {
                   "source": "interface_payload_contracts",
-                  "path": "knowledge_ir/modules/inStack.json"
-                }
-              ]
-            },
-            {
-              "value": "该free信号可能表示RGRF驱动事件的完成或背压状态",
-              "explanation": "接口载荷契约中i_driveFromRGRF_1关联了free信号o_freeToRGRF_1，但无进一步证据说明其具体语义。可能用于指示dataMerge是否准备好接收新事件，或表示事件处理完成。",
-              "certainty": "ai_inferred",
-              "confidence": "low",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:completion_backpressure:001",
-              "doc_priority": "reference",
-              "signals": [
-                "i_driveFromRGRF_1",
-                "o_freeToRGRF_1"
-              ],
-              "instances": [
-                "dataMerge"
-              ],
-              "related_flows": [],
-              "related_assignments": [],
-              "requires_rtl_source_review": true,
-              "review_status": "needs_review",
-              "evidence_refs": [
-                "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
-                "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "interface_payload_contracts",
-                  "path": "knowledge_ir/modules/inStack.json"
+                  "path": "modules/inStack.json"
                 }
               ]
             }
@@ -3141,20 +3238,22 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_001_inStack_i_driveFromRPSR_1.json",
         "reader_takeaway": {
-          "value": "该驱动事件无关联数据负载，仅作为控制事件传播",
-          "explanation": "接口负载契约显示i_driveFromRPSR_1的payloads为空，表明该事件不携带数据负载，仅作为纯控制信号驱动内部合并逻辑。其free信号o_freeToRPSR_1可能用于背压控制。",
+          "value": "最终手册应强调该流程未到达模块输出端点，可能内部终止或需要进一步追踪",
+          "explanation": "流程上下文中明确警告\"no module event output reached from i_driveFromRPSR_1\"，且endpoints为空。这表明该驱动事件在inStackMerge输出后未连接到任何模块输出端口，可能用于内部状态更新或控制逻辑。手册应说明这一限制，并建议通过RTL源码审查确认实际终点。",
           "certainty": "ai_inferred",
-          "confidence": "low",
+          "confidence": "high",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:data_control_effect:001",
+          "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:documentation_focus:001",
           "doc_priority": "primary",
           "signals": [
-            "i_driveFromRPSR_1",
-            "o_freeToRPSR_1"
+            "w_inStackDriToDR_1"
           ],
-          "instances": [],
+          "instances": [
+            "dataMerge",
+            "inStackMerge"
+          ],
           "related_flows": [],
           "related_assignments": [
             "8"
@@ -3167,54 +3266,14 @@
           ],
           "semantic_evidence": [
             {
-              "source": "knowledge_ir/modules/inStack.json",
-              "path": "interface_payload_contracts"
+              "source": "flow.warnings",
+              "path": "knowledge_ir/modules/inStack.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "文档应强调该流在模块内部终止，未到达输出端点，并说明两级合并器的语义差异",
-              "explanation": "该流的关键特征是：1) 从输入到内部合并后未连接到模块输出，可能用于内部状态更新或作为其他流的子路径；2) dataMerge(WaitMerge)和inStackMerge(MutexMerge)具有不同的合并语义，文档应解释其行为差异；3) 需要RTL源码确认w_inStackDriToDR_1的最终去向。",
-              "certainty": "ai_inferred",
-              "confidence": "low",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:documentation_focus:001",
-              "doc_priority": "primary",
-              "signals": [
-                "i_driveFromRPSR_1",
-                "w_dataMerDriveToInMer_1",
-                "w_inStackDriToDR_1"
-              ],
-              "instances": [
-                "dataMerge",
-                "inStackMerge"
-              ],
-              "related_flows": [],
-              "related_assignments": [
-                "8"
-              ],
-              "requires_rtl_source_review": true,
-              "review_status": "needs_review",
-              "evidence_refs": [
-                "ev:inStack:flow:flow_001_inStack_i_driveFromRPSR_1",
-                "ev:inStack:semantic_flow:flow_001_inStack_i_driveFromRPSR_1"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "knowledge_ir/modules/inStack.json",
-                  "path": "internal_event_flow"
-                },
-                {
-                  "source": "parser_pipeline_rtl/modules/inStack.json",
-                  "path": "flow_graph.assignment_dependencies"
-                }
-              ]
-            },
-            {
-              "value": "来自RPSR的驱动事件通过两级合并器(dataMerge和inStackMerge)向内部堆栈合并，但最终未到达模块输出端点",
-              "explanation": "该流从模块输入i_driveFromRPSR_1开始，首先进入dataMerge(WaitMerge类型)与来自RGRF的驱动事件合并，输出w_dataMerDriveToInMer_1；然后进入inStackMerge(MutexMerge类型)与来自inStackSele的驱动事件合并，输出w_inStackDriToDR_1。但上下文未显示该输出连接到任何模块输出端点，流在模块内部终止。",
+              "value": "来自RPSR的驱动事件通过两级合并器(dataMerge和inStackMerge)向内部堆栈传递，但最终未到达模块输出端点",
+              "explanation": "该流程从模块输入i_driveFromRPSR_1开始，首先进入dataMerge(与来自RGRF的驱动事件合并)，然后通过w_dataMerDriveToInMer_1进入inStackMerge(与来自inStackSele的驱动事件合并)，输出为w_inStackDriToDR_1。但流程上下文中未列出任何模块输出端点，表明该事件流可能在内部终止或需要进一步追踪。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -3243,32 +3302,30 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/inStack.json",
-                  "path": "internal_event_flow"
+                  "source": "instances.connections",
+                  "path": "parser_pipeline_rtl/modules/inStack.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/inStack.json",
-                  "path": "flow_graph.assignment_dependencies"
+                  "source": "transparent_flows",
+                  "path": "knowledge_ir/modules/inStack.json"
                 }
               ]
             },
             {
-              "value": "该free信号可能用于向RPSR指示模块可接收新事件，但具体机制不明确",
-              "explanation": "接口负载契约显示i_driveFromRPSR_1关联free信号o_freeToRPSR_1，表明存在背压机制。但上下文未提供该free信号的驱动逻辑或与内部合并器的连接关系，无法确定其与dataMerge或inStackMerge的阻塞关系。",
+              "value": "输入驱动事件i_driveFromRPSR_1与空闲信号o_freeToRPSR_1构成控制耦合，但具体关系不明确",
+              "explanation": "接口负载契约显示i_driveFromRPSR_1的free_signal为o_freeToRPSR_1，表明该输入事件可能受空闲信号控制。但契约置信度为low，且无payload信号关联，无法确定是握手协议、背压机制还是其他控制关系。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
                 "semantic_layer"
               ],
-              "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:completion_backpressure:001",
+              "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:data_control_effect:001",
               "doc_priority": "secondary",
               "signals": [
-                "o_freeToRPSR_1",
-                "i_driveFromRPSR_1"
+                "i_driveFromRPSR_1",
+                "o_freeToRPSR_1"
               ],
-              "instances": [
-                "(none)"
-              ],
+              "instances": [],
               "related_flows": [],
               "related_assignments": [],
               "requires_rtl_source_review": true,
@@ -3279,8 +3336,42 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/inStack.json",
-                  "path": "interface_payload_contracts"
+                  "source": "interface.event_ports",
+                  "path": "knowledge_ir/modules/inStack.json"
+                },
+                {
+                  "source": "interface.data_ports",
+                  "path": "knowledge_ir/modules/inStack.json"
+                }
+              ]
+            },
+            {
+              "value": "空闲信号o_freeToRPSR_1可能表示背压或就绪状态，但无法确定具体语义",
+              "explanation": "接口负载契约将o_freeToRPSR_1列为i_driveFromRPSR_1的free_signal，但未提供握手协议细节。可能表示RPSR可以发送新事件(空闲)，或表示inStack可以接收新事件(就绪)。由于缺乏payload和具体协议信息，无法做出更精确的推断。",
+              "certainty": "ai_inferred",
+              "confidence": "low",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:completion_backpressure:001",
+              "doc_priority": "reference",
+              "signals": [
+                "i_driveFromRPSR_1",
+                "o_freeToRPSR_1"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:inStack:flow:flow_001_inStack_i_driveFromRPSR_1",
+                "ev:inStack:semantic_flow:flow_001_inStack_i_driveFromRPSR_1"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "interface.event_ports",
+                  "path": "knowledge_ir/modules/inStack.json"
                 }
               ]
             }

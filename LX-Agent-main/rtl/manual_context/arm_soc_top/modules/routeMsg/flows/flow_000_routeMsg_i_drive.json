@@ -337,8 +337,8 @@
         "w_driveFork"
       ],
       "role_in_flow": {
-        "value": "事件流的入口缓冲级，用于暂存输入事件并可能进行流控。",
-        "explanation": "receiveFifo 是 cFifo1 类型的 FIFO 实例，位于流的最前端。它接收来自模块输入端口 i_drive 的事件，并在内部缓冲后输出到 w_driveFork。其 FIFO 特性可能引入背压或阻塞。",
+        "value": "事件流的入口缓冲级，用于接收并暂存来自 i_drive 的事件。",
+        "explanation": "作为第一个FIFO级，它负责在事件进入内部分发网络前进行缓冲，可能实现背压或同步。其输出驱动后续的延迟单元。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -418,8 +418,8 @@
         "w_driveWFifo_t"
       ],
       "role_in_flow": {
-        "value": "事件流的方向分叉器，根据事件的目标方向将事件分发到五个方向路径。",
-        "explanation": "dirFork 是 cCondFork5 类型的条件分叉实例。它接收来自 delayUart0 的延迟事件，并根据事件携带的方向信息（可能由 i_msg_51 载荷决定）将事件路由到五个输出之一。这是流中唯一的分支点。",
+        "value": "事件流的核心方向分叉器，根据事件目标方向将事件分发到五个方向路径。",
+        "explanation": "这是一个条件分叉器，接收来自延迟单元的事件，并根据内部逻辑（可能基于事件负载中的方向信息）将事件导向五个输出通道之一。这是流中唯一的扇出点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -450,6 +450,9 @@
         "semantic_evidence": [
           {
             "source": "instances.connections"
+          },
+          {
+            "source": "transparent_flows"
           }
         ]
       },
@@ -834,8 +837,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "最终手册应重点描述事件从 i_drive 到五个方向输出端口的完整路径，以及 dirFork 的方向选择机制。",
-    "explanation": "该流的核心功能是事件分发。手册应清晰展示事件经过的每个组件（FIFO、延迟、分叉器）及其作用，并解释 dirFork 如何根据载荷决定事件去向。同时应说明 FIFO 的缓冲作用和可能的阻塞点。",
+    "value": "手册应重点描述事件从输入到五个方向输出的完整路径，以及 dirFork 的方向选择机制。",
+    "explanation": "该流的核心功能是事件分发。手册需要清晰地说明事件如何通过 receiveFifo、delayUart0、dirFork 以及五个并行的延迟和FIFO路径，最终到达不同的输出端口。特别需要解释 dirFork 如何决定事件的目标方向，这很可能依赖于输入负载 i_msg_51 中的字段。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -845,18 +848,7 @@
     "doc_priority": "primary",
     "signals": [
       "i_drive",
-      "w_driveFork",
-      "w_driveFork_delay",
-      "w_driveEFifo_t",
-      "w_driveEFifo",
-      "w_driveLFifo_t",
-      "w_driveLFifo",
-      "w_driveNFifo_t",
-      "w_driveNFifo",
-      "w_driveSFifo_t",
-      "w_driveSFifo",
-      "w_driveWFifo_t",
-      "w_driveWFifo",
+      "i_msg_51",
       "o_driveEArb",
       "o_driveLArb",
       "o_driveNArb",
@@ -865,13 +857,7 @@
     ],
     "instances": [
       "receiveFifo",
-      "delayUart0",
       "dirFork",
-      "delayE",
-      "delayL",
-      "delayN",
-      "delayS",
-      "delayW",
       "eastSendFifo",
       "localSendFifo",
       "northSendFifo",
@@ -882,8 +868,8 @@
     "related_assignments": [
       "(none)"
     ],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
       "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
@@ -899,7 +885,7 @@
     "supporting_claims": [
       {
         "value": "从输入端口 i_drive 接收事件，经过缓冲、延迟和方向分叉后，分发到五个方向输出端口的单驱动内部事件流。",
-        "explanation": "该流是 routeMsg 模块的核心内部事件分发路径。事件从 i_drive 进入，首先由 receiveFifo 缓冲，然后经过 delayUart0 延迟，再由 dirFork 根据方向选择分叉为五路，每路再经过各自的 delay6U 延迟和 sendFifo 缓冲，最终输出到五个方向仲裁器。",
+        "explanation": "该流描述了事件从模块输入端口 i_drive 进入，经过一个接收FIFO缓冲，一个UART延迟，然后通过一个条件分叉器根据方向选择，分别经过五个独立的延迟和发送FIFO，最终输出到五个方向仲裁器的过程。这是一个典型的单输入、多输出的扇出事件分发流。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -912,14 +898,14 @@
           "w_driveFork",
           "w_driveFork_delay",
           "w_driveEFifo_t",
-          "w_driveEFifo",
           "w_driveLFifo_t",
-          "w_driveLFifo",
           "w_driveNFifo_t",
-          "w_driveNFifo",
           "w_driveSFifo_t",
-          "w_driveSFifo",
           "w_driveWFifo_t",
+          "w_driveEFifo",
+          "w_driveLFifo",
+          "w_driveNFifo",
+          "w_driveSFifo",
           "w_driveWFifo",
           "o_driveEArb",
           "o_driveLArb",
@@ -962,8 +948,8 @@
         ]
       },
       {
-        "value": "输入事件携带的 51 位载荷 i_msg_51 可能用于 dirFork 的方向选择。",
-        "explanation": "接口载荷契约显示 i_drive 事件携带 i_msg_51 载荷。dirFork 作为条件分叉，其分叉逻辑很可能依赖于该载荷中的方向字段。然而，当前上下文未提供具体的分叉条件或载荷字段映射。",
+        "value": "输入事件携带的 51 位消息负载 i_msg_51 可能包含目标方向信息，用于控制 dirFork 的分叉选择。",
+        "explanation": "接口负载合约显示 i_drive 事件携带一个 51 位宽的负载 i_msg_51。dirFork 作为一个条件分叉器，其分叉逻辑很可能依赖于该负载中的某些位（例如，方向编码字段）。然而，当前上下文未提供具体的分配逻辑来证实这一点。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -972,8 +958,8 @@
         "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_drive",
-          "i_msg_51"
+          "i_msg_51",
+          "i_drive"
         ],
         "instances": [],
         "related_flows": [],
@@ -996,8 +982,8 @@
         ]
       },
       {
-        "value": "流中的 FIFO 实例可能引入背压，但具体机制未在上下文中明确。",
-        "explanation": "receiveFifo 和五个 sendFifo 实例被标记为阻塞点，表明它们可能因满而阻塞上游事件。然而，当前上下文未提供这些 FIFO 的满状态信号或背压传播路径。输出端口的 free 信号可能间接影响 sendFifo 的行为。",
+        "value": "每个输出端口关联一个输入 free 信号，用于实现背压或握手，但当前流未描述其内部连接。",
+        "explanation": "接口合约显示每个输出事件端口（如 o_driveEArb）都有一个对应的输入 free 信号（如 i_freeEArb）。这表明模块与下游仲裁器之间存在某种握手或背压机制。然而，当前流上下文仅描述了事件的前向传播路径，未包含这些 free 信号在模块内部的连接或使用方式。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -1006,12 +992,6 @@
         "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
-          "i_drive",
-          "o_driveEArb",
-          "o_driveLArb",
-          "o_driveNArb",
-          "o_driveSArb",
-          "o_driveWArb",
           "i_freeEArb",
           "i_freeLArb",
           "i_freeNArb",
@@ -1019,57 +999,10 @@
           "i_freeWArb"
         ],
         "instances": [
-          "receiveFifo",
-          "eastSendFifo",
-          "localSendFifo",
-          "northSendFifo",
-          "southSendFifo",
-          "westSendFifo"
+          "(none)"
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
-          "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections"
-          },
-          {
-            "source": "interface.event_ports"
-          }
-        ]
-      },
-      {
-        "value": "每个输出事件端口关联一个独立的 free 输入信号，用于背压控制。",
-        "explanation": "接口契约显示 o_driveEArb、o_driveLArb 等输出事件端口各自关联一个 free 信号（如 i_freeEArb）。这表明下游模块可以通过这些 free 信号向 routeMsg 模块指示是否准备好接收新事件，从而控制事件流。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:002",
-        "doc_priority": "secondary",
-        "signals": [
-          "o_driveEArb",
-          "i_freeEArb",
-          "o_driveLArb",
-          "i_freeLArb",
-          "o_driveNArb",
-          "i_freeNArb",
-          "o_driveSArb",
-          "i_freeSArb",
-          "o_driveWArb",
-          "i_freeWArb"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [

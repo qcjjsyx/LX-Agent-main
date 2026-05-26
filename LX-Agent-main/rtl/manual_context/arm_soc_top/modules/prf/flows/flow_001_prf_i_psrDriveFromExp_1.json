@@ -94,8 +94,8 @@
         "o_psrDriveToExp_1"
       ],
       "role_in_flow": {
-        "value": "作为Fifo1缓冲级，在事件驱动流中提供单拍缓冲和可能的背压处理。",
-        "explanation": "该实例接收输入事件i_psrDriveFromExp_1，并将其缓冲后输出为o_psrDriveToExp_1。Fifo1模块通常实现一个深度为1的队列，可能包含满/空状态信号，用于控制事件传播的节流或阻塞。",
+        "value": "作为Fifo1缓冲级，在驱动流中提供事件暂存和可能的背压处理。",
+        "explanation": "该实例接收输入事件i_psrDriveFromExp_1，并将其缓冲后输出为o_psrDriveToExp_1。Fifo1通常具有单深度缓冲，可能根据内部状态（如满/空标志）决定是否立即传递事件或进行等待，从而引入阻塞点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -105,7 +105,7 @@
         "doc_priority": "primary",
         "signals": [
           "i_psrDriveFromExp_1",
-          "o_psrDriveToExp_1"
+          "o_psrDriveFromExp_1"
         ],
         "instances": [
           "cFifo1_prf3"
@@ -122,6 +122,10 @@
         "semantic_evidence": [
           {
             "source": "instances.connections",
+            "path": "modules/prf.json"
+          },
+          {
+            "source": "flow.blocking_points",
             "path": "modules/prf.json"
           }
         ]
@@ -193,8 +197,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "最终手册应强调事件驱动流与数据载荷路径是分离的，数据可能通过内部寄存器间接提供。",
-    "explanation": "当前证据显示事件流经过Fifo1缓冲，而数据输出来自内部寄存器r_psrValue2_32，并非直接来自输入载荷。手册应说明这种分离设计，并指出数据路径的独立性，避免用户误认为数据与事件是同步直通的。",
+    "value": "最终手册应重点说明该驱动流是单级事件传递，并强调其数据载荷的来源（内部寄存器）与输入载荷不同，以及Fifo1实例可能引入的背压行为。",
+    "explanation": "流本身结构简单，但数据载荷的间接性（输入载荷未直接传递到输出）和Fifo1的潜在阻塞行为是需要澄清的关键点。手册应避免过度简化，需指出这些不确定性并引导读者查阅RTL源码。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -206,7 +210,9 @@
       "i_psrDriveFromExp_1",
       "o_psrDriveToExp_1",
       "o_psrDataToExp_32",
-      "r_psrValue2_32"
+      "r_psrValue2_32",
+      "o_psrFreeToExp_1",
+      "i_psrFreeFromExp_1"
     ],
     "instances": [
       "cFifo1_prf3"
@@ -215,26 +221,30 @@
     "related_assignments": [
       "2"
     ],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:prf:flow:flow_001_prf_i_psrDriveFromExp_1",
       "ev:prf:semantic_flow:flow_001_prf_i_psrDriveFromExp_1"
     ],
     "semantic_evidence": [
       {
-        "source": "assignment_facts",
+        "source": "flow.blocking_points",
         "path": "modules/prf.json"
       },
       {
-        "source": "interface.data_ports",
+        "source": "related_assign_dependencies",
+        "path": "modules/prf.json"
+      },
+      {
+        "source": "interface_payload_contracts",
         "path": "modules/prf.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "该驱动流将来自执行阶段的物理寄存器驱动事件，通过一个Fifo1缓冲级，转发到执行阶段。",
-        "explanation": "流从输入端口i_psrDriveFromExp_1接收事件，经过实例cFifo1_prf3的缓冲，最终从输出端口o_psrDriveToExp_1送出。这是一个单级、无分支的直通驱动流，Fifo1实例作为事件传播的中间节点。",
+        "value": "该驱动流将来自执行阶段的物理寄存器驱动事件，通过一个Fifo1缓冲级，传递到输出端口，实现事件在模块内的单级流水转发。",
+        "explanation": "流从输入端口i_psrDriveFromExp_1进入，经过实例cFifo1_prf3（一个Fifo1缓冲级）后，直接驱动输出端口o_psrDriveToExp_1。没有分支或合并点，表明这是一个简单的、单级的事件传递路径。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -271,8 +281,8 @@
         ]
       },
       {
-        "value": "流中存在自由/背压信号，但当前上下文未提供其与Fifo1实例的直接连接证据。",
-        "explanation": "接口合同定义了输入事件i_psrDriveFromExp_1的自由信号o_psrFreeToExp_1，以及输出事件o_psrDriveToExp_1的自由信号i_psrFreeFromExp_1。这些信号通常用于实现握手或背压机制。然而，提供的流步骤和连接未显示这些自由信号如何连接到cFifo1_prf3，因此无法断言背压的具体实现。",
+        "value": "流上下文提供了自由/背压信号的存在，但未明确其在当前驱动流中的具体作用。",
+        "explanation": "接口合约列出了输入事件i_psrDriveFromExp_1的自由信号o_psrFreeToExp_1，以及输出事件o_psrDriveToExp_1的自由信号i_psrFreeFromExp_1。这表明存在背压机制，但当前流步骤未展示这些信号如何与Fifo1实例交互。Fifo1可能使用这些信号来控制事件传递。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -297,14 +307,14 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
+            "source": "interface_payload_contracts",
             "path": "modules/prf.json"
           }
         ]
       },
       {
-        "value": "输入事件携带输入数据载荷，但该载荷与当前驱动流的数据输出无直接赋值依赖。",
-        "explanation": "接口合同显示输入事件i_psrDriveFromExp_1关联载荷i_rdDataToPrf_32，输出事件o_psrDriveToExp_1关联载荷o_psrDataToExp_32。然而，提供的赋值依赖仅显示o_psrDataToExp_32来自r_psrValue2_32，未显示与输入载荷的直接数据路径。这表明数据可能在Fifo1内部或通过其他逻辑进行了转换或选择。",
+        "value": "输入驱动事件i_psrDriveFromExp_1与输入数据i_rdDataToPrf_32相关联，但该数据载荷在流中未直接传递到输出。",
+        "explanation": "接口载荷合约显示，输入事件i_psrDriveFromExp_1携带载荷i_rdDataToPrf_32。然而，在提供的流上下文中，该载荷并未直接连接到输出事件o_psrDriveToExp_1的载荷o_psrDataToExp_32。输出载荷来自内部寄存器r_psrValue2_32，表明数据可能在Fifo1内部或模块其他地方被处理或替换。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -313,7 +323,9 @@
         "semantic_claim_id": "semantic:flow:prf:flow_001_prf_i_psrDriveFromExp_1:data_control_effect:001",
         "doc_priority": "secondary",
         "signals": [
+          "i_psrDriveFromExp_1",
           "i_rdDataToPrf_32",
+          "o_psrDriveToExp_1",
           "o_psrDataToExp_32"
         ],
         "instances": [],
@@ -329,11 +341,11 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
+            "source": "interface_payload_contracts",
             "path": "modules/prf.json"
           },
           {
-            "source": "interface.data_ports",
+            "source": "related_assign_dependencies",
             "path": "modules/prf.json"
           }
         ]

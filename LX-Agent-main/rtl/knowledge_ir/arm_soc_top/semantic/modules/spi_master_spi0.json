@@ -46,11 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 6,
+    "count": 7,
     "by_type": {
       "assignment_interpretation": 3,
       "interface_intent": 1,
       "module_role": 1,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -63,7 +64,7 @@
       },
       "summary": "SPI主控制器模块，负责生成SPI时钟、片选信号并完成数据收发。",
       "subject": "spi_master_spi0",
-      "explanation": "模块通过内部时钟分频器实例clk_div_u生成SPI时钟和片选，并通过assign逻辑根据CPOL/CPHA配置调整输出时钟极性，同时产生收发完成标志。",
+      "explanation": "模块通过内部时钟分频器实例clk_div_u生成SCLK和NSS，并通过组合逻辑根据CPOL/CPHA配置调整输出时钟极性，同时产生收发完成标志。",
       "signals": [
         "sclk_out",
         "nss_out",
@@ -93,9 +94,9 @@
         "type": "module",
         "module": "spi_master_spi0"
       },
-      "summary": "通过实例化时钟分频器生成SPI时钟和片选信号，并输出分频计数值。",
-      "subject": "spi时钟和片选生成",
-      "explanation": "clk_div_u实例接收系统时钟和复位，输出nss_out（片选）和sclk_cnt（分频计数值），后者直接连接到顶层输出sclk_cnt_div。",
+      "summary": "通过实例化时钟分频器产生SPI时钟和片选信号，并将分频计数值输出。",
+      "subject": "spi时钟与片选生成",
+      "explanation": "clk_div_u接收系统时钟和复位，输出nss_out和sclk_cnt_div，前者作为片选输出，后者作为时钟分频系数供外部使用。",
       "signals": [
         "clk",
         "rst_n",
@@ -125,8 +126,8 @@
         "module": "spi_master_spi0"
       },
       "subject": "sclk_out",
-      "summary": "根据CPOL极性选择输出SPI时钟，实现时钟极性配置。",
-      "explanation": "当CPOL为1时输出反相时钟，否则输出分频后的时钟，直接控制SPI总线时钟极性。",
+      "summary": "根据CPOL极性选择输出时钟极性，控制SPI时钟空闲电平。",
+      "explanation": "当CPOL为高时，输出时钟取反，否则直通分频时钟，决定SCLK空闲状态。",
       "signals": [
         "sclk_out",
         "CPOL",
@@ -152,8 +153,8 @@
         "module": "spi_master_spi0"
       },
       "subject": "rx_done",
-      "summary": "根据接收计数器和缓冲标志产生接收完成信号。",
-      "explanation": "当rx_cnt[5]为低且cnt_buf_rx有效时，表示接收完成，用于触发后续数据读取或中断。",
+      "summary": "接收完成标志，由接收计数器高位和缓冲使能共同决定。",
+      "explanation": "当rx_cnt[5]为低且cnt_buf_rx有效时，表示接收完成，用于触发数据读取或中断。",
       "signals": [
         "rx_done",
         "rx_cnt",
@@ -179,8 +180,8 @@
         "module": "spi_master_spi0"
       },
       "subject": "tx_done",
-      "summary": "根据CPHA和发送计数器产生发送完成信号，支持两种SPI模式。",
-      "explanation": "CPHA为1时使用tx_cnt[5]判断，否则使用tx_cnt[4]，结合cnt_buf_tx产生发送完成标志。",
+      "summary": "发送完成标志，根据CPHA相位选择不同的计数器位宽判断。",
+      "explanation": "CPHA为高时使用tx_cnt[5]判断，否则使用tx_cnt[4]，结合cnt_buf_tx产生发送完成信号，适配不同SPI模式。",
       "signals": [
         "tx_done",
         "CPHA",
@@ -206,13 +207,13 @@
         "type": "module",
         "module": "spi_master_spi0"
       },
-      "summary": "CR[7:0]作为控制寄存器输入，配置SPI模式参数（如CPOL、CPHA）。",
-      "subject": "控制寄存器接口",
-      "explanation": "CR输入宽度为8位，结合assign中使用的CPOL和CPHA信号，推测CR包含这些控制位，但具体位域映射需RTL确认。",
+      "summary": "CR寄存器配置SPI模式参数，data_in/data_out构成32位数据通道。",
+      "subject": "控制寄存器CR与数据接口",
+      "explanation": "CR作为控制输入影响CPOL/CPHA等模式选择，data_in和data_out为并行数据总线，与内部移位寄存器交互。",
       "signals": [
         "CR",
-        "CPOL",
-        "CPHA"
+        "data_in",
+        "data_out"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -220,26 +221,42 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_master_spi0.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/spi_master_spi0.json"
         }
       ],
       "id": "semantic:module:spi_master_spi0:interface_intent:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "spi_master_spi0"
+      },
+      "reason": "当前上下文缺少内部移位寄存器、状态机或计数器实现细节，无法推断数据收发时序。",
+      "subject": "内部数据路径与状态机",
+      "needed_source_slice": "always block",
+      "signals": [
+        "data_in",
+        "data_out",
+        "rx_cnt",
+        "tx_cnt",
+        "cnt_buf_rx",
+        "cnt_buf_tx"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/SPI/SPI0/spi_master_spi0.v"
+        }
+      ],
+      "id": "semantic:module:spi_master_spi0:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部数据路径",
-      "reason": "缺少data_in到data_out的传输路径、移位寄存器或FIFO的实例信息，无法推断数据收发机制。"
-    },
-    {
-      "field": "控制寄存器位域映射",
-      "reason": "未提供CR寄存器各位的定义，CPOL/CPHA的来源和位位置不明确。"
-    },
-    {
-      "field": "内部状态机或计数器逻辑",
-      "reason": "缺少always块或状态机描述，rx_cnt、tx_cnt、cnt_buf_rx、cnt_buf_tx等信号的生成逻辑未知。"
+      "field": "内部事件流",
+      "reason": "未提供任何内部事件流或状态转换信息，无法推断模块内部握手或中断机制。"
     }
   ]
 }

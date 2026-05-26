@@ -46,12 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 5,
+    "count": 6,
     "by_type": {
-      "assignment_interpretation": 2,
-      "documentation_focus": 1,
+      "assignment_interpretation": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1
+      "source_review_request": 2,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -63,7 +64,7 @@
       },
       "summary": "该模块根据输入数据计算并输出CRC校验值，支持16位和8位两种模式。",
       "subject": "CRC_tx",
-      "explanation": "模块接收16位数据输入datain和多项式poly，输出16位CRC结果CRC_out。通过assign依赖项中的条件选择器（DFF ? CRC16_reg : {8'b0,CRC8_reg}）推断模块内部存在16位和8位两种CRC计算路径，由信号DFF选择输出。",
+      "explanation": "模块接收16位数据输入datain和多项式poly，输出16位CRC结果CRC_out。通过assign依赖中DFF信号选择CRC16_reg或CRC8_reg，表明模块内部存在一个16位/8位CRC计算状态机或寄存器组，由DFF信号控制输出模式。",
       "signals": [
         "datain",
         "poly",
@@ -81,19 +82,22 @@
         },
         {
           "source": "parser_pipeline_rtl/modules/CRC_tx.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/SPI/SPI1/CRC_tx.v"
         }
       ],
       "id": "semantic:module:CRC_tx:module_role:001"
     },
     {
-      "claim_type": "assignment_interpretation",
+      "claim_type": "structural_responsibility",
       "scope": {
         "type": "module",
         "module": "CRC_tx"
       },
-      "subject": "CRC_out",
-      "summary": "该赋值根据DFF信号选择输出16位或8位CRC计算结果，构成数据路径的多路选择器。",
-      "explanation": "CRC_out = DFF ? CRC16_reg : {8'b0,CRC8_reg} 表明模块内部同时维护16位和8位CRC寄存器，由DFF控制输出模式。该赋值直接驱动模块输出，是数据路径的关键节点。",
+      "summary": "模块内部维护两个CRC寄存器（CRC16_reg和CRC8_reg），根据DFF信号选择输出16位或8位CRC结果。",
+      "subject": "CRC计算与输出选择",
+      "explanation": "assign依赖0显示CRC_out由DFF ? CRC16_reg : {8'b0,CRC8_reg}决定，表明模块内部存在两个独立的CRC计算路径，分别对应16位和8位模式。DFF信号作为模式选择，控制输出是完整的16位CRC还是高8位补零的8位CRC。",
       "signals": [
         "CRC_out",
         "DFF",
@@ -105,13 +109,13 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IONet/SPI/SPI1/CRC_tx.v"
+          "source": "knowledge_ir/modules/CRC_tx.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/CRC_tx.json"
         }
       ],
-      "id": "semantic:module:CRC_tx:assignment_interpretation:001"
+      "id": "semantic:module:CRC_tx:structural_responsibility:001"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -120,53 +124,51 @@
         "module": "CRC_tx"
       },
       "subject": "enable_rise",
-      "summary": "该赋值检测enable信号的上升沿，用于触发CRC计算或更新。",
-      "explanation": "enable_rise = (~enable_buf) & enable 是一个典型的上升沿检测电路，通过将当前enable与延迟一拍后的enable_buf进行逻辑运算，生成单周期脉冲。该信号很可能用于控制CRC计算过程的启动或数据锁存。",
+      "summary": "该赋值生成一个上升沿检测信号，用于触发CRC计算或状态更新。",
+      "explanation": "enable_rise = (~enable_buf) & enable 是一个典型的上升沿检测逻辑，通过将enable信号延迟一拍（enable_buf）后取反再与当前enable相与，产生一个单周期脉冲。该脉冲可能用于启动CRC计算、更新寄存器或控制状态机。",
       "signals": [
         "enable_rise",
-        "enable",
-        "enable_buf"
+        "enable_buf",
+        "enable"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "rtl/rtl/IONet/SPI/SPI1/CRC_tx.v"
+          "source": "knowledge_ir/modules/CRC_tx.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/CRC_tx.json"
         }
       ],
-      "id": "semantic:module:CRC_tx:assignment_interpretation:002"
+      "id": "semantic:module:CRC_tx:assignment_interpretation:001"
     },
     {
-      "claim_type": "documentation_focus",
+      "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "CRC_tx"
       },
-      "summary": "手册应重点说明16位和8位CRC模式的选择机制、DFF信号的控制含义以及两种模式下CRC_out的格式差异。",
-      "subject": "CRC计算模式选择",
-      "explanation": "从assign依赖项可见，模块支持两种输出模式，但上下文未提供DFF的来源和切换条件。文档需明确该选择逻辑，避免用户误解输出数据格式。",
+      "summary": "datain和poly作为并行数据输入，共同构成CRC计算的输入数据对。",
+      "subject": "数据输入接口",
+      "explanation": "datain提供待计算CRC的原始数据，poly提供CRC多项式系数。两者均为16位宽，表明模块支持16位数据块的CRC计算。没有事件输入，暗示CRC计算可能由内部状态或使能信号控制，而非外部事件触发。",
       "signals": [
-        "CRC_out",
-        "DFF",
-        "CRC16_reg",
-        "CRC8_reg"
+        "datain",
+        "poly"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "rtl/rtl/IONet/SPI/SPI1/CRC_tx.v"
+          "source": "knowledge_ir/modules/CRC_tx.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/CRC_tx.json"
         }
       ],
-      "id": "semantic:module:CRC_tx:documentation_focus:001"
+      "id": "semantic:module:CRC_tx:interface_intent:001"
     },
     {
       "claim_type": "source_review_request",
@@ -174,15 +176,12 @@
         "type": "module",
         "module": "CRC_tx"
       },
-      "reason": "紧凑上下文仅包含两个assign依赖项，缺少CRC16_reg和CRC8_reg的更新逻辑、enable信号与CRC计算的关系、以及DFF信号的驱动源。需要查看RTL源码中的always块和assign块以理解完整时序。",
-      "subject": "CRC计算时序与使能控制",
+      "reason": "紧凑上下文未提供CRC16_reg和CRC8_reg的赋值或always块，无法推断CRC计算的具体实现方式。",
+      "subject": "CRC寄存器更新逻辑",
       "needed_source_slice": "always block, assign block",
       "signals": [
         "CRC16_reg",
         "CRC8_reg",
-        "enable",
-        "enable_buf",
-        "DFF",
         "datain",
         "poly"
       ],
@@ -195,20 +194,40 @@
         }
       ],
       "id": "semantic:module:CRC_tx:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "CRC_tx"
+      },
+      "reason": "紧凑上下文未提供enable、enable_buf、DFF等信号的来源，无法确定模块的控制逻辑和时序。",
+      "subject": "控制信号生成",
+      "needed_source_slice": "module declaration, assign block, always block",
+      "signals": [
+        "enable",
+        "enable_buf",
+        "DFF"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "rtl/rtl/IONet/SPI/SPI1/CRC_tx.v"
+        }
+      ],
+      "id": "semantic:module:CRC_tx:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "内部CRC计算逻辑",
-      "reason": "缺少CRC16_reg和CRC8_reg的更新逻辑、多项式poly的使用方式、以及DFF信号的来源和含义。无法确定CRC计算的具体算法（如CRC-16-CCITT）和时序控制。"
+      "reason": "缺少CRC16_reg和CRC8_reg的更新逻辑、多项式使用方式、以及DFF信号的来源和含义。无法确定CRC计算是串行移位还是并行实现，也无法确定8位CRC是截取16位结果还是独立计算。"
     },
     {
-      "field": "事件流与控制流",
-      "reason": "接口中无事件输入/输出，且内部事件流引用为空。无法推断模块的触发条件、完成握手或数据有效指示信号。"
-    },
-    {
-      "field": "组件实例与连接",
-      "reason": "关键实例列表和组件族为空，无法识别内部使用的寄存器、状态机或组合逻辑结构。"
+      "field": "控制与状态机",
+      "reason": "缺少enable、enable_buf、DFF等控制信号的来源和连接关系。无法确定模块是否包含状态机、如何启动CRC计算、以及模式切换的时序。"
     }
   ]
 }

@@ -46,14 +46,15 @@
     }
   ],
   "claim_summary": {
-    "count": 16,
+    "count": 20,
     "by_type": {
       "assignment_interpretation": 3,
-      "component_role": 4,
+      "component_role": 7,
       "documentation_focus": 3,
-      "interface_intent": 3,
+      "interface_intent": 2,
       "module_role": 1,
-      "structural_responsibility": 2
+      "source_review_request": 3,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -63,41 +64,27 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "中断与异常集中仲裁与分发核心，负责收集来自流水线各阶段的中断/异常事件，仲裁优先级，并分发处理结果（写回、数据路由、PC跳转）及释放信号。",
+      "summary": "中断与异常集中仲裁与分发单元，负责收集来自流水线各阶段的中断/异常事件，仲裁优先级，并驱动后续的栈操作、数据路由和PC更新。",
       "subject": "intAndExc",
-      "explanation": "模块接收来自IF、Dec、Exe、Lsu、WB、DR、RGRF、RPSR等多个流水线阶段的事件驱动信号，通过内部仲裁组件（cmpMerge、intAndExeSele）和堆栈组件（u_inStack、u_outStack）处理后，输出驱动信号到IF、DataRoute、RGRF、RPSR、WGRF、WPSR等目标，并输出对应的释放信号。数据输入包括各阶段的PC和异常编号，以及GRF和PSR数据，输出包括路由数据、写回数据和中断PC。",
+      "explanation": "模块接收来自IF、Dec、Exe、Lsu、WB、DR、RGRF、RPSR等多个流水线阶段的中断/异常驱动事件，通过内部仲裁和选择逻辑，最终输出驱动信号到IF、DataRoute、RGRF、RPSR、WGRF、WPSR等目标，并产生对应的释放信号。这表明其核心角色是事件汇聚、仲裁与分发。",
       "signals": [
-        "i_driveFromDR_1",
-        "i_driveFromRGRF_1",
-        "i_driveFromRPSR_1",
-        "i_driveFromWB",
+        "i_intDriveFromIF",
         "i_excDriveFromDec",
         "i_excDriveFromExe",
         "i_excDriveFromIF",
         "i_excDriveFromLsu",
-        "i_intDriveFromIF",
-        "o_DriveToIf_1",
-        "o_driveToDataRoute_1",
-        "o_driveToRGRF_1",
-        "o_driveToRPSR_1",
-        "o_driveToWGRF_1",
-        "o_driveToWPSR_1"
+        "i_driveFromDR_1",
+        "i_driveFromRGRF_1",
+        "i_driveFromRPSR_1",
+        "i_driveFromWB"
       ],
       "instances": [
         "cmpMerge",
         "intAndExeSele",
         "u_inStack",
         "u_outStack",
-        "DRSelector",
         "dataRoteMerge",
-        "vectorSpli",
-        "WbMerge",
-        "WbtopcMerge",
-        "SRMerge",
-        "preStackSpli",
-        "inOutSele",
-        "SRDriveTap",
-        "firstTap"
+        "vectorSpli"
       ],
       "related_flows": [
         "flow_000_intAndExc_i_driveFromRGRF_1",
@@ -115,13 +102,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "interface.event_outputs"
         },
         {
-          "source": "rtl/rtl/int/intAndExc.v"
+          "source": "internal_event_flow_refs"
+        },
+        {
+          "source": "key_component_connections"
         }
       ],
       "id": "semantic:module:intAndExc:module_role:001"
@@ -132,34 +122,24 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "模块通过cmpMerge（WaitMerge5）收集来自IF、Dec、Exe、Lsu的中断/异常事件，仲裁后通过intAndExeSele（SelSplit）选择处理路径，最终分发到写回堆栈（u_outStack）、数据路由（dataRoteMerge）和PC跳转（vectorSpli）。",
-      "subject": "中断与异常优先级仲裁与分发",
-      "explanation": "cmpMerge接收i_excDriveFromIF/Dec/Exe/Lsu和i_intDriveFromIF共5个事件，输出仲裁后的事件w_cmpMerDrive_1。该事件经Delay3后驱动intAndExeSele，intAndExeSele根据优先级选择将事件导向写回路径（w_intAndExeSeleDriveToMe）或中断/异常处理路径（w_intSeleDrive_1）。写回路径最终通过u_outStack输出驱动到WGRF和WPSR；中断/异常处理路径通过preStackSpli和vectorSpli输出驱动到IF（PC跳转）和DataRoute。",
+      "summary": "模块通过内部仲裁器（cmpMerge, intAndExeSele）对来自不同源的中断/异常事件进行优先级排序，并驱动后续的入栈（u_inStack）、出栈（u_outStack）、数据路由（dataRoteMerge）和PC更新（vectorSpli）流程。",
+      "subject": "中断与异常事件仲裁与分发",
+      "explanation": "来自IF、Dec、Exe、Lsu的异常事件和来自IF的中断事件汇聚到cmpMerge，其输出经intAndExeSele选择后，分别驱动入栈/出栈选择逻辑（inOutSele）、PC向量生成逻辑（preStackSpli, vectorSpli）以及数据路由逻辑（dataRoteMerge）。来自DR、RGRF、RPSR、WB的驱动事件则分别进入DRSelector、u_inStack、WbMerge等路径，最终也汇聚到数据路由和栈操作。",
       "signals": [
-        "i_excDriveFromDec",
-        "i_excDriveFromExe",
-        "i_excDriveFromIF",
-        "i_excDriveFromLsu",
-        "i_intDriveFromIF",
         "w_cmpMerDrive_1",
-        "w_intAndExeSeleDriveToMe",
         "w_intSeleDrive_1",
-        "o_driveToWGRF_1",
-        "o_driveToWPSR_1",
-        "o_DriveToIf_1",
-        "o_driveToDataRoute_1"
+        "w_intAndExeSeleDriveToMe",
+        "w_vecDriveToDataRoute_1",
+        "w_pcDriveToDataRoute_1"
       ],
       "instances": [
         "cmpMerge",
         "intAndExeSele",
-        "u_outStack",
         "preStackSpli",
         "vectorSpli",
         "dataRoteMerge",
-        "Delay3",
-        "Delay0",
-        "Delay1",
-        "preDelay0"
+        "u_inStack",
+        "u_outStack"
       ],
       "related_flows": [
         "flow_003_intAndExc_i_excDriveFromDec",
@@ -173,59 +153,16 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "internal_event_flow_refs"
+        },
+        {
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:intAndExc:structural_responsibility:001"
-    },
-    {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "summary": "模块通过u_inStack和u_outStack管理中断/异常处理时的寄存器堆栈（SP）操作，包括入栈和出栈，并通过SRMerge和SRDriveTap生成SP操作请求。",
-      "subject": "寄存器堆栈（SP）管理",
-      "explanation": "u_inStack（inStack）处理来自RGRF和RPSR的入栈事件（i_driveFromRGRF_1, i_driveFromRPSR_1），输出SP操作事件w_driveFrominStackSP。u_outStack（intAndExc_pop）处理出栈事件，输出SP操作事件w_driveFromoutStackSP。这两个事件通过SRMerge（MutexMerge）合并为w_SRDrive_1，再通过SRDriveTap（contTap）生成SP操作请求w_SRDriveReq_1。SP值（w_SP_32）由内部寄存器r_SP_32提供。",
-      "signals": [
-        "i_driveFromRGRF_1",
-        "i_driveFromRPSR_1",
-        "w_driveFrominStackSP",
-        "w_driveFromoutStackSP",
-        "w_SRDrive_1",
-        "w_SRDriveReq_1",
-        "w_SP_32",
-        "o_driveToRGRF_1",
-        "o_driveToRPSR_1",
-        "o_freeToRGRF_1",
-        "o_freeToRPSR_1"
-      ],
-      "instances": [
-        "u_inStack",
-        "u_outStack",
-        "SRMerge",
-        "SRDriveTap",
-        "firstTap"
-      ],
-      "related_flows": [
-        "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc:structural_responsibility:002"
     },
     {
       "claim_type": "component_role",
@@ -233,22 +170,17 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "cmpMerge",
-      "summary": "中断与异常事件优先级仲裁器，收集来自IF、Dec、Exe、Lsu的异常事件和IF的中断事件，输出仲裁后的事件和数据。",
-      "explanation": "cmpMerge是WaitMerge5类型组件，接收5个事件输入（i_excDriveFromIF/Dec/Exe/Lsu, i_intDriveFromIF），以及一个额外的驱动输入（w_intAndExeSeleDriveToMe | o_DriveToIf_1）。它输出仲裁后的事件w_cmpMerDrive_1和合并后的异常编号数据w_allExcNum_20。该组件是中断/异常处理路径的起点。",
+      "subject": "cmpMerge (cWaitMerge5_180b_int)",
+      "summary": "中断与异常事件的优先级仲裁器，收集来自IF、Dec、Exe、Lsu的异常事件和来自IF的中断事件，输出仲裁后的异常/中断编号和PC信息。",
+      "explanation": "cmpMerge接收5个输入驱动事件（i_intDriveFromIF, i_excDriveFromIF, i_excDriveFromDec, i_excDriveFromExe, i_excDriveFromLsu），并输出合并后的数据（w_allExcNum_20）和驱动信号（w_cmpMerDrive_1）。其输出是后续选择逻辑（intAndExeSele）和PC计算的关键输入。",
       "signals": [
+        "i_intDriveFromIF",
+        "i_excDriveFromIF",
         "i_excDriveFromDec",
         "i_excDriveFromExe",
-        "i_excDriveFromIF",
         "i_excDriveFromLsu",
-        "i_intDriveFromIF",
-        "w_cmpMerDrive_1",
-        "w_allExcNum_20",
-        "o_excFreeToDec",
-        "o_excFreeToExe",
-        "o_excFreeToIf",
-        "o_excFreeToLsu",
-        "o_intFreeToIF"
+        "o_driveNext",
+        "o_data_180"
       ],
       "instances": [
         "cmpMerge"
@@ -265,10 +197,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:intAndExc:component_role:001"
@@ -279,21 +211,19 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "intAndExeSele",
-      "summary": "中断/异常处理路径选择器，根据优先级决定事件是进入写回路径还是中断/异常处理路径。",
-      "explanation": "intAndExeSele是cSelector2_181b_int类型组件，接收来自SRMerge的SP驱动事件（w_SRDrive_1）和来自cmpMerge的仲裁后事件（w_cmpMerDrive1_1）。它输出两个事件：w_intAndExeSeleDriveToMe（写回路径）和w_intSeleDrive_1（中断/异常处理路径）。该组件是仲裁后事件分发的关键节点。",
+      "subject": "intAndExeSele (cSelector2_181b_int)",
+      "summary": "中断/异常与栈恢复（SR）驱动的选择器，决定当前处理的是新中断/异常事件还是栈恢复事件。",
+      "explanation": "intAndExeSele接收来自cmpMerge的仲裁后事件（w_cmpMerDrive1_1）和来自SRMerge的栈恢复驱动（w_SRDrive_1），根据优先级选择输出到不同的处理路径：w_intSeleDrive_1（驱动中断/异常处理流程）和w_intAndExeSeleDriveToMe（反馈给cmpMerge或驱动其他逻辑）。",
       "signals": [
-        "w_SRDrive_1",
-        "w_cmpMerDrive1_1",
-        "w_intAndExeSeleDriveToMe",
-        "w_intSeleDrive_1"
+        "i_drive0 (w_SRDrive_1)",
+        "i_drive1 (w_cmpMerDrive1_1)",
+        "o_driveNext0 (w_intSeleDrive_1)",
+        "o_driveNext1 (w_intAndExeSeleDriveToMe)"
       ],
       "instances": [
         "intAndExeSele"
       ],
       "related_flows": [
-        "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1",
         "flow_003_intAndExc_i_excDriveFromDec",
         "flow_004_intAndExc_i_excDriveFromExe",
         "flow_005_intAndExc_i_excDriveFromIF",
@@ -305,10 +235,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:intAndExc:component_role:002"
@@ -319,19 +249,17 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "u_inStack",
-      "summary": "入栈控制器，处理来自RGRF和RPSR的入栈事件，管理入栈数据并生成SP操作事件。",
-      "explanation": "u_inStack是inStack类型模块，接收来自RGRF和RPSR的驱动事件（i_driveFromRGRF_1, i_driveFromRPSR_1）和数据（i_grfData_192, i_psrData_32），以及来自inOutSele的入栈数据（w_inOutDriToDataSpli_1）。它输出驱动到RGRF和RPSR的事件（o_driveToRGRF_1, o_driveToRPSR_1），SP操作事件（w_driveFrominStackSP），以及入栈数据（w_inData_96）。",
+      "subject": "u_inStack (inStack)",
+      "summary": "异常/中断入栈控制器，负责将当前处理器状态（PC、PSR等）压入栈中。",
+      "explanation": "u_inStack接收来自RGRF和RPSR的驱动事件和数据，以及来自inOutSele的入栈选择信号，执行入栈操作，并输出驱动信号到RGRF、RPSR和SRMerge（w_driveFrominStackSP）。",
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
         "i_grfData_192",
         "i_psrData_32",
-        "w_inOutDriToDataSpli_1",
         "o_driveToRGRF_1",
         "o_driveToRPSR_1",
-        "w_driveFrominStackSP",
-        "w_inData_96"
+        "o_driveFromSPDec"
       ],
       "instances": [
         "u_inStack"
@@ -345,10 +273,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "internal_event_flow_refs"
         }
       ],
       "id": "semantic:module:intAndExc:component_role:003"
@@ -359,22 +287,90 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "u_outStack",
-      "summary": "出栈控制器，处理中断/异常处理后的出栈事件，输出写回数据到WGRF和WPSR。",
-      "explanation": "u_outStack是intAndExc_pop类型模块，接收来自DRSelector的出栈数据（w_DRdata_64）和来自inOutSele的出栈事件（w_inOutDriToOutMer_1）。它输出驱动到WGRF和WPSR的事件（o_driveToWGRF_1, o_driveToWPSR_1），写回数据（o_dataToWGRF_72, o_dataToWPSR_32），以及SP操作事件（w_driveFromoutStackSP）。",
+      "subject": "u_outStack (intAndExc_pop)",
+      "summary": "异常/中断出栈控制器，负责从中断/异常返回时从栈中恢复处理器状态。",
+      "explanation": "u_outStack接收来自DRSelector的恢复数据（w_DRdata_64），执行出栈操作，并输出恢复后的数据到WGRF和WPSR，同时输出驱动信号到SRMerge（w_driveFromoutStackSP）。",
       "signals": [
-        "w_DRdata_64",
-        "w_inOutDriToOutMer_1",
+        "i_driveFromDR (via w_DRSeleDriToWbSpli_1)",
         "o_driveToWGRF_1",
         "o_driveToWPSR_1",
         "o_dataToWGRF_72",
         "o_dataToWPSR_32",
-        "w_driveFromoutStackSP"
+        "o_driveToSP"
       ],
       "instances": [
         "u_outStack"
       ],
       "related_flows": [
+        "flow_002_intAndExc_i_driveFromDR_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "key_component_connections"
+        },
+        {
+          "source": "internal_event_flow_refs"
+        }
+      ],
+      "id": "semantic:module:intAndExc:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "subject": "SRMerge (cMutexMerge2_32b_int)",
+      "summary": "栈恢复（SR）驱动事件的互斥合并器，合并来自入栈和出栈控制器的SP更新请求。",
+      "explanation": "SRMerge接收来自u_inStack的入栈SP驱动（w_driveFrominStackSP）和来自u_outStack的出栈SP驱动（w_driveFromoutStackSP），输出一个统一的栈恢复驱动信号（w_SRDrive_1），用于驱动后续的SP更新逻辑。",
+      "signals": [
+        "i_drive0 (w_driveFrominStackSP)",
+        "i_drive1 (w_driveFromoutStackSP)",
+        "o_driveNext (w_SRDrive_1)"
+      ],
+      "instances": [
+        "SRMerge"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_i_driveFromRGRF_1",
+        "flow_001_intAndExc_i_driveFromRPSR_1",
+        "flow_002_intAndExc_i_driveFromDR_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "key_component_connections"
+        }
+      ],
+      "id": "semantic:module:intAndExc:component_role:005"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "subject": "dataRoteMerge (cMutexMerge3_104b_int)",
+      "summary": "数据路由的互斥合并器，合并来自PC更新路径和栈操作路径的数据，输出到DataRoute模块。",
+      "explanation": "dataRoteMerge接收来自WbtopcMerge的PC驱动数据（w_pcDriveToDataRoute_1）、来自u_inStack的入栈数据（w_inData_96）和来自u_outStack的出栈数据（w_outMerDriToDR_1），输出合并后的104位数据（o_dataRouteData_104）和驱动信号（o_driveToDataRoute_1）。",
+      "signals": [
+        "i_drive0 (w_pcDriveToDataRoute_1)",
+        "i_drive1 (w_inStackDriToDR_1)",
+        "i_drive2 (w_outMerDriToDR_1)",
+        "o_driveNext",
+        "o_data_104"
+      ],
+      "instances": [
+        "dataRoteMerge"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_i_driveFromRGRF_1",
+        "flow_001_intAndExc_i_driveFromRPSR_1",
         "flow_002_intAndExc_i_driveFromDR_1",
         "flow_003_intAndExc_i_excDriveFromDec",
         "flow_004_intAndExc_i_excDriveFromExe",
@@ -388,46 +384,44 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "key_component_connections"
         }
       ],
-      "id": "semantic:module:intAndExc:component_role:004"
+      "id": "semantic:module:intAndExc:component_role:006"
     },
     {
-      "claim_type": "assignment_interpretation",
+      "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "w_pcToif_32",
-      "summary": "根据异常编号（w_excNum_4）计算跳转到IF的PC地址，包括软件中断（SVC）和硬件异常向量地址。",
-      "explanation": "该赋值（index 14）根据w_excNum_4的值选择不同的PC地址。对于软件中断（4'b0010），使用w_pcAndPsr_64的高32位；对于其他异常，映射到固定的异常向量地址（如0x1200, 0x1204等）。这是中断/异常处理中PC跳转的核心逻辑。",
+      "subject": "vectorSpli (cSplitter2_32b_int)",
+      "summary": "中断向量地址分割器，将计算出的中断向量PC和类型信息分割，分别输出到IF和WbMerge。",
+      "explanation": "vectorSpli接收来自preStackSpli的驱动信号（w_intSeleDrive1_1）和向量地址数据，输出o_DriveToIf_1（驱动IF跳转到中断向量地址）和o_intPC_32（中断向量PC值）。",
       "signals": [
-        "w_pcToif_32",
-        "w_excNum_4",
-        "w_pcAndPsr_64"
+        "i_drive (w_DRSeleDriTovec_1)",
+        "o_driveNext0 (w_vecSpliDriToWbMer_1)",
+        "o_driveNext1 (o_DriveToIf_1)",
+        "o_data1_32 (o_intPC_32)"
       ],
-      "related_assignments": [
-        "14"
+      "instances": [
+        "vectorSpli"
       ],
       "related_flows": [
-        "flow_007_intAndExc_i_intDriveFromIF"
+        "flow_002_intAndExc_i_driveFromDR_1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "assign_dependencies"
         }
       ],
-      "id": "semantic:module:intAndExc:assignment_interpretation:001"
+      "id": "semantic:module:intAndExc:component_role:007"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -435,9 +429,9 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "subject": "w_pc_32",
-      "summary": "根据异常编号（w_excNum_4）从各阶段PC中选择对应的PC值，用于后续处理。",
-      "explanation": "该赋值（index 11）通过多级条件选择器，根据w_excNum_4的值从w_intPC1_32、w_ifPC1_32、w_decPC1_32、w_exePC1_32、w_lsuPC1_32中选择对应的PC。这是将各阶段PC与异常编号关联的关键逻辑。",
+      "subject": "w_pc_32 (assign index 11)",
+      "summary": "根据仲裁后的异常编号（w_excNum_4）选择对应的异常PC值。",
+      "explanation": "该赋值通过多级条件选择器，从多个流水线阶段（IF、Dec、Exe、Lsu）的PC值中选择与当前异常编号匹配的PC，用于后续的向量地址计算。",
       "signals": [
         "w_pc_32",
         "w_excNum_4",
@@ -448,7 +442,82 @@
         "w_lsuPC1_32"
       ],
       "related_assignments": [
-        "11"
+        "assign index 9",
+        "assign index 12",
+        "assign index 13",
+        "assign index 14"
+      ],
+      "related_flows": [
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies"
+        }
+      ],
+      "id": "semantic:module:intAndExc:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "subject": "w_pcToif_32 (assign index 14)",
+      "summary": "根据异常编号（w_excNum_4）计算最终发送给IF的中断/异常向量地址。",
+      "explanation": "该赋值根据不同的异常类型（如软件中断、数据中止、预取中止等）映射到固定的向量地址（如0x1200, 0x1204等），或从w_pcAndPsr_64中提取PC值（用于返回地址）。这是中断/异常处理流程的关键输出。",
+      "signals": [
+        "w_pcToif_32",
+        "w_excNum_4",
+        "w_pcAndPsr_64"
+      ],
+      "related_assignments": [
+        "assign index 11",
+        "assign index 12",
+        "assign index 13"
+      ],
+      "related_flows": [
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies"
+        }
+      ],
+      "id": "semantic:module:intAndExc:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "subject": "w_vecAddr_32 (assign index 13)",
+      "summary": "计算中断/异常向量地址，对于软件中断（异常编号4'b0010）使用SP+24，其他情况使用w_exeAddr_32。",
+      "explanation": "该赋值区分了软件中断（SVC）和其他异常，软件中断的向量地址基于栈指针（SP）计算，而其他异常则使用基于异常编号的地址（w_exeAddr_32 = w_excNum_4 * 4）。",
+      "signals": [
+        "w_vecAddr_32",
+        "w_excNum_4",
+        "w_SP_32",
+        "w_exeAddr_32"
+      ],
+      "related_assignments": [
+        "assign index 12",
+        "assign index 14"
       ],
       "related_flows": [
         "flow_003_intAndExc_i_excDriveFromDec",
@@ -462,45 +531,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "subject": "w_vecAddr_32",
-      "summary": "计算异常向量地址，对于软件中断（SVC）使用SP+24，其他异常使用w_exeAddr_32。",
-      "explanation": "该赋值（index 13）根据w_excNum_4是否为软件中断（4'b0010）选择不同的向量地址计算方式。软件中断使用SP+24，其他异常使用w_exeAddr_32（w_excNum_4 * 4）。这是异常向量表访问的地址计算逻辑。",
-      "signals": [
-        "w_vecAddr_32",
-        "w_excNum_4",
-        "w_SP_32",
-        "w_exeAddr_32"
-      ],
-      "related_assignments": [
-        "12",
-        "13"
-      ],
-      "related_flows": [
-        "flow_007_intAndExc_i_intDriveFromIF"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:intAndExc:assignment_interpretation:003"
@@ -511,9 +542,9 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "每个事件驱动输入（i_driveFrom*）都有一个对应的释放信号输出（o_freeTo*），形成请求-确认握手协议，确保事件处理完成。",
-      "subject": "事件驱动与释放信号配对",
-      "explanation": "接口中定义了9个事件驱动输入和9个释放信号输出，形成一一对应的配对关系。例如，i_driveFromDR_1对应o_freeToDR_1，i_excDriveFromDec对应o_excFreeToDec等。这表明模块使用请求-确认握手协议与外部模块通信，确保事件被正确处理后才释放源模块。",
+      "summary": "每个输入事件驱动信号都配有一个对应的输出释放信号，构成一个请求-确认握手协议，用于模块间同步。",
+      "subject": "事件-释放信号对",
+      "explanation": "例如，i_driveFromDR_1对应o_freeToDR_1，i_excDriveFromDec对应o_excFreeToDec。这表明模块在处理完一个事件后，会通过释放信号通知源模块，从而允许源模块继续发送下一个事件。这种设计用于管理流水线阶段之间的背压和同步。",
       "signals": [
         "i_driveFromDR_1",
         "o_freeToDR_1",
@@ -523,21 +554,22 @@
         "o_intFreeToIF"
       ],
       "related_payload": [
+        "i_DRdata_64",
         "i_decPCAndNum_36",
-        "i_exePCAndNum_36",
-        "i_ifPCAndNum_36",
-        "i_lsuPCAndNum_36",
         "i_intPCAndIntNum_38"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "interface.event_inputs"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "interface.free_outputs"
+        },
+        {
+          "source": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:intAndExc:interface_intent:001"
@@ -548,66 +580,30 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "异常事件驱动信号（i_excDriveFrom*）与对应的PC和异常编号数据（i_*PCAndNum_36）绑定，形成事件-数据对。",
-      "subject": "异常事件与PC/异常编号数据绑定",
-      "explanation": "接口中，每个异常事件驱动输入（如i_excDriveFromDec）都有一个对应的36位数据输入（如i_decPCAndNum_36），该数据包含32位PC和4位异常编号。这表明异常事件携带其发生时的PC和异常类型信息，供模块内部仲裁和处理。",
+      "summary": "部分输入事件携带相关的载荷数据，这些数据在事件被处理时被模块使用。",
+      "subject": "事件-载荷数据关联",
+      "explanation": "例如，i_excDriveFromDec事件携带i_decPCAndNum_36（包含PC和异常编号），i_intDriveFromIF事件携带i_ifPCAndNum_36和i_intPCAndIntNum_38。这表明事件和其相关数据是同时到达的，模块在接收到事件驱动信号时，会采样对应的数据总线。",
       "signals": [
         "i_excDriveFromDec",
         "i_decPCAndNum_36",
-        "i_excDriveFromExe",
-        "i_exePCAndNum_36",
-        "i_excDriveFromIF",
+        "i_intDriveFromIF",
         "i_ifPCAndNum_36",
-        "i_excDriveFromLsu",
-        "i_lsuPCAndNum_36"
+        "i_intPCAndIntNum_38"
       ],
       "related_payload": [
         "i_decPCAndNum_36",
-        "i_exePCAndNum_36",
         "i_ifPCAndNum_36",
-        "i_lsuPCAndNum_36"
+        "i_intPCAndIntNum_38"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:intAndExc:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "intAndExc"
-      },
-      "summary": "中断事件驱动信号（i_intDriveFromIF）与中断PC和中断类型数据（i_intPCAndIntNum_38）绑定，形成事件-数据对。",
-      "subject": "中断事件与中断PC/类型数据绑定",
-      "explanation": "接口中，中断事件驱动输入i_intDriveFromIF对应一个38位数据输入i_intPCAndIntNum_38，该数据包含32位中断PC和6位中断类型。这表明中断事件携带其中断发生时的PC和中断类型信息，供模块内部处理。",
-      "signals": [
-        "i_intDriveFromIF",
-        "i_intPCAndIntNum_38"
-      ],
-      "related_payload": [
-        "i_intPCAndIntNum_38"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
-        }
-      ],
-      "id": "semantic:module:intAndExc:interface_intent:003"
     },
     {
       "claim_type": "documentation_focus",
@@ -615,17 +611,16 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "文档应重点描述中断与异常事件的优先级仲裁机制，包括cmpMerge的仲裁策略和intAndExeSele的路径选择逻辑。",
-      "subject": "中断与异常优先级仲裁逻辑",
-      "explanation": "模块的核心功能是仲裁来自多个流水线阶段的中断/异常事件，并决定处理路径。cmpMerge作为WaitMerge5组件，其仲裁策略（如优先级顺序）是理解模块行为的关键。intAndExeSele的路径选择逻辑（写回 vs 中断/异常处理）决定了事件的处理方式。这些逻辑需要详细文档说明。",
+      "summary": "文档应重点描述不同中断/异常源之间的优先级仲裁机制，以及仲裁结果如何影响后续的入栈、出栈和PC更新流程。",
+      "subject": "中断与异常仲裁优先级",
+      "explanation": "模块的核心功能是仲裁来自多个流水线阶段的中断/异常事件。cmpMerge和intAndExeSele的输入输出关系，以及assign index 11和14中的条件选择逻辑，都体现了优先级仲裁。文档需要解释仲裁规则（例如，异常优先级高于中断，不同流水线阶段的异常优先级等）。",
       "signals": [
+        "i_intDriveFromIF",
+        "i_excDriveFromIF",
         "i_excDriveFromDec",
         "i_excDriveFromExe",
-        "i_excDriveFromIF",
         "i_excDriveFromLsu",
-        "i_intDriveFromIF",
         "w_cmpMerDrive_1",
-        "w_intAndExeSeleDriveToMe",
         "w_intSeleDrive_1"
       ],
       "instances": [
@@ -640,14 +635,14 @@
         "flow_007_intAndExc_i_intDriveFromIF"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:intAndExc:documentation_focus:001"
@@ -658,38 +653,36 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "文档应详细描述入栈（u_inStack）和出栈（u_outStack）的控制逻辑，以及SP值的更新和SP操作请求的生成。",
-      "subject": "寄存器堆栈（SP）管理机制",
-      "explanation": "模块通过u_inStack和u_outStack管理中断/异常处理时的寄存器堆栈操作。入栈事件来自RGRF和RPSR，出栈事件来自DRSelector和inOutSele。SP操作事件通过SRMerge合并后，由SRDriveTap生成请求。SP值（r_SP_32）的更新逻辑需要明确文档化。",
+      "summary": "文档应详细说明入栈（u_inStack）和出栈（u_outStack）的触发条件、数据路径和与SP更新逻辑（SRMerge）的交互。",
+      "subject": "栈操作（入栈与出栈）流程",
+      "explanation": "模块包含两个栈操作子模块，分别处理异常/中断发生时的状态保存（入栈）和返回时的状态恢复（出栈）。SRMerge负责合并两者的SP更新请求。文档需要解释入栈和出栈的触发事件、数据格式以及SP更新的时机。",
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
+        "i_driveFromDR_1",
         "w_driveFrominStackSP",
         "w_driveFromoutStackSP",
-        "w_SRDrive_1",
-        "w_SRDriveReq_1",
-        "w_SP_32"
+        "w_SRDrive_1"
       ],
       "instances": [
         "u_inStack",
         "u_outStack",
-        "SRMerge",
-        "SRDriveTap",
-        "firstTap"
+        "SRMerge"
       ],
       "related_flows": [
         "flow_000_intAndExc_i_driveFromRGRF_1",
-        "flow_001_intAndExc_i_driveFromRPSR_1"
+        "flow_001_intAndExc_i_driveFromRPSR_1",
+        "flow_002_intAndExc_i_driveFromDR_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "internal_event_flow_refs"
         }
       ],
       "id": "semantic:module:intAndExc:documentation_focus:002"
@@ -700,67 +693,146 @@
         "type": "module",
         "module": "intAndExc"
       },
-      "summary": "文档应明确列出异常编号（w_excNum_4）到异常向量地址的映射关系，包括软件中断和硬件异常。",
-      "subject": "异常向量地址映射",
-      "explanation": "赋值index 14定义了w_excNum_4到w_pcToif_32的映射，包括软件中断（SVC）使用w_pcAndPsr_64的高32位，以及其他异常对应的固定向量地址（如0x1200, 0x1204等）。这些映射关系是中断/异常处理的核心，需要详细文档化。",
+      "summary": "文档应说明输出到DataRoute模块的104位数据的格式和来源，包括PC更新数据、入栈数据和出栈数据。",
+      "subject": "数据路由输出（o_dataRouteData_104）的组成",
+      "explanation": "dataRoteMerge合并了来自三个不同路径的数据：PC更新路径（WbtopcMerge）、入栈路径（u_inStack）和出栈路径（u_outStack）。文档需要解释这104位数据中每个字段的含义和来源，以便DataRoute模块正确解析。",
       "signals": [
-        "w_pcToif_32",
-        "w_excNum_4",
-        "w_pcAndPsr_64"
+        "o_dataRouteData_104",
+        "w_pcDriveToDataRoute_1",
+        "w_inStackDriToDR_1",
+        "w_outMerDriToDR_1"
+      ],
+      "instances": [
+        "dataRoteMerge"
       ],
       "related_flows": [
-        "flow_007_intAndExc_i_intDriveFromIF"
+        "flow_000_intAndExc_i_driveFromRGRF_1",
+        "flow_001_intAndExc_i_driveFromRPSR_1",
+        "flow_002_intAndExc_i_driveFromDR_1",
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF",
+        "flow_008_intAndExc_i_driveFromWB"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/intAndExc.json"
+          "source": "key_component_connections"
         },
         {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:intAndExc:documentation_focus:003"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "reason": "当前上下文仅显示了仲裁器的连接关系，但未提供仲裁优先级的具体逻辑（例如，是固定优先级还是可编程优先级，不同异常类型的优先级顺序等）。需要查看RTL源码中的仲裁逻辑。",
+      "subject": "中断/异常仲裁优先级的具体规则",
+      "needed_source_slice": "always block or assign block containing arbitration logic",
+      "signals": [
+        "w_cmpMerDrive_1",
+        "w_intSeleDrive_1",
+        "w_intAndExeSeleDriveToMe"
+      ],
+      "instances": [
+        "cmpMerge",
+        "intAndExeSele"
+      ],
+      "related_flows": [
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "key_component_connections"
+        },
+        {
+          "source": "assign_dependencies"
+        }
+      ],
+      "id": "semantic:module:intAndExc:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "reason": "assign index 14中包含了向量地址的硬编码映射，但上下文未提供完整的映射表。需要查看RTL源码以确认所有异常类型的向量地址。",
+      "subject": "中断/异常向量地址映射表",
+      "needed_source_slice": "assign block for w_pcToif_32",
+      "signals": [
+        "w_pcToif_32",
+        "w_excNum_4"
+      ],
+      "related_flows": [
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies"
+        }
+      ],
+      "id": "semantic:module:intAndExc:source_review_request:002"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "intAndExc"
+      },
+      "reason": "上下文未提供o_dataRouteData_104的位域定义，无法确定其内部字段的具体含义和布局。需要查看RTL源码或相关文档。",
+      "subject": "数据路由输出（o_dataRouteData_104）的位域定义",
+      "needed_source_slice": "assign block or comments defining o_dataRouteData_104",
+      "signals": [
+        "o_dataRouteData_104"
+      ],
+      "instances": [
+        "dataRoteMerge"
+      ],
+      "related_flows": [
+        "flow_000_intAndExc_i_driveFromRGRF_1",
+        "flow_001_intAndExc_i_driveFromRPSR_1",
+        "flow_002_intAndExc_i_driveFromDR_1",
+        "flow_003_intAndExc_i_excDriveFromDec",
+        "flow_004_intAndExc_i_excDriveFromExe",
+        "flow_005_intAndExc_i_excDriveFromIF",
+        "flow_006_intAndExc_i_excDriveFromLsu",
+        "flow_007_intAndExc_i_intDriveFromIF",
+        "flow_008_intAndExc_i_driveFromWB"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "key_component_connections"
+        }
+      ],
+      "id": "semantic:module:intAndExc:source_review_request:003"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "cmpMerge仲裁策略",
-      "reason": "上下文未提供cmpMerge（WaitMerge5）的详细仲裁逻辑，如优先级顺序（例如，异常是否优先于中断，各阶段异常之间的优先级）。需要RTL源代码或设计文档来明确仲裁策略。",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
-        }
-      ]
-    },
-    {
-      "field": "intAndExeSele路径选择条件",
-      "reason": "上下文未明确intAndExeSele选择写回路径（w_intAndExeSeleDriveToMe）还是中断/异常处理路径（w_intSeleDrive_1）的具体条件。需要RTL源代码或设计文档来明确选择逻辑。",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
-        }
-      ]
-    },
-    {
-      "field": "SP值（r_SP_32）更新逻辑",
-      "reason": "上下文仅指出w_SP_32来自r_SP_32，但未提供r_SP_32的更新逻辑（何时增加、减少或重置）。需要RTL源代码或设计文档来明确SP管理细节。",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/intAndExc.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/intAndExc.json"
-        }
-      ]
-    }
-  ]
+  "evidence_gaps": []
 }

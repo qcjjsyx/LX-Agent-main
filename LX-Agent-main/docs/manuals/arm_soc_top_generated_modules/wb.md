@@ -1,8 +1,8 @@
 # 模块 `wb`
 
 - 源文件：`rtl/rtl/WB/wb.v`。
-- 职责：AI 推断：写回阶段模块，负责将执行结果分发并写入通用寄存器组、程序计数器、谓词寄存器、XPSR等架构状态单元。。
-- 说明：模块接收来自互斥合并单元和加载存储单元的两个驱动事件，通过内部的分发、选择、延迟和互斥合并组件，将数据路由到五个不同的写回目标，并管理对应的释放信号。
+- 职责：AI 推断：写回阶段模块，负责将执行结果分发并写入到通用寄存器组、程序计数器、谓词寄存器、XPSR等架构状态单元。。
+- 说明：模块接收来自 LSU 和互斥合并单元的驱动事件，通过内部的分发、选择、延迟和互斥合并组件，将数据分别导向 grf、pc、prf、xpsr 等目标，并产生对应的写回驱动事件和释放信号。
 
 ## 1. 层级位置
 
@@ -83,7 +83,7 @@ wb
 - Payload：`o_drive_grf` -> `o_WBdataToGRF_8 [7:0]`, `o_drive_grf` -> `o_grfData_74 [73:0]`。
 - 输出/影响：`o_drive_grf`。
 - 结构复杂度：branch=0，join=2，blocking=3。
-- AI 推断：最终手册应重点描述该流如何通过两级MutexMerge实现多源事件的仲裁，以及事件与数据载荷的同步关系。
+- AI 推断：文档应重点描述两级互斥合并器的仲裁逻辑和事件选择条件。
 
 ### `i_lsuDriveToWB`
 
@@ -91,7 +91,7 @@ wb
 - Payload：`o_drive_grf` -> `o_WBdataToGRF_8 [7:0]`, `o_drive_grf` -> `o_grfData_74 [73:0]`, `o_drive_pc` -> `o_pcData_32 [31:0]`, `o_drive_prf` -> `o_prfData_40 [39:0]`, `o_drive_xpsr` -> `o_xpsrData_4 [3:0]`, `o_wbDriveReadGRF` -> `o_WBdataToGRF_8 [7:0]`, `o_wbDriveReadGRF` -> `o_grfData_74 [73:0]`。
 - 输出/影响：`o_drive_prf`, `o_wbDriveReadGRF`, `o_drive_xpsr`, `o_drive_pc`, `o_drive_grf`。
 - 结构复杂度：branch=4，join=2，blocking=3。
-- AI 推断：文档应重点描述 LSU 驱动事件如何通过 Splitter、Selector 和 MutexMerge 分发至多个写回目标，以及 FIFO 反馈路径的作用。
+- AI 推断：LSU 写回事件携带的数据通过 Selector1 和 Selector2 的分发，分别映射到 PRF、PC、XPSR 和 GRF 的 payload 输出。
 
 
 ## 5. 内部组件与 assign 影响
@@ -112,6 +112,6 @@ wb
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_11` | control_path | `o_WBdataToGRF_8` | w_dataReadGRF_87[85:78] | AI 推断：从读GRF数据中提取8位数据，用于写回GRF的读回路径。 |
-| `assign_23` | data_path | `w_dataToMutexMerge2_64` | {i_dataFromGRF_64[63:32],w_data1_64[63:32]} | AI 推断：组合来自GRF的高32位数据和来自w_data1_64的高32位数据，形成64位数据输入给MutexMerge2。 |
+| `assign_11` | control_path | `o_WBdataToGRF_8` | w_dataReadGRF_87[85:78] | AI 推断：从读 GRF 数据中提取 8 位数据，用于写回 GRF。 |
+| `assign_23` | data_path | `w_dataToMutexMerge2_64` | {i_dataFromGRF_64[63:32],w_data1_64[63:32]} | AI 推断：组合来自 GRF 和内部数据路径的 64 位数据，用于 MutexMerge2 的输入。 |
 | `assign_25` | control_path | `o_bitOpOver_1` | w_driveMutexMerge12Delay_1 | 证据不足：No Semantic Layer assignment interpretation is available. |

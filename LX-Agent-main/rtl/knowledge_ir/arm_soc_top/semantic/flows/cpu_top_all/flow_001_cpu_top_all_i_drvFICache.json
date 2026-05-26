@@ -66,9 +66,9 @@
         "module": "cpu_top_all",
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
-      "summary": "从外部输入 i_drvFICache 出发，经延迟、选择、分发后，最终汇聚到两个模块输出端点 o_drv2ICache 和 o_lsuDriveToDataRout_1 的驱动事件流。",
+      "summary": "从外部输入 i_drvFICache 出发，经延迟、选择、分发后，最终汇聚到两个输出端点 o_drv2ICache 和 o_lsuDriveToDataRout_1 的驱动事件流。",
       "subject": "flow_001_cpu_top_all_i_drvFICache",
-      "explanation": "该流描述了 i_drvFICache 信号如何通过 icacheSelectorDelay 和 icacheSelectorDelay1 两级延迟后，由 icacheSelector 分发给 fetch_inst 和 lsu_inst，再经各自路径（包括延迟、FIFO、合并器）最终到达 icachecArbMerge 和 DRMutexMerge，形成对 ICache 和数据路由的驱动。",
+      "explanation": "该流描述了单个驱动事件从模块边界进入后，通过 icacheSelectorDelay 和 icacheSelectorDelay1 进行透明延迟，再由 icacheSelector 分叉为两条路径：一条经 fetch_inst 等模块最终到达 icachecArbMerge 输出 o_drv2ICache；另一条经 lsu_inst 等模块最终到达 lsuToDataRoutDelay1 输出 o_lsuDriveToDataRout_1。流中包含了多个分支、合并和阻塞点，体现了指令缓存和数据路由的驱动关系。",
       "signals": [
         "i_drvFICache",
         "o_drv2ICache",
@@ -81,7 +81,6 @@
         "fetch_inst",
         "lsu_inst",
         "icachecArbMerge",
-        "DRMutexMerge",
         "lsuToDataRoutDelay1"
       ],
       "related_assignments": [
@@ -108,8 +107,8 @@
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
       "subject": "icacheSelector",
-      "summary": "作为事件分发器，将延迟后的驱动信号 w_drvFICacheDelay1 分发给 fetch_inst 和 lsu_inst。",
-      "explanation": "icacheSelector 是一个 cSelector2_65b_cpu 类型的 splitter，其输入为 w_drvFICacheDelay1，输出 w_drvFICache 和 w_icacheDriveToLsu_1 分别驱动 fetch_inst 和 lsu_inst，实现事件的分叉。",
+      "summary": "作为流的分叉点，将延迟后的驱动信号分发给 fetch 和 lsu 两条路径。",
+      "explanation": "icacheSelector 是一个 cSelector2_65b_cpu 类型的 splitter，它接收 w_drvFICacheDelay1 信号，并输出 w_drvFICache 和 w_icacheDriveToLsu_1 两个信号，分别驱动 fetch_inst 和 lsu_inst 模块，实现事件的分发。",
       "signals": [
         "w_drvFICacheDelay1",
         "w_drvFICache",
@@ -136,8 +135,8 @@
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
       "subject": "icachecArbMerge",
-      "summary": "作为仲裁合并器，将来自 fetch_inst 和 lsu_inst 的 ICache 驱动信号合并后输出到 o_drv2ICache。",
-      "explanation": "icachecArbMerge 是一个 cArbMerge2_105b_cpu 类型的 merger，输入 w_fetchDriveToIcacheDelay_1 和 w_lsuDriveToIcacheDelay_1，输出 o_drv2ICache，表明该端点由两个源仲裁驱动。",
+      "summary": "作为流中通往 o_drv2ICache 路径的合并点，仲裁来自 fetch 和 lsu 的驱动请求。",
+      "explanation": "icachecArbMerge 是一个 cArbMerge2_105b_cpu 类型的 merger，它接收来自 fetch 路径的 w_fetchDriveToIcacheDelay_1 和来自 lsu 路径的 w_lsuDriveToIcacheDelay_1，仲裁后输出 o_drv2ICache。",
       "signals": [
         "w_fetchDriveToIcacheDelay_1",
         "w_lsuDriveToIcacheDelay_1",
@@ -163,17 +162,14 @@
         "module": "cpu_top_all",
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
-      "subject": "DRMutexMerge",
-      "summary": "作为互斥合并器，将来自 lsu_inst 和 intAndExc_inst 的数据路由驱动信号合并后，经延迟输出到 o_lsuDriveToDataRout_1。",
-      "explanation": "DRMutexMerge 是一个 cMutexMerge2_105b_cpu 类型的 merger，输入 w_lsuDriveToDataRoutDelay1_1 和 w_intDriveToDR，输出 w_lsuDriveToDR_1，再经 lsuToDataRoutDelay1 延迟后输出到 o_lsuDriveToDataRout_1。",
+      "subject": "lsuToDataRoutDelay1",
+      "summary": "作为流中通往 o_lsuDriveToDataRout_1 路径的最终延迟级，将 lsu 驱动信号延迟后输出。",
+      "explanation": "lsuToDataRoutDelay1 是一个 delay8U 类型的透明延迟单元，它接收来自 DRMutexMerge 的 w_lsuDriveToDR_1 信号，延迟后输出 o_lsuDriveToDataRout_1。",
       "signals": [
-        "w_lsuDriveToDataRoutDelay1_1",
-        "w_intDriveToDR",
         "w_lsuDriveToDR_1",
         "o_lsuDriveToDataRout_1"
       ],
       "instances": [
-        "DRMutexMerge",
         "lsuToDataRoutDelay1"
       ],
       "doc_priority": "primary",
@@ -194,8 +190,8 @@
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
       "subject": "w_lsuPyPathPmtFire_1",
-      "summary": "该赋值定义了 LSU 路径的触发条件，由多个驱动源或运算得到。",
-      "explanation": "assign 39 将 w_lsuDriveToLaunchDelay2_1、w_ExeDriveToLunchDelay_1 和 w_branchDri3 进行或运算，生成 w_lsuPyPathPmtFire_1，用于控制 LSU 路径的启动或使能。",
+      "summary": "该赋值定义了 lsu 路径的触发条件，用于控制 lsu 路径的启动。",
+      "explanation": "assign 39 将 w_lsuDriveToLaunchDelay2_1、w_ExeDriveToLunchDelay_1 和 w_branchDri3 三个信号进行或运算，生成 w_lsuPyPathPmtFire_1。该信号可能用于触发 lsu 路径中的某些流水线阶段或控制逻辑。",
       "signals": [
         "w_lsuPyPathPmtFire_1",
         "w_lsuDriveToLaunchDelay2_1",
@@ -205,9 +201,9 @@
       "related_assignments": [
         "39"
       ],
-      "doc_priority": "reference",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
@@ -222,9 +218,9 @@
         "module": "cpu_top_all",
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
-      "summary": "o_lsuDriveToDataRout_1 携带 105 位数据载荷，其流控由 i_lsuFreeFromDataRout_1 信号控制。",
+      "summary": "o_lsuDriveToDataRout_1 携带 105 位数据负载，并由 i_lsuFreeFromDataRout_1 信号进行流控。",
       "subject": "o_lsuDriveToDataRout_1 与 i_lsuFreeFromDataRout_1",
-      "explanation": "接口载荷合约显示 o_lsuDriveToDataRout_1 关联了 105 位数据信号 o_lsuToDataRoutData_105，并有一个空闲信号 i_lsuFreeFromDataRout_1，表明该输出端口的驱动受外部数据路由模块的空闲状态控制。",
+      "explanation": "接口负载合约显示，o_lsuDriveToDataRout_1 关联了 105 位数据信号 o_lsuToDataRoutData_105，并有一个空闲信号 i_lsuFreeFromDataRout_1。这表明该输出是一个带流控的数据接口，数据在空闲信号有效时才能被驱动。",
       "signals": [
         "o_lsuDriveToDataRout_1",
         "o_lsuToDataRoutData_105",
@@ -250,15 +246,19 @@
         "module": "cpu_top_all",
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
-      "summary": "该信号作为 o_lsuDriveToDataRout_1 的反压信号，但当前上下文未提供其内部连接细节。",
+      "summary": "该信号是 o_lsuDriveToDataRout_1 路径上的反压信号，用于控制数据路由的驱动。",
       "subject": "i_lsuFreeFromDataRout_1",
-      "explanation": "接口载荷合约中提到了 i_lsuFreeFromDataRout_1 作为空闲信号，但未在流步骤或连接中体现其如何影响内部延迟或 FIFO 的流控，因此无法断言其具体作用。",
+      "explanation": "接口负载合约中明确指出了 i_lsuFreeFromDataRout_1 作为空闲信号，与 o_lsuDriveToDataRout_1 关联。这表明在数据路由路径上存在反压机制，当该信号无效时，lsu 不应驱动数据。该反压关系对于理解数据路由的流控至关重要。",
       "signals": [
-        "i_lsuFreeFromDataRout_1"
+        "i_lsuFreeFromDataRout_1",
+        "o_lsuDriveToDataRout_1"
       ],
-      "doc_priority": "reference",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "instances": [
+        "lsuToDataRoutDelay1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/cpu_top_all.json"
@@ -273,12 +273,11 @@
         "module": "cpu_top_all",
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
-      "summary": "最终手册应重点描述 i_drvFICache 如何通过 icacheSelector 分发给 fetch_inst 和 lsu_inst，以及各自路径如何通过延迟、FIFO 和合并器到达最终输出端点。",
-      "subject": "流的分发与汇聚路径",
-      "explanation": "该流的核心在于 icacheSelector 的分发和后续路径的汇聚，包括 fetch_inst 到 icachecArbMerge 的路径和 lsu_inst 到 DRMutexMerge 的路径，这些是理解模块内部事件驱动的关键。",
+      "summary": "文档应重点描述 i_drvFICache 事件如何通过 icacheSelector 分叉，以及如何通过 icachecArbMerge 和 DRMutexMerge 等合并点汇聚到最终输出。",
+      "subject": "流的分叉与合并路径",
+      "explanation": "该流的核心结构是分叉和合并。icacheSelector 将事件分发给 fetch 和 lsu 两条路径，而 icachecArbMerge 和 DRMutexMerge 则分别将来自不同源的事件合并后输出。文档应清晰说明这些分叉和合并点的作用，以及它们如何影响事件的传播。",
       "signals": [
         "i_drvFICache",
-        "w_drvFICacheDelay1",
         "w_drvFICache",
         "w_icacheDriveToLsu_1",
         "o_drv2ICache",
@@ -286,8 +285,6 @@
       ],
       "instances": [
         "icacheSelector",
-        "fetch_inst",
-        "lsu_inst",
         "icachecArbMerge",
         "DRMutexMerge"
       ],
@@ -308,22 +305,24 @@
         "module": "cpu_top_all",
         "flow_id": "flow_001_cpu_top_all_i_drvFICache"
       },
-      "reason": "当前上下文未提供 i_lsuFreeFromDataRout_1 如何与内部延迟或 FIFO 交互的细节，需要 RTL 源码确认其是否影响流控。",
-      "subject": "i_lsuFreeFromDataRout_1 的反压机制",
-      "needed_source_slice": "always block 或 assign 中与 i_lsuFreeFromDataRout_1 相关的逻辑",
+      "reason": "当前上下文仅提供了 assign 39 的 RHS 表达式，但未说明 w_lsuPyPathPmtFire_1 信号的具体用途和连接关系，需要查看 RTL 源码以确定其控制逻辑。",
+      "subject": "assign 39 的精确语义",
+      "needed_source_slice": "assign block",
       "signals": [
-        "i_lsuFreeFromDataRout_1"
+        "w_lsuPyPathPmtFire_1",
+        "w_lsuDriveToLaunchDelay2_1",
+        "w_ExeDriveToLunchDelay_1",
+        "w_branchDri3"
       ],
-      "instances": [
-        "lsuToDataRoutDelay1",
-        "DRMutexMerge"
+      "related_assignments": [
+        "39"
       ],
-      "doc_priority": "reference",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/cpu_top_all.json"
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
       ],
       "id": "semantic:flow:cpu_top_all:flow_001_cpu_top_all_i_drvFICache:source_review_request:001"
@@ -331,8 +330,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "i_drvFICache 的载荷信息",
-      "reason": "接口载荷合约中 i_drvFICache 的 payloads 和 free_signal 字段为空，无法确定其数据宽度或流控信号。"
+      "field": "i_drvFICache 的负载合约",
+      "reason": "接口负载合约中，i_drvFICache 的 payloads 和 free_signal 字段均为空，置信度为 low，无法确定该输入是否携带数据负载或流控信号。"
     }
   ]
 }

@@ -49,10 +49,9 @@
     "count": 10,
     "by_type": {
       "component_role": 3,
-      "documentation_focus": 1,
-      "interface_intent": 2,
+      "documentation_focus": 2,
+      "interface_intent": 3,
       "module_role": 1,
-      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -63,16 +62,14 @@
         "type": "module",
         "module": "IONet_slot"
       },
-      "summary": "该模块是SoC内部CPU与外围设备（UART、SPI、I2C、PWM、Timer、GPIO、WatchDog）之间的NoC（片上网络）桥接与路由节点。",
+      "summary": "该模块是SoC中CPU与片上网络(NoC)之间的桥接与外围设备汇聚节点，负责将CPU的驱动事件和数据分发到各外围设备，并收集外围设备的响应返回CPU。",
       "subject": "IONet_slot",
-      "explanation": "模块通过CPU2NoC实例接收CPU的驱动事件和数据，并通过IONetwork实例（uut）将事件和数据路由到各个外设，同时收集外设的响应事件和数据，再通过CPU2NoC实例返回给CPU。接口中的事件驱动信号（i_drvFCPU/o_drv2CPU）和自由信号（i_freeFCPU/o_free2CPU）构成了CPU与NoC之间的握手机制。",
+      "explanation": "模块通过cpu2noc_instance与CPU接口，通过uut(IONetwork)实例连接多个外围设备(IIC, PWM, UART, SPI, Timer, WatchDog, GPIO)，形成星型拓扑。事件流从CPU输入，经模块分发到各外设，再汇聚返回CPU。",
       "signals": [
         "i_drvFCPU",
         "o_drv2CPU",
         "i_dataFCPU_51",
-        "o_data2CPU_51",
-        "i_freeFCPU",
-        "o_free2CPU"
+        "o_data2CPU_51"
       ],
       "instances": [
         "cpu2noc_instance",
@@ -99,7 +96,7 @@
           "source": "knowledge_ir/modules/IONet_slot.json"
         },
         {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:module_role:001"
@@ -110,18 +107,21 @@
         "type": "module",
         "module": "IONet_slot"
       },
-      "summary": "模块负责将CPU发起的驱动事件和数据，通过NoC网络分发到指定的外设，并将外设的响应事件和数据回传给CPU。",
-      "subject": "CPU到外设的NoC路由",
-      "explanation": "cpu2noc_instance负责与CPU接口，将CPU的驱动事件（i_drvFCPU）和数据（i_dataFCPU_51）转换为NoC内部信号。IONetwork实例（uut）作为核心路由器，根据事件目标将事件和数据路由到对应的外设（如UART0、SPI0等），并收集外设的返回事件和数据，最终通过cpu2noc_instance回传给CPU。",
+      "summary": "模块将CPU的单个驱动事件(i_drvFCPU)通过NoC网络分发到多个外围设备，并将各外设的驱动事件汇聚后返回CPU(o_drv2CPU)。",
+      "subject": "事件驱动分发与汇聚",
+      "explanation": "事件流从i_drvFCPU进入cpu2noc_instance，产生两个通道事件(w_drv2NoCChanel0/1)，经uut分发到各外设。各外设的响应事件通过uut汇聚回cpu2noc_instance，最终输出o_drv2CPU。",
       "signals": [
         "i_drvFCPU",
         "o_drv2CPU",
-        "i_dataFCPU_51",
-        "o_data2CPU_51"
+        "w_drv2NoCChanel0",
+        "w_drv2NoCChanel1",
+        "w_drvFNoCChannel0",
+        "w_drvFNoCChannel1"
       ],
       "instances": [
         "cpu2noc_instance",
-        "uut"
+        "uut",
+        "delayUart0"
       ],
       "related_flows": [
         "flow_000_IONet_slot_i_drvFCPU"
@@ -134,7 +134,7 @@
           "source": "knowledge_ir/modules/IONet_slot.json"
         },
         {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:structural_responsibility:001"
@@ -146,15 +146,17 @@
         "module": "IONet_slot"
       },
       "subject": "cpu2noc_instance (CPU2NoC)",
-      "summary": "CPU与NoC网络之间的协议转换和接口适配器。",
-      "explanation": "该实例将CPU的驱动事件（i_drvFCPU）和数据（i_dataFCPU_51）转换为NoC内部使用的通道信号（w_drv2NoCChanel0/1, w_data2NoCChanel0/1_51），并将NoC的返回事件（w_drvFNoCChannel0/1）和数据（w_dataFNoCChannel0/1_51）转换为CPU接口信号（o_drv2CPU, o_data2CPU_51）。它处理了CPU与NoC之间的握手协议（包括自由信号i_freeFCPU/o_free2CPU）。",
+      "summary": "CPU与NoC之间的协议转换与通道管理单元，负责将CPU的单个事件/数据接口转换为两个NoC通道。",
+      "explanation": "该实例接收CPU的驱动事件(i_drvFCPU)和数据(i_dataFCPU_51)，输出两个通道事件(w_drv2NoCChanel0/1)和对应数据。同时接收两个NoC通道的返回事件和数据，合并后输出给CPU。",
       "signals": [
         "i_drvFCPU",
         "o_drv2CPU",
         "i_dataFCPU_51",
         "o_data2CPU_51",
-        "i_freeFCPU",
-        "o_free2CPU"
+        "w_drv2NoCChanel0",
+        "w_drv2NoCChanel1",
+        "w_drvFNoCChannel0",
+        "w_drvFNoCChannel1"
       ],
       "instances": [
         "cpu2noc_instance"
@@ -170,7 +172,7 @@
           "source": "knowledge_ir/modules/IONet_slot.json"
         },
         {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:component_role:001"
@@ -182,8 +184,8 @@
         "module": "IONet_slot"
       },
       "subject": "uut (IONetwork)",
-      "summary": "NoC核心路由器，负责事件和数据的定向分发与汇聚。",
-      "explanation": "该实例是模块的核心，它接收来自cpu2noc_instance的驱动事件（经delayUart0延迟后）以及所有外设（IIC, PWM0/1, TIMER, UART0/1, WatchDog, gpio_slot, spi0/1）的驱动事件，并根据事件类型和目标，将事件和数据路由到正确的目的地。它实现了NoC的网格拓扑结构，通过方向性端口（如i_driveEast_11, o_driveNorth_01）进行连接。",
+      "summary": "NoC路由网络核心，实现外围设备与CPU之间的事件和数据路由。",
+      "explanation": "该实例连接所有外围设备(IIC, PWM0/1, TIMER, UART0/1, WatchDog, gpio_slot, spi0/1)和cpu2noc_instance的两个通道，负责在它们之间路由事件和数据包。每个外设通过一对事件信号(输入/输出)和一对数据总线与uut连接。",
       "signals": [
         "w_drv2NoCChanel0_delay",
         "w_drv2NoCChanel1",
@@ -212,7 +214,7 @@
           "source": "knowledge_ir/modules/IONet_slot.json"
         },
         {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:component_role:002"
@@ -224,8 +226,8 @@
         "module": "IONet_slot"
       },
       "subject": "delayUart0",
-      "summary": "为CPU到NoC的通道0驱动事件提供延迟单元。",
-      "explanation": "该实例位于cpu2noc_instance的通道0输出（w_drv2NoCChanel0）和IONetwork的输入（w_drv2NoCChanel0_delay）之间，表明通道0的驱动事件在进入核心路由器之前经过了延迟处理。这可能用于时序调整或避免竞争。",
+      "summary": "为通道0事件提供延迟对齐，确保与通道1的时序同步。",
+      "explanation": "该实例位于cpu2noc_instance的通道0输出与uut之间，对w_drv2NoCChanel0信号进行延迟处理，生成w_drv2NoCChanel0_delay。通道1无此延迟单元，表明通道0可能需要与特定外设(如UART)的时序对齐。",
       "signals": [
         "w_drv2NoCChanel0",
         "w_drv2NoCChanel0_delay"
@@ -241,10 +243,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/IONet_slot.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:component_role:003"
@@ -255,26 +254,25 @@
         "type": "module",
         "module": "IONet_slot"
       },
-      "summary": "该接口组构成了CPU发起NoC事务的请求通道，事件信号（i_drvFCPU）作为有效指示，数据信号（i_dataFCPU_51）作为伴随负载。",
-      "subject": "CPU驱动事件与数据接口",
-      "explanation": "事件信号i_drvFCPU的上升沿或高电平表明CPU发起了一个新的NoC事务，此时数据信号i_dataFCPU_51上的51位数据是有效的。自由信号i_freeFCPU可能用于指示CPU已准备好接收响应或释放通道。",
+      "summary": "i_drvFCPU与i_dataFCPU_51构成一个原子事务对，驱动事件携带51位数据负载。",
+      "subject": "CPU接口事件-数据绑定",
+      "explanation": "事件输入i_drvFCPU与数据输入i_dataFCPU_51在接口上配对出现，且数据宽度为51位。这表明CPU通过驱动事件触发数据传输，数据在事件有效时被采样。",
       "signals": [
         "i_drvFCPU",
-        "i_dataFCPU_51",
-        "i_freeFCPU"
+        "i_dataFCPU_51"
       ],
       "related_payload": [
         "i_dataFCPU_51"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/IONet_slot.json"
         },
         {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:interface_intent:001"
@@ -285,29 +283,52 @@
         "type": "module",
         "module": "IONet_slot"
       },
-      "summary": "该接口组构成了NoC向CPU返回事务结果的响应通道，事件信号（o_drv2CPU）作为有效指示，数据信号（o_data2CPU_51）作为伴随负载。",
-      "subject": "CPU响应事件与数据接口",
-      "explanation": "事件信号o_drv2CPU的上升沿或高电平表明NoC完成了一个事务并向CPU返回结果，此时数据信号o_data2CPU_51上的51位数据是有效的。自由信号o_free2CPU可能用于指示NoC已准备好接收下一个请求或释放通道。",
+      "summary": "每个外围设备通过一对事件信号(输入/输出)和一对数据总线与NoC通信，形成双向请求-响应协议。",
+      "subject": "外围设备接口事件-数据绑定",
+      "explanation": "所有外围设备(IIC, PWM, UART, SPI, Timer, WatchDog, GPIO)均具有输入事件(w_drvXxxFNoc)和输出事件(w_drvNocFXxx)，以及对应的输入数据和输出数据总线。这表明NoC与每个外设之间采用事件驱动的双向数据交换协议。",
       "signals": [
-        "o_drv2CPU",
-        "o_data2CPU_51",
-        "o_free2CPU"
-      ],
-      "related_payload": [
-        "o_data2CPU_51"
+        "w_drvIIC0FNoc",
+        "w_drvNocFIIC0",
+        "w_dataNoc2IIC0",
+        "w_dataIIC02Noc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/IONet_slot.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:interface_intent:002"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "IONet_slot"
+      },
+      "summary": "模块通过大量专用信号连接外围设备的配置、状态和中断引脚，这些信号直接路由到模块边界。",
+      "subject": "外围设备配置与状态接口",
+      "explanation": "连接列表显示大量BAUD、BREG、CKISO、IRQ、INT等信号从模块边界直接连接到各外设实例。这表明模块负责将这些外围设备的配置/状态信号透传到SoC顶层，不进行内部处理。",
+      "signals": [
+        "BAUD_UART0",
+        "BREG_UART0",
+        "IRQ_UART0",
+        "INT_TIMER",
+        "IRQ_GPIO",
+        "Int_WD",
+        "WD_RST"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
+        }
+      ],
+      "id": "semantic:module:IONet_slot:interface_intent:003"
     },
     {
       "claim_type": "documentation_focus",
@@ -315,14 +336,16 @@
         "type": "module",
         "module": "IONet_slot"
       },
-      "summary": "手册应重点描述基于事件驱动（drive）的NoC路由机制，而非传统的地址译码或包交换。",
-      "subject": "事件驱动路由机制",
-      "explanation": "从接口和内部连接来看，所有外设的通信都基于事件信号（如i_drvFCPU, o_drv2CPU, w_drvNocFUART0等），数据信号作为伴随负载。这表明NoC采用事件驱动的流控制方式，每个事件触发一次数据传递。手册应解释事件信号的握手协议（如电平/边沿触发、自由信号的作用）以及路由决策的依据（可能基于事件类型或目标外设）。",
+      "summary": "手册应重点描述CPU事件如何通过两个NoC通道分发到各外围设备，以及各外设响应如何汇聚返回CPU。",
+      "subject": "事件驱动数据流",
+      "explanation": "模块的核心功能是事件驱动的数据路由。从CPU到外设的分发路径和从外设到CPU的汇聚路径是理解模块行为的关键。应详细说明每个外设的事件-数据绑定关系和路由规则。",
       "signals": [
         "i_drvFCPU",
         "o_drv2CPU",
-        "i_freeFCPU",
-        "o_free2CPU"
+        "w_drv2NoCChanel0",
+        "w_drv2NoCChanel1",
+        "w_drvFNoCChannel0",
+        "w_drvFNoCChannel1"
       ],
       "instances": [
         "cpu2noc_instance",
@@ -332,93 +355,64 @@
         "flow_000_IONet_slot_i_drvFCPU"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/IONet_slot.json"
         },
         {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
         }
       ],
       "id": "semantic:module:IONet_slot:documentation_focus:001"
     },
     {
-      "claim_type": "source_review_request",
+      "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "IONet_slot"
       },
-      "reason": "当前上下文仅提供了事件信号的名称和连接关系，但未说明其具体的握手协议（如电平敏感还是边沿敏感、自由信号的具体作用、事件与数据的时序关系）。这些细节对于理解模块行为至关重要。",
-      "subject": "事件信号握手协议",
-      "needed_source_slice": "always block, comments",
+      "summary": "手册应说明模块仅透传外围设备的配置/状态信号，不进行内部处理，这些信号直接连接到SoC顶层。",
+      "subject": "外围设备配置信号透传",
+      "explanation": "大量连接显示模块边界信号直接连接到外设实例的配置/状态引脚(如BAUD、BREG、IRQ等)。手册应明确这些信号是透传的，其功能由各外设模块定义。",
       "signals": [
-        "i_drvFCPU",
-        "o_drv2CPU",
-        "i_freeFCPU",
-        "o_free2CPU"
-      ],
-      "instances": [
-        "cpu2noc_instance"
-      ],
-      "related_flows": [
-        "flow_000_IONet_slot_i_drvFCPU"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/IONet_slot.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
-        }
-      ],
-      "id": "semantic:module:IONet_slot:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "IONet_slot"
-      },
-      "reason": "模块输出了多个中断信号（INT_TIMER, IRQ_GPIO, IRQ_SPI1, IRQ_UART0, IRQ_UART1, Int_WD），但当前上下文未说明这些中断信号在模块内部是如何产生或汇聚的，以及它们与NoC事件流的关系。",
-      "subject": "外设中断信号汇聚",
-      "needed_source_slice": "assign block, always block, comments",
-      "signals": [
+        "BAUD_UART0",
+        "BREG_UART0",
+        "IRQ_UART0",
         "INT_TIMER",
         "IRQ_GPIO",
-        "IRQ_SPI1",
-        "IRQ_UART0",
-        "IRQ_UART1",
-        "Int_WD"
+        "Int_WD",
+        "WD_RST"
       ],
       "instances": [
-        "TIMER",
-        "gpio_slot",
-        "spi1",
         "UART0",
         "UART1",
+        "IIC",
+        "TIMER",
+        "gpio_slot",
         "WatchDog"
       ],
-      "related_flows": [
-        "flow_000_IONet_slot_i_drvFCPU"
-      ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/IONet_slot.json"
+        }
+      ],
+      "id": "semantic:module:IONet_slot:documentation_focus:002"
+    }
+  ],
+  "evidence_gaps": [
+    {
+      "field": "assign_dependencies",
+      "reason": "上下文中assign_dependencies为空，无法推断模块内部组合逻辑或数据路径的详细行为。需要RTL源代码补充。",
       "evidence": [
         {
           "source": "knowledge_ir/modules/IONet_slot.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/IONetwork_9.24/IONet_slot.v"
         }
-      ],
-      "id": "semantic:module:IONet_slot:source_review_request:002"
+      ]
     }
-  ],
-  "evidence_gaps": []
+  ]
 }

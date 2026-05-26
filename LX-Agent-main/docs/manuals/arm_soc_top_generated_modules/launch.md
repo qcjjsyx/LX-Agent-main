@@ -1,8 +1,8 @@
 # 模块 `launch`
 
 - 源文件：`rtl/rtl/launch/launch.v`。
-- 职责：AI 推断：指令发射与数据准备中心，负责接收来自译码、执行、加载、GRF、SRF、PSR等多个功能模块的驱动事件，仲裁并合并数据，最终向执行、GRF、SRF、IF、PSR等下游模块发射指令及操作数。。
-- 说明：模块拥有8个事件输入和5个事件输出，以及7个数据输入和5个数据输出，连接了52个内部组件，形成了复杂的内部事件流。其核心功能是作为指令流水线的“发射级”，协调来自不同上游模块的指令和数据，并为下游模块准备就绪的指令。
+- 职责：AI 推断：指令发射与数据准备中心，负责接收来自解码器、执行单元、加载存储单元、通用寄存器文件、系统寄存器文件和程序状态寄存器的事件，仲裁数据依赖，生成操作数，并最终将准备好的指令发射到执行单元、通用寄存器文件、指令获取单元、程序状态寄存器和系统寄存器文件。。
+- 说明：模块接收来自多个源的事件（i_ExeDriveToLunch_1, i_GrfDriveToLaunch_1, i_LsuDriveToLunch_1, i_PSRDriveToLaunch_1, i_SrfDriveToLaunch_1, i_decoDrive1ToLaunch_1, i_decoderDriveToLaunch_1, i_driveFExcToIf_1），并产生输出事件（o_launchDriveToExe_1, o_launchDriveToGrf_1, o_launchDriveToIf_1, o_launchDriveToPsr_1, o_launchDriveToSrf_1）。内部通过大量SelSplit、WaitMerge、MutexMerge和Fifo组件进行数据流和控制流的仲裁、合并与同步，最终生成发射到各执行单元的数据。
 
 ## 1. 层级位置
 
@@ -109,7 +109,7 @@ launch
 - Payload：`i_ExeDriveToLunch_1` -> `i_ExeData_96 [95:0]`, `o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=12，join=21，blocking=16。
-- AI 推断：文档应重点描述执行事件如何通过多级合并、分支、选择器自循环和再合并，最终分发到三个目标。
+- AI 推断：执行数据作为事件 i_ExeDriveToLunch_1 的载荷，随事件流传播。
 
 ### `i_GrfDriveToLaunch_1`
 
@@ -117,7 +117,7 @@ launch
 - Payload：`o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=13，join=20，blocking=15。
-- AI 推断：输入事件i_GrfDriveToLaunch_1的载荷（未明确指定）经过整个流处理后，最终成为输出事件o_launchDriveToExe_1的载荷（o_launchDataToExe_207）的一部分。
+- AI 推断：手册应强调该流程中数据（寄存器值、立即数）和控制（驱动事件、释放信号）如何通过不同的组件路径并行处理，最终在合并点同步。
 
 ### `i_LsuDriveToLunch_1`
 
@@ -125,7 +125,7 @@ launch
 - Payload：`i_LsuDriveToLunch_1` -> `i_lsuData_64 [63:0]`, `o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=12，join=20，blocking=15。
-- AI 推断：最终手册应重点描述事件从LSU输入到GRF、SRF、EXE三个输出的完整路径，以及各合并/拆分节点的作用。
+- AI 推断：最终手册应重点描述LSU事件如何通过合并、选择、分叉和同步机制，最终分发到GRF、SRF和Exe。
 
 ### `i_PSRDriveToLaunch_1`
 
@@ -133,7 +133,7 @@ launch
 - Payload：未记录。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：手册应重点描述 i_PSRDriveToLaunch_1 作为外部事件入口的角色，以及 psrRele1Merge 的合并行为。
+- AI 推断：最终手册应重点说明该流在 psrRele1Merge 处终止的事实，并强调合并器作为事件汇合点的作用，同时指出缺少到模块输出端点的完整路径。
 
 ### `i_SrfDriveToLaunch_1`
 
@@ -141,7 +141,7 @@ launch
 - Payload：`o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=13，join=20，blocking=15。
-- AI 推断：输入驱动事件i_SrfDriveToLaunch_1本身不携带显式数据载荷，但其传播路径上的数据由解码器输入i_decoderDriveToLaunch_1和寄存器合并路径提供。
+- AI 推断：SRF驱动事件通过仲裁、寄存器读取和操作数准备，最终形成发送到执行单元的数据包。
 
 ### `i_decoDrive1ToLaunch_1`
 
@@ -149,7 +149,7 @@ launch
 - Payload：`i_decoDrive1ToLaunch_1` -> `i_decoderData_185 [184:0]`, `o_launchDriveToPsr_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToPsr_1`。
 - 结构复杂度：branch=2，join=2，blocking=2。
-- AI 推断：最终手册应强调该流的分级分支和等待合并结构，以及其与执行单元和PSR驱动的交互。
+- AI 推断：文档应重点描述事件如何从解码器分支到PSR直通路径和两条释放路径，以及合并器如何同步或仲裁事件
 
 ### `i_decoderDriveToLaunch_1`
 
@@ -157,7 +157,7 @@ launch
 - Payload：`i_decoderDriveToLaunch_1` -> `i_decoderData_185 [184:0]`, `o_launchDriveToExe_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToGrf_1` -> `o_launchDataToExe_207 [206:0]`, `o_launchDriveToSrf_1` -> `o_launchDataToExe_207 [206:0]`。
 - 输出/影响：`o_launchDriveToGrf_1`, `o_launchDriveToSrf_1`, `o_launchDriveToExe_1`。
 - 结构复杂度：branch=14，join=24，blocking=17。
-- AI 推断：输入事件携带185位数据，经过流处理后，输出到执行单元的事件携带207位数据，表明数据在流中被扩展或重组。
+- AI 推断：解码器通过o_launchFree1ToDecoder_1信号向发射模块提供背压反馈。
 
 ### `i_driveFExcToIf_1`
 
@@ -165,7 +165,7 @@ launch
 - Payload：未记录。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：输入事件信号 i_driveFExcToIf_1 作为控制源，通过延迟和逻辑或合并，影响寄存器选择信号 w_regMergeDriveToRegSelector1_1 的生成。
+- AI 推断：该流中无显式数据负载，事件信号 i_driveFExcToIf_1 作为控制信号，通过延迟后参与合并赋值，影响寄存器选择。
 
 
 ## 5. 内部组件与 assign 影响
@@ -192,9 +192,8 @@ launch
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_15` | data_path | `w_exeData_32` | (w_rele_6[1] == 1'b1 \| w_rele_6[5] == 1'b1) ? (w_exeDataFromHigh_1 ? i_ExeData_96[63:32] : i_... | AI 推断：从执行单元返回的96位数据中，根据地址匹配结果选择高32位或低32位作为执行结果数据。 |
+| `assign_15` | data_path | `w_exeData_32` | (w_rele_6[1] == 1'b1 \| w_rele_6[5] == 1'b1) ? (w_exeDataFromHigh_1 ? i_ExeData_96[63:32] : i_... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_17` | data_path | `w_lsuData_32` | (w_rele_6[0] == 1'b1 \| w_rele_6[4] == 1'b1) ? (w_lsuDataFromHigh_1 ? i_lsuData_64[63:32] : i_... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_36` | data_path | `o_pc_32` | w_is16_1 ? w_pc1_32 + 2 : w_pc1_32 + 4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_49` | data_path | `w_immSign_32` | {{32{w_signimm5_1 & ~w_bl_1 & ~w_ucb32Bit_1}} & {{28{w_signImm_16[4]}}, w_signImm_16[4:0]}} \|... | AI 推断：根据指令类型（如signimm5, signimm8, bl等），从译码数据和立即数中组合生成有符号立即数。 |
-| `assign_75` | data_path | `w_b_1` | (w_cond1_4 == 4'b0000 & w_z2_1 == 1'b1 & w_isCb_1 == 1'b1) \| (w_cond1_4 == 4'b0001 & w_z2_1 =... | AI 推断：条件分支判断信号，根据条件码和操作数结果判断是否应该发生分支跳转。 |
+| `assign_49` | data_path | `w_immSign_32` | {{32{w_signimm5_1 & ~w_bl_1 & ~w_ucb32Bit_1}} & {{28{w_signImm_16[4]}}, w_signImm_16[4:0]}} \|... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_0` | unknown | `o_b_1` | w_b_1 | 证据不足：No Semantic Layer assignment interpretation is available. |

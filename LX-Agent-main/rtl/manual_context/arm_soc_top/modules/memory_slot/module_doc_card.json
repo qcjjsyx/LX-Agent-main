@@ -21,7 +21,7 @@
   },
   "purpose": {
     "value": "该模块是SoC内存子系统的槽位，负责仲裁来自IF和LSU的驱动事件，并将数据/地址/写使能信号转发给内部socmem实例。",
-    "explanation": "模块接收两个事件输入i_driveFrmIf和i_driveFrmLsu，输出两个事件o_driveNextToIf和o_driveNextToLsu，表明其作为事件驱动的内存访问仲裁点。数据输入i_dbus_*和i_ibus_*通过assign依赖被选择性地转发给socmem，同时存在u_data_init实例用于初始化数据注入。",
+    "explanation": "模块接收两个事件输入i_driveFrmIf和i_driveFrmLsu，输出两个事件o_driveNextToIf和o_driveNextToLsu，表明它作为事件驱动的仲裁点。数据输入i_dbus_*和i_ibus_*通过assign选择后送入socmem，输出数据直接来自socmem。u_data_init实例提供初始化数据路径，通过init_sig_temp2选择器覆盖正常数据流。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -33,7 +33,15 @@
       "i_driveFrmIf",
       "i_driveFrmLsu",
       "o_driveNextToIf",
-      "o_driveNextToLsu"
+      "o_driveNextToLsu",
+      "i_dbus_addr",
+      "i_dbus_data",
+      "i_dbus_we",
+      "i_ibus_addr",
+      "i_ibus_data",
+      "i_ibus_we",
+      "o_dbus_data",
+      "o_ibus_data"
     ],
     "instances": [
       "socmem",
@@ -56,11 +64,11 @@
       },
       {
         "source": "knowledge_ir/modules/memory_slot.json",
-        "path": "internal_event_flow"
+        "path": "key_instances"
       },
       {
         "source": "knowledge_ir/modules/memory_slot.json",
-        "path": "key_instances"
+        "path": "internal_event_flow"
       }
     ]
   },
@@ -652,8 +660,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_memory_slot_i_driveFrmIf.json",
       "reader_takeaway": {
-        "value": "最终手册应重点说明socmem实例如何将单个输入驱动事件分支到两个输出，并强调其无数据负载的纯控制特性。",
-        "explanation": "该流的核心语义是socmem作为转发节点，可能根据内部条件（如仲裁或状态）将事件分发到指令端或存储端。由于无赋值依赖，手册应避免过度解释内部逻辑，并建议查阅socmem模块的详细文档。",
+        "value": "最终手册应重点说明i_driveFrmIf事件如何通过socmem实例分发到两个下游输出，以及socmem内部可能存在的仲裁或合并逻辑。",
+        "explanation": "当前流的核心特征是事件从单一输入分支到两个输出，socmem作为关键节点，其内部实现决定了事件的分发策略（如优先级、并行性等），但当前上下文未提供细节，需RTL源码确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -689,8 +697,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "该驱动流将来自指令接口的驱动事件通过内部实例socmem透明转发至指令端和存储端两个下游输出。",
-            "explanation": "流从顶层输入i_driveFrmIf进入，直接连接到socmem实例的对应输入端口，socmem实例随后产生两个输出驱动信号o_driveNextToIf和o_driveNextToLsu，分别返回顶层输出。该流仅包含一个实例节点，无中间赋值依赖，表明socmem在此流中执行简单的信号直通或内部仲裁/分支。",
+            "value": "该驱动流将来自指令接口的驱动事件从模块边界传入，经过内部实例socmem后，分发至指令端和存储端两个下游输出。",
+            "explanation": "流从输入端口i_driveFrmIf进入，直接连接到内部实例socmem的对应输入，socmem作为事件处理核心，将事件驱动到两个输出端口o_driveNextToIf和o_driveNextToLsu，形成一对多的分支结构。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -726,15 +734,15 @@
             ]
           },
           {
-            "value": "该驱动流无显式数据负载，仅传递控制事件信号，表明其为纯控制流。",
-            "explanation": "接口负载契约中所有相关事件均无payload信号，且无相关赋值依赖，因此该流不携带数据，仅作为控制驱动信号传递。",
+            "value": "该流为纯控制事件流，无显式数据载荷关联，事件驱动信号直接控制下游模块的行为。",
+            "explanation": "接口载荷契约显示i_driveFrmIf和o_driveNextToIf/o_driveNextToLsu均无关联的payload信号，表明这些事件信号本身即为控制信号，用于触发下游模块的状态转换或操作。",
             "certainty": "ai_inferred",
-            "confidence": "high",
+            "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:memory_slot:flow_000_memory_slot_i_driveFrmIf:data_control_effect:001",
-            "doc_priority": "secondary",
+            "doc_priority": "primary",
             "signals": [
               "i_driveFrmIf",
               "o_driveNextToIf",
@@ -743,8 +751,8 @@
             "instances": [],
             "related_flows": [],
             "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
             "evidence_refs": [
               "ev:memory_slot:flow:flow_000_memory_slot_i_driveFrmIf",
               "ev:memory_slot:semantic_flow:flow_000_memory_slot_i_driveFrmIf"
@@ -757,8 +765,8 @@
             ]
           },
           {
-            "value": "存在关联的空闲/反压信号，但当前流中未明确其与驱动事件的耦合关系。",
-            "explanation": "接口负载契约列出了o_freeToIf（与i_driveFrmIf关联）、i_freeNextFrmIf（与o_driveNextToIf关联）和i_freeNextFrmLsu（与o_driveNextToLsu关联），但无赋值或连接证据表明这些信号如何与驱动流交互。反压机制可能存在，但无法从当前上下文确认。",
+            "value": "存在可能的反压信号o_freeToIf与输入事件i_driveFrmIf关联，但当前上下文未提供具体连接或逻辑。",
+            "explanation": "接口载荷契约中列出了o_freeToIf作为i_driveFrmIf的free信号，但该信号未出现在当前流的连接或赋值中，表明反压机制可能存在于更高层级或由socmem内部处理，当前流中无法确认其作用。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -767,9 +775,8 @@
             "semantic_claim_id": "semantic:flow:memory_slot:flow_000_memory_slot_i_driveFrmIf:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
-              "o_freeToIf",
-              "i_freeNextFrmIf",
-              "i_freeNextFrmLsu"
+              "i_driveFrmIf",
+              "o_freeToIf"
             ],
             "instances": [
               "socmem"
@@ -804,47 +811,80 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_memory_slot_i_driveFrmLsu.json",
       "reader_takeaway": {
-        "value": "文档应强调该流为纯事件透传，无数据载荷，无分支，并注明free信号与驱动事件分离",
-        "explanation": "由于无赋值依赖和payload，该流在手册中应描述为简单的事件转发路径，同时指出背压机制需从RTL源码确认",
+        "value": "本流为纯事件驱动，无有效载荷信号关联",
+        "explanation": "接口有效载荷契约中，i_driveFrmLsu、o_driveNextToIf 和 o_driveNextToLsu 的 payloads 字段均为空，表明这些事件信号不携带数据，仅作为控制/驱动信号传递。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:memory_slot:flow_001_memory_slot_i_driveFrmLsu:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:memory_slot:flow_001_memory_slot_i_driveFrmLsu:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
           "i_driveFrmLsu",
           "o_driveNextToIf",
           "o_driveNextToLsu"
         ],
-        "instances": [
-          "socmem"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [
-          "(无)"
+          "(none)"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:memory_slot:flow:flow_001_memory_slot_i_driveFrmLsu",
           "ev:memory_slot:semantic_flow:flow_001_memory_slot_i_driveFrmLsu"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/memory_slot.json"
-          },
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/memory_slot.json"
+            "source": "interface_payload_contracts",
+            "path": "compact_context"
           }
         ],
         "supporting_claims": [
           {
-            "value": "来自LSU的驱动事件通过socmem实例透明转发至下游IF和LSU接口",
-            "explanation": "该流仅包含一个实例socmem，输入i_driveFrmLsu直接驱动输出o_driveNextToIf和o_driveNextToLsu，表明socmem在此流中充当事件透传节点，无分支或阻塞逻辑",
+            "value": "手册应强调 socmem 作为透明转发节点，将 LSU 驱动事件分支到 IF 和 LSU 下游",
+            "explanation": "该流的核心语义是事件的分发，而非处理或缓冲。手册应说明 socmem 实例在此流中的角色，并指出事件路径的起点和终点。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:memory_slot:flow_001_memory_slot_i_driveFrmLsu:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_driveFrmLsu",
+              "o_driveNextToIf",
+              "o_driveNextToLsu"
+            ],
+            "instances": [
+              "socmem"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "(none)"
+            ],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:memory_slot:flow:flow_001_memory_slot_i_driveFrmLsu",
+              "ev:memory_slot:semantic_flow:flow_001_memory_slot_i_driveFrmLsu"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "flow.steps",
+                "path": "compact_context"
+              },
+              {
+                "source": "related_component_connections",
+                "path": "compact_context"
+              }
+            ]
+          },
+          {
+            "value": "来自 LSU 的驱动事件通过 socmem 实例透明转发，并分支到 IF 和 LSU 两个下游输出端口",
+            "explanation": "该流仅包含一个步骤，即 socmem 实例接收 i_driveFrmLsu 输入事件，并将其直接传递到 o_driveNextToIf 和 o_driveNextToLsu 两个输出。socmem 在此充当透明转发节点，事件在此处发生分支，但无阻塞或仲裁点。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -862,10 +902,10 @@
             ],
             "related_flows": [],
             "related_assignments": [
-              "(无)"
+              "(none)"
             ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
             "evidence_refs": [
               "ev:memory_slot:flow:flow_001_memory_slot_i_driveFrmLsu",
               "ev:memory_slot:semantic_flow:flow_001_memory_slot_i_driveFrmLsu"
@@ -873,17 +913,17 @@
             "semantic_evidence": [
               {
                 "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/memory_slot.json"
+                "path": "parser_module"
               },
               {
                 "source": "transparent_flows",
-                "path": "knowledge_ir/modules/memory_slot.json"
+                "path": "parser_module"
               }
             ]
           },
           {
-            "value": "free信号（o_freeToLsu, i_freeNextFrmIf, i_freeNextFrmLsu）与驱动事件分离，无直接耦合证据",
-            "explanation": "当前上下文未显示free信号与驱动事件之间的赋值或连接关系，无法确认背压机制是否作用于该流，需RTL源码验证",
+            "value": "存在关联的空闲信号，但本流中其与驱动事件的确切时序关系未定义",
+            "explanation": "接口契约中为每个事件端口关联了空闲信号（如 o_freeToLsu、i_freeNextFrmIf、i_freeNextFrmLsu），但上下文未提供这些信号如何与驱动事件交互的细节。因此，不能断言反压或完成握手的存在。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -909,45 +949,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/memory_slot.json"
-              }
-            ]
-          },
-          {
-            "value": "该流为纯事件驱动，无显式数据载荷关联",
-            "explanation": "接口载荷契约显示所有事件端口均无payload信号，且free信号（o_freeToLsu, i_freeNextFrmIf, i_freeNextFrmLsu）与驱动事件分离，表明该流仅传递控制事件，不携带数据",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:memory_slot:flow_001_memory_slot_i_driveFrmLsu:data_control_effect:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "i_driveFrmLsu",
-              "o_driveNextToIf",
-              "o_driveNextToLsu"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:memory_slot:flow:flow_001_memory_slot_i_driveFrmLsu",
-              "ev:memory_slot:semantic_flow:flow_001_memory_slot_i_driveFrmLsu"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/memory_slot.json"
-              },
-              {
-                "source": "interface.data_ports",
-                "path": "knowledge_ir/modules/memory_slot.json"
+                "source": "interface_payload_contracts",
+                "path": "compact_context"
               }
             ]
           }

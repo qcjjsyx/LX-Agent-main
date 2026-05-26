@@ -46,14 +46,14 @@
     }
   ],
   "claim_summary": {
-    "count": 24,
+    "count": 14,
     "by_type": {
       "assignment_interpretation": 5,
-      "component_role": 6,
-      "documentation_focus": 3,
-      "interface_intent": 6,
+      "component_role": 3,
+      "documentation_focus": 2,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,32 +64,33 @@
         "type": "module",
         "module": "lsu"
       },
-      "summary": "加载存储单元，负责仲裁来自执行单元、通用寄存器文件、数据路由和指令缓存的访存请求，并分发至写回、异常、发射等下游模块。",
+      "summary": "加载存储单元，负责执行内存访问指令（加载/存储）并管理数据在处理器核心与内存/外设之间的传输。",
       "subject": "lsu",
-      "explanation": "模块接收来自执行单元、通用寄存器文件、数据路由和指令缓存的驱动事件，通过内部Fifo、MutexMerge、SelSplit等组件进行仲裁和分发，最终输出到写回、异常、发射、通用寄存器文件、数据路由和指令缓存等多个下游模块，并管理对应的释放信号。",
+      "explanation": "模块接收来自执行单元（exe）、通用寄存器组（grf）、数据路由（dataRout）和指令缓存（icache）的驱动事件，并产生多个输出事件以驱动数据路由、异常处理、写回、寄存器读写等模块。其内部包含多个FIFO、MutexMerge、SelSplit等组件，用于处理多周期加载/存储、地址计算、数据对齐和异常检测。",
       "signals": [
         "i_exeDriveToLsu_1",
         "i_grfDriveToLsu_1",
         "i_dataRoutDriveToLsu_1",
         "i_icacheDriveToLsu_1",
-        "o_lsuDriveToWriteBack_1",
+        "o_lsuDriveToDataRout_1",
         "o_lsuDriveToExcp_1",
+        "o_lsuDriveToIcache_1",
         "o_lsuDriveToLaunch_1",
         "o_lsuDriveToRGrf_1",
         "o_lsuDriveToWGrf_1",
-        "o_lsuDriveToDataRout_1",
-        "o_lsuDriveToIcache_1"
+        "o_lsuDriveToWriteBack_1"
       ],
       "instances": [
         "lsuFifo",
         "icacheOrDataRoutMutexMerge",
         "grfSelector",
+        "dataRoutSelector",
+        "IcacheSelector",
         "excSplitter",
         "wbackSelector",
         "launchMutexMerge",
         "readGrfMutexMerge",
-        "IcacheSelector",
-        "dataRoutSelector",
+        "wbackMutexMerge",
         "dataUpdate",
         "multiLoadDataUpate",
         "multiStoreDataUpate",
@@ -108,15 +109,7 @@
         "wbackSplitter",
         "updateWaitMerge",
         "executeTap",
-        "dataRoutMutexMerge",
-        "LASMutexMerge",
-        "multiStoreMutexMerge",
-        "stateSelector",
-        "bitOpSelector",
-        "outdelay9",
-        "outdelay10",
-        "outdelay17",
-        "excSplitterDelay"
+        "lsuDelayFifo"
       ],
       "related_flows": [
         "flow_000_lsu_i_exeDriveToLsu_1",
@@ -146,59 +139,33 @@
         "type": "module",
         "module": "lsu"
       },
-      "summary": "模块将来自四个源的访存请求（执行、通用寄存器文件、数据路由、指令缓存）进行仲裁，并根据操作类型分发到写回、异常、发射、通用寄存器文件、数据路由和指令缓存等下游路径。",
-      "subject": "访存请求仲裁与分发",
-      "explanation": "四个输入驱动事件分别连接到不同的内部组件：i_exeDriveToLsu_1进入lsuFifo，i_grfDriveToLsu_1进入grfSelector，i_dataRoutDriveToLsu_1和i_icacheDriveToLsu_1进入icacheOrDataRoutMutexMerge进行互斥合并。内部流经多个SelSplit和MutexMerge组件后，最终输出到八个输出驱动事件，每个输出对应一个下游模块。",
+      "summary": "lsu模块负责解析来自执行单元的加载/存储指令，管理地址生成、数据对齐、多周期传输（如多加载/多存储）、异常检测以及与缓存/内存的交互。",
+      "subject": "加载/存储指令执行与数据流管理",
+      "explanation": "模块通过lsuFifo接收来自执行单元的指令和数据（i_exeToLsuData_163），解析出操作类型、地址、寄存器列表等信息。通过icacheOrDataRoutMutexMerge接收来自数据路由或指令缓存的数据。内部组件如dataRoutSelector、IcacheSelector、multiLoadSelector等负责将数据路由到正确的目标（如写回、寄存器文件、异常处理）。assign_dependencies显示地址计算（w_address_32）、外设地址范围检测（w_addrFromPeripheralFlag_1）、icache地址范围检测（w_icacheFlag_1）等关键逻辑。",
       "signals": [
-        "i_exeDriveToLsu_1",
-        "i_grfDriveToLsu_1",
-        "i_dataRoutDriveToLsu_1",
-        "i_icacheDriveToLsu_1",
-        "o_lsuDriveToWriteBack_1",
-        "o_lsuDriveToExcp_1",
-        "o_lsuDriveToLaunch_1",
-        "o_lsuDriveToRGrf_1",
-        "o_lsuDriveToWGrf_1",
-        "o_lsuDriveToDataRout_1",
-        "o_lsuDriveToIcache_1"
+        "i_exeToLsuData_163",
+        "i_grfToLsuData_64",
+        "i_icacheData_64",
+        "i_memData_64",
+        "o_lsuToDataRoutData_104",
+        "o_lsuToIcacheData_104",
+        "o_lsuToLaunchData_64",
+        "o_lsuToRGrfData_8",
+        "o_lsuToWriteBackData_103",
+        "o_wGrfData_74",
+        "o_exception_36"
       ],
       "instances": [
         "lsuFifo",
         "icacheOrDataRoutMutexMerge",
-        "grfSelector",
-        "excSplitter",
-        "wbackSelector",
-        "launchMutexMerge",
-        "readGrfMutexMerge",
-        "IcacheSelector",
         "dataRoutSelector",
+        "IcacheSelector",
         "dataUpdate",
         "multiLoadDataUpate",
         "multiStoreDataUpate",
         "multiLoadFifo",
         "multiStoreFifo",
-        "lsuMutexMerge",
-        "multiLoadMutexMerge",
-        "multiLoadSelector",
-        "multiLoadSplitter",
-        "multiStoreSelector",
-        "noLsSplitter",
-        "readGrfSelector",
-        "stateUpdateSelector",
-        "updateFinalSelector",
-        "updateSplitter",
-        "wbackSplitter",
-        "updateWaitMerge",
-        "executeTap",
-        "dataRoutMutexMerge",
-        "LASMutexMerge",
-        "multiStoreMutexMerge",
-        "stateSelector",
-        "bitOpSelector",
-        "outdelay9",
-        "outdelay10",
-        "outdelay17",
-        "excSplitterDelay"
+        "updateWaitMerge"
       ],
       "related_flows": [
         "flow_000_lsu_i_exeDriveToLsu_1",
@@ -229,8 +196,8 @@
         "module": "lsu"
       },
       "subject": "lsuFifo",
-      "summary": "来自执行单元的访存请求的输入Fifo，用于缓冲和解耦执行单元与LSU内部处理逻辑。",
-      "explanation": "lsuFifo接收来自执行单元的驱动事件i_exeDriveToLsu_1和载荷数据i_exeToLsuData_163，其输出连接到excSplitter，表明执行单元的请求首先进入Fifo，然后被分发到异常和写回路径。",
+      "summary": "作为执行单元到lsu的指令和数据缓冲队列，实现事件驱动的流水线解耦。",
+      "explanation": "lsuFifo接收来自执行单元的驱动事件（i_exeDriveToLsu_1）和163位宽的数据（i_exeToLsuData_163），其输出驱动后续的excSplitter和wbackSplitter，是加载/存储指令进入lsu处理流水线的入口。",
       "signals": [
         "i_exeDriveToLsu_1",
         "i_exeToLsuData_163"
@@ -261,8 +228,8 @@
         "module": "lsu"
       },
       "subject": "icacheOrDataRoutMutexMerge",
-      "summary": "数据路由和指令缓存请求的互斥合并器，确保来自这两个源的请求不会同时被处理。",
-      "explanation": "该组件接收来自数据路由（i_dataRoutDriveToLsu_1）和指令缓存（i_icacheDriveToLsu_1）的驱动事件，以及对应的载荷数据（i_memData_64, i_icacheData_64），输出合并后的驱动事件和载荷数据到dataRoutSelector。",
+      "summary": "仲裁来自数据路由（dataRout）和指令缓存（icache）的数据访问请求，确保互斥访问。",
+      "explanation": "该组件接收来自数据路由（i_dataRoutDriveToLsu_1）和指令缓存（i_icacheDriveToLsu_1）的驱动事件，以及对应的数据（i_memData_64, i_icacheData_64）。其输出驱动后续的dataRoutSelector，是lsu模块与外部内存/缓存子系统交互的关键仲裁点。",
       "signals": [
         "i_dataRoutDriveToLsu_1",
         "i_icacheDriveToLsu_1",
@@ -295,57 +262,14 @@
         "type": "module",
         "module": "lsu"
       },
-      "subject": "IcacheSelector",
-      "summary": "根据地址范围判断是否将数据路由到指令缓存或数据路由，实现数据与指令缓存的分离。",
-      "explanation": "IcacheSelector接收来自dataRoutMutexMerge的驱动事件和载荷数据，并根据w_icacheFlag_1信号（由地址范围决定）将数据分发到o_lsuDriveToDataRout_1或o_lsuDriveToIcache_1，以及对应的数据输出。",
-      "signals": [
-        "w_dataRoutMutexMergeDriveToIcacheSelector1_1",
-        "w_lsuToDataRoutData_104",
-        "w_icacheFlag_1",
-        "o_lsuDriveToDataRout_1",
-        "o_lsuDriveToIcache_1",
-        "o_lsuToDataRoutData_104",
-        "o_lsuToIcacheData_104"
-      ],
-      "instances": [
-        "IcacheSelector"
-      ],
-      "related_flows": [
-        "flow_001_lsu_i_grfDriveToLsu_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:component_role:003"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
       "subject": "dataUpdate",
-      "summary": "负责处理数据更新操作，将更新后的数据写回数据路由和写回路径。",
-      "explanation": "dataUpdate接收来自dataRoutMutexMerge、updateSplitter和wbackSplitter的输入，输出更新后的地址、数据、写使能到dataRoutMutexMerge，并输出到updateSplitter和wbackSplitter，表明它负责将更新后的数据写回数据路由和写回路径。",
+      "summary": "负责处理写回数据更新，包括地址、数据和写使能信号的生成。",
+      "explanation": "dataUpdate模块接收来自数据路由、lsuMutexMerge和写回分割器的数据，生成更新后的地址（w_dataUpdateToDataRoutAddr_32）、数据（w_dataUpdateToDataRoutData_64）和写使能（w_dataUpdateToDataRoutWen_8），并驱动数据路由和写回分割器。它是lsu内部数据更新路径的核心。",
       "signals": [
         "w_dataRoutToDataUpdate_1",
+        "w_lsuMutexMergeToUpdateSplitterData_76",
         "w_updateSplitterToDataUpdate_1",
-        "w_writeBackSplitterToDataUpdate_1",
-        "w_dataUpdateToDataRoutAddr_32",
-        "w_dataUpdateToDataRoutData_64",
-        "w_dataUpdateToDataRoutWen_8",
-        "w_dataUpdateToDataRout_1",
-        "w_dataUpdateToUpdateSplitter_1",
-        "w_dataUpdateToWriteBackSplitter_1",
-        "w_dataUpdateToWriteBackSplitter_74"
+        "w_writeBackSplitterToDataUpdate_1"
       ],
       "instances": [
         "dataUpdate"
@@ -364,77 +288,7 @@
           "source": "parser_pipeline_rtl/modules/lsu.json"
         }
       ],
-      "id": "semantic:module:lsu:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "subject": "multiLoadDataUpate",
-      "summary": "处理多字加载操作的数据更新，将加载的数据组合后传递给写回路径。",
-      "explanation": "multiLoadDataUpate接收来自dataRoutSelector的加载数据和驱动事件，输出组合后的数据、写使能、高半字和低半字到multiLoadFifo，用于后续的写回操作。",
-      "signals": [
-        "w_dataRoutToMultiLoadDataUpdataData_64",
-        "w_dataRoutToMultiLoadDataUpdate_1",
-        "w_multiLoadDataUpateToWabckData_64",
-        "w_multiLoadDataUpateToWabckWen_2",
-        "w_multiLoadDataUpateToWbackDHi_4",
-        "w_multiLoadDataUpateToWbackDLo_4"
-      ],
-      "instances": [
-        "multiLoadDataUpate"
-      ],
-      "related_flows": [
-        "flow_002_lsu_i_dataRoutDriveToLsu_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:component_role:005"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "subject": "multiStoreDataUpate",
-      "summary": "处理多字存储操作的数据更新，将存储数据组合后传递给数据路由和写回路径。",
-      "explanation": "multiStoreDataUpate输出写使能、高半字和低半字到multiStoreFifo，并输出写使能到dataRoutMutexMerge，表明它负责将多字存储的数据更新到数据路由和写回路径。",
-      "signals": [
-        "w_multiStoreDataUpateToDataRoutWen_8",
-        "w_multiStoreDataUpateToWabckWen_2",
-        "w_multiStoreDataUpateToWbackDHi_4",
-        "w_multiStoreDataUpateToWbackDLo_4"
-      ],
-      "instances": [
-        "multiStoreDataUpate"
-      ],
-      "related_flows": [
-        "flow_001_lsu_i_grfDriveToLsu_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:component_role:006"
+      "id": "semantic:module:lsu:component_role:003"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -443,8 +297,8 @@
         "module": "lsu"
       },
       "subject": "w_grfToLsuData_64",
-      "summary": "根据是否为多字访存指令和写使能信号，对通用寄存器文件数据进行字节交换。",
-      "explanation": "当w_isMultiLS_1为真或i_wen_2为2'b11时，直接传递i_grfToLsuData_64；否则，将高低32位交换。这表明对于非多字访存且非全字写操作，数据需要进行字节交换以适应小端或大端模式。",
+      "summary": "根据是否为多加载/存储指令和写使能信号，对来自通用寄存器组的数据进行字交换（word swap）。",
+      "explanation": "当w_isMultiLS_1为真或i_wen_2为2'b11时，数据保持不变；否则，将64位数据的高32位和低32位交换。这通常用于处理大小端或数据对齐。",
       "signals": [
         "w_grfToLsuData_64",
         "i_grfToLsuData_64",
@@ -452,14 +306,14 @@
         "i_wen_2"
       ],
       "related_assignments": [
-        "assign 8"
+        "8"
       ],
       "related_flows": [
         "flow_001_lsu_i_grfDriveToLsu_1"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json"
@@ -473,21 +327,21 @@
         "type": "module",
         "module": "lsu"
       },
-      "subject": "w_dataTmp_64",
-      "summary": "根据写使能信号，对数据路由返回的数据进行字节交换。",
-      "explanation": "当i_wen_2为2'b11时，直接传递w_data_64；否则，将高低32位交换。这与w_grfToLsuData_64的处理逻辑一致，表明LSU内部对数据路由返回的数据也进行相同的字节交换处理。",
+      "subject": "w_address_32",
+      "summary": "根据P位（w_P_1）选择数据的高32位或低32位作为内存访问地址。",
+      "explanation": "当w_P_1为1时，地址为w_data_64的低32位；否则为高32位。这是ARM指令中前变址（pre-indexed）和后变址（post-indexed）寻址模式的关键逻辑。",
       "signals": [
-        "w_dataTmp_64",
-        "w_data_64",
-        "i_wen_2"
+        "w_address_32",
+        "w_P_1",
+        "w_data_64"
       ],
       "related_assignments": [
-        "assign 14"
+        "2"
       ],
       "related_flows": [
-        "flow_002_lsu_i_dataRoutDriveToLsu_1"
+        "flow_000_lsu_i_exeDriveToLsu_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -503,23 +357,20 @@
         "type": "module",
         "module": "lsu"
       },
-      "subject": "o_lsuFreeToExe_1",
-      "summary": "组合多个完成信号，向执行单元发送释放信号，表示LSU已处理完当前请求。",
-      "explanation": "释放信号由来自发射模块的释放信号、多字加载/存储完成信号、状态更新选择器完成信号和位操作选择器完成信号组合而成。这表明执行单元的请求在LSU内部经过多个阶段后，最终通过此信号通知执行单元可以继续。",
+      "subject": "w_addrFromPeripheralFlag_1",
+      "summary": "检测地址是否落在外设地址范围（0x01000-0x0109f）内。",
+      "explanation": "该标志用于区分内存访问和外设访问，可能影响后续的数据路由或时序控制。",
       "signals": [
-        "o_lsuFreeToExe_1",
-        "i_lsuFreeFromLaunch_1",
-        "o_multiLoadOrStoreOver",
-        "w_stateUpdateSelectorOver_1",
-        "w_bitOpSelectorOver_1"
+        "w_addrFromPeripheralFlag_1",
+        "w_address_32"
       ],
       "related_assignments": [
-        "assign 21"
+        "12"
       ],
       "related_flows": [
         "flow_000_lsu_i_exeDriveToLsu_1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -536,14 +387,14 @@
         "module": "lsu"
       },
       "subject": "w_icacheFlag_1",
-      "summary": "根据数据路由输出的地址范围判断是否访问指令缓存。",
-      "explanation": "当o_lsuToDataRoutData_104的高32位地址在0x01200到0x211ff之间时，w_icacheFlag_1置1，表明该数据应路由到指令缓存。这实现了数据与指令缓存的地址空间划分。",
+      "summary": "检测数据路由输出地址是否落在指令缓存地址范围（0x01200-0x211ff）内。",
+      "explanation": "该标志用于决定数据是路由到数据路由（dataRout）还是指令缓存（icache），是IcacheSelector选择输出的关键依据。",
       "signals": [
         "w_icacheFlag_1",
-        "o_lsuToDataRoutData_104"
+        "w_lsuToDataRoutData_104"
       ],
       "related_assignments": [
-        "assign 17"
+        "17"
       ],
       "related_flows": [
         "flow_001_lsu_i_grfDriveToLsu_1"
@@ -564,20 +415,23 @@
         "type": "module",
         "module": "lsu"
       },
-      "subject": "w_addrFromPeripheralFlag_1",
-      "summary": "根据地址范围判断是否访问外设。",
-      "explanation": "当w_address_32在0x01000到0x0109f之间时，w_addrFromPeripheralFlag_1置1，表明该访存操作的目标是外设地址空间。",
+      "subject": "o_lsuFreeToExe_1",
+      "summary": "组合多个完成信号，向执行单元发送释放信号，表示lsu已处理完当前指令。",
+      "explanation": "释放信号由来自发射单元（launch）的释放信号、多加载/存储完成信号、状态更新选择器完成信号和位操作选择器完成信号组合而成。",
       "signals": [
-        "w_addrFromPeripheralFlag_1",
-        "w_address_32"
+        "o_lsuFreeToExe_1",
+        "i_lsuFreeFromLaunch_1",
+        "o_multiLoadOrStoreOver",
+        "w_stateUpdateSelectorOver_1",
+        "w_bitOpSelectorOver_1"
       ],
       "related_assignments": [
-        "assign 12"
+        "21"
       ],
       "related_flows": [
         "flow_000_lsu_i_exeDriveToLsu_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -593,20 +447,33 @@
         "type": "module",
         "module": "lsu"
       },
-      "summary": "所有与外部模块的接口均采用事件驱动、载荷数据和释放信号的三元组协议，实现解耦的请求-应答通信。",
-      "subject": "事件-载荷-释放协议",
-      "explanation": "每个输入事件（如i_exeDriveToLsu_1）都关联一个或多个载荷数据（如i_exeToLsuData_163）和一个释放信号（如o_lsuFreeToExe_1）。输出事件（如o_lsuDriveToWriteBack_1）也关联载荷数据和释放信号（如i_lsuFreeFromWriteBack_1）。这表明LSU与外部模块之间采用标准的握手协议。",
+      "summary": "lsu模块通过一组事件驱动信号与外部模块进行同步，每个输入事件通常对应一个数据负载和一个释放信号，形成请求-确认握手协议。",
+      "subject": "事件驱动接口组",
+      "explanation": "输入事件（如i_exeDriveToLsu_1）触发lsu处理，同时携带相关数据负载（如i_exeToLsuData_163）。处理完成后，lsu通过对应的释放信号（如o_lsuFreeToExe_1）通知源模块。输出事件（如o_lsuDriveToWriteBack_1）也遵循类似模式，携带数据负载并等待来自目标模块的释放信号（如i_lsuFreeFromWriteBack_1）。这种接口设计实现了模块间的解耦和流水线控制。",
       "signals": [
         "i_exeDriveToLsu_1",
-        "i_exeToLsuData_163",
-        "o_lsuFreeToExe_1",
-        "o_lsuDriveToWriteBack_1",
-        "o_lsuToWriteBackData_103",
-        "i_lsuFreeFromWriteBack_1"
+        "i_grfDriveToLsu_1",
+        "i_dataRoutDriveToLsu_1",
+        "i_icacheDriveToLsu_1",
+        "o_lsuDriveToDataRout_1",
+        "o_lsuDriveToExcp_1",
+        "o_lsuDriveToIcache_1",
+        "o_lsuDriveToLaunch_1",
+        "o_lsuDriveToRGrf_1",
+        "o_lsuDriveToWGrf_1",
+        "o_lsuDriveToWriteBack_1"
       ],
       "related_payload": [
         "i_exeToLsuData_163",
-        "o_lsuToWriteBackData_103"
+        "i_grfToLsuData_64",
+        "i_icacheData_64",
+        "i_memData_64",
+        "o_lsuToDataRoutData_104",
+        "o_lsuToIcacheData_104",
+        "o_lsuToLaunchData_64",
+        "o_lsuToRGrfData_8",
+        "o_lsuToWriteBackData_103",
+        "o_wGrfData_74"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -622,217 +489,38 @@
       "id": "semantic:module:lsu:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "summary": "写回接口包含写回数据、写回驱动事件和写回释放信号，用于将计算结果写回通用寄存器文件。",
-      "subject": "写回接口",
-      "explanation": "o_lsuDriveToWriteBack_1是写回驱动事件，o_lsuToWriteBackData_103是写回数据，i_lsuFreeFromWriteBack_1是写回释放信号。该接口将LSU处理后的数据（包括加载数据、运算结果等）传递给写回模块。",
-      "signals": [
-        "o_lsuDriveToWriteBack_1",
-        "o_lsuToWriteBackData_103",
-        "i_lsuFreeFromWriteBack_1"
-      ],
-      "related_payload": [
-        "o_lsuToWriteBackData_103"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:interface_intent:002"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "summary": "异常接口用于将异常信息传递给异常处理模块。",
-      "subject": "异常接口",
-      "explanation": "o_lsuDriveToExcp_1是异常驱动事件，o_exception_36是异常数据（包含当前PC和异常类型），i_lsuFreeFromExcp_1是异常释放信号。该接口将LSU检测到的异常（如地址对齐错误、未定义指令等）传递给异常处理模块。",
-      "signals": [
-        "o_lsuDriveToExcp_1",
-        "o_exception_36",
-        "i_lsuFreeFromExcp_1"
-      ],
-      "related_payload": [
-        "o_exception_36"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:interface_intent:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "summary": "发射接口用于将加载的数据发射到执行流水线。",
-      "subject": "发射接口",
-      "explanation": "o_lsuDriveToLaunch_1是发射驱动事件，o_lsuToLaunchData_64是发射数据，i_lsuFreeFromLaunch_1是发射释放信号。该接口将加载的数据传递给发射模块，用于后续的执行。",
-      "signals": [
-        "o_lsuDriveToLaunch_1",
-        "o_lsuToLaunchData_64",
-        "i_lsuFreeFromLaunch_1"
-      ],
-      "related_payload": [
-        "o_lsuToLaunchData_64"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:interface_intent:004"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "summary": "用于向通用寄存器文件发送读请求。",
-      "subject": "通用寄存器文件读接口",
-      "explanation": "o_lsuDriveToRGrf_1是读驱动事件，o_lsuToRGrfData_8是读数据（可能包含寄存器地址），i_lsuFreeFromRGrf_1是读释放信号。该接口用于LSU向通用寄存器文件发起读操作。",
-      "signals": [
-        "o_lsuDriveToRGrf_1",
-        "o_lsuToRGrfData_8",
-        "i_lsuFreeFromRGrf_1"
-      ],
-      "related_payload": [
-        "o_lsuToRGrfData_8"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:interface_intent:005"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "summary": "用于向通用寄存器文件发送写请求。",
-      "subject": "通用寄存器文件写接口",
-      "explanation": "o_lsuDriveToWGrf_1是写驱动事件，o_wGrfData_74是写数据（包含寄存器地址、数据和写使能），i_lsuFreeFromWGrf_1是写释放信号。该接口用于LSU向通用寄存器文件发起写操作。",
-      "signals": [
-        "o_lsuDriveToWGrf_1",
-        "o_wGrfData_74",
-        "i_lsuFreeFromWGrf_1"
-      ],
-      "related_payload": [
-        "o_wGrfData_74"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:interface_intent:006"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "lsu"
       },
-      "summary": "文档应重点描述四个输入事件流（执行、通用寄存器文件、数据路由、指令缓存）在LSU内部的路径和仲裁逻辑。",
-      "subject": "内部事件流",
-      "explanation": "四个内部事件流（flow_000至flow_003）清晰地展示了不同来源的请求如何通过Fifo、MutexMerge、SelSplit等组件进行仲裁、分发和处理。文档应详细描述每个流的关键路径、组件和信号。",
+      "summary": "文档应重点描述lsu如何处理多加载（LDM）和多存储（STM）指令，包括地址序列生成、数据对齐、FIFO缓冲和完成信号生成。",
+      "subject": "多周期加载/存储（Multi Load/Store）处理",
+      "explanation": "上下文显示存在多个与多加载/存储相关的组件，如multiLoadDataUpate、multiStoreDataUpate、multiLoadFifo、multiStoreFifo、multiLoadSelector、multiStoreSelector等。assign_dependencies中也有w_isMultiLS_1信号用于控制数据交换。这表明多周期传输是lsu的核心功能之一，需要详细说明其状态机、数据路径和时序。",
       "signals": [
-        "i_exeDriveToLsu_1",
-        "i_grfDriveToLsu_1",
-        "i_dataRoutDriveToLsu_1",
-        "i_icacheDriveToLsu_1"
+        "w_isMultiLS_1",
+        "w_registerList_16",
+        "w_endLoadFlag_1",
+        "w_endStoreFlag_1",
+        "o_multiLoadOrStoreOver"
       ],
       "instances": [
-        "lsuFifo",
-        "icacheOrDataRoutMutexMerge",
-        "grfSelector",
-        "excSplitter",
-        "wbackSelector",
-        "launchMutexMerge",
-        "readGrfMutexMerge",
-        "IcacheSelector",
-        "dataRoutSelector",
-        "dataUpdate",
         "multiLoadDataUpate",
         "multiStoreDataUpate",
         "multiLoadFifo",
         "multiStoreFifo",
-        "lsuMutexMerge",
-        "multiLoadMutexMerge",
         "multiLoadSelector",
-        "multiLoadSplitter",
         "multiStoreSelector",
-        "noLsSplitter",
-        "readGrfSelector",
-        "stateUpdateSelector",
-        "updateFinalSelector",
-        "updateSplitter",
-        "wbackSplitter",
-        "updateWaitMerge",
-        "executeTap",
-        "dataRoutMutexMerge",
-        "LASMutexMerge",
+        "multiLoadSplitter",
         "multiStoreMutexMerge",
-        "stateSelector",
-        "bitOpSelector",
-        "outdelay9",
-        "outdelay10",
-        "outdelay17",
-        "excSplitterDelay"
+        "multiLoadMutexMerge"
       ],
       "related_flows": [
-        "flow_000_lsu_i_exeDriveToLsu_1",
-        "flow_001_lsu_i_grfDriveToLsu_1",
-        "flow_002_lsu_i_dataRoutDriveToLsu_1",
-        "flow_003_lsu_i_icacheDriveToLsu_1"
+        "flow_000_lsu_i_exeDriveToLsu_1"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json"
@@ -849,33 +537,24 @@
         "type": "module",
         "module": "lsu"
       },
-      "summary": "文档应详细说明多字加载和多字存储的处理流程，包括数据更新、Fifo缓冲和状态管理。",
-      "subject": "多字访存处理",
-      "explanation": "多字加载（multiLoadDataUpate, multiLoadFifo, multiLoadSelector, multiLoadSplitter）和多字存储（multiStoreDataUpate, multiStoreFifo, multiStoreSelector）是LSU的核心功能之一，涉及多个专用组件和状态机。文档应描述其数据路径、控制逻辑和状态转换。",
+      "summary": "文档应说明lsu如何检测和转发异常，包括异常类型编码和与异常处理模块的接口。",
+      "subject": "异常处理路径",
+      "explanation": "lsu有一个专门的异常输出事件（o_lsuDriveToExcp_1）和数据输出（o_exception_36）。assign_dependencies显示o_exception_36由当前PC（w_currentPc_32）和固定值拼接而成。excSplitter组件负责将异常事件从正常写回路径中分离出来。",
       "signals": [
-        "w_dataRoutToMultiLoadDataUpdate_1",
-        "w_multiLoadDataUpateToWabckData_64",
-        "w_multiStoreDataUpateToDataRoutWen_8",
-        "w_multiStoreDataUpateToWabckWen_2"
+        "o_lsuDriveToExcp_1",
+        "o_exception_36",
+        "w_currentPc_32"
       ],
       "instances": [
-        "multiLoadDataUpate",
-        "multiLoadFifo",
-        "multiLoadSelector",
-        "multiLoadSplitter",
-        "multiStoreDataUpate",
-        "multiStoreFifo",
-        "multiStoreSelector",
-        "multiStoreMutexMerge",
-        "multiLoadMutexMerge"
+        "excSplitter",
+        "excSplitterDelay"
       ],
       "related_flows": [
-        "flow_002_lsu_i_dataRoutDriveToLsu_1",
-        "flow_001_lsu_i_grfDriveToLsu_1"
+        "flow_000_lsu_i_exeDriveToLsu_1"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json"
@@ -887,53 +566,22 @@
       "id": "semantic:module:lsu:documentation_focus:002"
     },
     {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "summary": "文档应说明LSU如何根据地址范围将请求路由到不同的目标（数据路由、指令缓存、外设）。",
-      "subject": "地址解码与路由",
-      "explanation": "通过w_icacheFlag_1和w_addrFromPeripheralFlag_1等信号，LSU根据地址范围判断请求的目标。文档应列出关键的地址范围及其对应的路由目标。",
-      "signals": [
-        "w_icacheFlag_1",
-        "w_addrFromPeripheralFlag_1",
-        "w_address_32",
-        "o_lsuToDataRoutData_104"
-      ],
-      "instances": [
-        "IcacheSelector"
-      ],
-      "related_flows": [
-        "flow_001_lsu_i_grfDriveToLsu_1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:documentation_focus:003"
-    },
-    {
       "claim_type": "source_review_request",
       "scope": {
         "type": "module",
         "module": "lsu"
       },
-      "reason": "紧凑上下文未提供状态机（如stateSelector, stateUpdateSelector）的具体状态定义和状态转换逻辑，需要RTL源代码以理解多字访存和状态更新的控制流程。",
-      "subject": "状态机逻辑",
+      "reason": "上下文提供了组件连接和assign依赖，但缺少状态机（如stateSelector、stateUpdate）的详细状态转换和时序逻辑，需要RTL源代码来理解多周期加载/存储的完整控制流程。",
+      "subject": "多周期加载/存储状态机",
       "needed_source_slice": "always block",
       "signals": [
         "w_stateValid_12",
-        "w_stateUpdateSelectorOver_1",
         "w_stateSelectorToMultiLoadMutexMerge_1",
         "w_stateSelectorToMultiStoreMutexMerge_1"
       ],
       "instances": [
         "stateSelector",
+        "stateUpdate",
         "stateUpdateSelector"
       ],
       "related_flows": [
@@ -951,31 +599,6 @@
         }
       ],
       "id": "semantic:module:lsu:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "lsu"
-      },
-      "reason": "紧凑上下文中提到了lsuDelayFifo实例，但未提供其输入输出连接和具体作用，需要RTL源代码以理解其延迟功能。",
-      "subject": "延迟Fifo (lsuDelayFifo)",
-      "needed_source_slice": "instance connections",
-      "instances": [
-        "lsuDelayFifo"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json"
-        }
-      ],
-      "id": "semantic:module:lsu:source_review_request:002"
     }
   ],
   "evidence_gaps": []

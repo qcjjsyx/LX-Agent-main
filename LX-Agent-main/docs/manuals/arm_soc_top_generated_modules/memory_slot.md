@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/slot/memory_slot.v`。
 - 职责：AI 推断：该模块是SoC内存子系统的槽位，负责仲裁来自IF和LSU的驱动事件，并将数据/地址/写使能信号转发给内部socmem实例。。
-- 说明：模块接收两个事件输入i_driveFrmIf和i_driveFrmLsu，输出两个事件o_driveNextToIf和o_driveNextToLsu，表明其作为事件驱动的内存访问仲裁点。数据输入i_dbus_*和i_ibus_*通过assign依赖被选择性地转发给socmem，同时存在u_data_init实例用于初始化数据注入。
+- 说明：模块接收两个事件输入i_driveFrmIf和i_driveFrmLsu，输出两个事件o_driveNextToIf和o_driveNextToLsu，表明它作为事件驱动的仲裁点。数据输入i_dbus_*和i_ibus_*通过assign选择后送入socmem，输出数据直接来自socmem。u_data_init实例提供初始化数据路径，通过init_sig_temp2选择器覆盖正常数据流。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ memory_slot
 - Payload：未记录。
 - 输出/影响：`o_driveNextToIf`, `o_driveNextToLsu`。
 - 结构复杂度：branch=1，join=1，blocking=0。
-- AI 推断：最终手册应重点说明socmem实例如何将单个输入驱动事件分支到两个输出，并强调其无数据负载的纯控制特性。
+- AI 推断：最终手册应重点说明i_driveFrmIf事件如何通过socmem实例分发到两个下游输出，以及socmem内部可能存在的仲裁或合并逻辑。
 
 ### `i_driveFrmLsu`
 
@@ -67,7 +67,7 @@ memory_slot
 - Payload：未记录。
 - 输出/影响：`o_driveNextToIf`, `o_driveNextToLsu`。
 - 结构复杂度：branch=1，join=1，blocking=0。
-- AI 推断：文档应强调该流为纯事件透传，无数据载荷，无分支，并注明free信号与驱动事件分离
+- AI 推断：本流为纯事件驱动，无有效载荷信号关联
 
 
 ## 5. 内部组件与 assign 影响
@@ -82,12 +82,12 @@ memory_slot
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `memory_ibus_we` | init_sig_temp2 ? {8{init_ibus_we}} : i_ibus_we | AI 推断：这些assign实现正常模式与初始化模式之间的数据路径选择。 |
-| `assign_2` | data_path | `memory_ibus_addr_i` | init_sig_temp2 ? {init_ibus_addr,1'b0}: i_ibus_addr | AI 推断：这些assign实现正常模式与初始化模式之间的数据路径选择。 |
-| `assign_3` | data_path | `memory_ibus_data_i` | init_sig_temp2 ? init_ibus_data : i_ibus_data | AI 推断：这些assign实现正常模式与初始化模式之间的数据路径选择。 |
-| `assign_4` | data_path | `memory_dbus_we` | init_sig_temp2 ? {8{init_dbus_we}} : i_dbus_we | AI 推断：这些assign实现正常模式与初始化模式之间的数据路径选择。 |
-| `assign_5` | data_path | `memory_dbus_addr_i` | init_sig_temp2 ? init_dbus_addr : i_dbus_addr | AI 推断：这些assign实现正常模式与初始化模式之间的数据路径选择。 |
-| `assign_6` | data_path | `memory_dbus_data_i` | init_sig_temp2 ? init_dbus_data : i_dbus_data | AI 推断：这些assign实现正常模式与初始化模式之间的数据路径选择。 |
-| `assign_7` | data_path | `o_ibus_data` | memory_ibus_data_o | AI 推断：将socmem的读取数据直接输出到模块顶层。 |
-| `assign_8` | data_path | `o_dbus_data` | memory_dbus_data_o | AI 推断：将socmem的读取数据直接输出到模块顶层。 |
+| `assign_1` | unknown | `memory_ibus_we` | init_sig_temp2 ? {8{init_ibus_we}} : i_ibus_we | AI 推断：控制数据路径在正常模式和初始化模式之间切换的关键选择信号。 |
+| `assign_2` | unknown | `memory_ibus_addr_i` | init_sig_temp2 ? {init_ibus_addr,1'b0}: i_ibus_addr | AI 推断：控制数据路径在正常模式和初始化模式之间切换的关键选择信号。 |
+| `assign_3` | data_path | `memory_ibus_data_i` | init_sig_temp2 ? init_ibus_data : i_ibus_data | AI 推断：控制数据路径在正常模式和初始化模式之间切换的关键选择信号。 |
+| `assign_4` | unknown | `memory_dbus_we` | init_sig_temp2 ? {8{init_dbus_we}} : i_dbus_we | AI 推断：控制数据路径在正常模式和初始化模式之间切换的关键选择信号。 |
+| `assign_5` | unknown | `memory_dbus_addr_i` | init_sig_temp2 ? init_dbus_addr : i_dbus_addr | AI 推断：控制数据路径在正常模式和初始化模式之间切换的关键选择信号。 |
+| `assign_6` | data_path | `memory_dbus_data_i` | init_sig_temp2 ? init_dbus_data : i_dbus_data | AI 推断：控制数据路径在正常模式和初始化模式之间切换的关键选择信号。 |
+| `assign_7` | data_path | `o_ibus_data` | memory_ibus_data_o | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_8` | data_path | `o_dbus_data` | memory_dbus_data_o | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_0` | unknown | `init_sig` | init_sig_temp | 证据不足：No Semantic Layer assignment interpretation is available. |

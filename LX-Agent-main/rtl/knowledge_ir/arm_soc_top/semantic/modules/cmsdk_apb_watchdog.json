@@ -48,12 +48,11 @@
   "claim_summary": {
     "count": 11,
     "by_type": {
-      "assignment_interpretation": 2,
+      "assignment_interpretation": 3,
       "component_role": 1,
       "documentation_focus": 2,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 1,
       "structural_responsibility": 2
     }
   },
@@ -64,9 +63,9 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "该模块是APB总线上的看门狗定时器控制器，负责管理看门狗定时器的配置、锁定、中断和复位输出。",
+      "summary": "该模块是APB总线从设备，负责看门狗定时器的寄存器接口与中断/复位输出控制。",
       "subject": "cmsdk_apb_watchdog",
-      "explanation": "模块通过APB接口接收配置数据，内部实例化一个看门狗定时器核心（cmsdk_apb_watchdog_frc），并生成中断和复位输出信号。地址译码逻辑和写使能信号表明它负责寄存器访问控制。",
+      "explanation": "模块通过APB接口接收配置和命令，内部实例化cmsdk_apb_watchdog_frc作为核心定时器，并基于锁定机制和测试模式选择输出中断或复位信号。",
       "signals": [
         "PADDR",
         "PWDATA",
@@ -82,12 +81,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
+          "source": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
         },
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:module_role:001"
@@ -98,26 +95,26 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "模块负责对APB总线上的寄存器读写操作进行地址译码，并生成内部寄存器的写使能信号。",
-      "subject": "APB寄存器访问与地址译码",
-      "explanation": "通过assign语句，模块根据PADDR、PSEL、PWRITE和PENABLE信号，生成针对不同寄存器（如锁定寄存器、ITCR、ITOP）的写使能信号（wdog_lock_wr_en, wdog_itcr_wr_en, wdog_itop_wr_en）。同时，它也生成读数据使能信号（prdata_next_en）。",
+      "summary": "模块解析APB地址和写数据，生成内部寄存器写使能信号，并实现锁定寄存器保护机制。",
+      "subject": "APB寄存器接口与锁定控制",
+      "explanation": "通过assign依赖项，模块根据PADDR和PSEL/PWRITE/PENABLE生成wdog_lock_wr_en、wdog_itcr_wr_en等写使能信号，其中wdog_lock_wr_val通过比较PWDATA与0x1ACCE551决定锁定状态。",
       "signals": [
         "PADDR",
         "PSEL",
         "PWRITE",
         "PENABLE",
+        "PWDATA",
         "wdog_lock_wr_en",
+        "wdog_lock_wr_val",
         "wdog_itcr_wr_en",
-        "wdog_itop_wr_en",
-        "prdata_next_en"
+        "wdog_itop_wr_en"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:001"
@@ -128,9 +125,9 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "模块根据测试模式控制寄存器（wdog_itcr）的值，选择输出真实的看门狗中断/复位信号或测试激励信号。",
-      "subject": "看门狗中断与复位输出选择",
-      "explanation": "通过assign语句，当wdog_itcr为0时，WDOGINT和WDOGRES输出来自看门狗核心的i_wdogint和i_wdogres；否则，输出测试模式下的wdog_itop信号。",
+      "summary": "模块根据测试模式控制信号wdog_itcr，选择输出内部看门狗事件或测试激励。",
+      "subject": "中断与复位输出多路选择",
+      "explanation": "assign 7和8显示，当wdog_itcr为0时，WDOGINT和WDOGRES分别来自内部信号i_wdogint和i_wdogres；否则来自测试输入wdog_itop。",
       "signals": [
         "WDOGINT",
         "WDOGRES",
@@ -144,8 +141,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:002"
@@ -157,8 +153,8 @@
         "module": "cmsdk_apb_watchdog"
       },
       "subject": "u_apb_watchdog_frc",
-      "summary": "该实例是看门狗定时器的核心功能单元，负责实际的定时计数和超时逻辑。",
-      "explanation": "模块将APB接口信号（PCLK, PENABLE, PRESETn, PWDATA, PWRITE）以及看门狗专用时钟和复位信号（WDOGCLK, WDOGCLKEN, WDOGRESn）传递给该实例。该实例输出数据（frc_data），但上下文未明确其具体用途。",
+      "summary": "核心看门狗定时器实例，负责实际计数和超时逻辑。",
+      "explanation": "该实例接收APB时钟、使能、复位、写数据等信号，并输出frc_data，是模块内部数据路径和事件生成的核心。",
       "signals": [
         "PCLK",
         "PENABLE",
@@ -167,19 +163,17 @@
         "PWRITE",
         "WDOGCLK",
         "WDOGCLKEN",
-        "WDOGRESn",
-        "frc_data"
+        "WDOGRESn"
       ],
       "instances": [
         "u_apb_watchdog_frc"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "key_component_connections",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:component_role:001"
@@ -191,24 +185,22 @@
         "module": "cmsdk_apb_watchdog"
       },
       "subject": "frc_sel",
-      "summary": "该信号用于选择看门狗核心的地址范围，决定是否响应APB访问。",
-      "explanation": "通过比较PADDR的高位（[11:5]）与参数ARM_WDOG1A，当PSEL有效且地址匹配时，frc_sel被置位，表明该模块可能支持多个看门狗实例或地址映射。",
+      "summary": "通过地址译码选择看门狗功能单元。",
+      "explanation": "当PSEL有效且PADDR[11:5]匹配ARM_WDOG1A时，frc_sel置位，用于选通核心定时器。",
       "signals": [
         "frc_sel",
         "PSEL",
-        "PADDR",
-        "ARM_WDOG1A"
+        "PADDR"
       ],
       "related_assignments": [
         "0"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:001"
@@ -219,14 +211,20 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "subject": "wdog_lock_wr_val",
-      "summary": "该信号通过比较写入数据与特定密钥（0x1ACCE551）来决定是否解锁看门狗寄存器。",
-      "explanation": "当PWDATA等于密钥时，wdog_lock_wr_val为0，表示解锁；否则为1，表示锁定。这是一种常见的保护机制，防止意外配置。",
+      "subject": "wdog_lock_wr_en, wdog_lock_wr_val",
+      "summary": "实现锁定寄存器的写使能和锁定值判断。",
+      "explanation": "wdog_lock_wr_en在地址匹配且写周期有效时产生；wdog_lock_wr_val通过比较PWDATA与0x1ACCE551决定是否解锁（0表示解锁）。",
       "signals": [
+        "wdog_lock_wr_en",
         "wdog_lock_wr_val",
-        "PWDATA"
+        "PADDR",
+        "PWDATA",
+        "PSEL",
+        "PWRITE",
+        "PENABLE"
       ],
       "related_assignments": [
+        "1",
         "2"
       ],
       "doc_priority": "primary",
@@ -234,11 +232,38 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "cmsdk_apb_watchdog"
+      },
+      "subject": "prdata_next_en",
+      "summary": "生成读数据使能信号，用于在APB地址相位采样读数据。",
+      "explanation": "当PSEL有效、PWRITE为低且PENABLE为低时，prdata_next_en有效，指示读操作开始。",
+      "signals": [
+        "prdata_next_en",
+        "PSEL",
+        "PWRITE",
+        "PENABLE"
+      ],
+      "related_assignments": [
+        "5"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+        }
+      ],
+      "id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:003"
     },
     {
       "claim_type": "interface_intent",
@@ -246,9 +271,9 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "该接口是标准的APB从设备接口，用于配置和读取看门狗状态。",
+      "summary": "标准APB从设备接口，用于寄存器读写访问。",
       "subject": "APB从接口",
-      "explanation": "接口包含地址（PADDR）、写数据（PWDATA）、读数据（PRDATA）以及控制信号（PSEL, PENABLE, PWRITE）。模块通过地址译码和写使能逻辑，实现对内部寄存器的读写操作。",
+      "explanation": "模块通过PADDR、PWDATA、PRDATA、PSEL、PENABLE、PWRITE等信号实现APB协议，无事件输入输出，纯数据接口。",
       "signals": [
         "PADDR",
         "PWDATA",
@@ -266,8 +291,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "interface",
-          "path": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
+          "source": "knowledge_ir/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:interface_intent:001"
@@ -278,9 +302,9 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "该接口输出看门狗超时事件，包括中断和复位信号。",
-      "subject": "看门狗事件输出接口",
-      "explanation": "WDOGINT和WDOGRES是模块的核心输出，分别表示看门狗中断和复位请求。它们可以来自真实的看门狗核心或测试模式。",
+      "summary": "提供中断和复位输出，受测试模式控制。",
+      "subject": "看门狗输出接口",
+      "explanation": "WDOGINT和WDOGRES是模块的主要输出，分别表示看门狗超时中断和复位事件，可通过测试模式强制赋值。",
       "signals": [
         "WDOGINT",
         "WDOGRES"
@@ -290,8 +314,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:interface_intent:002"
@@ -302,22 +325,20 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "文档应重点描述看门狗寄存器的锁定/解锁机制，包括密钥值和操作流程。",
-      "subject": "寄存器锁定机制",
-      "explanation": "通过wdog_lock_wr_en和wdog_lock_wr_val信号，模块实现了对关键寄存器的写保护。这是防止软件错误或恶意攻击导致看门狗配置被意外修改的关键特性。",
+      "summary": "文档应详细描述锁定寄存器的写保护和解锁流程。",
+      "subject": "锁定寄存器机制",
+      "explanation": "通过wdog_lock_wr_en和wdog_lock_wr_val实现，解锁需要写入特定值0x1ACCE551，影响其他寄存器的写使能。",
       "signals": [
         "wdog_lock_wr_en",
         "wdog_lock_wr_val",
-        "PADDR",
-        "PWDATA"
+        "wdog_lock"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:001"
@@ -328,59 +349,30 @@
         "type": "module",
         "module": "cmsdk_apb_watchdog"
       },
-      "summary": "文档应说明如何通过ITCR和ITOP寄存器进入测试模式，以验证中断和复位输出路径。",
-      "subject": "测试模式（Integration Test）",
-      "explanation": "通过wdog_itcr和wdog_itop信号，模块允许在测试模式下直接驱动WDOGINT和WDOGRES输出，绕过看门狗核心。这对于系统级测试非常重要。",
+      "summary": "文档应说明测试模式如何覆盖中断和复位输出。",
+      "subject": "测试模式对输出的影响",
+      "explanation": "当wdog_itcr为1时，WDOGINT和WDOGRES由wdog_itop控制，用于测试验证。",
       "signals": [
-        "wdog_itcr",
-        "wdog_itop",
         "WDOGINT",
-        "WDOGRES"
+        "WDOGRES",
+        "wdog_itcr",
+        "wdog_itop"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "assign_dependencies",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+          "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
         }
       ],
       "id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "cmsdk_apb_watchdog"
-      },
-      "reason": "上下文仅提供了实例的连接信息，但未描述其内部定时逻辑、计数器宽度、超时值配置方式等关键功能细节。",
-      "subject": "u_apb_watchdog_frc 实例的详细功能",
-      "needed_source_slice": "module declaration, always block, comments",
-      "signals": [
-        "frc_data",
-        "i_wdogint",
-        "i_wdogres"
-      ],
-      "instances": [
-        "u_apb_watchdog_frc"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "key_instances",
-          "path": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-        }
-      ],
-      "id": "semantic:module:cmsdk_apb_watchdog:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "看门狗核心（cmsdk_apb_watchdog_frc）的内部定时逻辑",
-      "reason": "上下文未提供该模块的详细行为描述，如计数器如何递减、超时条件、中断和复位产生的具体时序等。"
+      "field": "内部看门狗事件生成逻辑",
+      "reason": "上下文未提供i_wdogint和i_wdogres的生成细节，需参考cmsdk_apb_watchdog_frc模块。"
     }
   ]
 }

@@ -46,13 +46,10 @@
     }
   ],
   "claim_summary": {
-    "count": 8,
+    "count": 5,
     "by_type": {
       "assignment_interpretation": 3,
-      "documentation_focus": 1,
-      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -65,7 +62,7 @@
       },
       "summary": "多加载数据更新与写回控制模块，负责从加载数据路由中选择并组合数据，生成写回使能、结束标志及下一轮地址/寄存器列表。",
       "subject": "multiLoadDataUpate",
-      "explanation": "模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志及下一轮地址和寄存器列表。",
+      "explanation": "模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志及下一轮地址和寄存器列表。无事件接口，纯数据驱动。",
       "signals": [
         "i_address_32",
         "i_fromDataRoutData_64",
@@ -101,18 +98,17 @@
         "type": "module",
         "module": "multiLoadDataUpate"
       },
-      "summary": "根据内部状态（num, r_count_2）从加载数据路由数据中选择并组合数据，生成写回数据、写回使能及结束标志。",
-      "subject": "多加载数据更新与写回控制",
-      "explanation": "赋值依赖显示o_wbackData_64根据num和r_count_2从i_fromDataRoutData_64中选择32位数据并拼接；o_wbackWen_2根据num生成写回使能；o_endFlag_1根据r_registerList_16是否全零生成结束标志。",
+      "summary": "根据内部计数和选择信号，从加载数据路由输入中提取并组合数据，生成写回数据、写回使能、结束标志及下一轮地址和寄存器列表。",
+      "subject": "多加载数据更新与写回",
+      "explanation": "通过assign依赖可见，o_wbackData_64根据num和r_count_2从i_fromDataRoutData_64中选择32位或64位数据；o_wbackWen_2根据num生成写回使能；o_endFlag_1根据r_registerList_16是否全零判断结束；o_nextAddress_32和o_nextRegisterList_16直接由内部寄存器驱动。",
       "signals": [
         "o_wbackData_64",
         "o_wbackWen_2",
         "o_endFlag_1",
-        "i_fromDataRoutData_64",
-        "i_fromDataRout_1",
-        "r_count_2",
-        "num",
-        "r_registerList_16"
+        "o_nextAddress_32",
+        "o_nextRegisterList_16",
+        "o_dHi_4",
+        "o_dLo_4"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -137,8 +133,8 @@
         "module": "multiLoadDataUpate"
       },
       "subject": "o_wbackData_64",
-      "summary": "根据num和r_count_2从i_fromDataRoutData_64中选择并组合32位数据，形成64位写回数据。",
-      "explanation": "当num==2'b10时直接使用i_fromDataRoutData_64；当num==2'b01时根据r_count_2选择高32位或低32位并拼接零；否则输出0。",
+      "summary": "根据num和r_count_2选择写回数据，支持64位或32位数据组合。",
+      "explanation": "当num==2'b10时，直接输出64位数据；当num==2'b01时，根据r_count_2选择高32位或低32位并零扩展；否则输出0。表明模块支持不同宽度的加载数据写回。",
       "signals": [
         "o_wbackData_64",
         "i_fromDataRoutData_64",
@@ -171,8 +167,8 @@
         "module": "multiLoadDataUpate"
       },
       "subject": "o_wbackWen_2",
-      "summary": "根据num生成写回使能信号，num==2'b01时使能低2位，num==2'b10时使能全部2位，否则不使能。",
-      "explanation": "写回使能直接由num控制，表明写回宽度与num相关。",
+      "summary": "根据num生成写回使能，支持单字节或双字节写回。",
+      "explanation": "当num==2'b01时，使能为2'b01（单字节）；当num==2'b10时，使能为2'b11（双字节）；否则为0。表明写回使能与数据宽度选择一致。",
       "signals": [
         "o_wbackWen_2",
         "num"
@@ -203,8 +199,8 @@
         "module": "multiLoadDataUpate"
       },
       "subject": "o_endFlag_1",
-      "summary": "当r_registerList_16全零时输出1，表示多加载操作结束。",
-      "explanation": "结束标志由内部寄存器列表全零状态决定，表明模块跟踪剩余寄存器数量。",
+      "summary": "当寄存器列表全零时，输出结束标志。",
+      "explanation": "通过检查r_registerList_16是否全零来判断多加载操作是否完成。全零时输出1，否则输出0。",
       "signals": [
         "o_endFlag_1",
         "r_registerList_16"
@@ -212,7 +208,7 @@
       "related_assignments": [
         "4"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
@@ -227,110 +223,53 @@
         }
       ],
       "id": "semantic:module:multiLoadDataUpate:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "multiLoadDataUpate"
-      },
-      "summary": "输出写回数据、写回使能、结束标志及下一轮地址/寄存器列表，构成多加载操作的写回和状态更新接口。",
-      "subject": "数据输出接口",
-      "explanation": "o_wbackData_64和o_wbackWen_2提供写回数据和控制；o_endFlag_1指示操作结束；o_nextAddress_32和o_nextRegisterList_16提供下一轮操作的地址和寄存器列表。",
-      "signals": [
-        "o_wbackData_64",
-        "o_wbackWen_2",
-        "o_endFlag_1",
-        "o_nextAddress_32",
-        "o_nextRegisterList_16"
-      ],
-      "related_payload": [
-        "o_wbackData_64",
-        "o_nextAddress_32",
-        "o_nextRegisterList_16"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
-        },
-        {
-          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
-        }
-      ],
-      "id": "semantic:module:multiLoadDataUpate:interface_intent:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "multiLoadDataUpate"
-      },
-      "summary": "文档应重点描述内部状态（num, r_count_2, r_registerList_16）如何控制数据选择、写回使能和结束标志生成。",
-      "subject": "多加载数据更新与写回控制逻辑",
-      "explanation": "赋值依赖显示核心逻辑由内部状态驱动，但缺少状态机定义和状态转移细节，需RTL源码补充。",
-      "signals": [
-        "num",
-        "r_count_2",
-        "r_registerList_16",
-        "o_wbackData_64",
-        "o_wbackWen_2",
-        "o_endFlag_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
-        },
-        {
-          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
-        }
-      ],
-      "id": "semantic:module:multiLoadDataUpate:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "multiLoadDataUpate"
-      },
-      "reason": "紧凑上下文缺少内部寄存器（r_k_4, r_j_4, r_count_2, num, r_registerList_16, r_nextAddress_32）的赋值逻辑和状态转移，无法完整描述模块行为。",
-      "subject": "内部状态机定义",
-      "needed_source_slice": "always block",
-      "signals": [
-        "r_k_4",
-        "r_j_4",
-        "r_count_2",
-        "num",
-        "r_registerList_16",
-        "r_nextAddress_32"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
-        },
-        {
-          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
-        }
-      ],
-      "id": "semantic:module:multiLoadDataUpate:source_review_request:001"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "内部状态机（r_k_4, r_j_4, r_count_2, num）的更新逻辑",
+      "reason": "当前上下文仅显示这些信号出现在assign依赖中，但未提供其赋值来源或状态转移逻辑。需要RTL源代码中的always块或assign块来理解状态机行为。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
+        }
+      ]
+    },
+    {
+      "field": "i_fromDataRout_1 的用途",
+      "reason": "该信号作为数据输入，但未出现在任何assign依赖中，其作用不明。可能用于控制或状态更新，但当前上下文无法推断。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
+        }
+      ]
+    },
+    {
+      "field": "o_dHi_4 和 o_dLo_4 的语义",
+      "reason": "这两个输出直接由内部寄存器r_k_4和r_j_4驱动，但当前上下文未说明其用途。可能用于调试或状态指示，但无法确认。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/multiLoadDataUpate.json"
+        },
+        {
+          "source": "rtl/rtl/Lsu/multiLoadDataUpate.v"
+        }
+      ]
+    }
+  ]
 }

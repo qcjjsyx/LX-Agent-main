@@ -46,14 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 14,
+    "count": 13,
     "by_type": {
       "assignment_interpretation": 2,
-      "component_role": 3,
+      "component_role": 5,
       "documentation_focus": 2,
-      "interface_intent": 3,
+      "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -64,12 +63,13 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "顶层CPU流水线集成模块，负责将取指、译码、执行、访存、写回及异常中断处理等子模块通过事件驱动机制连接成完整的处理器流水线。",
+      "summary": "顶层CPU流水线集成模块，负责指令获取、译码、执行、访存、写回及异常/中断处理的完整流水线控制与数据通路汇聚。",
       "subject": "cpu_top_all",
-      "explanation": "该模块通过事件驱动信号（如i_driveFromStart_1、i_dataRoutDriveToLsu_1）和互斥合并/选择器组件（如BranchMerge、launchMerge、exeMutexSele）协调各流水线阶段（fetch_inst、decoder_inst、execute_inst、lsu_inst、wb_inst）之间的数据和控制流，并管理指令发射（launch_inst）、寄存器文件（grf_inst、prf_inst）以及异常中断（intAndExc_inst）的交互。",
+      "explanation": "该模块集成了fetch、decoder、execute、lsu、wb、grf、prf、intAndExc等核心流水线阶段模块，并通过大量SelSplit、MutexMerge、Fifo1、PmtFifo1等控制组件进行事件驱动的流水线阶段间同步与数据路由。外部事件输入（i_dataRoutDriveToLsu_1、i_driveFromStart_1、i_drvFICache）驱动内部流水线启动，输出事件（o_drv2ICache、o_lsuDriveToDataRout_1）驱动外部缓存和路由模块。",
       "signals": [
-        "i_driveFromStart_1",
         "i_dataRoutDriveToLsu_1",
+        "i_driveFromStart_1",
+        "i_drvFICache",
         "o_drv2ICache",
         "o_lsuDriveToDataRout_1"
       ],
@@ -79,7 +79,6 @@
         "execute_inst",
         "lsu_inst",
         "wb_inst",
-        "launch_inst",
         "grf_inst",
         "prf_inst",
         "intAndExc_inst"
@@ -108,25 +107,24 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "通过事件驱动信号和选择/合并组件网络，将取指、译码、发射、执行、访存、写回等流水线阶段连接起来，实现指令的流动和数据的传递。",
-      "subject": "流水线阶段间事件驱动与数据路由",
-      "explanation": "模块内部使用大量cSelector、cSplitter、cMutexMerge、cFifo1、cPmtFifo1等组件，对来自不同源的事件（如执行结果、访存结果、分支预测、异常）进行路由、合并、缓冲和同步，确保数据（如指令、操作数、结果）在正确的流水线阶段之间传递。",
+      "summary": "通过SelSplit、MutexMerge、Fifo1、PmtFifo1等组件族，实现流水线各阶段（取指、译码、发射、执行、访存、写回）之间的事件驱动同步、数据转发与仲裁。",
+      "subject": "流水线阶段间事件驱动同步与数据路由",
+      "explanation": "模块内部大量使用cSelector2_1b、cSplitter2_1b、cMutexMerge2_1b、cFifo1、cPmtFifo1等组件，形成事件驱动的流水线控制网络。例如，decoSplitter将译码器输出事件分发给发射阶段；launchSele、exeMutexSele、lsuMutexSele等选择器负责在多个事件源之间进行仲裁；exeWaitMerge、launchMerge等合并器负责同步多个路径的事件。这些组件共同实现了流水线阶段间的握手、暂停、转发和异常处理。",
       "signals": [
         "w_decoderDrive_1",
+        "w_driveToLaunchSele",
         "w_exeDrive_1",
-        "w_lsuDriveToLaunch_1",
-        "w_launchDataToExecute_207",
-        "w_exeToLsuData_163"
+        "w_lsuDriveToSele"
       ],
       "instances": [
         "decoSplitter",
-        "exeSplitter",
         "launchSele",
         "exeMutexSele",
-        "lsuSplitter",
         "lsuMutexSele",
-        "icachecArbMerge",
-        "DRMutexMerge"
+        "exeWaitMerge",
+        "launchMerge",
+        "exeMutexMerge",
+        "lsuMutexMerge"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -152,20 +150,31 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "launch_inst",
-      "summary": "指令发射单元，负责在满足依赖条件后，将译码后的指令及其操作数发射到执行单元。",
-      "explanation": "launch_inst接收来自译码器（decoder_inst）、寄存器文件（grf_inst、prf_inst）和旁路数据（来自执行和访存阶段）的事件和数据，在条件满足时生成发射事件（w_launchDriveToExe_1）和数据（w_launchDataToExecute_207）给执行单元。",
+      "subject": "SelSplit组件族 (cSelector2_1b, cSplitter2_1b, cSelector3_2b)",
+      "summary": "流水线事件路由与分发节点，负责将单个事件流路由到多个目标或从多个源中选择一个事件流。",
+      "explanation": "这些组件是流水线控制网络的关键节点。cSplitter2_1b（如decoSplitter、exeSplitter、lsuSplitter）将输入事件分发到两个不同的下游路径。cSelector2_1b和cSelector3_2b（如launchSele、exeMutexSele、lsuMutexSele）从多个输入事件源中选择一个进行转发，实现流水线阶段间的仲裁和路径选择。它们共同构成了流水线控制流的分发与汇聚网络。",
       "signals": [
-        "w_decoderDriveToLaunch_1",
-        "w_grfDriveToLaunch_1",
-        "w_ExeData_96",
-        "w_lsuData_64",
-        "w_launchDataToExecute_207"
+        "w_decoderDrive_1",
+        "w_driveToLaunchSele",
+        "w_exeDrive_1",
+        "w_lsuDriveToSele"
       ],
       "instances": [
-        "launch_inst"
+        "decoSplitter",
+        "launchSele",
+        "exeMutexSele",
+        "lsuMutexSele",
+        "fetchSele0",
+        "fetchSele1",
+        "outStackSele",
+        "exeSplitter",
+        "launchWaySele",
+        "lsuSplitter",
+        "lsuByWaySele0"
       ],
       "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "primary",
@@ -187,22 +196,26 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "intAndExc_inst",
-      "summary": "异常与中断处理单元，负责收集来自各流水线阶段的异常和中断请求，并生成相应的处理事件和数据。",
-      "explanation": "intAndExc_inst接收来自取指（ifHelpDecExcDelayFifo）、执行（u1_cMutexMerge2_36b_xyp）、访存（u2_cMutexMerge2_36b_xyp）以及数据路由（DRSelector）的异常/中断事件，处理后生成写回寄存器文件（grf_inst、prf_inst）和跳转（BranchMerge）的事件。",
+      "subject": "MutexMerge组件族 (cMutexMerge2_1b, cMutexMerge2_36b_xyp, cMutexMerge4_32b)",
+      "summary": "互斥合并节点，确保来自不同源的事件流按顺序合并，避免数据竞争。",
+      "explanation": "这些组件用于合并来自不同流水线阶段或不同路径的事件流，保证合并后的顺序性。例如，BranchMerge合并来自启动、写回和异常路径的取指请求；exeMutexMerge合并来自执行和发射路径的释放事件；u1_cMutexMerge2_36b_xyp合并来自执行和异常路径的异常数据。它们通常与SelSplit组件配合使用，形成流水线控制流的闭环。",
       "signals": [
-        "w_drv2Excp_2",
-        "w_exeDriveToExcp_1",
-        "w_lsuDriveToExcp_1",
-        "w_intDriveFromDR",
-        "w_driveToRGRF_1",
-        "w_driveToWGRF_1"
+        "w_drvFTop",
+        "w_driveToExeSele_1",
+        "w_exeDriveToExcp_1"
       ],
       "instances": [
-        "intAndExc_inst"
+        "BranchMerge",
+        "launchMerge",
+        "exeMutexMerge",
+        "lsuMutexMerge",
+        "DRMutexMerge",
+        "u1_cMutexMerge2_36b_xyp",
+        "u2_cMutexMerge2_36b_xyp"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "primary",
@@ -224,19 +237,24 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "subject": "BranchMerge",
-      "summary": "分支与异常跳转合并单元，将来自不同源（启动、写回、异常）的跳转请求合并后发送给取指阶段。",
-      "explanation": "BranchMerge是一个4输入互斥合并器，接收来自启动信号（i_driveFromStart_1）、写回阶段（w_branchDri2）和异常处理单元（w_branchDri3）的跳转事件，合并后输出w_drvFTop驱动取指阶段。",
+      "subject": "Fifo1组件族 (cFifo1)",
+      "summary": "流水线延迟缓冲节点，用于在事件驱动路径上引入延迟或缓冲，以匹配不同流水线阶段的时序。",
+      "explanation": "这些Fifo1组件（如excfifo、ifHelpDecExcDelayFifo、lsuDriveToLaunchDelayFifo1）在事件流路径上提供单级延迟或缓冲。它们用于解决流水线阶段间的时序匹配问题，例如，ifHelpDecExcDelayFifo缓冲取指阶段的异常事件，等待译码阶段处理；lsuDriveToLaunchDelayFifo1缓冲访存阶段的发射事件，等待发射阶段就绪。",
       "signals": [
-        "i_driveFromStart_1",
-        "w_branchDri2",
-        "w_branchDri3",
-        "w_drvFTop"
+        "w_drv2Excp_2",
+        "w_lsuDriveToLaunchDelay_1"
       ],
       "instances": [
-        "BranchMerge"
+        "excfifo",
+        "ifHelpDecExcDelayFifo",
+        "lsuDriveToLaunchDelayFifo1",
+        "exeWaitMergeDelayFifo1",
+        "launchDelayFifo1",
+        "lsuDelayFifo"
       ],
       "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "secondary",
@@ -253,14 +271,90 @@
       "id": "semantic:module:cpu_top_all:component_role:003"
     },
     {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "cpu_top_all"
+      },
+      "subject": "PmtFifo1组件族 (cPmtFifo1)",
+      "summary": "流水线路径延迟缓冲节点，用于在特定路径上引入延迟，以匹配不同数据通路的时序。",
+      "explanation": "这些PmtFifo1组件（如exeByPathPmtfifo、lsuByPathPmtfifo、launchToLsuPmtfifo）在特定事件路径上提供延迟，通常用于匹配数据通路的延迟。例如，exeByPathPmtfifo缓冲执行阶段的旁路路径事件，等待发射阶段就绪；lsuByPathPmtfifo缓冲访存阶段的旁路路径事件。",
+      "signals": [
+        "w_ExeDriveToLunchDelay_1",
+        "w_LsuDriveToLunchDelay_1"
+      ],
+      "instances": [
+        "exeByPathPmtfifo",
+        "lsuByPathPmtfifo",
+        "launchToLsuPmtfifo"
+      ],
+      "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
+        "flow_002_cpu_top_all_i_driveFromStart_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
+        }
+      ],
+      "id": "semantic:module:cpu_top_all:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "cpu_top_all"
+      },
+      "subject": "contTap组件族 (decTap, exeTap, firstTap, releaseTap, lsuDriveToLaunchTap, secondTap)",
+      "summary": "流水线监控探针，用于观察或统计流水线内部事件流，不参与数据或控制路径。",
+      "explanation": "这些contTap实例（如decTap、exeTap、firstTap）仅监听内部事件信号，不产生任何输出事件或数据。它们的作用是提供流水线内部状态的观测点，可能用于性能计数、调试或验证。例如，decTap监听译码阶段和异常释放事件；exeTap监听执行阶段和异常释放事件。",
+      "signals": [
+        "w_driveToDec",
+        "w_exeDriveToExcMutexMerge_1",
+        "w_loadEndDrive"
+      ],
+      "instances": [
+        "decTap",
+        "exeTap",
+        "firstTap",
+        "releaseTap",
+        "lsuDriveToLaunchTap",
+        "secondTap"
+      ],
+      "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
+        "flow_002_cpu_top_all_i_driveFromStart_1"
+      ],
+      "doc_priority": "reference",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
+        }
+      ],
+      "id": "semantic:module:cpu_top_all:component_role:005"
+    },
+    {
       "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "cpu_top_all"
       },
       "subject": "w_exeTrueNum_4",
-      "summary": "根据执行异常标志选择有效异常数量，用于异常处理。",
-      "explanation": "该赋值根据w_exeExcRstFlag_1信号，从执行异常数据w_exeToExcpData_36中提取有效异常数量（低4位），否则默认为4'b1111，表明所有异常均有效。",
+      "summary": "根据执行异常标志选择有效异常数量，用于异常处理优先级判断。",
+      "explanation": "该赋值根据w_exeExcRstFlag_1信号，从执行异常数据w_exeToExcpData_36中提取低4位作为有效异常数量，否则默认为4'b1111。这表明异常数据包中包含异常数量信息，用于后续异常处理逻辑。",
       "signals": [
         "w_exeTrueNum_4",
         "w_exeExcRstFlag_1",
@@ -270,15 +364,14 @@
         "assign index 20"
       ],
       "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
@@ -292,8 +385,8 @@
         "module": "cpu_top_all"
       },
       "subject": "w_lsuPyPathPmtFire_1",
-      "summary": "组合多个旁路路径的驱动信号，用于触发旁路路径的许可信号。",
-      "explanation": "该赋值将来自执行旁路（w_ExeDriveToLunchDelay_1）、访存旁路（w_lsuDriveToLaunchDelay2_1）和异常跳转（w_branchDri3）的驱动信号进行逻辑或，生成一个统一的旁路路径触发信号。",
+      "summary": "组合多个路径的发射事件，用于触发LSU旁路路径的许可信号。",
+      "explanation": "该赋值将LSU发射延迟事件、执行发射延迟事件和分支事件进行逻辑或，生成一个组合信号。这表明LSU旁路路径的发射许可由多个事件源共同决定，可能用于控制旁路路径的启动条件。",
       "signals": [
         "w_lsuPyPathPmtFire_1",
         "w_lsuDriveToLaunchDelay2_1",
@@ -304,15 +397,14 @@
         "assign index 39"
       ],
       "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json"
-        },
         {
           "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
         }
@@ -325,19 +417,18 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "数据路由单元与CPU之间的双向事件驱动接口，用于传递访存请求和结果。",
-      "subject": "数据路由接口（i_dataRoutDriveToLsu_1 / o_lsuDriveToDataRout_1）",
-      "explanation": "该接口对包含一个输入事件（i_dataRoutDriveToLsu_1）和一个输出事件（o_lsuDriveToDataRout_1），并伴随数据信号（i_memData_65, o_lsuToDataRoutData_105）和释放信号（i_lsuFreeFromDataRout_1, o_lsuFreeToDataRout_1），构成一个完整的请求-响应-释放握手协议。",
+      "summary": "外部事件输入（i_dataRoutDriveToLsu_1、i_driveFromStart_1、i_drvFICache）作为流水线启动和外部同步的触发源，对应输出事件（o_drv2ICache、o_lsuDriveToDataRout_1）驱动外部模块。",
+      "subject": "外部事件驱动接口组",
+      "explanation": "这些事件接口构成了模块与外部世界的同步边界。i_dataRoutDriveToLsu_1触发LSU从数据路由接收数据；i_driveFromStart_1携带启动PC，触发流水线从起始地址开始执行；i_drvFICache触发取指阶段从ICache获取指令。对应的输出事件o_drv2ICache驱动ICache进行指令预取，o_lsuDriveToDataRout_1驱动数据路由模块处理LSU的访存结果。这些接口体现了模块作为CPU核心与外部缓存和路由模块的交互。",
       "signals": [
         "i_dataRoutDriveToLsu_1",
-        "o_lsuDriveToDataRout_1",
-        "i_memData_65",
-        "o_lsuToDataRoutData_105",
-        "i_lsuFreeFromDataRout_1",
-        "o_lsuFreeToDataRout_1"
+        "i_driveFromStart_1",
+        "i_drvFICache",
+        "o_drv2ICache",
+        "o_lsuDriveToDataRout_1"
       ],
       "related_payload": [
-        "i_memData_65",
+        "i_startPc_32",
         "o_lsuToDataRoutData_105"
       ],
       "doc_priority": "primary",
@@ -359,20 +450,24 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "外部启动CPU执行的接口，包含起始PC和完成释放信号。",
-      "subject": "启动接口（i_driveFromStart_1 / o_freeToStart_1）",
-      "explanation": "该接口通过输入事件i_driveFromStart_1触发CPU开始执行，并携带起始PC（i_startPc_32）。当CPU完成初始化或特定任务后，通过输出释放信号o_freeToStart_1通知外部。",
+      "summary": "事件输入与释放输出（如i_dataRoutDriveToLsu_1与o_lsuFreeToDataRout_1）构成一对握手信号，用于模块间同步和资源释放。",
+      "subject": "事件-释放握手接口组",
+      "explanation": "多个事件输入都有对应的释放输出，例如i_dataRoutDriveToLsu_1对应o_lsuFreeToDataRout_1，i_driveFromStart_1对应o_freeToStart_1。这表明模块采用事件-释放握手协议与外部模块通信：外部模块发送事件驱动本模块，本模块处理完成后发送释放信号通知外部模块。这种协议用于管理共享资源或同步流水线阶段。",
       "signals": [
+        "i_dataRoutDriveToLsu_1",
+        "o_lsuFreeToDataRout_1",
         "i_driveFromStart_1",
         "o_freeToStart_1",
-        "i_startPc_32"
+        "i_lsuFreeFromDataRout_1",
+        "o_lsuDriveToDataRout_1"
       ],
       "related_payload": [
-        "i_startPc_32"
+        "i_startPc_32",
+        "o_lsuToDataRoutData_105"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "high",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/cpu_top_all.json"
@@ -384,59 +479,29 @@
       "id": "semantic:module:cpu_top_all:interface_intent:002"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "summary": "CPU与指令缓存之间的双向事件驱动接口，用于请求和接收指令。",
-      "subject": "指令缓存接口（i_drvFICache / o_drv2ICache / i_freeFICache / o_free2ICache）",
-      "explanation": "该接口包含输入事件（i_drvFICache）和输出事件（o_drv2ICache），以及对应的释放信号（i_freeFICache, o_free2ICache），构成一个请求-响应-释放握手协议，用于从指令缓存获取指令。",
-      "signals": [
-        "i_drvFICache",
-        "o_drv2ICache",
-        "i_freeFICache",
-        "o_free2ICache"
-      ],
-      "related_payload": [
-        "o_cpuToIcache_105"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:interface_intent:003"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "手册应重点描述基于事件驱动和互斥合并/选择器组件的流水线控制机制，而非传统的流水线寄存器级描述。",
-      "subject": "事件驱动流水线架构",
-      "explanation": "从上下文可见，模块内部大量使用cSelector、cSplitter、cMutexMerge、cFifo1等组件进行事件路由和同步，而非简单的寄存器打拍。手册应解释这些组件如何协同工作，实现指令的发射、旁路、异常处理等复杂控制逻辑。",
+      "summary": "文档应重点描述由SelSplit、MutexMerge、Fifo1、PmtFifo1等组件构成的流水线阶段间事件驱动同步与数据路由网络。",
+      "subject": "流水线控制网络",
+      "explanation": "该模块的核心复杂性不在于单个流水线阶段，而在于这些阶段之间的事件驱动控制网络。文档应详细说明每个SelSplit和MutexMerge组件的路由和仲裁逻辑，以及Fifo1和PmtFifo1组件的延迟缓冲作用。同时，应解释事件-释放握手协议在模块内部和外部接口中的应用。",
       "signals": [
         "w_decoderDrive_1",
+        "w_driveToLaunchSele",
         "w_exeDrive_1",
-        "w_lsuDriveToLaunch_1",
-        "w_drvFTop"
+        "w_lsuDriveToSele"
       ],
       "instances": [
-        "BranchMerge",
-        "launchMerge",
-        "exeMutexMerge",
-        "lsuMutexMerge",
+        "decoSplitter",
         "launchSele",
         "exeMutexSele",
-        "lsuMutexSele"
+        "lsuMutexSele",
+        "exeWaitMerge",
+        "launchMerge",
+        "exeMutexMerge",
+        "lsuMutexMerge"
       ],
       "related_flows": [
         "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
@@ -462,26 +527,32 @@
         "type": "module",
         "module": "cpu_top_all"
       },
-      "summary": "手册应详细说明执行和访存阶段到发射阶段的旁路路径，包括其触发条件和数据流。",
-      "subject": "旁路（Bypass）路径",
-      "explanation": "上下文中的assign index 39（w_lsuPyPathPmtFire_1）和多个PmtFifo1实例（exeByPathPmtfifo, lsuByPathPmtfifo）表明存在复杂的旁路机制。手册应解释这些旁路路径如何工作，以及它们如何解决数据冒险。",
+      "summary": "文档应详细描述异常和中断事件从产生（fetch、execute、lsu）到汇聚（intAndExc_inst）再到处理（grf、prf）的完整路径。",
+      "subject": "异常与中断处理路径",
+      "explanation": "模块中存在多条异常/中断路径：取指异常（w_drv2Excp_2Tmp -> ifHelpDecExcDelayFifo -> intAndExc_inst）、执行异常（w_exeDriveToExcMutexMerge_1 -> u1_cMutexMerge2_36b_xyp -> intAndExc_inst）、访存异常（w_lsuDriveToExcMutexMerge1_1 -> u2_cMutexMerge2_36b_xyp -> intAndExc_inst）。intAndExc_inst模块汇聚这些异常，并驱动grf和prf进行状态更新。文档应解释这些路径的优先级、合并逻辑以及异常处理对流水线控制的影响。",
       "signals": [
-        "w_ExeDriveToLunchDelay_1",
-        "w_lsuDriveToLaunchDelay2_1",
-        "w_lsuPyPathPmtFire_1"
+        "w_drv2Excp_2Tmp",
+        "w_exeDriveToExcMutexMerge_1",
+        "w_lsuDriveToExcMutexMerge1_1",
+        "w_exeDriveToExcp_1",
+        "w_lsuDriveToExcp_1"
       ],
       "instances": [
-        "exeByPathPmtfifo",
-        "lsuByPathPmtfifo",
-        "launchWaySele",
-        "lsuByWaySele0"
+        "ifHelpDecExcDelayFifo",
+        "u1_cMutexMerge2_36b_xyp",
+        "u2_cMutexMerge2_36b_xyp",
+        "intAndExc_inst",
+        "grf_inst",
+        "prf_inst"
       ],
       "related_flows": [
+        "flow_000_cpu_top_all_i_dataRoutDriveToLsu_1",
+        "flow_001_cpu_top_all_i_drvFICache",
         "flow_002_cpu_top_all_i_driveFromStart_1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "knowledge_ir/modules/cpu_top_all.json"
@@ -491,79 +562,35 @@
         }
       ],
       "id": "semantic:module:cpu_top_all:documentation_focus:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "reason": "上下文提供了异常/中断事件的来源（如excfifo, u1_cMutexMerge2_36b_xyp）和去向（intAndExc_inst），但未明确说明异常/中断的优先级、处理时序以及如何影响流水线状态（如刷新、重定向）。",
-      "subject": "异常与中断处理路径的详细时序",
-      "needed_source_slice": "always block, assign block, instance connections",
-      "signals": [
-        "w_drv2Excp_2",
-        "w_exeDriveToExcp_1",
-        "w_lsuDriveToExcp_1",
-        "w_branchDri3"
-      ],
-      "instances": [
-        "intAndExc_inst",
-        "excfifo",
-        "u1_cMutexMerge2_36b_xyp",
-        "u2_cMutexMerge2_36b_xyp"
-      ],
-      "related_flows": [
-        "flow_002_cpu_top_all_i_driveFromStart_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "cpu_top_all"
-      },
-      "reason": "上下文列出了launch_inst的输入事件（如w_decoderDriveToLaunch_1, w_grfDriveToLaunch_1）和输出事件（w_launchDriveToExe_1），但未说明发射条件的具体逻辑（如操作数就绪、资源冲突、异常等）。",
-      "subject": "发射逻辑（launch_inst）的详细条件",
-      "needed_source_slice": "always block, assign block, instance connections",
-      "signals": [
-        "w_decoderDriveToLaunch_1",
-        "w_grfDriveToLaunch_1",
-        "w_ExeData_96",
-        "w_lsuData_64",
-        "w_launchDataToExecute_207"
-      ],
-      "instances": [
-        "launch_inst"
-      ],
-      "related_flows": [
-        "flow_002_cpu_top_all_i_driveFromStart_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/cpu_top_all.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
-        }
-      ],
-      "id": "semantic:module:cpu_top_all:source_review_request:002"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "具体的数据通路宽度和位域定义",
+      "reason": "上下文提供了数据信号宽度（如w_launchDataToExecute_207），但未提供这些宽位数据的位域划分和具体含义。例如，207位的数据包中包含哪些字段（操作码、寄存器地址、立即数等）未定义。",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/cpu_top_all.json"
+        }
+      ]
+    },
+    {
+      "field": "流水线阶段间握手协议的详细时序",
+      "reason": "上下文描述了事件驱动和释放信号，但未提供这些握手信号的时序关系（如事件有效周期、释放信号何时断言、是否支持背压等）。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        }
+      ]
+    },
+    {
+      "field": "contTap组件的具体用途",
+      "reason": "上下文仅说明contTap监听事件，但未解释其具体用途（如性能计数、调试、验证等）。需要RTL源代码或注释来确认。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/cpu_top_all.json"
+        }
+      ]
+    }
+  ]
 }

@@ -47,9 +47,9 @@
     }
   ],
   "claim_summary": {
-    "count": 9,
+    "count": 8,
     "by_type": {
-      "completion_backpressure": 2,
+      "completion_backpressure": 1,
       "component_role": 3,
       "data_control_effect": 1,
       "documentation_focus": 1,
@@ -65,9 +65,9 @@
         "module": "data_slot",
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
-      "summary": "从Dcache的驱动事件经过延迟和互斥合并后，最终输出到CPU的驱动路径",
+      "summary": "从Dcache到CPU的驱动事件流，经过延迟和互斥合并后输出",
       "subject": "flow_001_data_slot_i_driveFromDcache",
-      "explanation": "该流描述了i_driveFromDcache输入事件如何通过delay_driveFromDcache延迟单元，再与来自Mesh的驱动事件在MutexMerge中进行互斥合并，最后经过两级延迟单元delay2CPU和delay2CPU2输出为o_driveToCpu事件",
+      "explanation": "该流将来自Dcache的驱动事件信号i_driveFromDcache，通过延迟单元delay_driveFromDcache进行透明延迟，然后与来自Mesh的驱动事件在MutexMerge中进行互斥合并，再经过两级延迟单元delay2CPU和delay2CPU2后，最终输出为o_driveToCpu信号",
       "signals": [
         "i_driveFromDcache",
         "w_delay_driveFromDcache",
@@ -104,8 +104,8 @@
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
       "subject": "delay_driveFromDcache",
-      "summary": "对Dcache驱动事件进行固定延迟缓冲",
-      "explanation": "作为delay8U类型的透明延迟单元，将输入事件i_driveFromDcache延迟固定周期后输出到w_delay_driveFromDcache，不改变事件语义",
+      "summary": "输入驱动事件的透明延迟缓冲",
+      "explanation": "作为delay8U实例，对i_driveFromDcache信号进行固定延迟，输出w_delay_driveFromDcache，不改变事件语义",
       "signals": [
         "i_driveFromDcache",
         "w_delay_driveFromDcache"
@@ -113,7 +113,7 @@
       "instances": [
         "delay_driveFromDcache"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
@@ -132,8 +132,8 @@
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
       "subject": "MutexMerge",
-      "summary": "互斥合并来自Dcache和Mesh的驱动事件",
-      "explanation": "作为cMutexMerge2_64b类型的互斥合并器，接收w_delay_driveFromDcache和w_delay_driveFromMesh两个输入事件，通过仲裁机制选择其中一个输出到w_driveToCpu，同时携带对应的数据负载i_dcache_data或i_mesh_data",
+      "summary": "两个驱动事件流的互斥合并仲裁器",
+      "explanation": "作为cMutexMerge2_64b实例，接收来自Dcache的延迟驱动事件w_delay_driveFromDcache和来自Mesh的延迟驱动事件w_delay_driveFromMesh，进行互斥合并后输出w_driveToCpu，同时接收数据负载i_dcache_data",
       "signals": [
         "w_delay_driveFromDcache",
         "w_delay_driveFromMesh",
@@ -162,8 +162,8 @@
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
       "subject": "delay2CPU, delay2CPU2",
-      "summary": "对合并后的驱动事件进行两级延迟缓冲",
-      "explanation": "作为delay4U类型的透明延迟单元，delay2CPU将w_driveToCpu延迟后输出到中间信号a，delay2CPU2再将a延迟后输出为o_driveToCpu，共同构成到CPU的延迟路径",
+      "summary": "输出路径上的两级透明延迟缓冲",
+      "explanation": "作为两个delay4U实例串联，对合并后的驱动事件w_driveToCpu进行两级固定延迟，最终输出o_driveToCpu",
       "signals": [
         "w_driveToCpu",
         "a",
@@ -191,12 +191,12 @@
         "module": "data_slot",
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
-      "summary": "Dcache数据负载通过MutexMerge与驱动事件同步传递",
-      "subject": "i_dcache_data与MutexMerge的负载关联",
-      "explanation": "i_dcache_data作为64位数据负载直接连接到MutexMerge的i_data1_64端口，当MutexMerge选择来自Dcache的驱动事件时，该数据负载与事件同步输出到w_driveToCpu",
+      "summary": "数据负载与驱动事件并行传输，在MutexMerge处与事件同步",
+      "subject": "i_dcache_data与驱动事件的关系",
+      "explanation": "数据信号i_dcache_data直接连接到MutexMerge的数据输入i_data1_64，与来自Dcache的驱动事件i_driveFromDcache属于同一事件-数据对，在合并点与事件同步处理",
       "signals": [
         "i_dcache_data",
-        "w_driveToCpu"
+        "i_driveFromDcache"
       ],
       "related_payload": [
         "i_dcache_data"
@@ -206,11 +206,11 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "component_connection",
+          "source": "interface.data_ports",
           "path": "modules/data_slot.json"
         },
         {
-          "source": "module_boundary",
+          "source": "component_connection",
           "path": "modules/data_slot.json"
         }
       ],
@@ -223,12 +223,12 @@
         "module": "data_slot",
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
-      "summary": "存在从Dcache到data_slot的释放信号，但具体流控机制不明确",
-      "subject": "o_freeToDcache与i_driveFromDcache的流控关系",
-      "explanation": "接口契约显示o_freeToDcache是i_driveFromDcache的释放信号，表明存在背压机制，但当前上下文未提供该信号与流中组件的连接关系，无法确定延迟单元和合并器如何处理释放信号",
+      "summary": "输入和输出端口的流控信号存在但未在流中体现",
+      "subject": "o_freeToDcache与i_freeFromCpu",
+      "explanation": "接口契约显示输入事件i_driveFromDcache关联free信号o_freeToDcache，输出事件o_driveToCpu关联free信号i_freeFromCpu，但当前流步骤中未包含这些流控信号的连接关系，无法确定背压机制",
       "signals": [
         "o_freeToDcache",
-        "i_driveFromDcache"
+        "i_freeFromCpu"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -242,40 +242,15 @@
       "id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:completion_backpressure:001"
     },
     {
-      "claim_type": "completion_backpressure",
-      "scope": {
-        "type": "flow",
-        "module": "data_slot",
-        "flow_id": "flow_001_data_slot_i_driveFromDcache"
-      },
-      "summary": "存在从CPU到data_slot的释放信号，但具体流控机制不明确",
-      "subject": "i_freeFromCpu与o_driveToCpu的流控关系",
-      "explanation": "接口契约显示i_freeFromCpu是o_driveToCpu的释放信号，表明存在背压机制，但当前上下文未提供该信号与流中组件的连接关系，无法确定延迟单元和合并器如何处理释放信号",
-      "signals": [
-        "i_freeFromCpu",
-        "o_driveToCpu"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "interface.event_ports",
-          "path": "modules/data_slot.json"
-        }
-      ],
-      "id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:completion_backpressure:002"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "flow",
         "module": "data_slot",
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
-      "summary": "手册应重点描述从Dcache到CPU的驱动事件路径，以及MutexMerge的仲裁行为",
-      "subject": "驱动事件路径与互斥合并",
-      "explanation": "该流的核心是Dcache驱动事件经过延迟后与Mesh驱动事件在MutexMerge中互斥合并，最终输出到CPU，手册应强调MutexMerge的输入选择逻辑、延迟单元的延迟周期数，以及数据负载与事件的同步关系",
+      "summary": "应重点描述从Dcache到CPU的驱动事件路径，以及MutexMerge的互斥合并行为",
+      "subject": "驱动事件流的路径与合并仲裁",
+      "explanation": "该流的核心是Dcache驱动事件经过延迟和互斥合并后到达CPU，MutexMerge作为关键仲裁点决定了事件是否被阻塞或转发，同时数据负载i_dcache_data在合并点与事件同步",
       "signals": [
         "i_driveFromDcache",
         "w_delay_driveFromDcache",
@@ -311,14 +286,15 @@
         "module": "data_slot",
         "flow_id": "flow_001_data_slot_i_driveFromDcache"
       },
-      "reason": "当前上下文未提供MutexMerge的仲裁逻辑细节，以及释放信号o_freeToDcache和i_freeFromCpu如何与合并器交互",
-      "subject": "MutexMerge的仲裁条件与释放信号处理",
+      "reason": "当前上下文未提供MutexMerge的仲裁逻辑、阻塞条件和流控信号连接，无法确定事件被阻塞的具体条件",
+      "subject": "MutexMerge的仲裁条件和背压机制",
       "needed_source_slice": "always block|instance connections",
       "signals": [
-        "o_freeToDcache",
-        "i_freeFromCpu",
         "w_delay_driveFromDcache",
-        "w_delay_driveFromMesh"
+        "w_delay_driveFromMesh",
+        "w_driveToCpu",
+        "o_freeToDcache",
+        "i_freeFromCpu"
       ],
       "instances": [
         "MutexMerge"
@@ -328,11 +304,11 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports",
+          "source": "instances.connections",
           "path": "modules/data_slot.json"
         },
         {
-          "source": "instances.connections",
+          "source": "interface.event_ports",
           "path": "modules/data_slot.json"
         }
       ],
@@ -342,11 +318,11 @@
   "evidence_gaps": [
     {
       "field": "MutexMerge仲裁逻辑",
-      "reason": "当前上下文仅说明MutexMerge是互斥合并器，未提供仲裁条件（如优先级或轮询）的具体实现"
+      "reason": "未提供MutexMerge的仲裁条件、优先级或阻塞信号"
     },
     {
-      "field": "释放信号连接",
-      "reason": "接口契约定义了o_freeToDcache和i_freeFromCpu，但未提供它们与流中组件的连接关系，无法确定背压机制如何影响事件传播"
+      "field": "流控信号连接",
+      "reason": "未提供o_freeToDcache和i_freeFromCpu在流中的连接关系"
     }
   ]
 }

@@ -46,9 +46,9 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 7,
     "by_type": {
-      "assignment_interpretation": 6,
+      "assignment_interpretation": 3,
       "documentation_focus": 1,
       "interface_intent": 1,
       "module_role": 1,
@@ -62,13 +62,10 @@
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "该模块是SPI从设备控制器，负责在SPI总线上作为从机接收和发送数据，并支持CRC校验。",
+      "summary": "该模块是SPI从机核心控制器，负责在SPI从机模式下处理数据收发、时钟同步和CRC校验。",
       "subject": "spi_s",
-      "explanation": "模块具有数据输入TXCRC和data_in，数据输出data_out，以及内部信号busy、tx、rx_done、tx_done、sclk_rise和crc_done，表明其处理SPI从机数据传输和CRC计算。",
+      "explanation": "模块通过assign依赖中的busy、tx、rx_done、tx_done、sclk_rise和crc_done信号，表明其核心功能是管理SPI从机传输状态、数据移位、时钟边沿检测和CRC计算完成标志。",
       "signals": [
-        "TXCRC",
-        "data_in",
-        "data_out",
         "busy",
         "tx",
         "rx_done",
@@ -95,16 +92,14 @@
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "模块根据SPI协议（CPHA、DFF等配置）控制数据移位、接收完成和发送完成标志，并管理CRC计算状态。",
-      "subject": "SPI从机数据收发与CRC校验",
-      "explanation": "赋值依赖显示tx信号受rxonly、CPHA、tx_reg和tx_cnt控制，rx_done和tx_done由DFF和计数器决定，crc_done由crc_cnt控制，表明模块实现了SPI从机的数据路径和CRC逻辑。",
+      "summary": "模块通过组合逻辑生成busy信号，指示SPI从机是否处于活动状态（使能、发送FIFO空或CRC使能）。",
+      "subject": "SPI从机传输控制",
+      "explanation": "assign 0显示busy由enable、TXE和crc_en驱动，表明模块在使能、发送数据未就绪或CRC计算进行时均视为忙状态，这是从机传输控制的核心状态指示。",
       "signals": [
-        "tx",
-        "rx_done",
-        "tx_done",
-        "crc_done",
-        "sclk_rise",
-        "busy"
+        "busy",
+        "enable",
+        "TXE",
+        "crc_en"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -125,14 +120,16 @@
         "type": "module",
         "module": "spi_s"
       },
-      "subject": "busy",
-      "summary": "busy信号指示模块是否处于活动状态，由使能、发送FIFO空或CRC使能触发。",
-      "explanation": "赋值busy = enable | !TXE | crc_en表明模块在使能、发送数据未空或CRC使能时视为忙，用于控制SPI传输流程。",
+      "subject": "tx",
+      "summary": "该assign控制SPI从机发送数据线的输出，根据rxonly、CPHA和发送计数器选择发送寄存器值。",
+      "explanation": "在rxonly模式下强制输出0；否则根据CPHA和tx_cnt选择tx_reg或tx_reg0，表明模块支持全双工和只接收模式，并处理时钟相位对发送时序的影响。",
       "signals": [
-        "busy",
-        "enable",
-        "TXE",
-        "crc_en"
+        "tx",
+        "rxonly",
+        "CPHA",
+        "tx_reg",
+        "tx_cnt",
+        "tx_reg0"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -153,16 +150,25 @@
         "type": "module",
         "module": "spi_s"
       },
-      "subject": "tx",
-      "summary": "tx信号是SPI从机发送数据路径，根据rxonly、CPHA和移位计数器选择发送寄存器值。",
-      "explanation": "赋值tx = rxonly ? 1'b0 : (CPHA ? tx_reg : ((tx_cnt == 4'b0) ? tx_reg0 : tx_reg))表明在只接收模式下输出0，否则根据时钟相位和计数选择数据源，控制SPI数据输出。",
+      "subject": "rx_done, tx_done, crc_done",
+      "summary": "这三个assign根据DFF配置和计数器状态生成接收、发送和CRC完成的脉冲标志。",
+      "explanation": "通过DFF选择不同的位宽比较（3位或4位计数器），表明模块支持8位或16位数据帧格式，完成标志用于驱动后续数据存储或状态机跳转。",
       "signals": [
-        "tx",
-        "rxonly",
-        "CPHA",
-        "tx_reg",
+        "rx_done",
+        "tx_done",
+        "crc_done",
+        "DFF",
+        "rx_cnt",
         "tx_cnt",
-        "tx_reg0"
+        "crc_cnt",
+        "cnt_buf_rx",
+        "cnt_buf_tx",
+        "cnt_buf_crc"
+      ],
+      "related_assignments": [
+        "2",
+        "3",
+        "5"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -183,14 +189,17 @@
         "type": "module",
         "module": "spi_s"
       },
-      "subject": "rx_done",
-      "summary": "rx_done信号指示SPI接收完成，由DFF配置和接收计数器决定。",
-      "explanation": "赋值rx_done = DFF ? ((~rx_cnt[3]) & cnt_buf_rx) : ((~rx_cnt[2]) & cnt_buf_rx)表明模块根据数据帧格式（DFF）选择16位或8位接收完成条件，用于触发数据读取。",
+      "subject": "sclk_rise",
+      "summary": "该assign检测SPI时钟的上升沿，仅在S_en使能时有效。",
+      "explanation": "通过当前sclk和前一拍sclk_buf的与非逻辑生成上升沿脉冲，用于同步数据采样和移位操作，是SPI从机时序控制的关键。",
       "signals": [
-        "rx_done",
-        "DFF",
-        "rx_cnt",
-        "cnt_buf_rx"
+        "sclk_rise",
+        "S_en",
+        "sclk_buf",
+        "sclk"
+      ],
+      "related_assignments": [
+        "4"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -206,109 +215,25 @@
       "id": "semantic:module:spi_s:assignment_interpretation:003"
     },
     {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "spi_s"
-      },
-      "subject": "tx_done",
-      "summary": "tx_done信号指示SPI发送完成，由DFF配置和发送计数器决定。",
-      "explanation": "赋值tx_done = DFF ? ((~tx_cnt[3]) & cnt_buf_tx) : ((~tx_cnt[2]) & cnt_buf_tx)表明模块根据数据帧格式选择16位或8位发送完成条件，用于控制发送状态。",
-      "signals": [
-        "tx_done",
-        "DFF",
-        "tx_cnt",
-        "cnt_buf_tx"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/spi_s.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/spi_s.json"
-        }
-      ],
-      "id": "semantic:module:spi_s:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "spi_s"
-      },
-      "subject": "sclk_rise",
-      "summary": "sclk_rise信号检测SPI时钟上升沿，用于数据采样。",
-      "explanation": "赋值sclk_rise = S_en ? (~sclk_buf) & sclk : 1'b0表明在SPI使能时，通过当前时钟和前一周期时钟的异或检测上升沿，作为数据采样触发。",
-      "signals": [
-        "sclk_rise",
-        "S_en",
-        "sclk_buf",
-        "sclk"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/spi_s.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/spi_s.json"
-        }
-      ],
-      "id": "semantic:module:spi_s:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "spi_s"
-      },
-      "subject": "crc_done",
-      "summary": "crc_done信号指示CRC计算完成，由DFF配置和CRC计数器决定。",
-      "explanation": "赋值crc_done = DFF ? ((~crc_cnt[3]) & cnt_buf_crc) : ((~crc_cnt[2]) & cnt_buf_crc)表明模块根据数据帧格式选择16位或8位CRC完成条件，用于控制CRC状态。",
-      "signals": [
-        "crc_done",
-        "DFF",
-        "crc_cnt",
-        "cnt_buf_crc"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/spi_s.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/spi_s.json"
-        }
-      ],
-      "id": "semantic:module:spi_s:assignment_interpretation:006"
-    },
-    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "数据输入TXCRC和data_in分别用于CRC校验值和普通数据输入，表明模块支持带CRC的SPI传输。",
-      "subject": "数据输入接口",
-      "explanation": "TXCRC作为CRC输入，data_in作为数据输入，结合crc_done和crc_en信号，表明模块在SPI从机传输中集成CRC校验功能。",
+      "summary": "模块通过TXCRC、data_in和data_out构成16位数据通道，支持CRC数据和普通数据的独立输入。",
+      "subject": "数据输入输出接口",
+      "explanation": "TXCRC作为独立的CRC输入端口，表明模块可能支持硬件CRC计算或校验，data_in和data_out构成标准SPI数据路径，但缺少事件接口，说明控制完全由内部状态和时钟边沿驱动。",
       "signals": [
         "TXCRC",
         "data_in",
-        "crc_en",
-        "crc_done"
+        "data_out"
       ],
       "related_payload": [
         "TXCRC",
-        "data_in"
+        "data_in",
+        "data_out"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
@@ -327,17 +252,17 @@
         "type": "module",
         "module": "spi_s"
       },
-      "summary": "手册应重点描述SPI从机的数据发送/接收路径、CRC校验机制以及DFF配置对数据帧格式的影响。",
-      "subject": "SPI从机数据路径与CRC控制",
-      "explanation": "赋值依赖显示tx、rx_done、tx_done和crc_done均受DFF控制，且crc_en影响busy状态，表明DFF和CRC是核心配置点，需详细说明。",
+      "summary": "手册应重点说明模块如何通过DFF配置支持8位/16位数据帧，以及CRC计算完成标志与数据收发的关系。",
+      "subject": "SPI从机数据帧格式和CRC支持",
+      "explanation": "assign依赖中多次出现DFF选择不同位宽计数器，以及crc_done与rx_done/tx_done的相似结构，表明帧格式和CRC是模块的核心可配置特性，需要详细文档说明。",
       "signals": [
-        "tx",
+        "DFF",
         "rx_done",
         "tx_done",
         "crc_done",
-        "DFF",
-        "crc_en",
-        "busy"
+        "rx_cnt",
+        "tx_cnt",
+        "crc_cnt"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -355,8 +280,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "内部事件流",
-      "reason": "上下文中未提供内部事件流引用，无法推断模块内部状态机或事件触发关系。",
+      "field": "内部状态机或时序逻辑",
+      "reason": "上下文仅提供组合assign依赖，缺少always块或状态机描述，无法推断数据移位、寄存器更新和CRC计算的时序细节。",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_s.json"
@@ -367,8 +292,8 @@
       ]
     },
     {
-      "field": "关键组件连接",
-      "reason": "上下文中未提供关键组件连接信息，无法推断模块内部子模块或寄存器之间的连接关系。",
+      "field": "实例化组件",
+      "reason": "上下文中key_instances和component_families为空，无法确定模块内部是否包含FIFO、移位寄存器或CRC计算单元等子模块。",
       "evidence": [
         {
           "source": "knowledge_ir/modules/spi_s.json"

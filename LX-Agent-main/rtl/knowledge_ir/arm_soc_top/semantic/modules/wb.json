@@ -46,12 +46,12 @@
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 13,
     "by_type": {
       "assignment_interpretation": 2,
-      "component_role": 4,
-      "documentation_focus": 1,
-      "interface_intent": 1,
+      "component_role": 5,
+      "documentation_focus": 2,
+      "interface_intent": 2,
       "module_role": 1,
       "structural_responsibility": 1
     }
@@ -63,12 +63,12 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "写回阶段模块，负责将执行结果分发并写入通用寄存器组、程序计数器、谓词寄存器、XPSR等架构状态单元。",
+      "summary": "写回阶段模块，负责将执行结果分发并写入到通用寄存器组、程序计数器、谓词寄存器、XPSR等架构状态单元。",
       "subject": "wb",
-      "explanation": "模块接收来自互斥合并单元和加载存储单元的两个驱动事件，通过内部的分发、选择、延迟和互斥合并组件，将数据路由到五个不同的写回目标，并管理对应的释放信号。",
+      "explanation": "模块接收来自 LSU 和互斥合并单元的驱动事件，通过内部的分发、选择、延迟和互斥合并组件，将数据分别导向 grf、pc、prf、xpsr 等目标，并产生对应的写回驱动事件和释放信号。",
       "signals": [
-        "i_driveMutexMerge2",
         "i_lsuDriveToWB",
+        "i_driveMutexMerge2",
         "o_drive_grf",
         "o_drive_pc",
         "o_drive_prf",
@@ -107,15 +107,15 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "模块将来自LSU的103位宽数据包拆解，并通过选择器和互斥合并器仲裁后，分发到GRF、PC、PRF、XPSR和读GRF五个写回目标。",
+      "summary": "模块将来自 LSU 的 103 位宽数据包拆解，并仲裁来自互斥合并单元的写回请求，最终将数据写入到多个架构状态单元。",
       "subject": "写回数据分发与仲裁",
-      "explanation": "Splitter将i_data_103拆解为多个字段，Selector1和Selector2根据控制信号选择数据路径，MutexMerge1和MutexMerge2仲裁来自不同源的写回请求，最终通过延迟单元和子分发器输出驱动事件和数据。",
+      "explanation": "Splitter 将 i_data_103 拆解为多个字段，Selector1 和 Selector2 根据选择信号将数据路由到 pc、prf、xpsr 和 grf 写回路径。MutexMerge1 和 MutexMerge2 仲裁来自不同路径的写回请求，确保数据一致性。",
       "signals": [
         "i_data_103",
-        "o_grfData_74",
         "o_pcData_32",
         "o_prfData_40",
         "o_xpsrData_4",
+        "o_grfData_74",
         "o_WBdataToGRF_8"
       ],
       "instances": [
@@ -123,8 +123,7 @@
         "Selector1",
         "Selector2",
         "MutexMerge1",
-        "MutexMerge2",
-        "wbSplitter"
+        "MutexMerge2"
       ],
       "related_flows": [
         "flow_000_wb_i_lsuDriveToWB",
@@ -150,11 +149,11 @@
         "module": "wb"
       },
       "subject": "Splitter",
-      "summary": "输入数据包解析器，将来自LSU的103位宽数据包拆解为多个字段，供后续选择器使用。",
-      "explanation": "Splitter接收i_lsuDriveToWB事件和i_data_103数据，将其拆解为地址、数据、写使能、位操作控制等字段，并分发到Selector1和Selector2的驱动路径。",
+      "summary": "输入数据包解析器，将来自 LSU 的 103 位宽数据包拆解为多个内部信号。",
+      "explanation": "Splitter 接收 i_lsuDriveToWB 事件和 i_data_103 数据，将其拆解为 w_prfAddr_8, w_grfAddrH_4, w_grfAddrL_4, w_data_64 等字段，并产生两个驱动事件分别导向 Selector1 和 Selector2 的延迟路径。",
       "signals": [
-        "i_lsuDriveToWB",
         "i_data_103",
+        "w_temp1_98",
         "w_driveSelector1",
         "w_driveSelector2"
       ],
@@ -181,15 +180,20 @@
         "module": "wb"
       },
       "subject": "Selector1",
-      "summary": "多路选择器，负责将数据路由到PRF、PC、GRF读回和GRF写回等多个目标。",
-      "explanation": "Selector1接收来自Splitter的驱动事件和数据，根据内部选择逻辑，将数据分发到o_drive_prf、o_wbDriveReadGRF、w_driveMutexMerge11、w_driveMutexMerge2和w_drive_pc五个输出路径。",
+      "summary": "多路选择器，根据选择信号将数据路由到 pc、prf、grf 写回路径以及读 GRF 路径。",
+      "explanation": "Selector1 接收来自 Splitter 延迟后的驱动事件，根据 w_selector1 等选择信号，将数据分别导向 o_drive_prf, o_wbDriveReadGRF, w_driveMutexMerge11, w_driveMutexMerge2, w_drive_pc 等输出事件，并输出对应的数据。",
       "signals": [
         "w_drive1Selector1",
         "o_drive_prf",
         "o_wbDriveReadGRF",
         "w_driveMutexMerge11",
         "w_driveMutexMerge2",
-        "w_drive_pc"
+        "w_drive_pc",
+        "o_pcData_32",
+        "o_prfData_40",
+        "w_dataReadGRF_87",
+        "w_grf1Data_74",
+        "w_grf2Data_87"
       ],
       "instances": [
         "Selector1"
@@ -214,8 +218,8 @@
         "module": "wb"
       },
       "subject": "MutexMerge1",
-      "summary": "三输入互斥合并器，仲裁来自Selector1、位操作延迟和wbSplitter的GRF写回请求。",
-      "explanation": "MutexMerge1接收三个源的驱动事件和数据，仲裁后输出一个统一的GRF写回事件和数据，确保写回操作的互斥性。",
+      "summary": "三输入互斥合并器，仲裁来自 Selector1、位操作延迟和 wbSplitter 的写 GRF 请求。",
+      "explanation": "MutexMerge1 接收三个写 GRF 请求事件 (w_driveMutexMerge11, w_driveMutexMerge12Delay_1, w_wbSplitterDriveToMutexMerge1_1) 及其对应的数据，仲裁后产生一个写 GRF 事件 w_drive_grf，并输出合并后的数据 o_grfData_74。",
       "signals": [
         "w_driveMutexMerge11",
         "w_driveMutexMerge12Delay_1",
@@ -227,7 +231,8 @@
         "MutexMerge1"
       ],
       "related_flows": [
-        "flow_000_wb_i_lsuDriveToWB"
+        "flow_000_wb_i_lsuDriveToWB",
+        "flow_001_wb_i_driveMutexMerge2"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -246,14 +251,14 @@
         "module": "wb"
       },
       "subject": "MutexMerge2",
-      "summary": "双输入互斥合并器，仲裁来自外部和Selector1的64位数据写回请求，用于位操作处理。",
-      "explanation": "MutexMerge2接收i_driveMutexMerge2和w_driveMutexMerge2两个驱动事件，以及对应的64位数据，仲裁后输出到cFifo1进行后续处理。",
+      "summary": "双输入互斥合并器，仲裁来自外部互斥合并单元和 Selector1 的写 GRF 读数据请求。",
+      "explanation": "MutexMerge2 接收 i_driveMutexMerge2 和 w_driveMutexMerge2 两个事件，以及对应的数据 w_data2_64 和 w_dataToMutexMerge2_64，仲裁后产生 w_drivecFifo1 事件，将数据送入 cFifo1。",
       "signals": [
         "i_driveMutexMerge2",
         "w_driveMutexMerge2",
+        "w_drivecFifo1",
         "w_data2_64",
-        "w_dataToMutexMerge2_64",
-        "w_drivecFifo1"
+        "w_dataToMutexMerge2_64"
       ],
       "instances": [
         "MutexMerge2"
@@ -261,7 +266,7 @@
       "related_flows": [
         "flow_001_wb_i_driveMutexMerge2"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
@@ -272,14 +277,43 @@
       "id": "semantic:module:wb:component_role:004"
     },
     {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "subject": "cFifo1",
+      "summary": "写 GRF 读数据路径上的 FIFO，用于缓冲来自 MutexMerge2 的数据。",
+      "explanation": "cFifo1 接收来自 MutexMerge2 的驱动事件 w_drivecFifo1，经过 FIFO 缓冲后，输出事件 w_driveMutexMerge12，该事件经过位操作延迟后，作为 MutexMerge1 的一个输入。",
+      "signals": [
+        "w_drivecFifo1",
+        "w_driveMutexMerge12"
+      ],
+      "instances": [
+        "cFifo1"
+      ],
+      "related_flows": [
+        "flow_001_wb_i_driveMutexMerge2"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:component_role:005"
+    },
+    {
       "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "wb"
       },
       "subject": "o_WBdataToGRF_8",
-      "summary": "从读GRF数据中提取8位数据，用于写回GRF的读回路径。",
-      "explanation": "该赋值从w_dataReadGRF_87的[85:78]位提取8位数据，作为o_WBdataToGRF_8输出，是o_wbDriveReadGRF事件的负载数据的一部分。",
+      "summary": "从读 GRF 数据中提取 8 位数据，用于写回 GRF。",
+      "explanation": "该赋值从 w_dataReadGRF_87 的 [85:78] 位提取数据，作为 o_WBdataToGRF_8 输出，与 o_drive_grf 和 o_wbDriveReadGRF 事件关联，用于写回 GRF 的读数据路径。",
       "signals": [
         "o_WBdataToGRF_8",
         "w_dataReadGRF_87"
@@ -307,8 +341,8 @@
         "module": "wb"
       },
       "subject": "w_dataToMutexMerge2_64",
-      "summary": "组合来自GRF的高32位数据和来自w_data1_64的高32位数据，形成64位数据输入给MutexMerge2。",
-      "explanation": "该赋值将i_dataFromGRF_64的高32位和w_data1_64的高32位拼接，用于MutexMerge2的位操作处理。",
+      "summary": "组合来自 GRF 和内部数据路径的 64 位数据，用于 MutexMerge2 的输入。",
+      "explanation": "该赋值将 i_dataFromGRF_64 的高 32 位和 w_data1_64 的高 32 位拼接，形成 w_dataToMutexMerge2_64，作为 MutexMerge2 的一个数据输入，用于写 GRF 读数据路径。",
       "signals": [
         "w_dataToMutexMerge2_64",
         "i_dataFromGRF_64",
@@ -336,28 +370,19 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "五个写回目标接口（GRF、PC、PRF、XPSR、读GRF）各自具有独立的驱动事件和数据负载，并关联对应的释放信号。",
-      "subject": "写回目标接口组",
-      "explanation": "每个写回目标接口由驱动事件（o_drive_*）和数据负载（o_*Data_*）组成，部分接口还关联了释放信号（i_wbFreeFrom*），形成完整的请求-释放握手协议。",
+      "summary": "每个写回目标（grf、pc、prf、xpsr）都有一个对应的驱动事件输出，并且部分目标有对应的释放信号输入，形成请求-确认的握手协议。",
+      "subject": "写回事件与释放信号",
+      "explanation": "o_drive_grf 对应 i_wbFreeFromGRF，o_drive_xpsr 对应 i_wbFreeFromXpsr，o_wbDriveReadGRF 对应 i_wbFreeFromReadGRF。这表明写回操作需要等待目标单元释放后才能进行，体现了流控机制。",
       "signals": [
         "o_drive_grf",
-        "o_grfData_74",
         "i_wbFreeFromGRF",
-        "o_drive_pc",
-        "o_pcData_32",
-        "o_drive_prf",
-        "o_prfData_40",
         "o_drive_xpsr",
-        "o_xpsrData_4",
         "i_wbFreeFromXpsr",
         "o_wbDriveReadGRF",
-        "o_WBdataToGRF_8",
         "i_wbFreeFromReadGRF"
       ],
       "related_payload": [
         "o_grfData_74",
-        "o_pcData_32",
-        "o_prfData_40",
         "o_xpsrData_4",
         "o_WBdataToGRF_8"
       ],
@@ -367,9 +392,41 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
         }
       ],
       "id": "semantic:module:wb:interface_intent:001"
+    },
+    {
+      "claim_type": "interface_intent",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "summary": "i_data_103 是一个包含写回所需所有字段的复合数据包，包括地址、数据、控制位等。",
+      "subject": "输入数据包结构",
+      "explanation": "通过 assign 0 可以看到，i_data_103 被拆解为 w_prfAddr_8, w_grfAddrH_4, w_grfAddrL_4, w_data_64, w_rdWen_2, w_msr_1, w_msbit_5, w_lsbit_5, w_bfi_1, w_bfc_1, w_sbfx, w_ubfx, w_writeRd_1 等字段，表明该数据包包含了写回所需的所有信息。",
+      "signals": [
+        "i_data_103",
+        "w_temp1_98"
+      ],
+      "related_payload": [
+        "w_prfAddr_8",
+        "w_grfAddrH_4",
+        "w_grfAddrL_4",
+        "w_data_64"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -377,25 +434,23 @@
         "type": "module",
         "module": "wb"
       },
-      "summary": "文档应重点描述从输入事件到五个写回目标的数据流路径，以及互斥合并器和选择器的仲裁逻辑。",
+      "summary": "文档应重点描述从 LSU 和互斥合并单元到各个写回目标的数据流路径，以及 MutexMerge 组件的仲裁机制。",
       "subject": "写回数据流与仲裁逻辑",
-      "explanation": "模块的核心功能是数据分发和仲裁，理解Splitter的拆解、Selector1/2的选择、MutexMerge1/2的仲裁以及延迟单元的作用是理解模块行为的关键。",
+      "explanation": "模块的核心功能是数据分发和仲裁，Splitter、Selector、MutexMerge 等组件构成了复杂的数据流网络。文档需要清晰描述每个数据流的路径、选择条件和仲裁策略。",
       "signals": [
         "i_lsuDriveToWB",
-        "i_data_103",
-        "o_grfData_74",
-        "o_pcData_32",
-        "o_prfData_40",
-        "o_xpsrData_4"
+        "i_driveMutexMerge2",
+        "o_drive_grf",
+        "o_drive_pc",
+        "o_drive_prf",
+        "o_drive_xpsr"
       ],
       "instances": [
         "Splitter",
         "Selector1",
         "Selector2",
         "MutexMerge1",
-        "MutexMerge2",
-        "wbSplitter",
-        "cFifo1"
+        "MutexMerge2"
       ],
       "related_flows": [
         "flow_000_wb_i_lsuDriveToWB",
@@ -413,12 +468,59 @@
         }
       ],
       "id": "semantic:module:wb:documentation_focus:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "wb"
+      },
+      "summary": "文档应解释释放信号（free signals）如何与写回事件配合，实现写回操作的流控。",
+      "subject": "释放信号与流控机制",
+      "explanation": "多个写回目标都有对应的释放信号输入，表明写回操作不是简单的组合逻辑，而是需要等待目标单元就绪。文档需要说明这种握手协议的细节。",
+      "signals": [
+        "i_wbFreeFromGRF",
+        "i_wbFreeFromXpsr",
+        "i_wbFreeFromReadGRF",
+        "o_WBfreeGRF",
+        "o_free"
+      ],
+      "instances": [
+        "MutexMerge1",
+        "MutexMerge2",
+        "Selector1",
+        "Selector2"
+      ],
+      "related_flows": [
+        "flow_000_wb_i_lsuDriveToWB",
+        "flow_001_wb_i_driveMutexMerge2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ],
+      "id": "semantic:module:wb:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "i_driveMutexMerge2事件与i_dataFromGRF_64数据的精确关联",
-      "reason": "事件-负载合约显示i_driveMutexMerge2没有关联的负载数据，但赋值23显示其路径使用了i_dataFromGRF_64，需要RTL源码确认精确的时序关系。"
+      "field": "i_driveMutexMerge2 和 i_lsuDriveToWB 的事件-数据关联",
+      "reason": "事件-数据合约中，这两个输入事件没有关联的 payload 数据，但根据数据流，它们应该与 i_data_103 和 i_dataFromGRF_64 有关联。需要 RTL 源码确认。",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/wb.json"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/wb.json"
+        }
+      ]
     }
   ]
 }

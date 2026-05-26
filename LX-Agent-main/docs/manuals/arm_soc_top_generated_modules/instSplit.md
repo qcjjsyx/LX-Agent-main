@@ -1,8 +1,8 @@
 # 模块 `instSplit`
 
 - 源文件：`rtl/rtl/IF/instSplit.v`。
-- 职责：AI 推断：指令拆分与分发单元，将64位指令包拆分为最多4条32位指令，并管理指令流控制。。
-- 说明：模块接收来自FICache的驱动事件和64位指令包，根据基地址和异常分支条件，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO组件进行流控和事件同步后，将拆分后的指令和计数发送给Merge单元。
+- 职责：AI 推断：指令拆分与分发模块，将取回的64位指令包拆分为最多4条指令，并管理指令FIFO的驱动与释放。。
+- 说明：模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位确定指令起始位置，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO缓存后输出给Merge模块。同时管理FIFO的释放信号回传给ICache。
 
 ## 1. 层级位置
 
@@ -54,7 +54,7 @@ instSplit
 - Payload：未记录。
 - 输出/影响：`o_drv2Merge`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应重点描述该流的三级延迟缓冲加FIFO的流水线结构，以及其作为纯事件驱动的单向传递特性。
+- AI 推断：该流仅传递事件信号，无关联的数据负载或控制信号，属于纯事件驱动路径。
 
 
 ## 5. 内部组件与 assign 影响
@@ -69,10 +69,10 @@ instSplit
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `w_state` | ~w_intExcpBranchValid & r_preState | AI 推断：异常分支条件对指令流状态的控制。 |
-| `assign_2` | data_path | `w_part1_16` | i_inst_64[15:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | data_path | `w_part2_16` | i_inst_64[31:16] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | data_path | `w_part3_16` | i_inst_64[47:32] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | data_path | `w_part4_16` | i_inst_64[63:48] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_10` | unknown | `o_inst0_33` | r_inst0_33 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | control_path | `w_state` | ~w_intExcpBranchValid & r_preState | AI 推断：异常分支有效时强制清除状态，用于指令拆分流程的异常处理。 |
+| `assign_2` | data_path | `w_part1_16` | i_inst_64[15:0] | AI 推断：将64位指令包拆分为4个16位半字，为后续指令组合做准备。 |
+| `assign_3` | data_path | `w_part2_16` | i_inst_64[31:16] | AI 推断：将64位指令包拆分为4个16位半字，为后续指令组合做准备。 |
+| `assign_4` | data_path | `w_part3_16` | i_inst_64[47:32] | AI 推断：将64位指令包拆分为4个16位半字，为后续指令组合做准备。 |
+| `assign_5` | data_path | `w_part4_16` | i_inst_64[63:48] | AI 推断：将64位指令包拆分为4个16位半字，为后续指令组合做准备。 |
+| `assign_10` | unknown | `o_inst0_33` | r_inst0_33 | AI 推断：将寄存器缓存的33位指令（含有效位）直接输出。 |
 | ... | ... | ... | ... | 其余 9 条 assign 省略 |

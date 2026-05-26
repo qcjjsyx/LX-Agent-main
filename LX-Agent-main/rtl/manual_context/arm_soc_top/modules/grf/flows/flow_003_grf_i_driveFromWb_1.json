@@ -107,8 +107,8 @@
         "o_grfDriveToWb_1"
       ],
       "role_in_flow": {
-        "value": "单级FIFO缓冲器，用于事件传递和可能的流控",
-        "explanation": "cFifo1_4作为FIFO实例，接收输入驱动事件i_driveFromWb_1，并在内部缓冲后产生输出驱动事件o_grfDriveToWb_1。其FIFO特性意味着它可能实现事件的门控或背压机制，但具体行为（如深度、满/空标志）未在上下文中明确。",
+        "value": "写请求事件直通级，可能实现事件传播的门控或缓冲",
+        "explanation": "该Fifo1实例位于流路径中间，输入i_driveFromWb_1直接连接其i_drive端口，输出o_driveNext直接连接o_grfDriveToWb_1，无其他分支或合并，表明其角色是事件转发级，可能根据内部状态（如满/空）决定是否允许事件通过",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -127,8 +127,8 @@
         "related_assignments": [
           "11"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:grf:semantic_flow:flow_003_grf_i_driveFromWb_1"
         ],
@@ -208,8 +208,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "文档应强调FIFO的缓冲角色和事件传递的简单性，但需注明数据路径的独立性",
-    "explanation": "该流结构简单，仅包含一个FIFO实例，但数据路径与事件路径可能分离。文档应说明事件驱动信号通过FIFO传递，而输出数据由内部寄存器生成，避免误导读者认为数据直接通过FIFO。",
+    "value": "文档应强调该流为简单的单级Fifo1直通路径，数据与事件路径解耦",
+    "explanation": "该流结构简单，仅一个Fifo1实例，无分支或合并，但数据路径（o_grfDataToWb_64）来自内部寄存器而非输入payload，文档需明确区分事件转发与数据生成逻辑，避免误导读者认为数据直接来自输入",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -229,8 +229,8 @@
     "related_assignments": [
       "11"
     ],
-    "requires_rtl_source_review": true,
-    "review_status": "needs_review",
+    "requires_rtl_source_review": false,
+    "review_status": "ready",
     "evidence_refs": [
       "ev:grf:flow:flow_003_grf_i_driveFromWb_1",
       "ev:grf:semantic_flow:flow_003_grf_i_driveFromWb_1"
@@ -240,13 +240,16 @@
         "source": "instances.connections"
       },
       {
+        "source": "transparent_flows"
+      },
+      {
         "source": "parser_module.assignments"
       }
     ],
     "supporting_claims": [
       {
-        "value": "写回阶段驱动事件通过单级FIFO缓冲后输出到写回总线",
-        "explanation": "该流描述了一个从外部写回总线进入grf模块的驱动事件，经过一个FIFO实例cFifo1_4的缓冲后，作为输出驱动事件o_grfDriveToWb_1离开模块。流中无分支或合并点，FIFO是唯一的中间处理节点，可能引入背压或事件门控。",
+        "value": "写回阶段驱动事件流，通过单个Fifo1实例将外部写请求事件从输入端口转发至输出端口",
+        "explanation": "该流仅包含一个Fifo1实例cFifo1_4作为直通级，输入i_driveFromWb_1直接驱动其输入，其输出o_driveNext直接驱动模块输出o_grfDriveToWb_1，无分支或合并点，表明这是一个简单的写请求事件转发路径",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -281,19 +284,18 @@
         ]
       },
       {
-        "value": "输入数据与输出数据无直接赋值依赖，数据路径可能分离",
-        "explanation": "输入数据i_wbDataToGrf_64连接到cMutexMerge3_end_74b，而输出数据o_grfDataToWb_64来自r_rsValue_32，两者在提供的赋值依赖中无直接关联。这表明事件驱动流可能仅控制数据选通，而数据内容由其他内部状态决定。",
+        "value": "输入payload信号连接到cMutexMerge3_end_74b，与流事件路径无关",
+        "explanation": "输入payload信号i_wbAddr_8和i_wbDataToGrf_64连接到cMutexMerge3_end_74b实例，而非cFifo1_4，表明这些数据可能用于其他内部逻辑（如地址译码或数据合并），与当前流的事件转发路径无直接数据耦合",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:data_control_effect:001",
         "doc_priority": "secondary",
         "signals": [
-          "i_wbDataToGrf_64",
-          "o_grfDataToWb_64",
-          "r_rsValue_32"
+          "i_wbAddr_8",
+          "i_wbDataToGrf_64"
         ],
         "instances": [],
         "related_flows": [],
@@ -308,23 +310,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_module.assignments"
-          },
-          {
-            "source": "interface_data_contract"
+            "source": "related_component_connections"
           }
         ]
       },
       {
-        "value": "存在自由信号但未在流步骤中体现，背压机制可能独立于事件路径",
-        "explanation": "接口负载合约显示输入事件i_driveFromWb_1关联自由信号o_grfFreeToWb_1，输出事件o_grfDriveToWb_1关联自由信号i_grfFreeFromWb_1。但流步骤中未包含这些信号，表明背压可能由FIFO内部处理或通过其他路径实现，需RTL源码确认。",
+        "value": "流路径上存在free信号，但当前上下文未提供其与cFifo1_4的连接细节",
+        "explanation": "接口payload合同显示输入事件i_driveFromWb_1关联free信号o_grfFreeToWb_1，输出事件o_grfDriveToWb_1关联free信号i_grfFreeFromWb_1，但未提供这些free信号与cFifo1_4的实例连接，无法确认背压机制是否通过该Fifo1实现",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:completion_backpressure:001",
-        "doc_priority": "reference",
+        "doc_priority": "secondary",
         "signals": [
           "o_grfFreeToWb_1",
           "i_grfFreeFromWb_1"

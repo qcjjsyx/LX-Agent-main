@@ -1,8 +1,8 @@
 # 模块 `adder32`
 
 - 源文件：`rtl/rtl/Execute/adder32.v`。
-- 职责：AI 推断：32位算术加法器，支持有符号/无符号模式选择，并生成进位和溢出标志。
-- 说明：模块通过assign依赖实现双模式加法：无符号模式（symbol=1）产生进位，有符号模式（symbol=0）检测溢出。无事件流，纯组合逻辑。
+- 职责：AI 推断：32位算术加法器，支持有符号/无符号模式选择，生成进位和溢出标志。
+- 说明：模块通过assign依赖实现双模式加法：无符号模式（symbol=1）输出进位，有符号模式（symbol=0）检测溢出。无事件流，纯组合逻辑。
 
 ## 1. 层级位置
 
@@ -50,8 +50,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `signedSum` | $signed({oprand1[31],oprand1}) + $signed({oprand2[31],oprand2}) + $signed({1'b0,carry_in}) | AI 推断：有符号加法中间结果，符号扩展后计算 |
-| `assign_2` | data_path | `result` | symbol ? unsignedSum[31:0] : signedSum[31:0] | AI 推断：有符号加法中间结果，符号扩展后计算 |
-| `assign_3` | data_path | `carry_out` | symbol ? unsignedSum[32] : 1'b0 | AI 推断：无符号加法中间结果，扩展1位用于进位捕获 |
-| `assign_4` | data_path | `overflow` | symbol ? 1'b0 : (oprand1[31] == oprand2[31]) && (oprand1[31] != result[31]) | AI 推断：有符号模式溢出检测，无符号模式恒为0 |
-| `assign_0` | data_path | `unsignedSum` | {1'b0, oprand1} + {1'b0, oprand2} + carry_in | AI 推断：无符号加法中间结果，扩展1位用于进位捕获 |
+| `assign_1` | unknown | `signedSum` | $signed({oprand1[31],oprand1}) + $signed({oprand2[31],oprand2}) + $signed({1'b0,carry_in}) | AI 推断：有符号加法中间结果，33位宽，用于溢出检测 |
+| `assign_2` | data_path | `result` | symbol ? unsignedSum[31:0] : signedSum[31:0] | AI 推断：32位加法结果输出，由symbol选择无符号或有符号结果 |
+| `assign_3` | unknown | `carry_out` | symbol ? unsignedSum[32] : 1'b0 | AI 推断：无符号模式进位输出，有符号模式恒为0 |
+| `assign_4` | data_path | `overflow` | symbol ? 1'b0 : (oprand1[31] == oprand2[31]) && (oprand1[31] != result[31]) | AI 推断：有符号模式溢出标志，无符号模式恒为0 |
+| `assign_0` | unknown | `unsignedSum` | {1'b0, oprand1} + {1'b0, oprand2} + carry_in | AI 推断：无符号加法中间结果，33位宽，用于进位检测 |

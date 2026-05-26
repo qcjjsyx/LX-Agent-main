@@ -47,14 +47,14 @@
     }
   ],
   "claim_summary": {
-    "count": 21,
+    "count": 26,
     "by_type": {
-      "completion_backpressure": 4,
-      "component_role": 7,
+      "completion_backpressure": 6,
+      "component_role": 11,
       "data_control_effect": 4,
-      "documentation_focus": 1,
+      "documentation_focus": 2,
       "flow_intent": 1,
-      "source_review_request": 4
+      "source_review_request": 2
     }
   },
   "claims": [
@@ -65,9 +65,9 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "执行单元向LSU发送单个事件，经FIFO缓冲后，通过多级选择器/分离器分发至异常、写通用寄存器文件和读通用寄存器文件三条路径。",
+      "summary": "执行单元驱动的一条内部事件流，经过FIFO缓冲、多级选择/拆分和互斥合并后，分发至异常、写回和读寄存器堆三个输出端点。",
       "subject": "flow_000_lsu_i_exeDriveToLsu_1",
-      "explanation": "该流从i_exeDriveToLsu_1输入，经lsuFifo缓冲后，由excSplitter分离出异常路径(o_lsuDriveToExcp_1)和写回路径。写回路径再经wbackSplitter分离出状态选择路径和写寄存器选择路径。状态选择路径通过stateSelector进一步分发至多个合并器，最终到达读通用寄存器文件(o_lsuDriveToRGrf_1)。写寄存器选择路径通过wbackSelector直接输出到写通用寄存器文件(o_lsuDriveToWGrf_1)。整个流体现了执行单元事件在LSU内部的扇出分发结构。",
+      "explanation": "该流从执行单元输入事件i_exeDriveToLsu_1开始，首先进入lsuFifo进行缓冲，然后通过excSplitter将事件分为异常路径和写回路径。写回路径进一步通过wbackSplitter和stateSelector进行状态选择，最终通过wbackSelector输出到写回寄存器堆，或通过readGrfSelector和多个互斥合并器输出到读寄存器堆。异常路径则通过excSplitterDelay延迟后反馈回excSplitter。",
       "signals": [
         "i_exeDriveToLsu_1",
         "o_lsuDriveToExcp_1",
@@ -80,10 +80,11 @@
         "wbackSplitter",
         "stateSelector",
         "wbackSelector",
-        "readGrfSelector"
-      ],
-      "related_assignments": [
-        "(无)"
+        "readGrfSelector",
+        "multiLoadMutexMerge",
+        "multiStoreMutexMerge",
+        "LASMutexMerge",
+        "readGrfMutexMerge"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -108,8 +109,8 @@
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
       "subject": "lsuFifo",
-      "summary": "执行事件入口缓冲器，用于暂存和节流来自执行单元的事件。",
-      "explanation": "lsuFifo作为Fifo1族实例，接收i_exeDriveToLsu_1输入，输出w_lsuFifoToExcSplitter_1。其角色是事件传播的阻塞点，可能因FIFO满而反压执行单元。",
+      "summary": "事件流的入口缓冲级，用于暂存执行单元驱动的事件，防止背压直接传递到执行单元。",
+      "explanation": "lsuFifo作为Fifo1类型的实例，接收i_exeDriveToLsu_1事件输入，输出w_lsuFifoToExcSplitter_1。其作用是解耦执行单元与后续流水线，允许事件在内部流水线阻塞时被缓冲。",
       "signals": [
         "i_exeDriveToLsu_1",
         "w_lsuFifoToExcSplitter_1"
@@ -117,20 +118,13 @@
       "instances": [
         "lsuFifo"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:001"
@@ -143,8 +137,8 @@
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
       "subject": "excSplitter",
-      "summary": "异常路径与写回路径的分离器。",
-      "explanation": "excSplitter作为cSplitter2_1b实例，将来自lsuFifo的事件分为两路：一路直接输出到异常处理模块(o_lsuDriveToExcp_1)，另一路进入写回处理路径(w_lsuFifoToWbackSplitter_1)。其选择逻辑由内部控制信号决定。",
+      "summary": "事件流的第一个分支点，将事件分为异常路径和写回路径。",
+      "explanation": "excSplitter作为cSplitter2_1b类型的实例，接收来自lsuFifo的事件，输出o_lsuDriveToExcp_1（异常路径）和w_lsuFifoToWbackSplitter_1（写回路径）。其选择逻辑可能基于事件类型或异常条件。",
       "signals": [
         "w_lsuFifoToExcSplitter_1",
         "o_lsuDriveToExcp_1",
@@ -153,20 +147,13 @@
       "instances": [
         "excSplitter"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:002"
@@ -178,34 +165,23 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "subject": "stateSelector",
-      "summary": "状态选择器，根据事件类型将写回事件分发至五个目标路径。",
-      "explanation": "stateSelector作为cSelector5_5b_lsu实例，接收w_wbackSplitterToStateSelector_1输入，输出至异常FIFO、多加载互斥合并器、多存储互斥合并器、无加载存储分离器和读通用寄存器选择器。其选择逻辑决定了事件在LSU内部的具体处理路径。",
+      "subject": "excSplitterDelay",
+      "summary": "异常路径上的透明延迟单元，用于时序对齐或反馈控制。",
+      "explanation": "excSplitterDelay作为delay8U类型的实例，接收o_lsuDriveToExcp_1，输出w_b_1。w_b_1连接到excSplitter的i_freeNext1，表明该延迟单元可能用于生成异常路径的释放信号，控制excSplitter的背压。",
       "signals": [
-        "w_wbackSplitterToStateSelector_1",
-        "w_stateSelectorToExcpFifo_1",
-        "w_stateSelectorToMultiLoadMutexMerge_1",
-        "w_stateSelectorToMultiStoreMutexMerge_1",
-        "w_stateSelectorToNoLsSplitter_1",
-        "w_stateSelectorToReadGrfSelector_1"
+        "o_lsuDriveToExcp_1",
+        "w_b_1"
       ],
       "instances": [
-        "stateSelector"
+        "excSplitterDelay"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:003"
@@ -217,19 +193,16 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "subject": "wbackSelector",
-      "summary": "写回选择器，决定写回事件是否输出到写通用寄存器文件。",
-      "explanation": "wbackSelector作为cSelector2_75b_lsu实例，接收w_wbackSplitterToWbackSelector_1输入，输出o_lsuDriveToWGrf_1和w_backSelectorOver_1。w_backSelectorOver_1连接到自身的i_freeNext1，形成反馈，表明该选择器可能具有内部反压或完成信号机制。",
+      "subject": "wbackSplitter",
+      "summary": "写回路径的第二个分支点，将事件分为状态选择路径和写回选择路径。",
+      "explanation": "wbackSplitter作为cSplitter2_107_74_33b_lsu类型的实例，接收w_lsuFifoToWbackSplitter_1，输出w_wbackSplitterToStateSelector_1和w_wbackSplitterToWbackSelector_1。其拆分可能基于事件是否需要状态更新或直接写回。",
       "signals": [
-        "w_wbackSplitterToWbackSelector_1",
-        "o_lsuDriveToWGrf_1",
-        "w_backSelectorOver_1"
+        "w_lsuFifoToWbackSplitter_1",
+        "w_wbackSplitterToStateSelector_1",
+        "w_wbackSplitterToWbackSelector_1"
       ],
       "instances": [
-        "wbackSelector"
-      ],
-      "related_assignments": [
-        "(无)"
+        "wbackSplitter"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -237,11 +210,7 @@
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:004"
@@ -253,19 +222,19 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "subject": "readGrfSelector",
-      "summary": "读通用寄存器选择器，将读寄存器事件分发至加载地址存储路径或读通用寄存器互斥合并器。",
-      "explanation": "readGrfSelector作为cSelector2_2b_lsu实例，接收w_stateSelectorToReadGrfSelector_1输入，输出至LASMutexMerge和readGrfMutexMerge。其选择逻辑决定了读寄存器事件的最终去向。",
+      "subject": "stateSelector",
+      "summary": "状态选择器，根据事件状态将事件分发到五个不同的子路径。",
+      "explanation": "stateSelector作为cSelector5_5b_lsu类型的实例，接收w_wbackSplitterToStateSelector_1，输出到异常FIFO、多加载互斥合并、多存储互斥合并、无加载存储拆分器和读寄存器堆选择器。其选择逻辑基于事件的状态字段。",
       "signals": [
-        "w_stateSelectorToReadGrfSelector_1",
-        "w_readGrfSelectorToLASMutexMerge_1",
-        "w_readGrfSelectorToReadGrfMutexMerge_1"
+        "w_wbackSplitterToStateSelector_1",
+        "w_stateSelectorToExcpFifo_1",
+        "w_stateSelectorToMultiLoadMutexMerge_1",
+        "w_stateSelectorToMultiStoreMutexMerge_1",
+        "w_stateSelectorToNoLsSplitter_1",
+        "w_stateSelectorToReadGrfSelector_1"
       ],
       "instances": [
-        "readGrfSelector"
-      ],
-      "related_assignments": [
-        "(无)"
+        "stateSelector"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -273,11 +242,7 @@
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:005"
@@ -289,43 +254,24 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "subject": "multiLoadMutexMerge, multiStoreMutexMerge, LASMutexMerge, readGrfMutexMerge",
-      "summary": "互斥合并器，用于仲裁来自不同路径的事件，确保同一时刻只有一个事件通过。",
-      "explanation": "这些MutexMerge族实例接收来自stateSelector或其他路径的事件，进行互斥仲裁后输出。它们是事件传播的阻塞点，可能因仲裁等待而引入延迟。",
+      "subject": "wbackSelector",
+      "summary": "写回选择器，将事件输出到写回寄存器堆或反馈回自身。",
+      "explanation": "wbackSelector作为cSelector2_75b_lsu类型的实例，接收w_wbackSplitterToWbackSelector_1，输出o_lsuDriveToWGrf_1和w_backSelectorOver_1。w_backSelectorOver_1连接到wbackSelector的i_freeNext1，表明该选择器可能用于处理写回路径的背压或重试。",
       "signals": [
-        "w_stateSelectorToMultiLoadMutexMerge_1",
-        "w_multiLoadSplitterToMultiLoadMutexMerge_1",
-        "w_multiLoadMutexMergeToMultiLoadSelector_1",
-        "w_stateSelectorToMultiStoreMutexMerge_1",
-        "w_multiStoreSelectorToMultiStoreMutexMerge_1",
-        "w_multiStoreMutexMergeToMultiStoreFifo_1",
-        "w_readGrfSelectorToLASMutexMerge_1",
-        "w_grfSelectorToLASMutexMerge_1",
-        "w_LASMutexMergeToLsuMutexMerge_1",
-        "w_readGrfSelectorToReadGrfMutexMerge_1",
-        "w_multiStoreFifoToReadGrfMutexMerge_1",
-        "o_lsuDriveToRGrf_1"
+        "w_wbackSplitterToWbackSelector_1",
+        "o_lsuDriveToWGrf_1",
+        "w_backSelectorOver_1"
       ],
       "instances": [
-        "multiLoadMutexMerge",
-        "multiStoreMutexMerge",
-        "LASMutexMerge",
-        "readGrfMutexMerge"
+        "wbackSelector"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:006"
@@ -337,33 +283,143 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "subject": "excSplitterDelay",
-      "summary": "异常路径延迟单元，用于对齐异常路径与写回路径的时序。",
-      "explanation": "excSplitterDelay作为delay8U实例，接收o_lsuDriveToExcp_1输入，输出w_b_1连接到excSplitter的i_freeNext1。这表明异常路径的完成信号通过延迟单元反馈到分离器，可能用于控制分离器的反压或释放机制。",
+      "subject": "readGrfSelector",
+      "summary": "读寄存器堆选择器，将事件分发到加载地址存储（LAS）路径或读寄存器堆路径。",
+      "explanation": "readGrfSelector作为cSelector2_2b_lsu类型的实例，接收w_stateSelectorToReadGrfSelector_1，输出w_readGrfSelectorToLASMutexMerge_1和w_readGrfSelectorToReadGrfMutexMerge_1。其选择可能基于事件是否需要加载地址存储。",
       "signals": [
-        "o_lsuDriveToExcp_1",
-        "w_b_1"
+        "w_stateSelectorToReadGrfSelector_1",
+        "w_readGrfSelectorToLASMutexMerge_1",
+        "w_readGrfSelectorToReadGrfMutexMerge_1"
       ],
       "instances": [
-        "excSplitterDelay"
+        "readGrfSelector"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:007"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "subject": "multiLoadMutexMerge",
+      "summary": "多加载路径的互斥合并器，用于仲裁来自状态选择器和多加载拆分器的事件。",
+      "explanation": "multiLoadMutexMerge作为cMutexMerge2_49b_lsu类型的实例，接收w_multiLoadSplitterToMultiLoadMutexMerge_1和w_stateSelectorToMultiLoadMutexMerge_1，输出w_multiLoadMutexMergeToMultiLoadSelector_1。其作用是确保多加载路径的事件不会冲突。",
+      "signals": [
+        "w_multiLoadSplitterToMultiLoadMutexMerge_1",
+        "w_stateSelectorToMultiLoadMutexMerge_1",
+        "w_multiLoadMutexMergeToMultiLoadSelector_1"
+      ],
+      "instances": [
+        "multiLoadMutexMerge"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:008"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "subject": "multiStoreMutexMerge",
+      "summary": "多存储路径的互斥合并器，用于仲裁来自状态选择器和多存储选择器的事件。",
+      "explanation": "multiStoreMutexMerge作为cMutexMerge2_48b_lsu类型的实例，接收w_multiStoreSelectorToMultiStoreMutexMerge_1和w_stateSelectorToMultiStoreMutexMerge_1，输出w_multiStoreMutexMergeToMultiStoreFifo_1。其作用是确保多存储路径的事件不会冲突。",
+      "signals": [
+        "w_multiStoreSelectorToMultiStoreMutexMerge_1",
+        "w_stateSelectorToMultiStoreMutexMerge_1",
+        "w_multiStoreMutexMergeToMultiStoreFifo_1"
+      ],
+      "instances": [
+        "multiStoreMutexMerge"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:009"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "subject": "LASMutexMerge",
+      "summary": "加载地址存储路径的互斥合并器，用于仲裁来自读寄存器堆选择器和通用寄存器选择器的事件。",
+      "explanation": "LASMutexMerge作为cMutexMerge2_64b_lsu类型的实例，接收w_grfSelectorToLASMutexMerge_1和w_readGrfSelectorToLASMutexMerge_1，输出w_LASMutexMergeToLsuMutexMerge_1。其作用是确保加载地址存储路径的事件不会冲突。",
+      "signals": [
+        "w_grfSelectorToLASMutexMerge_1",
+        "w_readGrfSelectorToLASMutexMerge_1",
+        "w_LASMutexMergeToLsuMutexMerge_1"
+      ],
+      "instances": [
+        "LASMutexMerge"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:010"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "subject": "readGrfMutexMerge",
+      "summary": "读寄存器堆路径的最终互斥合并器，用于仲裁来自读寄存器堆选择器和多存储FIFO的事件。",
+      "explanation": "readGrfMutexMerge作为cMutexMerge2_8b_lsu类型的实例，接收w_multiStoreFifoToReadGrfMutexMerge_1和w_readGrfSelectorToReadGrfMutexMerge_1，输出o_lsuDriveToRGrf_1。其作用是确保读寄存器堆路径的事件不会冲突。",
+      "signals": [
+        "w_multiStoreFifoToReadGrfMutexMerge_1",
+        "w_readGrfSelectorToReadGrfMutexMerge_1",
+        "o_lsuDriveToRGrf_1"
+      ],
+      "instances": [
+        "readGrfMutexMerge"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:011"
     },
     {
       "claim_type": "data_control_effect",
@@ -372,9 +428,9 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "执行事件携带163位数据载荷进入LSU。",
+      "summary": "事件i_exeDriveToLsu_1携带163位数据载荷i_exeToLsuData_163进入流，该载荷在流中通过各组件传递和拆分。",
       "subject": "i_exeDriveToLsu_1 与 i_exeToLsuData_163",
-      "explanation": "i_exeDriveToLsu_1作为事件控制信号，i_exeToLsuData_163作为其数据载荷，共同输入到lsuFifo。数据载荷在流中随事件传播，但具体如何被各组件解析和转发需要RTL源码确认。",
+      "explanation": "接口载荷契约表明，i_exeDriveToLsu_1事件与163位数据信号i_exeToLsuData_163关联。该数据载荷通过lsuFifo缓冲后，随事件流经各拆分器和选择器，最终可能被分发到不同的输出端点。各输出端点也关联了不同的数据载荷，表明数据在流中被重新组织或拆分。",
       "signals": [
         "i_exeDriveToLsu_1",
         "i_exeToLsuData_163"
@@ -382,20 +438,13 @@
       "related_payload": [
         "i_exeToLsuData_163"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
           "path": "interface_data_contract"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:001"
@@ -407,9 +456,9 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "异常路径输出携带多个数据载荷。",
-      "subject": "o_lsuDriveToExcp_1 与 o_lsuToDataRoutData_104, o_lsuToIcacheData_104, o_lsuToLaunchData_64",
-      "explanation": "o_lsuDriveToExcp_1作为事件控制信号，同时携带o_lsuToDataRoutData_104、o_lsuToIcacheData_104和o_lsuToLaunchData_64三个数据载荷。这表明异常路径可能同时向多个目标发送数据。",
+      "summary": "异常输出端点o_lsuDriveToExcp_1携带104位数据路由数据、104位Icache数据和64位发射数据。",
+      "subject": "o_lsuDriveToExcp_1 与数据载荷",
+      "explanation": "接口载荷契约表明，o_lsuDriveToExcp_1事件关联了o_lsuToDataRoutData_104、o_lsuToIcacheData_104和o_lsuToLaunchData_64三个数据信号。这表明异常路径可能同时输出多种数据，用于不同的下游模块。",
       "signals": [
         "o_lsuDriveToExcp_1",
         "o_lsuToDataRoutData_104",
@@ -421,20 +470,13 @@
         "o_lsuToIcacheData_104",
         "o_lsuToLaunchData_64"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
           "path": "interface_data_contract"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:002"
@@ -446,44 +488,9 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "读通用寄存器路径输出携带8位数据载荷。",
-      "subject": "o_lsuDriveToRGrf_1 与 o_lsuToRGrfData_8",
-      "explanation": "o_lsuDriveToRGrf_1作为事件控制信号，o_lsuToRGrfData_8作为其数据载荷，共同输出到读通用寄存器模块。",
-      "signals": [
-        "o_lsuDriveToRGrf_1",
-        "o_lsuToRGrfData_8"
-      ],
-      "related_payload": [
-        "o_lsuToRGrfData_8"
-      ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "interface_data_contract"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:003"
-    },
-    {
-      "claim_type": "data_control_effect",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
-      },
-      "summary": "写通用寄存器路径输出携带多个数据载荷。",
-      "subject": "o_lsuDriveToWGrf_1 与 o_lsuToDataRoutData_104, o_lsuToIcacheData_104, o_lsuToLaunchData_64",
-      "explanation": "o_lsuDriveToWGrf_1作为事件控制信号，同时携带o_lsuToDataRoutData_104、o_lsuToIcacheData_104和o_lsuToLaunchData_64三个数据载荷。这表明写回路径可能同时向多个目标发送数据。",
+      "summary": "写回输出端点o_lsuDriveToWGrf_1携带与异常端点相同的数据载荷。",
+      "subject": "o_lsuDriveToWGrf_1 与数据载荷",
+      "explanation": "接口载荷契约表明，o_lsuDriveToWGrf_1事件也关联了o_lsuToDataRoutData_104、o_lsuToIcacheData_104和o_lsuToLaunchData_64三个数据信号。这表明写回路径和异常路径可能共享相同的数据输出结构。",
       "signals": [
         "o_lsuDriveToWGrf_1",
         "o_lsuToDataRoutData_104",
@@ -495,20 +502,41 @@
         "o_lsuToIcacheData_104",
         "o_lsuToLaunchData_64"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
           "path": "interface_data_contract"
-        },
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:003"
+    },
+    {
+      "claim_type": "data_control_effect",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "summary": "读寄存器堆输出端点o_lsuDriveToRGrf_1携带8位数据载荷。",
+      "subject": "o_lsuDriveToRGrf_1 与数据载荷",
+      "explanation": "接口载荷契约表明，o_lsuDriveToRGrf_1事件关联了o_lsuToRGrfData_8数据信号。该数据宽度较小，可能用于返回读寄存器堆的结果。",
+      "signals": [
+        "o_lsuDriveToRGrf_1",
+        "o_lsuToRGrfData_8"
+      ],
+      "related_payload": [
+        "o_lsuToRGrfData_8"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
+      "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "source": "knowledge_ir/modules/lsu.json",
+          "path": "interface_data_contract"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:004"
@@ -520,19 +548,16 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "执行事件入口具有反压信号，但反压机制的具体实现需要RTL源码确认。",
+      "summary": "输入事件i_exeDriveToLsu_1关联了释放信号o_lsuFreeToExe_1，用于执行单元的背压控制。",
       "subject": "i_exeDriveToLsu_1 与 o_lsuFreeToExe_1",
-      "explanation": "接口载荷契约显示i_exeDriveToLsu_1关联free信号o_lsuFreeToExe_1，表明LSU可以通过该信号反压执行单元。但反压信号如何与lsuFifo的满状态关联，以及反压路径的详细逻辑，当前上下文未提供。",
+      "explanation": "接口载荷契约表明，i_exeDriveToLsu_1事件有对应的释放信号o_lsuFreeToExe_1。这表明执行单元通过该释放信号感知LSU是否准备好接收新事件，实现背压机制。",
       "signals": [
         "i_exeDriveToLsu_1",
         "o_lsuFreeToExe_1"
       ],
-      "instances": [
-        "lsuFifo"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
@@ -548,20 +573,16 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "异常路径输出具有反压信号，但反压机制的具体实现需要RTL源码确认。",
+      "summary": "异常输出端点o_lsuDriveToExcp_1关联了释放信号i_lsuFreeFromExcp_1，用于异常模块的背压控制。",
       "subject": "o_lsuDriveToExcp_1 与 i_lsuFreeFromExcp_1",
-      "explanation": "接口载荷契约显示o_lsuDriveToExcp_1关联free信号i_lsuFreeFromExcp_1，表明异常处理模块可以通过该信号反压LSU。但反压信号如何与excSplitterDelay的反馈路径关联，当前上下文未提供。",
+      "explanation": "接口载荷契约表明，o_lsuDriveToExcp_1事件有对应的释放信号i_lsuFreeFromExcp_1。这表明异常模块通过该释放信号通知LSU是否准备好接收新事件。",
       "signals": [
         "o_lsuDriveToExcp_1",
         "i_lsuFreeFromExcp_1"
       ],
-      "instances": [
-        "excSplitter",
-        "excSplitterDelay"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
@@ -577,19 +598,16 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "读通用寄存器路径输出具有反压信号，但反压机制的具体实现需要RTL源码确认。",
-      "subject": "o_lsuDriveToRGrf_1 与 i_lsuFreeFromRGrf_1",
-      "explanation": "接口载荷契约显示o_lsuDriveToRGrf_1关联free信号i_lsuFreeFromRGrf_1，表明读通用寄存器模块可以通过该信号反压LSU。但反压信号如何与readGrfMutexMerge的仲裁逻辑关联，当前上下文未提供。",
+      "summary": "写回输出端点o_lsuDriveToWGrf_1关联了释放信号i_lsuFreeFromWGrf_1，用于写回模块的背压控制。",
+      "subject": "o_lsuDriveToWGrf_1 与 i_lsuFreeFromWGrf_1",
+      "explanation": "接口载荷契约表明，o_lsuDriveToWGrf_1事件有对应的释放信号i_lsuFreeFromWGrf_1。这表明写回模块通过该释放信号通知LSU是否准备好接收新事件。",
       "signals": [
-        "o_lsuDriveToRGrf_1",
-        "i_lsuFreeFromRGrf_1"
+        "o_lsuDriveToWGrf_1",
+        "i_lsuFreeFromWGrf_1"
       ],
-      "instances": [
-        "readGrfMutexMerge"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
@@ -605,19 +623,16 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "写通用寄存器路径输出具有反压信号，但反压机制的具体实现需要RTL源码确认。",
-      "subject": "o_lsuDriveToWGrf_1 与 i_lsuFreeFromWGrf_1",
-      "explanation": "接口载荷契约显示o_lsuDriveToWGrf_1关联free信号i_lsuFreeFromWGrf_1，表明写通用寄存器模块可以通过该信号反压LSU。但反压信号如何与wbackSelector的反馈路径关联，当前上下文未提供。",
+      "summary": "读寄存器堆输出端点o_lsuDriveToRGrf_1关联了释放信号i_lsuFreeFromRGrf_1，用于读寄存器堆模块的背压控制。",
+      "subject": "o_lsuDriveToRGrf_1 与 i_lsuFreeFromRGrf_1",
+      "explanation": "接口载荷契约表明，o_lsuDriveToRGrf_1事件有对应的释放信号i_lsuFreeFromRGrf_1。这表明读寄存器堆模块通过该释放信号通知LSU是否准备好接收新事件。",
       "signals": [
-        "o_lsuDriveToWGrf_1",
-        "i_lsuFreeFromWGrf_1"
+        "o_lsuDriveToRGrf_1",
+        "i_lsuFreeFromRGrf_1"
       ],
-      "instances": [
-        "wbackSelector"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/lsu.json",
@@ -627,15 +642,72 @@
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:004"
     },
     {
+      "claim_type": "completion_backpressure",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "summary": "excSplitterDelay的输出w_b_1连接到excSplitter的i_freeNext1，形成异常路径的背压反馈。",
+      "subject": "excSplitterDelay 与 excSplitter 的反馈连接",
+      "explanation": "连接关系表明，excSplitterDelay的输出w_b_1作为excSplitter的释放信号输入。这表明异常路径通过延迟单元生成释放信号，控制excSplitter是否允许新事件进入异常路径。",
+      "signals": [
+        "w_b_1",
+        "o_lsuDriveToExcp_1"
+      ],
+      "instances": [
+        "excSplitterDelay",
+        "excSplitter"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:005"
+    },
+    {
+      "claim_type": "completion_backpressure",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "summary": "wbackSelector的输出w_backSelectorOver_1连接到自身的i_freeNext1，形成写回路径的背压反馈。",
+      "subject": "wbackSelector 的反馈连接",
+      "explanation": "连接关系表明，wbackSelector的输出w_backSelectorOver_1作为自身的释放信号输入。这表明写回选择器可能通过该反馈信号控制自身是否允许新事件进入写回路径。",
+      "signals": [
+        "w_backSelectorOver_1",
+        "o_lsuDriveToWGrf_1"
+      ],
+      "instances": [
+        "wbackSelector"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:006"
+    },
+    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "flow",
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "summary": "手册应重点描述执行事件在LSU内部的扇出分发结构，包括各选择器/分离器的选择逻辑和互斥合并器的仲裁机制。",
-      "subject": "flow_000_lsu_i_exeDriveToLsu_1 的流手册",
-      "explanation": "该流的核心特征是事件从单一入口经过多级选择器/分离器分发至三个输出端点。手册应详细说明每个选择器/分离器的选择条件（如事件类型、状态等），以及互斥合并器的仲裁策略。同时，应强调数据载荷与事件控制信号的关联关系。",
+      "summary": "文档应重点描述该流从输入到三个输出端点的完整路径，包括各分支点和合并点的作用。",
+      "subject": "flow_000_lsu_i_exeDriveToLsu_1 的流结构",
+      "explanation": "该流具有复杂的多级分支和合并结构，涉及多个拆分器和互斥合并器。文档应清晰描述每个分支点的选择逻辑和每个合并点的仲裁机制，以便读者理解事件如何被分发和处理。",
       "signals": [
         "i_exeDriveToLsu_1",
         "o_lsuDriveToExcp_1",
@@ -654,17 +726,10 @@
         "LASMutexMerge",
         "readGrfMutexMerge"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "internal_event_flow"
-        },
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
           "path": "flow_graph"
@@ -673,43 +738,67 @@
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:documentation_focus:001"
     },
     {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
+      },
+      "summary": "文档应强调该流中多个背压反馈路径，包括输入释放信号、输出释放信号和内部反馈连接。",
+      "subject": "背压和释放机制",
+      "explanation": "该流在输入和输出端点都有明确的释放信号，内部还有excSplitterDelay和wbackSelector的反馈连接。文档应解释这些背压机制如何协同工作，确保事件流不会溢出或丢失。",
+      "signals": [
+        "o_lsuFreeToExe_1",
+        "i_lsuFreeFromExcp_1",
+        "i_lsuFreeFromWGrf_1",
+        "i_lsuFreeFromRGrf_1",
+        "w_b_1",
+        "w_backSelectorOver_1"
+      ],
+      "instances": [
+        "excSplitterDelay",
+        "wbackSelector"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "knowledge_ir/modules/lsu.json",
+          "path": "interface_data_contract"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:documentation_focus:002"
+    },
+    {
       "claim_type": "source_review_request",
       "scope": {
         "type": "flow",
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "reason": "当前上下文仅提供了组件类型和连接关系，未提供选择器的选择信号或条件。需要RTL源码中的assign块或always块来确认选择逻辑。",
-      "subject": "各选择器/分离器的选择逻辑",
-      "needed_source_slice": "assign block, always block",
+      "reason": "需要确认excSplitterDelay的输出w_b_1是否确实作为excSplitter的释放信号，以及延迟单元的具体行为。",
+      "subject": "excSplitterDelay 的反馈连接",
+      "needed_source_slice": "always block or assign block for excSplitterDelay and excSplitter connections",
       "signals": [
-        "excSplitter.i_sel",
-        "wbackSplitter.i_sel",
-        "stateSelector.i_sel",
-        "wbackSelector.i_sel",
-        "readGrfSelector.i_sel"
+        "w_b_1",
+        "o_lsuDriveToExcp_1"
       ],
       "instances": [
-        "excSplitter",
-        "wbackSplitter",
-        "stateSelector",
-        "wbackSelector",
-        "readGrfSelector"
+        "excSplitterDelay",
+        "excSplitter"
       ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
+          "path": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:source_review_request:001"
@@ -721,144 +810,32 @@
         "module": "lsu",
         "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
       },
-      "reason": "当前上下文仅提供了互斥合并器的类型和连接关系，未提供仲裁逻辑或优先级信息。需要RTL源码中的assign块或always块来确认仲裁机制。",
-      "subject": "互斥合并器的仲裁机制",
-      "needed_source_slice": "assign block, always block",
+      "reason": "需要确认wbackSelector的输出w_backSelectorOver_1是否确实作为自身的释放信号，以及选择器的具体行为。",
+      "subject": "wbackSelector 的反馈连接",
+      "needed_source_slice": "always block or assign block for wbackSelector connections",
       "signals": [
-        "multiLoadMutexMerge.i_drive0",
-        "multiLoadMutexMerge.i_drive1",
-        "multiStoreMutexMerge.i_drive0",
-        "multiStoreMutexMerge.i_drive1",
-        "LASMutexMerge.i_drive0",
-        "LASMutexMerge.i_drive1",
-        "readGrfMutexMerge.i_drive0",
-        "readGrfMutexMerge.i_drive1"
+        "w_backSelectorOver_1",
+        "o_lsuDriveToWGrf_1"
       ],
       "instances": [
-        "multiLoadMutexMerge",
-        "multiStoreMutexMerge",
-        "LASMutexMerge",
-        "readGrfMutexMerge"
-      ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "instances"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
-      },
-      "reason": "当前上下文仅提供了数据载荷与事件控制信号的关联关系，未提供数据载荷如何在各组件间传播和解析的细节。需要RTL源码中的assign块或always块来确认数据路径。",
-      "subject": "数据载荷在流中的传播和解析",
-      "needed_source_slice": "assign block, always block",
-      "signals": [
-        "i_exeToLsuData_163",
-        "o_lsuToDataRoutData_104",
-        "o_lsuToIcacheData_104",
-        "o_lsuToLaunchData_64",
-        "o_lsuToRGrfData_8"
-      ],
-      "instances": [
-        "lsuFifo",
-        "excSplitter",
-        "wbackSplitter",
-        "stateSelector",
-        "wbackSelector",
-        "readGrfSelector",
-        "multiLoadMutexMerge",
-        "multiStoreMutexMerge",
-        "LASMutexMerge",
-        "readGrfMutexMerge"
-      ],
-      "related_assignments": [
-        "(无)"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "interface_data_contract"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/lsu.json",
-          "path": "connection_graph"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:source_review_request:003"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_000_lsu_i_exeDriveToLsu_1"
-      },
-      "reason": "当前上下文仅提供了反压信号的存在，未提供反压信号如何与内部组件（如FIFO、合并器）关联的细节。需要RTL源码中的assign块或always块来确认反压路径。",
-      "subject": "反压信号的具体实现",
-      "needed_source_slice": "assign block, always block",
-      "signals": [
-        "o_lsuFreeToExe_1",
-        "i_lsuFreeFromExcp_1",
-        "i_lsuFreeFromRGrf_1",
-        "i_lsuFreeFromWGrf_1"
-      ],
-      "instances": [
-        "lsuFifo",
-        "excSplitter",
-        "excSplitterDelay",
-        "wbackSelector",
-        "readGrfMutexMerge"
-      ],
-      "related_assignments": [
-        "(无)"
+        "wbackSelector"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/lsu.json",
-          "path": "interface_data_contract"
+          "source": "parser_pipeline_rtl/modules/lsu.json",
+          "path": "instances.connections"
         }
       ],
-      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:source_review_request:004"
+      "id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "选择器/分离器的选择信号",
-      "reason": "当前上下文未提供任何选择器/分离器的选择信号或条件。"
-    },
-    {
-      "field": "互斥合并器的仲裁逻辑",
-      "reason": "当前上下文未提供任何互斥合并器的仲裁逻辑或优先级信息。"
-    },
-    {
-      "field": "数据载荷的传播路径",
-      "reason": "当前上下文未提供数据载荷如何在各组件间传播和解析的细节。"
-    },
-    {
-      "field": "反压信号的具体实现",
-      "reason": "当前上下文未提供反压信号如何与内部组件关联的细节。"
+      "field": "各拆分器和选择器的选择逻辑",
+      "reason": "当前上下文未提供各拆分器和选择器的选择条件或控制信号，无法确定事件如何被分发到不同路径。需要RTL源代码中的选择逻辑实现。"
     }
   ]
 }

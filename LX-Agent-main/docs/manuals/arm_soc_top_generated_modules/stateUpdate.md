@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/Lsu/stateUpdate.v`。
 - 职责：AI 推断：状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）、状态机转换，并通过互斥合并后输出到状态更新选择器。。
-- 说明：模块接收一个事件驱动输入 i_driveFromUpdateSplitter_1 及其关联的7位数据，经过Fifo1缓冲后，由loadAndStoreSelector根据数据内容区分加载或存储操作，分别送入loadFifo和storeFifo，再通过loadOrStoreMutexMerge互斥合并后输出事件 o_driveToStateUpdateSelector_1。同时，模块内部维护状态机（由assign依赖中的w_nextState_4等信号体现），并输出12位状态有效信号 o_stateValid_12。
+- 说明：模块接收一个事件驱动输入和7位数据载荷，内部通过Fifo1缓冲，然后由loadAndStoreSelector根据载荷中的类型位将请求分发到加载或存储FIFO，每个FIFO独立维护状态机，最后通过loadOrStoreMutexMerge互斥合并后输出。同时输出12位状态有效信号。
 
 ## 1. 层级位置
 
@@ -66,7 +66,7 @@ stateUpdate
 - Payload：`i_driveFromUpdateSplitter_1` -> `i_fromUpdateSplitterData_7 [6:0]`。
 - 输出/影响：`o_driveToStateUpdateSelector_1`。
 - 结构复杂度：branch=1，join=1，blocking=4。
-- AI 推断：最终手册应重点描述事件如何通过loadAndStoreSelector分流，以及loadOrStoreMutexMerge如何互斥合并两路事件。
+- AI 推断：最终手册应强调该流的事件分叉与合并结构，以及FIFO缓冲对事件传播的影响。
 
 
 ## 5. 内部组件与 assign 影响
@@ -85,8 +85,6 @@ stateUpdate
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_12` | control_path | `LoadIdleValid` | w_isLoad_1 & idle | AI 推断：组合逻辑计算下一状态，根据当前操作类型（加载/存储）和子操作状态（如lbValid, lwValid）选择目标状态。 |
-| `assign_13` | control_path | `StoreIdleValid` | w_isStore_1 & idle | AI 推断：组合逻辑计算下一状态，根据当前操作类型（加载/存储）和子操作状态（如lbValid, lwValid）选择目标状态。 |
-| `assign_14` | control_path | `w_nextState_4` | {4{w_isLoad_1 & LoadIdleValid}} & r_nextLoadState_4 \| {4{w_isStore_1 & StoreIdleValid}} & r_n... | AI 推断：组合逻辑计算下一状态，根据当前操作类型（加载/存储）和子操作状态（如lbValid, lwValid）选择目标状态。 |
+| `assign_14` | control_path | `w_nextState_4` | {4{w_isLoad_1 & LoadIdleValid}} & r_nextLoadState_4 \| {4{w_isStore_1 & StoreIdleValid}} & r_n... | AI 推断：下一状态计算，根据当前请求类型和状态机状态，计算下一个状态值。 |
 | `assign_17` | unknown | `o_misaligned_1` | w_misaligned_1 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_18` | control_path | `o_stateValid_12` | r_stateValid_12 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_18` | control_path | `o_stateValid_12` | r_stateValid_12 | AI 推断：12位状态有效信号输出，将内部状态寄存器值直接驱动到模块输出。 |

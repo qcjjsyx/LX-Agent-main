@@ -1,8 +1,8 @@
 # 模块 `clk_div`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/clk_div.v`。
-- 职责：AI 推断：该模块根据波特率选择信号和SPI模式配置，从系统时钟生成SPI主时钟和输出时钟，并产生时钟完成指示信号。。
-- 说明：模块仅有一个数据输入BR用于选择分频比，输出sclk_m、sclk_out和sclk_done，通过组合逻辑实现时钟分频和门控，无内部事件流或实例，表明其核心功能是时钟生成与条件输出。
+- 职责：AI 推断：该模块根据波特率选择信号和配置模式，从系统时钟生成SPI串行时钟（sclk）及其完成指示信号。。
+- 说明：模块通过输入BR[2:0]选择分频系数，利用计数器cnt和sclk_cnt产生sclk_m和sclk_done，并受nss_out、rx_only、bit8_out等控制信号调节输出。
 
 ## 1. 层级位置
 
@@ -51,6 +51,6 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 :cnt[BR] | AI 推断：在片选有效时，根据BR选择计数器cnt的某一位作为主时钟输出，实现可编程分频。 |
-| `assign_2` | unknown | `sclk_out` | rx_only ? sclk_m : (bit8_out ? sclk_m : 1'b0) | AI 推断：根据rx_only和bit8_out信号选择是否输出主时钟sclk_m，实现接收模式或8位传输模式下的时钟门控。 |
-| `assign_3` | unknown | `sclk_done` | DFF ? ((~sclk_cnt[4]) & sclk_cnt_buf) : ((~sclk_cnt[3]) & sclk_cnt_buf) | AI 推断：根据DFF配置选择不同位宽的计数器比较结果，产生时钟完成脉冲，指示SPI传输结束。 |
+| `assign_1` | unknown | `sclk_m` | nss_out ? 1'b0 :cnt[BR] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | unknown | `sclk_out` | rx_only ? sclk_m : (bit8_out ? sclk_m : 1'b0) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_3` | unknown | `sclk_done` | DFF ? ((~sclk_cnt[4]) & sclk_cnt_buf) : ((~sclk_cnt[3]) & sclk_cnt_buf) | 证据不足：No Semantic Layer assignment interpretation is available. |

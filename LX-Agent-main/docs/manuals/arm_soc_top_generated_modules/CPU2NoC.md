@@ -1,8 +1,8 @@
 # 模块 `CPU2NoC`
 
 - 源文件：`rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v`。
-- 职责：AI 推断：CPU2NoC 是 CPU 与 NoC 之间的双向事件驱动桥接模块，负责将 CPU 发起的请求分发到两个 NoC 通道，并将两个 NoC 通道的响应合并后返回给 CPU。。
-- 说明：模块具有对称的接口：一个 CPU 侧接口和两个 NoC 通道接口。内部事件流显示 CPU 输入事件 (i_drvFCPU) 被分发到两个 NoC 通道输出 (o_drv2NoCChanel0/1)，而两个 NoC 通道输入事件 (i_drvFNoCChannel0/1) 被合并到 CPU 输出 (o_drv2CPU)。这表明模块执行双向的请求分发和响应合并。
+- 职责：AI 推断：事件 i_drvFNoCChannel0 与数据载荷 i_dataFNoCChannel0_51 同步进入合并器 mutexRead。。
+- 说明：切片3显示 i_drvFNoCChannel0 连接到 mutexRead 的 i_drive0，i_dataFNoCChannel0_51 连接到 i_data0_51，数据与事件在同一合并器端口同步输入。
 
 ## 1. 层级位置
 
@@ -86,7 +86,7 @@ CPU2NoC
 - Payload：`i_drvFCPU` -> `i_dataFCPU_51 [50:0]`, `o_drv2NoCChanel0` -> `o_data2NoCChanel0_51 [50:0]`, `o_drv2NoCChanel1` -> `o_data2NoCChanel1_51 [50:0]`。
 - 输出/影响：`o_drv2NoCChanel0`, `o_drv2NoCChanel1`。
 - 结构复杂度：branch=5，join=1，blocking=3。
-- AI 推断：最终手册应重点描述事件从单输入到双通道输出及反馈合并的完整路径，强调扇出点和合并点的逻辑
+- AI 推断：事件i_drvFCPU携带51位数据载荷i_dataFCPU_51，该载荷随事件流传播，最终在splitterChannel0/1处输出为o_data2NoCChanel0_51和o_data2NoCChanel1_51。
 
 ### `i_drvFNoCChannel0`
 
@@ -94,7 +94,7 @@ CPU2NoC
 - Payload：`i_drvFNoCChannel0` -> `i_dataFNoCChannel0_51 [50:0]`。
 - 输出/影响：`o_drv2CPU`。
 - 结构复杂度：branch=0，join=1，blocking=3。
-- AI 推断：输入数据信号 i_dataFNoCChannel0_51 作为事件驱动信号 i_drvFNoCChannel0 的伴随载荷，共同进入流路径。
+- AI 推断：输入数据载荷 i_dataFNoCChannel0_51 与驱动事件 i_drvFNoCChannel0 相关联，并随事件流传递。
 
 ### `i_drvFNoCChannel1`
 
@@ -102,7 +102,7 @@ CPU2NoC
 - Payload：`i_drvFNoCChannel1` -> `i_dataFNoCChannel1_51 [50:0]`。
 - 输出/影响：`o_drv2CPU`。
 - 结构复杂度：branch=0，join=1，blocking=3。
-- AI 推断：输入数据信号 i_dataFNoCChannel1_51 与事件驱动信号 i_drvFNoCChannel1 关联，作为该通道的负载。
+- AI 推断：数据信号 i_dataFNoCChannel1_51 作为事件 i_drvFNoCChannel1 的伴随载荷，随事件流同步传递。
 
 
 ## 5. 内部组件与 assign 影响
@@ -127,5 +127,5 @@ CPU2NoC
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `o_data2CPU_51` | r_data2CPU_51 | AI 推断：o_data2CPU_51 直接来自内部寄存器 r_data2CPU_51，表明 CPU 侧输出数据由内部状态驱动，而非组合逻辑。 |
-| `assign_0` | control_path | `o_free2CPU` | o_drv2CPU | AI 推断：o_free2CPU 直接跟随 o_drv2CPU 信号，表明 CPU 侧的释放信号与驱动信号同步，用于通知 CPU 响应已就绪。 |
+| `assign_1` | data_path | `o_data2CPU_51` | r_data2CPU_51 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | control_path | `o_free2CPU` | o_drv2CPU | 证据不足：No Semantic Layer assignment interpretation is available. |

@@ -1,8 +1,8 @@
 # 模块 `SPI2NoC`
 
 - 源文件：`rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v`。
-- 职责：AI 推断：SPI2NoC 是一个桥接模块，负责将 SPI 控制器的驱动事件和数据通过一对 FIFO 转换为 NoC 接口的驱动事件和数据，并处理 NoC 的空闲信号回传。。
-- 说明：模块通过 i_drvFNoc 事件驱动输入，携带 i_dataFNoc_51 数据，经过 cfifo0 和 cfifo1 两级 FIFO 流水线，最终输出 o_drv2Noc 事件和 o_data2Noc_51 数据。同时，NoC 侧的空闲信号 i_freeFNoc 直接连接到 cfifo1，而 cfifo0 的输出 o_free2Noc 则作为模块的空闲信号输出，形成完整的背压控制环。
+- 职责：AI 推断：输入 i_drvFNoc 连接到 cfifo0 的 i_drive，输入数据 i_dataFNoc_51 在 w_firefifo0[0] 上升沿加载到 r_dataFNoc_51。。
+- 说明：第 80 行显示 i_drvFNoc 连接到 cfifo0 的 i_drive。第 89-100 行 always 块在 w_firefifo0[0] 上升沿将 i_dataFNoc_51 赋值给 r_dataFNoc_51，同时 r_X、r_Y 被设为固定值。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ SPI2NoC
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：最终手册应强调 i_drvFNoc 作为模块外部事件入口的角色，并说明其与 i_dataFNoc_51 的关联，但需避免过度描述内部传播细节。
+- AI 推断：事件驱动信号 i_drvFNoc 与 51 位数据负载 i_dataFNoc_51 同时作为模块输入，但当前流上下文未显示两者在 cfifo0 内的具体关联方式。
 
 
 ## 5. 内部组件与 assign 影响
@@ -75,4 +75,4 @@ SPI2NoC
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_apbrdata,r_X,r_Y} | AI 推断：该赋值将内部寄存器 r_dataFNoc_51、r_apbrdata、r_X、r_Y 拼接成 51 位 NoC 输出数据。 |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_apbrdata,r_X,r_Y} | AI 推断：该赋值将 SPI 读取的数据 (r_apbrdata) 与坐标信息 (r_X, r_Y) 打包成 NoC 数据包。 |

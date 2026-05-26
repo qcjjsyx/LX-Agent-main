@@ -19,6 +19,8 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 |   |-- agent_runner.py                # Web 和 CLI 共享的 Agent 执行核心
 |   |-- agent_core.py                  # 简单交互式 CLI Agent
 |   |-- manual_workflow.py             # RTL 手册生成 workflow
+|   |-- manual_intent.py               # 将用户自然语言解析为结构化 ManualIntent
+|   |-- manual_planner.py              # 将 ManualIntent 校验并规划为 WorkflowPlan
 |   |-- manual_cli.py                  # 手册 workflow 命令行入口
 |   |-- tools.py                       # 工具注册和脚本封装
 |   |-- context_manager.py             # 对话上下文压缩
@@ -62,7 +64,9 @@ flowchart TD
     UI["Web UI / CLI"] --> Runner["AgentRunner"]
     Runner --> Selector["Skill Selector"]
     Selector --> GeneralTools["通用工具"]
-    Selector --> ManualWorkflow["manual_workflow"]
+    Selector --> Intent["ManualIntent Parser"]
+    Intent --> Planner["WorkflowPlan Validator / Planner"]
+    Planner --> ManualWorkflow["manual_workflow Executor"]
     ManualWorkflow --> Parser["Parser Tool"]
     Parser --> ParserArtifacts["parser_pipeline_rtl"]
     ManualWorkflow --> Knowledge["Knowledge Tool"]
@@ -75,7 +79,15 @@ flowchart TD
     Runner --> EventLogs["data/logs/*.jsonl"]
 ```
 
-`AgentRunner` 是共享执行核心。`app.py` 负责 Web 路由和会话持久化，`agent_core.py` 和 `manual_cli.py` 提供命令行入口。RTL 手册生成的阶段、状态、重跑和继续逻辑都集中在 `manual_workflow.py`。
+`AgentRunner` 是共享执行核心。`app.py` 负责 Web 路由和会话持久化，`agent_core.py` 和 `manual_cli.py` 提供命令行入口。
+
+RTL 手册生成现在分成三层：
+
+1. `manual_intent.py`：只负责理解用户输入，把自然语言和 key-value 参数转换成 `ManualIntent`。
+2. `manual_planner.py`：只负责校验 intent，并生成确定性的 `WorkflowPlan`。
+3. `manual_workflow.py`：只负责把 plan 写入旧 workflow state，然后执行现有阶段 handler。
+
+这样做的目标是让“自然语言理解”和“workflow 执行控制”解耦。执行器不再直接根据“手册”“review”“重新跑”等关键词决定阶段和重跑范围。
 
 ## 环境要求
 
@@ -167,10 +179,27 @@ python -m backend.run_web
 project_root=.
 rtl_inputs=rtl
 top_module=arm_soc_top
+manual_generation_mode=deterministic
 
 从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。
 语义增强开启，模块语义和 flow 语义都全量生成。
 ```
+
+`manual_generation_mode=deterministic` 是默认值，也可以不写。该模式只使用确定性 Markdown renderer，不会让 LLM 参与最终主手册生成。
+
+如果希望在确定性 renderer 生成 draft 后，让 LLM 只对主手册做受控润色，可以显式指定：
+
+```text
+请为当前项目生成 RTL 代码手册。
+project_root=.
+rtl_inputs=rtl
+top_module=arm_soc_top
+manual_generation_mode=llm_polish
+
+从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。
+```
+
+`llm_polish` 只润色主手册 Markdown，不生成或改写模块页。模块页仍由确定性 renderer 生成。如果模型客户端不可用，manual 阶段会自动回退到 deterministic draft，并在回复和日志里标记 LLM polish 被跳过或回退。
 
 运行完成后重点查看：
 
@@ -222,9 +251,22 @@ rtl_inputs=.
 project_root=E:\arm
 rtl_inputs=rtl
 top_module=arm_soc_top
+manual_generation_mode=deterministic
 
 从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。
 语义增强开启，模块语义和 flow 语义都全量生成。
+```
+
+外部项目同样可以显式启用 LLM 润色：
+
+```text
+请为 E:\arm\rtl 下的 RTL 源码生成代码手册。
+project_root=E:\arm
+rtl_inputs=rtl
+top_module=arm_soc_top
+manual_generation_mode=llm_polish
+
+重新生成最终手册，然后继续后续步骤。
 ```
 
 ### 4. 继续执行和阶段重跑
@@ -264,6 +306,29 @@ review
 强制重新生成 manual 和 review
 ```
 
+当前重跑控制会先生成结构化 plan，再执行：
+
+- `从 source_review 阶段开始重跑` 会从 `source_review` 开始，强制重跑 `source_review -> outline -> chapter_plan -> manual -> review`。
+- `从 references 阶段开始重跑` 会从 `references` 开始，强制重跑所有阶段。
+- `从头再跑一遍`、`全量重来`、`清空后重来` 会按全量 clean run 处理。
+- `重新生成最终手册`、`只重跑 manual 阶段`、`只生成 Markdown 正文` 才会按 `manual -> review` 处理。
+- 普通的 `生成代码手册`、`项目手册`、`代码手册` 不会被解释成从 `manual` 阶段开始。
+- 如果只说 `不要复用旧结果`，但没有说明从哪个阶段开始，且当前会话状态也不能推断，系统会要求确认，不会猜测执行。
+- 如果同时说 `继续` 和 `全量重来`，系统会要求确认，不会执行任何阶段。
+
+阶段名识别按完整 stage 优先处理，避免把 `source_review` 误判为 `review`，或把 `chapter_plan` 误判为普通 `plan/manual`。
+
+手册正文生成模式也可以在 Web 对话里切换：
+
+```text
+manual_generation_mode=deterministic 重新生成最终手册
+manual_generation_mode=llm_polish 重新生成最终手册
+用 LLM 润色手册，重新生成最终手册
+不用 LLM 润色，确定性生成手册
+```
+
+只有明确指定 `manual_generation_mode=llm_polish` 或说“用 LLM/模型润色手册”时，manual 阶段才会调用 LLM。普通“生成代码手册”不会启用 LLM polish。
+
 ### 5. 使用 CLI 运行 workflow
 
 CLI 更适合本地调试、复现、计时和自动化：
@@ -273,10 +338,13 @@ python -m backend.manual_cli `
   --project-root . `
   --rtl-inputs rtl `
   --top-module arm_soc_top `
+  --manual-generation-mode deterministic `
   --force `
   --knowledge-timeout 10800 `
   --log-events
 ```
+
+`--manual-generation-mode deterministic` 是默认值，也可以省略。
 
 外部项目示例：
 
@@ -285,10 +353,26 @@ python -m backend.manual_cli `
   --project-root E:\arm `
   --rtl-inputs rtl `
   --top-module arm_soc_top `
+  --manual-generation-mode deterministic `
   --force `
   --knowledge-timeout 10800 `
   --log-events
 ```
+
+如果希望让 LLM 参与最后主手册润色：
+
+```powershell
+python -m backend.manual_cli `
+  --project-root . `
+  --rtl-inputs rtl `
+  --top-module arm_soc_top `
+  --manual-generation-mode llm_polish `
+  --force `
+  --knowledge-timeout 10800 `
+  --log-events
+```
+
+如果同时使用 `--manual-generation-mode llm_polish --no-llm`，CLI 不会报错；manual 阶段会回退到 deterministic draft，并输出 LLM polish skipped / fallback 状态。如果使用 `--manual-generation-mode llm_polish --require-llm` 且模型客户端不可用，会沿用现有 fail-fast 行为。
 
 常用参数：
 
@@ -299,6 +383,9 @@ python -m backend.manual_cli `
 --audience newcomer         newcomer | maintainer | reviewer。
 --evidence-mode project     主证据模式。
 --enrich-modules <list>     Semantic Layer 模块白名单，逗号分隔；空值表示全部模块。
+--manual-generation-mode <mode>
+                            deterministic | llm_polish | llm_section_generate。
+                            默认 deterministic；llm_polish 会先确定性生成 draft，再让 LLM 润色主手册。
 --output <path>             自定义 Markdown 输出路径。
 --force                     强制重新生成，不复用已有产物。
 --no-llm                    跳过 source_review 模型调用。
@@ -327,6 +414,14 @@ Content-Type: application/json
 {
   "conversation_id": "chat_20260522_100450_cc608f",
   "message": "继续"
+}
+```
+
+全量生成并启用 LLM polish 的请求示例：
+
+```json
+{
+  "message": "请为当前项目生成 RTL 代码手册。\nproject_root=.\nrtl_inputs=rtl\ntop_module=arm_soc_top\nmanual_generation_mode=llm_polish\n\n从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。"
 }
 ```
 
@@ -369,6 +464,28 @@ python -m backend.agent_core
 ```
 
 ## 统计全量运行时间
+
+`backend.manual_timing` 是专门的性能/回归分析入口。它会按固定 workflow 从 `references` 开始做一次全量强制重跑，逐阶段记录耗时、状态、重要输出路径和最终产物位置，并写出 JSON / Markdown timing report。它适合用来回答：
+
+- Parser、Knowledge、Source Review、Manual、Review 各阶段分别耗时多久。
+- 调整 `RTL_MANUAL_SEMANTIC_WORKERS`、timeout 或 `manual_generation_mode` 后是否变快。
+- 某次全量重跑失败在哪个阶段，最后错误是什么。
+- 自动化环境里是否稳定生成了 parser、knowledge、manual、review 产物。
+
+直接运行：
+
+```powershell
+python -m backend.manual_timing `
+  --project-root . `
+  --rtl-inputs rtl `
+  --top-module arm_soc_top `
+  --manual-generation-mode deterministic `
+  --knowledge-timeout 10800 `
+  --report-dir data/logs `
+  --log-events
+```
+
+`manual_timing` 现在和 Web/CLI 一样使用 `ManualIntent -> WorkflowPlan -> apply_manual_plan_to_state()` 初始化 workflow state；区别是它固定按全量强制重跑来计时，并在每个 stage 后记录 timing item。
 
 PowerShell 计时示例：
 
@@ -486,6 +603,35 @@ data/logs/agent_events_<YYYYMMDD>.jsonl
 data/logs/conversations/<conversation_id>.jsonl
 ```
 
+`manual_workflow_request` 事件会同时记录自然语言解析结果和最终执行计划，常用字段包括：
+
+```text
+intent
+rerun_policy
+parsed_start_stage
+plan_start_stage
+plan_force_stages
+artifact_policy
+confirmation_required
+conflicts
+questions
+```
+
+同时保留旧字段：
+
+```text
+stage
+project_root
+rtl_inputs
+top_module
+evidence_mode
+auto_run
+force_regenerate
+force_stages
+semantic_enrichment
+enrich_modules
+```
+
 查看最近事件：
 
 ```powershell
@@ -588,6 +734,8 @@ python -m py_compile `
   backend\agent_core.py `
   backend\agent_runner.py `
   backend\tools.py `
+  backend\manual_intent.py `
+  backend\manual_planner.py `
   backend\manual_workflow.py `
   backend\manual_cli.py `
   backend\context_manager.py `
@@ -598,6 +746,7 @@ python -m py_compile `
 
 ```powershell
 python -B -m unittest `
+  backend.tests.test_manual_intent `
   backend.tests.test_manual_workflow `
   backend.tests.test_semantic_layer `
   backend.tests.test_tools `
@@ -607,6 +756,7 @@ python -B -m unittest `
 
 当前测试覆盖：
 
+- `ManualIntent` 阶段识别、重跑策略、确认机制和 `WorkflowPlan` 范围规划。
 - manual workflow 阶段顺序和重跑逻辑。
 - parser 生成后 artifact 路径刷新。
 - skill selector 确定性打分。
@@ -628,7 +778,26 @@ RTL 手册生成使用固定 workflow，而不是完全依赖提示词驱动，�
 因此：
 
 - Skill 描述能力、规则和边界。
-- Workflow 负责阶段顺序、状态转移、产物检查、重跑、继续执行和安全边界。
+- Intent Parser 负责把自然语言转换成结构化 `ManualIntent`。
+- Planner 负责把 intent 校验并转换成确定性的 `WorkflowPlan`。
+- Workflow Executor 负责阶段顺序、状态转移、产物检查、重跑、继续执行和安全边界。
+
+### 兼容性适配
+
+这次重构没有把旧 workflow state 和旧入口一次性推倒重写，而是在边界处做了兼容：
+
+- `handle_manual_workflow()` 仍保留旧签名和旧返回值 `(reply, state)`，用于兼容 `app.py`、既有测试和可能存在的旧调用方。
+- 新增 `handle_manual_workflow_structured()` 返回 `(reply, state, intent_dict, plan_dict)`，`AgentRunner` 使用这个新入口保存 `last_manual_intent` 和 `current_manual_plan`。
+- `AgentSession` 和 `AgentRunResult` 只新增可选字段，默认值为 `None`，旧测试和旧构造方式不需要立即传入 intent/plan。
+- `manual_cli.py` 和 `manual_timing.py` 现在也通过 `ManualIntent -> WorkflowPlan -> apply_manual_plan_to_state()` 初始化 workflow state；它们仍保留原有逐阶段 loop 和输出/计时方式。
+- `_run_current_stage()` 和各阶段 handler 没有大规模改写，仍读取旧 state 字段，例如 `stage`、`force_stages`、`force_regenerate`、`completed_stages`。
+- `apply_manual_plan_to_state()` 是新 plan 到旧 state 的适配层：它写入 `stage`、`restart_stage`、`force_stages`、`auto_run` 等旧字段，并清理对应阶段旧产物。
+- `_should_force_stage()` 仍兼容 `force_regenerate`，但新的 plan 优先写入精确的 `force_stages`，避免全局 force 造成范围不清。
+- `_extract_restart_stage()`、`_reset_from_stage()` 等旧 helper 暂时保留，主要用于旧测试和兼容代码；新的主入口不再依赖它们决定重跑范围。
+- `_update_state_from_user_input()` 仍保留参数抽取、artifact path 刷新等兼容用途，但已经不再负责 `restart_stage`、`force_stages`、`force_regenerate` 的判断。
+- 等待 `top_module` 时，用户只回复裸模块名的旧交互仍保留。
+
+这些兼容层带来的设计代价是：短期内系统同时存在结构化 plan 和旧 state 两套表示。执行阶段仍依赖旧 state 字段，因此 `apply_manual_plan_to_state()` 必须保持严格、可测试；后续如果要进一步收敛，可以逐步让阶段 handler 直接读取 `WorkflowPlan` 或一个更明确的运行上下文。
 
 ## 当前限制
 

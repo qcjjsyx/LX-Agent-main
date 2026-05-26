@@ -1,8 +1,8 @@
 # 模块 `NoCUART0`
 
 - 源文件：`rtl/rtl/IONet/UART/NoCUART0.v`。
-- 职责：AI 推断：NoCUART0 是一个 UART 桥接模块，负责在 NoC 协议域和标准 UART 外设之间进行事件驱动的数据转发与握手同步。。
-- 说明：模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 与 NoC 交互，内部使用 cFifo 和 cPmtFifo 组件进行跨时钟域或协议域的同步与缓冲，最终连接到标准 UART 核 (m16550s)。证据显示存在从 i_drvFNoc 到 o_drv2Noc 的完整事件流，以及数据路径的重新打包。
+- 职责：AI 推断：NoCUART0 是一个 UART 桥接模块，负责在 NoC 协议接口与标准 UART 内核 (m16550s) 之间进行事件驱动的数据和控制信号转换与同步。。
+- 说明：模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 和有效载荷 (i_dataFNoc_51/o_data2Noc_51) 与 NoC 通信，内部使用 FIFO (cfifo0, cfifo1) 和确认单元 (pmtAck) 进行事件同步和延迟，最终连接到标准 UART 实例 (uart_instance) 的众多控制/状态/数据信号 (如 SIN, SOUT, BAUD, IRQ 等)。这表明其核心作用是协议适配和信号桥接。
 
 ## 1. 层级位置
 
@@ -65,7 +65,7 @@ NoCUART0
 - Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
 - 输出/影响：`o_drv2Noc`。
 - 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：事件流 i_drvFNoc 到 o_drv2Noc 的传播与数据流 o_data2Noc_51 的生成是并行的，但数据流依赖于内部寄存器状态。
+- AI 推断：最终手册应重点描述事件从输入到输出的串行传播路径，包括 FIFO 缓冲和延迟链的时序对齐作用，以及数据载荷的打包过程。
 
 
 ## 5. 内部组件与 assign 影响
@@ -82,4 +82,4 @@ NoCUART0
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | AI 推断：将 UART 核的状态和数据 (ReceiveData, r_dataHigh) 与 NoC 输入数据的高位 (r_dataFNoc_51) 组合成 51 位输出数据包。 |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | AI 推断：将 UART 内核的读取数据、状态位和输入数据的高位部分打包成 51 位输出数据。 |

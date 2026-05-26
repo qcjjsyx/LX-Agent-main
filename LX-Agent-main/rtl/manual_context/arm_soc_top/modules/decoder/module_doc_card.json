@@ -20,8 +20,8 @@
     "review_needed": true
   },
   "purpose": {
-    "value": "指令解码与分发模块，将取指阶段传入的指令按长度分流至16位或32位解码器，合并解码结果并输出至发射与异常处理阶段。",
-    "explanation": "模块接收来自IF阶段的驱动事件和指令数据，通过decoderSele根据指令长度选择器分流至decoder16或decoder32，解码结果经decoMerge合并后，通过decSpli将驱动事件分发至发射和异常处理路径。输出包含解码数据、分支立即数、条件写使能等控制信号。",
+    "value": "指令解码与分发核心模块，负责将取指阶段传入的PC和指令数据解码为控制信号，并分发至发射和异常处理阶段。",
+    "explanation": "模块接收来自IF阶段的驱动事件和PC+指令数据，通过内部选择器（decoderSele）根据指令宽度（16位或32位）分流至对应的解码器（decoder16/decoder32），解码结果经互斥合并器（decoMerge）汇总后，输出解码数据、分支立即数、写使能等信号，并产生驱动事件至发射（Launch）和异常（Exc）阶段。同时处理来自下游的释放信号以控制流控。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -32,19 +32,24 @@
     "signals": [
       "i_driveFromIF",
       "i_pcAndIns_64",
-      "o_driveToExc_1",
       "o_driveToLaunch_1",
+      "o_driveToExc_1",
       "o_decoderData_187",
       "o_blImm9_9",
+      "o_wen_2",
       "o_nzcvWen_4",
-      "o_wen_2"
+      "o_decPCAndNum_36",
+      "o_freeToIF",
+      "i_freeFromLaunch_1",
+      "i_freeFromExc_1"
     ],
     "instances": [
       "decoderSele",
       "decoder16",
       "decoder32",
       "decoMerge",
-      "decSpli"
+      "decSpli",
+      "decodeFifo"
     ],
     "related_flows": [
       "flow_000_decoder_i_driveFromIF"
@@ -57,10 +62,10 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/decoder.json"
+        "source": "rtl/rtl/Decode/decoder.v"
       },
       {
-        "source": "parser_pipeline_rtl/modules/decoder.json"
+        "source": "modules/decoder.json"
       }
     ]
   },
@@ -477,8 +482,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_decoder_i_driveFromIF.json",
       "reader_takeaway": {
-        "value": "指令数据信号i_pcAndIns_64作为事件载荷，同时驱动选择器和两个解码器。",
-        "explanation": "i_pcAndIns_64是64位PC和指令组合信号，同时连接到decoderSele、decoder16和decoder32的数据输入。该信号作为事件载荷，在事件流中传递，但选择器的选择条件是否依赖该数据未明确。",
+        "value": "指令数据作为共享载荷，同时提供给选择器和两个解码器，用于解码操作。",
+        "explanation": "i_pcAndIns_64是模块的顶层输入数据端口，宽度为64位。它同时连接到decoderSele、decoder16和decoder32。对于decoderSele，它可能用于生成选择信号；对于decoder16和decoder32，它是解码操作的数据源。该信号在流中作为静态数据，不随事件驱动路径变化。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -487,8 +492,7 @@
         "semantic_claim_id": "semantic:flow:decoder:flow_000_decoder_i_driveFromIF:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_pcAndIns_64",
-          "i_driveFromIF"
+          "i_pcAndIns_64"
         ],
         "instances": [],
         "related_flows": [],
@@ -511,8 +515,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "手册应重点描述事件从IF到解码器选择、并行解码、再到合并的完整路径，并强调选择条件和合并仲裁机制。",
-            "explanation": "该流的核心是事件通过选择器分发到两个解码路径，再由合并器汇聚。手册需明确选择器的选择逻辑（基于指令类型？）和合并器的仲裁策略（互斥？优先级？），以及数据信号i_pcAndIns_64的传递方式。",
+            "value": "手册应重点描述事件从IF到解码器再到合并器的分流-并行处理-合并结构，并明确选择条件和合并仲裁逻辑的缺失。",
+            "explanation": "当前上下文清晰地展示了事件的分流和合并拓扑，但选择器decoderSele的选择条件、解码器decoder16/decoder32的内部行为、以及合并器decoMerge的仲裁机制均未提供。手册应强调这些未知点，并指出需要查阅RTL源代码以获取完整细节。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -526,8 +530,7 @@
               "w_DecSeleDriToDec32_1",
               "w_dec16DriToMer_1",
               "w_dec32DriToMer_1",
-              "decoDriToDecSpli_1",
-              "i_pcAndIns_64"
+              "decoDriToDecSpli_1"
             ],
             "instances": [
               "decoderSele",
@@ -555,8 +558,8 @@
             ]
           },
           {
-            "value": "从IF阶段传入的指令驱动事件，经选择器分发至16位或32位解码器，再由合并器汇聚后输出。",
-            "explanation": "该流描述了指令解码的入口事件流，通过decoderSele选择器将事件分发到两个并行解码路径（decoder16和decoder32），最终由decoMerge合并器汇聚。流中未定义最终输出端点，仅到decoMerge的输出信号decoDriToDecSpli_1为止。",
+            "value": "从IF阶段传入的驱动事件，经选择器分流后，由两个解码器并行处理，再通过互斥合并器汇聚为单一输出。",
+            "explanation": "该流描述了从顶层输入端口i_driveFromIF开始的内部事件传播路径。事件首先进入选择器decoderSele，根据某种条件（未在上下文中明确）将事件分流至decoder16或decoder32。两个解码器独立处理后，各自的输出在互斥合并器decoMerge中仲裁合并，形成最终输出decoDriToDecSpli_1。流中未定义最终模块输出端点，表明该流可能仅覆盖模块内部处理阶段。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -593,23 +596,22 @@
               },
               {
                 "source": "parser_pipeline_rtl/modules/decoder.json",
-                "path": "flow_graph"
+                "path": "flow_graph.assignment_dependencies"
               }
             ]
           },
           {
-            "value": "存在自由信号o_freeToIF，但未在流步骤中体现其与事件传播的耦合关系。",
-            "explanation": "接口载荷契约中提及o_freeToIF作为自由信号，但流步骤中未包含该信号。无法确定其是否用于背压或完成指示，需RTL源码确认。",
+            "value": "存在一个反向的释放信号，但当前上下文未提供其与内部流的连接关系。",
+            "explanation": "接口载荷契约中提到了o_freeToIF作为空闲/反压信号，但该信号未出现在内部事件流的连接图中。无法确定它是否与decoderSele、decoder16、decoder32或decoMerge中的任何一个有直接关联。因此，关于反压或完成信号的任何断言都缺乏证据。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:decoder:flow_000_decoder_i_driveFromIF:completion_backpressure:001",
-            "doc_priority": "secondary",
+            "doc_priority": "reference",
             "signals": [
-              "o_freeToIF",
-              "i_driveFromIF"
+              "o_freeToIF"
             ],
             "instances": [],
             "related_flows": [],
@@ -670,9 +672,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "internal_event_flow.i_driveFromIF",
-      "summary": "未发现从 i_driveFromIF 到达任何模块事件输出的路径",
-      "explanation": "i_driveFromIF 作为顶层输入端口（第24行），仅连接到 scheduler2_65b_dec 实例 decoderSele 的 .i_drive 端口（第61行）。该选择器的输出 o_driveNext0 和 o_driveNext1 分别驱动 decoder_16 和 decoder_32 的输入握手信号，但切片中未显示后续握手信号最终到达任何模块级事件输出（如 o_driveToLaunch_1、o_driveToExc_1）。o_driveToLaunch_1 和 o_driveToExc_1 被声明为输出端口（第28-29行），但其驱动来源在切片中未明确。",
+      "subject": "i_driveFromIF",
+      "summary": "i_driveFromIF 是 decoder 模块的顶层输入握手控制信号，直接连接到 decoderSele 实例的 i_drive 端口，作为整个解码流程的启动信号，但其后续去向未在切片中完整展示。",
+      "explanation": "由切片 lines 24 和 60-63 可见：i_driveFromIF 是 decoder 模块的输入端口（line 24），并直接连接到 decoderSele 实例的 i_drive 端口（line 61）。decoderSele 的输出 o_driveNext0 和 o_driveNext1 分别驱动 decoder16 和 decoder32 实例（lines 62-63, 77-79, 86-88）。切片中未展示 decoderSele 内部逻辑或 i_driveFromIF 如何生成其他模块事件输出信号（如 o_freeToIF, o_driveToLaunch_1 等）的完整路径，因此无法确认从 i_driveFromIF 到任意模块事件输出端的连通性。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -681,6 +683,7 @@
       ],
       "signals": [
         "i_driveFromIF",
+        "o_freeToIF",
         "o_driveToLaunch_1",
         "o_driveToExc_1"
       ],
@@ -695,13 +698,8 @@
         },
         {
           "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 61,
-          "line_end": 61
-        },
-        {
-          "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 28,
-          "line_end": 31
+          "line_start": 60,
+          "line_end": 63
         }
       ],
       "evidence_refs": [
@@ -713,8 +711,8 @@
     },
     {
       "subject": "flow_000_decoder_i_driveFromIF",
-      "summary": "未发现从 i_driveFromIF 到任何模块事件输出的完整数据路径",
-      "explanation": "i_driveFromIF 作为 1 位输入（第24行），驱动 decoderSele 的选择控制，而数据 i_pcAndIns_64 和 i_is16_1 通过 .i_data_65 传入（第61行）。选择器输出 w_DecSeleDriToDec16_1、w_DecSeleDriToDec32_1 分别连接 decoder_16（第78行）和 decoder_32（第87行）的 .i_drive 端口，但后续握手信号（如 w_dec32DriToMer_1）经 decoMerge（第100-102行）、decSpli 等中间模块后，在切片中未显示其最终连接至模块级事件输出。模块内 o_driveToLaunch_1、o_driveToExc_1 虽声明为输出，其驱动源在切片中缺失。",
+      "summary": "指令数据 i_pcAndIns_64 作为静态数据同时提供给 decoderSele、decoder16 和 decoder32，用于解码操作，与 i_driveFromIF 的事件路径分离。",
+      "explanation": "由切片 lines 25, 60-63, 77-79, 86-88 可见：i_pcAndIns_64 是顶层输入（line 25），同时连接到 decoderSele 的 i_data_65 端口（与 i_is16_1 拼接，line 61），以及 decoder16 和 decoder32 的 i_data_64 端口（lines 78, 87）。decoderSele 输出的数据 selector 数据（w_pcAndIns_64, w_pcAndIns1_64，lines 62-63）未在切片中进一步使用。i_pcAndIns_64 在流中作为静态数据，不随 i_driveFromIF 事件驱动路径变化，但 i_driveFromIF 本身作为控制信号驱动 decoderSele，其数据路与控制路在后续模块中可能关联。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -724,41 +722,35 @@
       "signals": [
         "i_driveFromIF",
         "i_pcAndIns_64",
-        "o_driveToLaunch_1",
-        "o_driveToExc_1"
+        "i_is16_1",
+        "w_pcAndIns_64",
+        "w_pcAndIns1_64"
       ],
       "instances": [
         "decoderSele",
         "decoder16",
-        "decoder32",
-        "decoMerge",
-        "decSpli"
+        "decoder32"
       ],
       "source_refs": [
         {
           "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 24,
-          "line_end": 26
+          "line_start": 25,
+          "line_end": 25
         },
         {
           "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 61,
+          "line_start": 60,
           "line_end": 63
         },
         {
           "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 78,
+          "line_start": 77,
           "line_end": 79
         },
         {
           "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 87,
+          "line_start": 86,
           "line_end": 88
-        },
-        {
-          "file": "rtl/rtl/Decode/decoder.v",
-          "line_start": 100,
-          "line_end": 104
         }
       ],
       "evidence_refs": [

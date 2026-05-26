@@ -2,7 +2,7 @@
 
 - 源文件：`rtl/rtl/IONet/IONetwork_9.24/routeMsgSN.v`。
 - 职责：AI 推断：坐标有效性检测与消息有效信号生成模块。
-- 说明：该模块仅有一个4位坐标输入i_coord_4和一个输出o_msgVld，通过按位或运算判断坐标是否非零，从而生成消息有效标志，表明该模块的核心功能是检测输入坐标是否有效。
+- 说明：该模块仅有一个4位坐标输入i_coord_4，通过按位或运算生成单比特输出o_msgVld，表明其核心功能是判断输入坐标是否非零，从而产生消息有效指示信号。
 
 ## 1. 层级位置
 
@@ -49,4 +49,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `o_msgVld` | i_coord_4[3]\|i_coord_4[2]\|i_coord_4[1]\|i_coord_4[0] | AI 推断：通过坐标各比特位或运算生成消息有效标志 |
+| `assign_0` | unknown | `o_msgVld` | i_coord_4[3]\|i_coord_4[2]\|i_coord_4[1]\|i_coord_4[0] | AI 推断：通过坐标各比特位逻辑或运算生成消息有效标志 |

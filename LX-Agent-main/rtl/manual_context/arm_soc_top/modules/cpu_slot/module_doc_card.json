@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "cpu_slot 是 SoC 拓扑中一个 CPU 核心的完整槽位，负责将 CPU 核心与片上网络 (Mesh) 及本地内存子系统进行桥接和事件驱动交互。",
-    "explanation": "该模块通过事件驱动接口 (i_driveFromMesh/o_driveToMesh) 与 Mesh 通信，内部包含 CPU 核心 (u_cpu_core)、内存槽 (u_memory_slot) 和数据多路选择器 (data_mux)，并拥有独立的初始化事件链 (SoCStart, select2, event2CPU)，表明其是一个自包含的 CPU 子系统槽位。",
+    "value": "该模块是CPU核心与片上网络Mesh之间的数据与事件桥接槽位，负责路由驱动事件、数据负载和初始化控制流。",
+    "explanation": "通过i_driveFromMesh接收Mesh驱动事件，经内部组件（data_mux、u_cpu_core、u_memory_slot）处理后，通过o_driveToMesh输出响应事件；同时管理初始化序列（SoCStart、select2、event2CPU）和自由信号（i_freeFMesh/o_free2Mesh）。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -35,12 +35,13 @@
       "i_dataFMesh",
       "o_data2Mesh",
       "i_freeFMesh",
-      "o_free2Mesh"
+      "o_free2Mesh",
+      "initMode"
     ],
     "instances": [
+      "data_mux",
       "u_cpu_core",
       "u_memory_slot",
-      "data_mux",
       "select2",
       "event2CPU",
       "cfifo0",
@@ -487,8 +488,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_cpu_slot_i_driveFromMesh.json",
       "reader_takeaway": {
-        "value": "手册应重点描述data_mux作为核心分发节点的选择逻辑，以及事件在CPU核心和内存槽之间的回传路径。",
-        "explanation": "该流的核心结构是data_mux将输入事件分发至u_cpu_core和u_memory_slot，两者处理后通过回传路径汇聚回data_mux。手册需阐明这一双向交互机制，但避免猜测具体选择条件或仲裁逻辑。",
+        "value": "手册应重点描述i_driveFromMesh事件如何经data_mux分发至CPU核心和内存槽，以及最终输出回Mesh的路径。",
+        "explanation": "该流核心是data_mux的分发与仲裁，需明确各输入输出的选择条件，以及u_cpu_core和u_memory_slot的参与角色。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -502,9 +503,7 @@
           "w_dataRoutDriveToLsu_1",
           "w_driveMux2Dcache",
           "w_driveDcache2Mux",
-          "w_lsuDriveToDataRout_1",
-          "w_drvCpu2Icache",
-          "w_drvIcache2CPU"
+          "w_lsuDriveToDataRout_1"
         ],
         "instances": [
           "data_mux",
@@ -529,8 +528,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "从Mesh输入的事件驱动信号，经数据选择器(data_mux)分发至CPU核心和内存槽，最终通过data_mux回传至Mesh输出。",
-            "explanation": "该流以i_driveFromMesh为起点，data_mux作为核心分发节点，将事件分别导向u_cpu_core和u_memory_slot，两者处理后通过回传路径汇聚回data_mux，最终由o_driveToMesh输出至Mesh。",
+            "value": "从Mesh输入的事件驱动信号经数据选择器(data_mux)分发至CPU核心或内存槽，最终由data_mux选择后输出回Mesh。",
+            "explanation": "该流以i_driveFromMesh为起点，data_mux作为核心分发节点，将事件导向u_cpu_core或u_memory_slot，两者处理后返回data_mux，最终由o_driveToMesh输出。流经三个实例，形成闭环路径。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -551,8 +550,8 @@
             "related_assignments": [
               "(无)"
             ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
             "evidence_refs": [
               "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
               "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
@@ -569,47 +568,15 @@
             ]
           },
           {
-            "value": "o_data2Mesh是o_driveToMesh事件的关联数据负载。",
-            "explanation": "接口负载契约显示，o_driveToMesh事件输出时，伴随一个50位宽的o_data2Mesh数据信号。这表明该事件流不仅传递控制信号，还携带了从data_mux输出的数据负载。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:data_control_effect:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "o_driveToMesh",
-              "o_data2Mesh"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
-              "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface_data_contract",
-                "path": "modules/cpu_slot.json"
-              }
-            ]
-          },
-          {
-            "value": "当前上下文未提供任何完成或反压信号信息。",
-            "explanation": "接口负载契约中free_signal字段为空，且流步骤和连接图中未提及任何握手或反压机制。因此，无法对该流的完成或反压行为做出任何声明。",
+            "value": "上下文中无free/backpressure信号，无法推断流完成或反压机制。",
+            "explanation": "接口payload_contracts中free_signal为空，且无相关赋值或连接，表明该流可能为纯事件驱动，无显式反压，或反压由其他机制处理。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:completion_backpressure:001",
-            "doc_priority": "reference",
+            "doc_priority": "secondary",
             "signals": [
               "(无)"
             ],
@@ -626,7 +593,43 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface_data_contract",
+                "source": "interface.event_ports",
+                "path": "modules/cpu_slot.json"
+              }
+            ]
+          },
+          {
+            "value": "i_driveFromMesh事件驱动信号与o_data2Mesh数据负载相关联，但无直接赋值依赖。",
+            "explanation": "接口显示o_driveToMesh事件输出伴随o_data2Mesh[50:0]数据负载，但上下文中无赋值依赖说明数据如何从输入事件映射到输出数据，需RTL源码确认。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:cpu_slot:flow_000_cpu_slot_i_driveFromMesh:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_driveFromMesh",
+              "o_data2Mesh"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "(无)"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh",
+              "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports",
+                "path": "modules/cpu_slot.json"
+              },
+              {
+                "source": "interface.data_ports",
                 "path": "modules/cpu_slot.json"
               }
             ]
@@ -645,7 +648,7 @@
     "components": 8,
     "assignments": 1,
     "evidence_gaps": 0,
-    "review_questions": 4
+    "review_questions": 1
   },
   "source_review_context": {
     "module": "cpu_slot",
@@ -674,9 +677,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "free 信号的精确语义",
-      "summary": "free 信号代表下游已接收数据，形成基于 valid-ready 的握手协议。",
-      "explanation": "从切片 9 (第 209-216 行) 可见，data_mux 实例中，o_driveToMesh (驱动/valid) 与 i_freeFromMesh (释放/ready) 配对，类似地，o_freeToMesh 与 i_driveFromMesh 配对。在切片 4 (第 107-110 行) 的 cFifo1 实例中，i_drive 和 o_free 也是一对。这些配对表明，'drive' 是 valid 信号，'free' 是 ready 信号，形成一个标准的 valid-ready 握手。",
+      "subject": "flow_000_cpu_slot_i_driveFromMesh",
+      "summary": "i_driveFromMesh 在顶层被连接至 u_cpu_core 实例的 i_driveFromMesh 端口，未发现与 data_mux 的直接连接或分发逻辑。",
+      "explanation": "根据切片 4（第 213-214 行），信号 i_driveFromMesh 被直接连接到实例 u_cpu_core 的端口 .i_driveFromMesh(i_driveFromMesh)。切片中未显示任何 data_mux 实例或其与 i_driveFromMesh 的连接，也未显示 u_memory_slot 实例的存在。因此，从给定切片无法验证该流描述的 data_mux 分发与仲裁行为。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -684,133 +687,29 @@
         "manual_context"
       ],
       "signals": [
-        "i_driveFromMesh",
-        "o_free2Mesh",
-        "o_driveToMesh",
-        "i_freeFMesh",
-        "w_drv2InnerInit",
-        "w_freeFInnerInit"
+        "i_driveFromMesh"
       ],
       "instances": [
-        "data_mux",
-        "cfifo0"
+        "u_cpu_core"
       ],
       "source_refs": [
         {
           "file": "rtl/rtl/slot/cpu_slot.v",
-          "line_start": 107,
-          "line_end": 110
-        },
-        {
-          "file": "rtl/rtl/slot/cpu_slot.v",
-          "line_start": 209,
+          "line_start": 212,
           "line_end": 216
         }
       ],
       "evidence_refs": [
-        "ev:cpu_slot:semantic_module",
         "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh",
         "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh"
       ],
       "review_status": "needs_review"
-    },
-    {
-      "subject": "data_mux 的仲裁策略",
-      "summary": "切片未提供关于 data_mux 仲裁算法的任何信息。",
-      "explanation": "切片 8 (第 183-217 行) 和 切片 9 仅显示了 data_mux 模块的端口连接，包括来自 LSU 的驱动、前往 Dcache 和 Mesh 的接口，以及返回 CPU 的数据路径。但没有任何关于内部仲裁逻辑的描述或 RTL 代码。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [],
-      "instances": [
-        "data_mux"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl/rtl/slot/cpu_slot.v",
-          "line_start": 183,
-          "line_end": 217
-        }
-      ],
-      "evidence_refs": [
-        "ev:cpu_slot:semantic_module",
-        "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh",
-        "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "event2CPU 的互斥合并逻辑",
-      "summary": "切片仅显示 event2CPU 是一个端口级互斥合并器，当两个输入同时到达时的行为未说明。",
-      "explanation": "切片 6 (第 134-144 行) 实例化了 cMutexMerge2_1b，其输入为 w_drv2MemUARTRoad&UART_INIT_SEL 和 w_drv2IONetInit，输出为 w_driveFromStart_1。切片没有提供该模块的内部逻辑，因此无法确定当 i_drive0 和 i_drive1 同时有效时的行为。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "w_drv2MemUARTRoad",
-        "UART_INIT_SEL",
-        "w_drv2IONetInit",
-        "w_driveFromStart_1"
-      ],
-      "instances": [
-        "event2CPU"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl/rtl/slot/cpu_slot.v",
-          "line_start": 134,
-          "line_end": 144
-        }
-      ],
-      "evidence_refs": [
-        "ev:cpu_slot:semantic_module",
-        "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh",
-        "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "i_driveFromMesh 流语义",
-      "summary": "i_driveFromMesh 是 data_mux 模块的输入数据驱动信号，代表来自片外 Mesh 网络的数据有效。",
-      "explanation": "切片 9 (第 214-216 行) 连接了 data_mux 的 i_driveFromMesh 端口至顶层输入 i_driveFromMesh。o_freeToMesh 作为对应的握手释放信号。切片 8 (第 209-211 行) 展示了输出方向相反的类似握手。这表明该流是一个标准的输入数据流，遵循 'drive' (valid) / 'free' (ready) 协议。",
-      "certainty": "ai_inferred",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "i_driveFromMesh",
-        "o_free2Mesh"
-      ],
-      "instances": [
-        "data_mux"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl/rtl/slot/cpu_slot.v",
-          "line_start": 208,
-          "line_end": 217
-        }
-      ],
-      "evidence_refs": [
-        "ev:cpu_slot:semantic_module",
-        "ev:cpu_slot:semantic_flow:flow_000_cpu_slot_i_driveFromMesh",
-        "ev:cpu_slot:flow:flow_000_cpu_slot_i_driveFromMesh"
-      ],
-      "review_status": "ready"
     }
   ],
   "source_review_report": {
     "status": "reviewed",
-    "claim_count": 4,
-    "open_question_count": 2,
+    "claim_count": 1,
+    "open_question_count": 3,
     "source_file": "rtl/rtl/slot/cpu_slot.v",
     "report_file": "source_review_report.json"
   }

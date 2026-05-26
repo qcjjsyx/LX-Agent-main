@@ -1,8 +1,8 @@
 # 模块 `fetch`
 
 - 源文件：`rtl/rtl/IF/fetch.v`。
-- 职责：AI 推断：取指模块，负责接收来自ICache、Top和Dispatch的驱动事件，经过内部流水线处理后，向译码、异常、中断和ICache输出驱动事件。。
-- 说明：模块有三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch），分别对应ICache、顶层和Dispatch的请求。内部通过大量Fifo、MutexMerge、SelSplit等组件进行事件路由、合并和拆分，最终输出五个驱动事件（o_drv2Dec、o_drv2Excp、o_drv2Excp_2、o_drv2ICache、o_drv2Int），分别指向译码、异常、ICache和中断。同时，模块处理指令数据（i_inst_64）和PC值（i_pcFTop_32、i_pcFdispatch_32），输出取指地址（o_fetchAddr_32）和指令+PC组合（o_instAndPC_66）。
+- 职责：AI 推断：取指模块，负责接收来自顶层、调度器和ICache的驱动事件，经过内部流水线仲裁、数据合并与异常处理，最终向译码、异常、中断和ICache输出驱动事件及指令/PC数据。。
+- 说明：模块接收三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch），分别对应ICache、顶层和调度器的取指请求。内部通过pmtLock、cfifo、spliter、select、merge等组件构成复杂的流水线，对指令和PC数据进行路由、合并和异常检测，最终输出五个驱动事件到译码、异常、中断和ICache。
 
 ## 1. 层级位置
 
@@ -105,7 +105,7 @@ fetch
 - Payload：未记录。
 - 输出/影响：`o_drv2Excp`, `o_drv2Dec`, `o_drv2Excp_2`, `o_drv2ICache`。
 - 结构复杂度：branch=5，join=3，blocking=12。
-- AI 推断：输入事件通过选择、拆分和合并机制，根据控制信号分发到四个输出端点。
+- AI 推断：输入事件通过一系列选择、拆分和合并操作，根据控制信号被分发到不同的输出端点。
 
 ### `i_drvFTop`
 
@@ -113,7 +113,7 @@ fetch
 - Payload：`i_drvFTop` -> `i_pcFTop_32 [31:0]`。
 - 输出/影响：`o_drv2Int`, `o_drv2ICache`。
 - 结构复杂度：branch=2，join=2，blocking=7。
-- AI 推断：最终手册应重点描述 spliter5 和 select5 的分叉逻辑，以及 mergeInt 和 merge1 的合并/仲裁逻辑。
+- AI 推断：输入事件 i_drvFTop 携带一个 32 位 PC 值作为有效载荷。
 
 ### `i_drvFdispatch`
 
@@ -121,7 +121,7 @@ fetch
 - Payload：`i_drvFdispatch` -> `i_pcFdispatch_32 [31:0]`。
 - 输出/影响：`o_drv2Int`, `o_drv2Excp`, `o_drv2Dec`, `o_drv2Excp_2`, `o_drv2ICache`。
 - 结构复杂度：branch=8，join=5，blocking=15。
-- AI 推断：输入事件 i_drvFdispatch 携带一个 32 位的 PC 值，该值直接连接到 merge0 的数据输入。
+- AI 推断：最终手册应重点描述从单一输入到五个输出的扇出结构，包括分路点、合并点和 FIFO 缓冲。
 
 
 ## 5. 内部组件与 assign 影响
@@ -148,9 +148,8 @@ fetch
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `o_exceptionF_4` | (r_PCErr) ? `FetchErrCode : 4'b1111 | AI 推断：异常代码输出，当PC错误时输出FetchErrCode，否则输出4'b1111。 |
-| `assign_2` | unknown | `o_exceptionF_2_4` | (i_isInInt & o_instAndPC_66[32]==1'b0 & w_bx & w_bxCount_10 == 10'b0) ? `FetchErrCode_2 : 4'b... | AI 推断：第二异常代码输出，在中断处理且指令未完成时，根据w_bx和w_bxCount_10条件输出FetchErrCode_2。 |
+| `assign_1` | unknown | `o_exceptionF_4` | (r_PCErr) ? `FetchErrCode : 4'b1111 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | unknown | `o_exceptionF_2_4` | (i_isInInt & o_instAndPC_66[32]==1'b0 & w_bx & w_bxCount_10 == 10'b0) ? `FetchErrCode_2 : 4'b... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_4` | unknown | `o_InterruptF_6` | r_InterruptF_6 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_5` | data_path | `o_fetchAddr_32` | r_fetchAddr | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_6` | unknown | `o_instAndPC_66` | r_instAndPC_66 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_7` | data_path | `w_instAndPC_66` | (r_curNum==1) ? {r_PCErr,w_inst0PC_32,w_inst0_33} : (r_curNum==2) ? {r_PCErr,w_inst1PC_32,w_i... | AI 推断：指令与PC组合信号，根据当前指令数量（r_curNum）选择对应的指令和PC数据。 |

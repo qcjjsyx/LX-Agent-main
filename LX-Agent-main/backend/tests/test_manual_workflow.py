@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend import manual_cli
+from backend import manual_timing
 from backend import manual_workflow as mw
 
 
@@ -32,6 +33,42 @@ class FakeCompletions:
 class FakeClient:
     def __init__(self):
         self.chat = SimpleNamespace(completions=FakeCompletions())
+
+
+class FakePolishCompletions:
+    def __init__(self, content):
+        self.content = content
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        message = SimpleNamespace(content=self.content)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class FakePolishClient:
+    def __init__(self, content):
+        self.completions = FakePolishCompletions(content)
+        self.chat = SimpleNamespace(completions=self.completions)
+
+
+class FakeSequencePolishCompletions:
+    def __init__(self, contents):
+        self.contents = list(contents)
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        index = len(self.calls) - 1
+        content = self.contents[index] if index < len(self.contents) else self.contents[-1]
+        message = SimpleNamespace(content=content)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class FakeSequencePolishClient:
+    def __init__(self, contents):
+        self.completions = FakeSequencePolishCompletions(contents)
+        self.chat = SimpleNamespace(completions=self.completions)
 
 
 def make_minimal_manual_context(root):
@@ -122,6 +159,47 @@ def make_context_state(root, stage):
         "outline": [],
         "chapter_plan": [],
         "force_stages": [stage],
+    }
+
+
+def make_page_polish_digest():
+    top_module = {
+        "module_name": "top",
+        "source_files": ["rtl/top.v"],
+        "system_position": {"parents": [], "children": ["child"], "component_children": []},
+        "port_summary": {"external_port_groups": [{"signals": [{"name": "clk"}, {"name": "rst_n"}]}]},
+        "interfaces": {"interface_groups": []},
+        "internal_components": {"primary_samples": [{"instance_name": "u_child", "module_type": "child"}]},
+        "assignment_impact_summary": {"primary_samples": []},
+        "key_drive_flows": [],
+        "evidence_gaps": [],
+    }
+    child_module = {
+        "module_name": "child",
+        "source_files": ["rtl/child.v"],
+        "system_position": {"parents": ["top"], "children": [], "component_children": []},
+        "port_summary": {"external_port_groups": [{"signals": [{"name": "i_data"}]}]},
+        "interfaces": {"interface_groups": []},
+        "internal_components": {"primary_samples": []},
+        "assignment_impact_summary": {"primary_samples": []},
+        "key_drive_flows": [],
+        "evidence_gaps": [],
+    }
+    other_module = {
+        "module_name": "other",
+        "source_files": ["rtl/other.v"],
+        "system_position": {"parents": [], "children": [], "component_children": []},
+        "port_summary": {"external_port_groups": []},
+        "interfaces": {"interface_groups": []},
+        "internal_components": {"primary_samples": []},
+        "assignment_impact_summary": {"primary_samples": []},
+        "key_drive_flows": [],
+        "evidence_gaps": [],
+    }
+    return {
+        "top_module": "top",
+        "project_context": {"top_level": {"direct_modules": {"value": ["child"]}}},
+        "modules": [top_module, child_module, other_module],
     }
 
 
@@ -238,6 +316,311 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
             self.assertTrue((root / "docs" / "manuals" / "top_generated.md").exists())
             self.assertTrue((root / "docs" / "manuals" / "top_generated_modules" / "child.md").exists())
             self.assertIn("阶段8", reply)
+
+    def test_default_manual_generation_mode_does_not_call_llm(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n\nAI 推断：x\n证据不足：y\n"
+        client = FakePolishClient("# should not be used")
+        state = {}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(state["manual_generation_mode"], "deterministic")
+        self.assertEqual(state["manual_llm_polish_status"], "not_requested")
+        self.assertEqual(client.completions.calls, [])
+
+    def test_explicit_deterministic_manual_generation_mode_does_not_call_llm(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n"
+        client = FakePolishClient("# should not be used")
+        state = {"manual_generation_mode": "deterministic"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(client.completions.calls, [])
+
+    def test_llm_polish_calls_model_and_returns_valid_markdown(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n\nAI 推断：x\n证据不足：y\n"
+        polished = (
+            "# top\n\n"
+            "这是一版更连贯的主手册。\n\n"
+            "[child](top_generated_modules/child.md)\n\n"
+            "AI 推断：x\n\n证据不足：y\n"
+        )
+        client = FakePolishClient(polished)
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, polished.strip())
+        self.assertEqual(state["manual_llm_polish_status"], "success")
+        self.assertEqual(len(client.completions.calls), 1)
+        self.assertEqual(client.completions.calls[0]["model"], "fake-model")
+
+    def test_llm_polish_strips_outer_markdown_fence(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n\nAI 推断：x\n证据不足：y\n"
+        polished_body = (
+            "# top\n\n"
+            "这是一版更连贯的主手册。\n\n"
+            "[child](top_generated_modules/child.md)\n\n"
+            "AI 推断：x\n\n证据不足：y\n"
+        )
+        client = FakePolishClient(f"```markdown\n{polished_body}\n```")
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, polished_body.strip())
+        self.assertFalse(manual.startswith("```"))
+        self.assertEqual(state["manual_llm_polish_status"], "success")
+
+    def test_llm_polish_strips_unclosed_outer_markdown_fence(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n\nAI 推断：x\n证据不足：y\n"
+        polished_body = (
+            "# top\n\n"
+            "这是一版更连贯的主手册。\n\n"
+            "[child](top_generated_modules/child.md)\n\n"
+            "AI 推断：x\n\n证据不足：y\n"
+        )
+        client = FakePolishClient(f"```markdown\n{polished_body}")
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, polished_body.strip())
+        self.assertFalse(manual.startswith("```"))
+        self.assertEqual(state["manual_llm_polish_status"], "success")
+
+    def test_llm_polish_rejects_unbalanced_internal_fence(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n\nAI 推断：x\n证据不足：y\n"
+        polished = (
+            "# top\n\n"
+            "[child](top_generated_modules/child.md)\n\n"
+            "```verilog\n"
+            "module top;\n"
+            "AI 推断：x\n\n证据不足：y\n"
+        )
+        client = FakePolishClient(polished)
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(state["manual_llm_polish_status"], "failed_validation_fallback_to_draft")
+        self.assertIn("unbalanced markdown code fences", state["manual_llm_validation_error"])
+
+    def test_llm_polish_model_unavailable_falls_back_to_draft(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n"
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, None, None)
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(state["manual_llm_polish_status"], "skipped_model_unavailable")
+
+    def test_llm_polish_validation_failure_falls_back_to_draft(self):
+        draft = "# top\n\n[child](top_generated_modules/child.md)\n\nAI 推断：x\n"
+        client = FakePolishClient("好的，下面是")
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(state["manual_llm_polish_status"], "failed_validation_fallback_to_draft")
+        self.assertTrue(state["manual_llm_validation_error"])
+
+    def test_llm_polish_must_keep_all_module_page_links(self):
+        draft = (
+            "# top\n\n"
+            "[foo](top_generated_modules/foo.md)\n"
+            "[bar](top_generated_modules/bar.md)\n"
+        )
+        polished = "# top\n\n[foo](top_generated_modules/foo.md)\n\n只保留了一个链接。\n"
+        client = FakePolishClient(polished)
+        state = {"manual_generation_mode": "llm_polish"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(state["manual_llm_polish_status"], "failed_validation_fallback_to_draft")
+        self.assertIn("bar.md", state["manual_llm_validation_error"])
+
+    def test_llm_section_generate_calls_model_per_section(self):
+        draft = (
+            "# arm_soc_top RTL 代码手册\n\n"
+            "front arm_soc_top\n\n"
+            "## 项目总览\n\n"
+            "[child](modules/child.md)\n\nAI 推断：x\n\n"
+            "## 子系统与模块索引\n\n"
+            "[foo](modules/foo.md)\n\n证据不足：y\n"
+        )
+        outputs = [
+            "# arm_soc_top RTL 代码手册\n\nfront arm_soc_top polished\n",
+            "## 项目总览\n\n[child](modules/child.md)\n\nAI 推断：x\n\n更清晰的描述。\n",
+            "## 子系统与模块索引\n\n[foo](modules/foo.md)\n\n证据不足：y\n\n更清晰的描述。\n",
+        ]
+        client = FakeSequencePolishClient(outputs)
+        state = {"manual_generation_mode": "llm_section_generate", "top_module": "arm_soc_top"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertIn("front arm_soc_top polished", manual)
+        self.assertEqual(len(client.completions.calls), 3)
+        self.assertEqual(
+            {item["status"] for item in state["manual_llm_section_status"].values()},
+            {"success"},
+        )
+
+    def test_llm_section_generate_model_unavailable_falls_back_to_draft(self):
+        draft = "# top\n\n## A\n\nbody\n"
+        state = {"manual_generation_mode": "llm_section_generate"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, None, None)
+
+        self.assertEqual(manual, draft)
+        self.assertEqual(
+            state["manual_llm_section_status"]["__all__"]["status"],
+            "skipped_model_unavailable",
+        )
+
+    def test_llm_section_generate_missing_link_falls_back_for_that_section(self):
+        draft = "## 子系统与模块索引\n\n[foo](modules/foo.md)\n\n证据不足：y\n"
+        client = FakeSequencePolishClient(["## 子系统与模块索引\n\n证据不足：y\n\n缺少链接。\n"])
+        state = {"manual_generation_mode": "llm_section_generate"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft.strip())
+        status = state["manual_llm_section_status"]["## 子系统与模块索引"]
+        self.assertEqual(status["status"], "failed_validation_fallback_to_draft")
+        self.assertIn("foo.md", status["reason"])
+
+    def test_llm_section_generate_conversational_output_falls_back(self):
+        draft = "## 项目总览\n\n没有链接的 deterministic section 内容足够长。\n"
+        client = FakeSequencePolishClient(["好的，下面是润色后的章节。" + "内容" * 40])
+        state = {"manual_generation_mode": "llm_section_generate"}
+
+        with patch.object(mw, "_render_manual_context_markdown", return_value=draft):
+            manual = mw._generate_manual_markdown(state, client, "fake-model")
+
+        self.assertEqual(manual, draft.strip())
+        status = state["manual_llm_section_status"]["## 项目总览"]
+        self.assertEqual(status["status"], "failed_validation_fallback_to_draft")
+        self.assertIn("conversational", status["reason"])
+
+    def test_llm_section_generate_with_page_polish_writes_polished_module_page(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            digest = make_page_polish_digest()
+            module = digest["modules"][0]
+            draft_page = mw._render_module_page(digest, module)
+            polished_page = draft_page + "\n\n润色后说明：保留 clk、rst_n 和 u_child。\n"
+            state = {
+                "manual_generation_mode": "llm_section_generate_with_page_polish",
+                "top_module": "top",
+                "evidence_digest": digest,
+                "llm_module_page_scope": "top_only",
+                "llm_module_page_limit": 20,
+            }
+            output_path = root / "manual.md"
+            client = FakeSequencePolishClient([polished_page])
+
+            paths = mw._write_module_pages(state, output_path, client=client, model="fake-model")
+
+            top_page = output_path.with_name("manual_modules") / "top.md"
+            self.assertIn(top_page, paths)
+            self.assertIn("润色后说明", top_page.read_text(encoding="utf-8"))
+            self.assertEqual(state["manual_llm_page_status"]["top"]["status"], "success")
+            self.assertEqual(len(client.completions.calls), 1)
+
+    def test_llm_module_page_missing_port_falls_back_to_draft(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            digest = make_page_polish_digest()
+            module = digest["modules"][0]
+            draft_page = mw._render_module_page(digest, module)
+            bad_page = draft_page.replace("clk", "clock_removed")
+            state = {
+                "manual_generation_mode": "llm_section_generate_with_page_polish",
+                "top_module": "top",
+                "evidence_digest": digest,
+                "llm_module_page_scope": "top_only",
+                "llm_module_page_limit": 20,
+            }
+            output_path = root / "manual.md"
+            client = FakeSequencePolishClient([bad_page])
+
+            mw._write_module_pages(state, output_path, client=client, model="fake-model")
+
+            top_page_text = (output_path.with_name("manual_modules") / "top.md").read_text(encoding="utf-8")
+            self.assertEqual(top_page_text.strip(), draft_page)
+            self.assertEqual(
+                state["manual_llm_page_status"]["top"]["status"],
+                "failed_validation_fallback_to_draft",
+            )
+            self.assertIn("clk", state["manual_llm_page_status"]["top"]["reason"])
+
+    def test_llm_module_page_scope_selection(self):
+        digest = make_page_polish_digest()
+        modules = digest["modules"]
+        base_state = {"top_module": "top", "evidence_digest": digest, "llm_module_page_limit": 20}
+
+        self.assertEqual(
+            mw._select_modules_for_llm_page_polish({**base_state, "llm_module_page_scope": "top_only"}, modules),
+            {"top"},
+        )
+        self.assertEqual(
+            mw._select_modules_for_llm_page_polish({**base_state, "llm_module_page_scope": "top_and_direct"}, modules),
+            {"top", "child"},
+        )
+        self.assertEqual(
+            mw._select_modules_for_llm_page_polish({
+                **base_state,
+                "llm_module_page_scope": "allowlist",
+                "llm_module_page_allowlist": "child,other",
+            }, modules),
+            {"child", "other"},
+        )
+        no_direct_state = {
+            "top_module": "top",
+            "evidence_digest": {"top_module": "top", "project_context": {}, "modules": modules},
+            "llm_module_page_scope": "top_and_direct",
+            "llm_module_page_limit": 20,
+        }
+        self.assertEqual(mw._select_modules_for_llm_page_polish(no_direct_state, modules), {"top"})
+
+    def test_no_llm_page_polish_records_skipped_and_uses_draft(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            digest = make_page_polish_digest()
+            state = {
+                "manual_generation_mode": "llm_section_generate_with_page_polish",
+                "top_module": "top",
+                "evidence_digest": digest,
+                "llm_module_page_scope": "top_only",
+                "llm_module_page_limit": 20,
+            }
+            output_path = root / "manual.md"
+
+            mw._write_module_pages(state, output_path, client=None, model=None)
+
+            self.assertEqual(
+                state["manual_llm_page_status"]["top"]["status"],
+                "skipped_model_unavailable",
+            )
+            self.assertTrue((output_path.with_name("manual_modules") / "top.md").exists())
 
     def test_outline_stage_reloads_existing_context_when_state_lacks_digest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -558,8 +941,28 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
 
             self.assertEqual(state["top_module"], "top")
             self.assertEqual(state["stage"], "references")
-            self.assertTrue(state["force_regenerate"])
+            self.assertFalse(state["force_regenerate"])
+            self.assertEqual(state["force_stages"], list(mw.MANUAL_STAGE_ORDER))
             self.assertEqual(state["manual_output_override"], str((Path(temp_dir) / "manual.md").resolve()))
+
+    def test_cli_force_start_stage_uses_planned_force_stages(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = manual_cli.build_parser().parse_args([
+                "--project-root",
+                temp_dir,
+                "--top-module",
+                "top",
+                "--start-stage",
+                "source_review",
+                "--force",
+                "--no-llm",
+            ])
+
+            state = manual_cli.build_initial_state(args)
+
+            self.assertEqual(state["stage"], "source_review")
+            self.assertFalse(state["force_regenerate"])
+            self.assertEqual(state["force_stages"], ["source_review", "outline", "chapter_plan", "manual", "review"])
 
     def test_cli_applies_tool_timeouts_to_environment(self):
         args = manual_cli.build_parser().parse_args([
@@ -701,6 +1104,83 @@ class ManualWorkflowRenderingTest(unittest.TestCase):
             self.assertEqual(Path(state["parser_dir"]), root / "rtl" / "parser_pipeline_rtl")
             self.assertEqual(Path(state["knowledge_dir"]), root / "rtl" / "knowledge_ir" / "top")
             self.assertEqual(Path(state["manual_context_dir"]), root / "rtl" / "manual_context" / "top")
+
+    def test_manual_cli_accepts_manual_generation_mode_with_no_llm(self):
+        args = manual_cli.build_parser().parse_args([
+            "--top-module",
+            "arm_soc_top",
+            "--manual-generation-mode",
+            "llm_section_generate_with_page_polish",
+            "--llm-module-page-scope",
+            "top_and_direct",
+            "--llm-module-page-limit",
+            "5",
+            "--llm-module-page-allowlist",
+            "foo,bar",
+            "--no-llm",
+        ])
+        client, model = manual_cli.build_model_client(args)
+        state = manual_cli.build_initial_state(args)
+
+        self.assertIsNone(client)
+        self.assertIsNone(model)
+        self.assertEqual(state["manual_generation_mode"], "llm_section_generate_with_page_polish")
+        self.assertEqual(state["llm_module_page_scope"], "top_and_direct")
+        self.assertEqual(state["llm_module_page_limit"], 5)
+        self.assertEqual(state["llm_module_page_allowlist"], "foo,bar")
+
+    def test_manual_timing_report_records_manual_generation_mode(self):
+        args = manual_timing.build_parser().parse_args([
+            "--top-module",
+            "arm_soc_top",
+            "--manual-generation-mode",
+            "deterministic",
+            "--llm-module-page-scope",
+            "allowlist",
+            "--llm-module-page-limit",
+            "3",
+            "--llm-module-page-allowlist",
+            "top,child",
+            "--no-llm",
+        ])
+        state = manual_timing.build_initial_state(args)
+        report = manual_timing.build_report(args, "run", state, [], 0.0)
+
+        self.assertEqual(state["manual_generation_mode"], "deterministic")
+        self.assertEqual(state["force_stages"], list(mw.MANUAL_STAGE_ORDER))
+        self.assertFalse(state["force_regenerate"])
+        self.assertEqual(report["config"]["manual_generation_mode"], "deterministic")
+        self.assertEqual(report["config"]["llm_module_page_scope"], "allowlist")
+        self.assertEqual(report["config"]["llm_module_page_limit"], 3)
+        self.assertEqual(report["config"]["llm_module_page_allowlist"], "top,child")
+
+    def test_forced_knowledge_stage_disables_semantic_cache(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            state = mw._ensure_state({
+                "project_root": str(root),
+                "rtl_inputs": "rtl",
+                "top_module": "top",
+                "stage": "knowledge",
+                "knowledge_dir": str(root / "rtl" / "knowledge_ir" / "top"),
+                "manual_context_dir": str(root / "rtl" / "manual_context" / "top"),
+                "force_stages": ["knowledge"],
+                "semantic_enrichment": True,
+                "enrich_modules": "",
+            })
+            captured = {}
+
+            def fake_run_knowledge_tool(**kwargs):
+                captured.update(kwargs)
+                return "Knowledge Tool execution succeeded"
+
+            with patch.object(mw, "_knowledge_artifacts_ready", return_value=(False, Path(state["manual_context_dir"]), [])):
+                with patch.object(mw, "run_knowledge_tool", fake_run_knowledge_tool):
+                    reply = mw._run_knowledge_stage(state)
+
+            self.assertTrue(captured["force"])
+            self.assertIn("阶段3", reply)
+            self.assertEqual(state["stage"], "evidence")
 
 
 if __name__ == "__main__":

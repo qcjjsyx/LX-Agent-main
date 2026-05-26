@@ -21,7 +21,7 @@
   },
   "purpose": {
     "value": "状态更新与分发模块，负责将来自更新拆分器的请求进行缓冲、类型识别（加载/存储）、状态机转换，并通过互斥合并后输出到状态更新选择器。",
-    "explanation": "模块接收一个事件驱动输入 i_driveFromUpdateSplitter_1 及其关联的7位数据，经过Fifo1缓冲后，由loadAndStoreSelector根据数据内容区分加载或存储操作，分别送入loadFifo和storeFifo，再通过loadOrStoreMutexMerge互斥合并后输出事件 o_driveToStateUpdateSelector_1。同时，模块内部维护状态机（由assign依赖中的w_nextState_4等信号体现），并输出12位状态有效信号 o_stateValid_12。",
+    "explanation": "模块接收一个事件驱动输入和7位数据载荷，内部通过Fifo1缓冲，然后由loadAndStoreSelector根据载荷中的类型位将请求分发到加载或存储FIFO，每个FIFO独立维护状态机，最后通过loadOrStoreMutexMerge互斥合并后输出。同时输出12位状态有效信号。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -33,9 +33,7 @@
       "i_driveFromUpdateSplitter_1",
       "i_fromUpdateSplitterData_7",
       "o_driveToStateUpdateSelector_1",
-      "o_stateValid_12",
-      "o_freeToUpdateSplitter_1",
-      "i_freeFromStateUpdateSelector_1"
+      "o_stateValid_12"
     ],
     "instances": [
       "Fifo1",
@@ -340,8 +338,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_stateUpdate_i_driveFromUpdateSplitter_1.json",
       "reader_takeaway": {
-        "value": "最终手册应重点描述事件如何通过loadAndStoreSelector分流，以及loadOrStoreMutexMerge如何互斥合并两路事件。",
-        "explanation": "该流的核心语义是事件的分发与有序合并，分流和合并节点的行为是理解流的关键。FIFO的缓冲作用次之。",
+        "value": "最终手册应强调该流的事件分叉与合并结构，以及FIFO缓冲对事件传播的影响。",
+        "explanation": "该流的核心特征是负载/存储事件的分叉与互斥合并，以及多个FIFO提供的缓冲和反压能力。手册应描述事件如何被选择、缓冲和合并，但避免过度推断数据路径细节。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -350,15 +348,15 @@
         "semantic_claim_id": "semantic:flow:stateUpdate:flow_000_stateUpdate_i_driveFromUpdateSplitter_1:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "w_loadAndStoreSelectorToLoadFifo_1",
-          "w_loadAndStoreSelectorToStoreFifo_1",
-          "w_loadFifoDrive_1",
-          "w_storeFifoDrive_1",
+          "i_driveFromUpdateSplitter_1",
           "o_driveToStateUpdateSelector_1"
         ],
         "instances": [
           "loadAndStoreSelector",
-          "loadOrStoreMutexMerge"
+          "loadOrStoreMutexMerge",
+          "Fifo1",
+          "loadFifo",
+          "storeFifo"
         ],
         "related_flows": [],
         "related_assignments": [
@@ -372,13 +370,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/stateUpdate.json"
+            "source": "parser_pipeline_rtl/modules/stateUpdate.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "该驱动流将来自更新分配器的事件，经过一级FIFO缓冲、负载/存储选择器分流、两路独立FIFO缓存，最终通过互斥合并器输出到状态更新选择器。",
-            "explanation": "流从输入端口i_driveFromUpdateSplitter_1进入，首先由Fifo1缓冲，然后由loadAndStoreSelector根据事件类型分流至loadFifo或storeFifo，两路FIFO输出经loadOrStoreMutexMerge互斥合并后，从o_driveToStateUpdateSelector_1输出。该流实现了事件的分发与有序合并。",
+            "value": "该驱动流将来自更新分配器的一个事件，经过FIFO缓冲、负载/存储选择、再分别缓冲后，通过互斥合并器输出到状态更新选择器。",
+            "explanation": "流从输入端口i_driveFromUpdateSplitter_1进入，首先由Fifo1缓冲，然后由loadAndStoreSelector根据事件类型分叉为负载或存储路径，分别经过loadFifo和storeFifo缓冲，最后通过loadOrStoreMutexMerge合并为单一输出o_driveToStateUpdateSelector_1。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -388,11 +386,6 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromUpdateSplitter_1",
-              "w_driveToLoadAndStoreSelector_1",
-              "w_loadAndStoreSelectorToLoadFifo_1",
-              "w_loadAndStoreSelectorToStoreFifo_1",
-              "w_loadFifoDrive_1",
-              "w_storeFifoDrive_1",
               "o_driveToStateUpdateSelector_1"
             ],
             "instances": [
@@ -422,8 +415,8 @@
             ]
           },
           {
-            "value": "流中多个FIFO和合并器可能引入背压，但具体完成或空闲信号未在上下文中明确。",
-            "explanation": "输入端口有o_freeToUpdateSplitter_1作为空闲信号，输出端口有i_freeFromStateUpdateSelector_1作为空闲信号，但内部组件的背压信号（如FIFO的满/空标志）未提供。因此，背压传播路径不明确。",
+            "value": "输入端口有free信号o_freeToUpdateSplitter_1，输出端口有free信号i_freeFromStateUpdateSelector_1，表明流支持反压机制，但具体实现细节未提供。",
+            "explanation": "输入事件i_driveFromUpdateSplitter_1关联free信号o_freeToUpdateSplitter_1，输出事件o_driveToStateUpdateSelector_1关联free信号i_freeFromStateUpdateSelector_1，表明FIFO和合并器可能使用反压控制流率，但内部连接未明确。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -456,8 +449,8 @@
             ]
           },
           {
-            "value": "输入数据i_fromUpdateSplitterData_7与事件i_driveFromUpdateSplitter_1关联，随事件流经Fifo1，但后续路径中数据信号未明确连接。",
-            "explanation": "数据信号i_fromUpdateSplitterData_7仅连接到Fifo1的输入数据端口，后续组件（loadAndStoreSelector、loadFifo、storeFifo、loadOrStoreMutexMerge）的数据连接未在上下文中提供。因此，数据是否随事件传递至输出端不确定。",
+            "value": "该7位数据信号作为事件的有效载荷，与事件驱动信号i_driveFromUpdateSplitter_1并行传输，经过整个流路径。",
+            "explanation": "数据信号i_fromUpdateSplitterData_7从输入端口进入，连接到Fifo1的数据输入，并随事件流经所有FIFO和选择器，最终可能通过合并器输出，但输出端o_driveToStateUpdateSelector_1未声明有效载荷，表明数据可能被内部消耗或仅用于控制。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -471,7 +464,9 @@
             ],
             "instances": [],
             "related_flows": [],
-            "related_assignments": [],
+            "related_assignments": [
+              "16"
+            ],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [

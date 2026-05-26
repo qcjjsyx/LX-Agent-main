@@ -46,13 +46,13 @@
     }
   ],
   "claim_summary": {
-    "count": 11,
+    "count": 6,
     "by_type": {
-      "assignment_interpretation": 4,
-      "documentation_focus": 2,
-      "interface_intent": 2,
+      "assignment_interpretation": 2,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
-      "structural_responsibility": 2
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -62,17 +62,16 @@
         "type": "module",
         "module": "shifter"
       },
-      "summary": "执行多种移位和扩展操作的组合逻辑数据通路模块",
+      "summary": "移位与扩展运算单元，根据操作码和类型选择执行逻辑/算术/循环移位及位宽扩展，并输出移位进位。",
       "subject": "shifter",
-      "explanation": "模块通过组合逻辑实现左移、右移、算术右移、循环左移、循环右移、带进位循环右移六种移位操作，以及零扩展和符号扩展功能，最终根据控制信号选择输出结果。",
+      "explanation": "模块通过组合逻辑实现六种移位类型（LSL/LSR/ASR/ROR/RRX/ROL）和四种扩展模式（零扩展/符号扩展/字节/半字），最终结果受取反标志控制。",
       "signals": [
-        "oprand",
-        "result",
-        "i_shiftNumber_8",
-        "i_shiftType_3",
         "i_shiftOpcode_3",
+        "i_shiftType_3",
         "i_xtFlag_1",
-        "i_notFlag_1"
+        "i_notFlag_1",
+        "o_carryOut_1",
+        "result"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -96,19 +95,20 @@
         "type": "module",
         "module": "shifter"
       },
-      "summary": "根据移位类型和操作码，从六种移位结果中选择并执行可选的扩展和取反操作",
-      "subject": "移位与扩展结果生成",
-      "explanation": "模块内部通过组合逻辑并行计算所有移位结果，然后由 i_shiftType_3 选择最终移位结果，再根据 i_xtFlag_1 和 i_shiftOpcode_3 进行零扩展或符号扩展，最后根据 i_notFlag_1 决定是否取反输出。",
+      "summary": "根据i_shiftType_3从六个预计算移位结果中选择最终移位值，并根据i_shiftOpcode_3[0]使能进位输出。",
+      "subject": "移位结果选择与进位生成",
+      "explanation": "assign 12和13构成核心选择器：w_resultTmp1_32通过多级条件运算符选择LSL/LSR/ASR/ROR/RRX/ROL结果；o_carryOut_1仅在移位操作码低位为1时输出对应进位。",
       "signals": [
-        "w_lslResult_32",
-        "w_lsrResult_32",
-        "w_asrResult_32",
-        "w_rorResult_32",
-        "w_rolResult_32",
-        "w_rrxResult_32",
+        "i_shiftType_3",
+        "i_shiftOpcode_3",
         "w_resultTmp1_32",
-        "w_resultTmp2_32",
-        "result"
+        "o_carryOut_1",
+        "w_lslCarryOut_1",
+        "w_lsrCarryOut_1",
+        "w_asrCarryOut_1",
+        "w_rorCarryOut_1",
+        "w_rrxCarryOut_1",
+        "w_rolCarryOut_1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -127,62 +127,23 @@
       "id": "semantic:module:shifter:structural_responsibility:001"
     },
     {
-      "claim_type": "structural_responsibility",
-      "scope": {
-        "type": "module",
-        "module": "shifter"
-      },
-      "summary": "根据移位类型和操作码，从六种移位操作的进位结果中选择输出进位",
-      "subject": "进位输出生成",
-      "explanation": "模块内部并行计算每种移位操作的进位输出，然后由 i_shiftOpcode_3 和 i_shiftType_3 共同选择最终的进位输出 o_carryOut_1。",
-      "signals": [
-        "w_lslCarryOut_1",
-        "w_lsrCarryOut_1",
-        "w_asrCarryOut_1",
-        "w_rorCarryOut_1",
-        "w_rolCarryOut_1",
-        "w_rrxCarryOut_1",
-        "o_carryOut_1",
-        "i_shiftOpcode_3",
-        "i_shiftType_3"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ],
-      "id": "semantic:module:shifter:structural_responsibility:002"
-    },
-    {
       "claim_type": "assignment_interpretation",
       "scope": {
         "type": "module",
         "module": "shifter"
       },
-      "subject": "w_resultTmp1_32",
-      "summary": "根据移位类型选择最终的移位结果",
-      "explanation": "该赋值通过多级条件选择器，根据 i_shiftType_3 的值从六种移位结果中选择一个作为中间结果，是移位操作的核心选择逻辑。",
+      "subject": "w_resultTmp2_32",
+      "summary": "扩展阶段，根据i_xtFlag_1和i_shiftOpcode_3对移位结果进行字节/半字零扩展或符号扩展。",
+      "explanation": "当i_xtFlag_1为1时，根据操作码选择：00→字节零扩展，01→字节符号扩展，10→半字零扩展，11→半字符号扩展；否则直通移位结果。",
       "signals": [
+        "i_xtFlag_1",
+        "i_shiftOpcode_3",
         "w_resultTmp1_32",
-        "i_shiftType_3",
-        "w_lslResult_32",
-        "w_lsrResult_32",
-        "w_asrResult_32",
-        "w_rorResult_32",
-        "w_rrxResult_32",
-        "w_rolResult_32"
+        "w_resultTmp2_32"
       ],
       "related_assignments": [
-        "12"
+        "12",
+        "14"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -206,17 +167,17 @@
         "type": "module",
         "module": "shifter"
       },
-      "subject": "w_resultTmp2_32",
-      "summary": "对移位结果执行零扩展或符号扩展",
-      "explanation": "当 i_xtFlag_1 有效时，根据 i_shiftOpcode_3 的编码，对移位结果进行8位或16位的零扩展或符号扩展，是数据扩展的核心逻辑。",
+      "subject": "result",
+      "summary": "最终结果取反控制，由i_notFlag_1决定是否对扩展结果按位取反。",
+      "explanation": "assign 15实现条件取反：i_notFlag_1为1时输出~w_resultTmp2_32，否则直通。",
       "signals": [
+        "i_notFlag_1",
         "w_resultTmp2_32",
-        "i_xtFlag_1",
-        "i_shiftOpcode_3",
-        "w_resultTmp1_32"
+        "result"
       ],
       "related_assignments": [
-        "14"
+        "14",
+        "15"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -235,92 +196,23 @@
       "id": "semantic:module:shifter:assignment_interpretation:002"
     },
     {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "shifter"
-      },
-      "subject": "result",
-      "summary": "根据取反标志决定最终输出是否取反",
-      "explanation": "当 i_notFlag_1 为高电平时，对扩展后的结果按位取反后输出；否则直接输出扩展结果，是最终输出前的条件取反逻辑。",
-      "signals": [
-        "result",
-        "i_notFlag_1",
-        "w_resultTmp2_32"
-      ],
-      "related_assignments": [
-        "15"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ],
-      "id": "semantic:module:shifter:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "shifter"
-      },
-      "subject": "o_carryOut_1",
-      "summary": "根据移位操作码和类型选择进位输出",
-      "explanation": "当 i_shiftOpcode_3[0] 有效时，根据 i_shiftType_3 从六种移位操作的进位结果中选择一个作为最终进位输出，是进位输出的多路选择逻辑。",
-      "signals": [
-        "o_carryOut_1",
-        "i_shiftOpcode_3",
-        "i_shiftType_3",
-        "w_lslCarryOut_1",
-        "w_lsrCarryOut_1",
-        "w_asrCarryOut_1",
-        "w_rorCarryOut_1",
-        "w_rrxCarryOut_1",
-        "w_rolCarryOut_1"
-      ],
-      "related_assignments": [
-        "13"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ],
-      "id": "semantic:module:shifter:assignment_interpretation:004"
-    },
-    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "shifter"
       },
-      "summary": "通过 i_shiftType_3 和 i_shiftOpcode_3 控制移位类型和扩展/取反操作",
+      "summary": "控制输入i_shiftOpcode_3、i_shiftType_3、i_xtFlag_1、i_notFlag_1共同定义移位类型、扩展模式和结果取反，构成完整的移位指令控制字。",
       "subject": "移位控制接口",
-      "explanation": "i_shiftType_3 选择六种移位操作之一，i_shiftOpcode_3 控制扩展类型和进位输出使能，两者共同决定模块的最终行为。",
+      "explanation": "这些信号均为条件输入，无事件握手，表明模块为纯组合逻辑，依赖外部控制信号组合决定运算行为。",
       "signals": [
+        "i_shiftOpcode_3",
         "i_shiftType_3",
-        "i_shiftOpcode_3"
+        "i_xtFlag_1",
+        "i_notFlag_1"
       ],
       "related_payload": [
         "oprand",
+        "i_shiftNumber_8",
         "result",
         "o_carryOut_1"
       ],
@@ -341,55 +233,20 @@
       "id": "semantic:module:shifter:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "shifter"
-      },
-      "summary": "通过 i_xtFlag_1 和 i_notFlag_1 控制扩展和取反操作",
-      "subject": "数据与标志接口",
-      "explanation": "i_xtFlag_1 使能扩展操作，i_notFlag_1 使能最终结果的取反操作，两者与移位操作码共同构成完整的控制逻辑。",
-      "signals": [
-        "i_xtFlag_1",
-        "i_notFlag_1"
-      ],
-      "related_payload": [
-        "result",
-        "w_resultTmp2_32"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ],
-      "id": "semantic:module:shifter:interface_intent:002"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "shifter"
       },
-      "summary": "应详细说明六种移位操作对应的 i_shiftType_3 编码以及每种操作的算法和进位输出定义",
-      "subject": "移位操作类型与编码",
-      "explanation": "模块的核心功能是执行多种移位操作，文档需要明确每种操作的类型编码、移位算法以及进位输出的计算方式，以便用户正确使用。",
+      "summary": "手册应重点说明六种移位类型（LSL/LSR/ASR/ROR/RRX/ROL）的语义、进位生成规则，以及四种扩展模式（字节/半字零扩展和符号扩展）的编码与行为。",
+      "subject": "移位类型与扩展模式组合",
+      "explanation": "模块核心功能由i_shiftType_3和i_xtFlag_1+ i_shiftOpcode_3两级选择实现，且进位输出受i_shiftOpcode_3[0]使能，这些组合逻辑是文档关键。",
       "signals": [
         "i_shiftType_3",
-        "w_lslResult_32",
-        "w_lsrResult_32",
-        "w_asrResult_32",
-        "w_rorResult_32",
-        "w_rolResult_32",
-        "w_rrxResult_32"
+        "i_shiftOpcode_3",
+        "i_xtFlag_1",
+        "o_carryOut_1",
+        "result"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -406,70 +263,12 @@
         }
       ],
       "id": "semantic:module:shifter:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "shifter"
-      },
-      "summary": "应说明 i_xtFlag_1 和 i_notFlag_1 与 i_shiftOpcode_3 的组合如何控制扩展和取反",
-      "subject": "扩展与取反操作",
-      "explanation": "模块在移位后还支持零扩展、符号扩展和取反操作，文档需要解释这些控制信号的组合逻辑以及它们对最终结果的影响。",
-      "signals": [
-        "i_xtFlag_1",
-        "i_notFlag_1",
-        "i_shiftOpcode_3",
-        "w_resultTmp2_32",
-        "result"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ],
-      "id": "semantic:module:shifter:documentation_focus:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部事件流",
-      "reason": "上下文中未提供内部事件流信息，无法推断模块的时序行为或流水线阶段",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ]
-    },
-    {
-      "field": "关键组件连接",
-      "reason": "上下文中未提供关键组件连接信息，无法推断模块与其他模块的交互关系",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/shifter.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/shifter.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/shifter.v"
-        }
-      ]
+      "field": "内部事件流; 关键组件连接; 进位输入i_carryIn_1",
+      "reason": "上下文中无内部事件流定义，无法推断模块是否参与流水线握手或状态机交互。; 无实例化信息，无法分析模块与外部单元的连接关系。; 接口列表未包含i_carryIn_1，但assign 10使用了该信号，存在接口定义不完整。"
     }
   ]
 }

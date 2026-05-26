@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "该模块作为外围设备槽位定时器，负责在网格网络中延迟和转发驱动事件，并管理对应的释放信号。",
-    "explanation": "模块接收来自网格的驱动事件 `i_driveFrmMesh`，通过两级 FIFO (`cFifo_1`, `cFifo_2`) 和两级延迟单元 (`delay0`, `delay1`) 进行流水线延迟处理后，输出驱动事件 `o_driveNextToMesh`。同时，它处理对应的释放信号 `i_freeNextFrmMesh` 和 `o_freeToMesh`，形成完整的驱动-释放握手协议。",
+    "value": "该模块作为外围设备槽位定时器，在IONet网络中负责驱动事件的延迟与转发控制。",
+    "explanation": "模块接收来自Mesh的驱动事件（i_driveFrmMesh），经过内部FIFO和延迟链处理后，输出驱动事件（o_driveNextToMesh）到下一级Mesh。同时，通过空闲信号（i_freeNextFrmMesh, o_freeToMesh）实现流控握手。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -50,10 +50,12 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/perip_slot_timer.json"
+        "source": "knowledge_ir/modules/perip_slot_timer.json",
+        "path": "interface"
       },
       {
-        "source": "rtl/rtl/IONet/IONetwork_9.24/perip_slot_timer.v"
+        "source": "knowledge_ir/modules/perip_slot_timer.json",
+        "path": "internal_event_flow"
       }
     ]
   },
@@ -435,8 +437,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_perip_slot_timer_i_driveFrmMesh.json",
       "reader_takeaway": {
-        "value": "文档应强调该流为纯事件传输，无数据负载，重点描述FIFO缓冲和固定延迟链的时序特性",
-        "explanation": "流结构清晰但无数据负载，FIFO级可能引入门控或背压，延迟单元提供确定性延迟，文档需说明事件如何从Mesh输入经缓冲和延迟后输出",
+        "value": "手册应强调该流为纯事件传递流，具有固定延迟（96单位）和两级FIFO门控，但需说明FIFO门控条件和空闲信号耦合关系需从RTL源码确认",
+        "explanation": "当前上下文清晰描述了事件路径和延迟单元，但FIFO门控条件（满/空状态）和空闲信号交互未提供，手册应明确指出这些不确定性",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -461,8 +463,8 @@
         "related_assignments": [
           "(无)"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:perip_slot_timer:flow:flow_000_perip_slot_timer_i_driveFrmMesh",
           "ev:perip_slot_timer:semantic_flow:flow_000_perip_slot_timer_i_driveFrmMesh"
@@ -479,8 +481,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "从Mesh输入事件驱动，经过两级FIFO缓冲和两级固定延迟后，输出到Mesh的纯事件传输流",
-            "explanation": "该流仅传输事件驱动信号，不携带数据负载，通过cFifo_1和cFifo_2两个FIFO级实现事件缓冲与可能的门控，中间插入delay0和delay1两个透明延迟单元，形成固定延迟链",
+            "value": "从Mesh输入事件驱动经过两级FIFO和两级延迟后输出到Mesh的纯事件传递流",
+            "explanation": "该流仅传递事件驱动信号，不携带数据负载，通过两个Fifo1实例进行事件缓冲/门控，通过两个透明延迟单元（delay64U和delay32U）实现固定延迟，最终将事件输出到Mesh网络",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -505,8 +507,8 @@
             "related_assignments": [
               "(无)"
             ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
             "evidence_refs": [
               "ev:perip_slot_timer:flow:flow_000_perip_slot_timer_i_driveFrmMesh",
               "ev:perip_slot_timer:semantic_flow:flow_000_perip_slot_timer_i_driveFrmMesh"
@@ -523,8 +525,8 @@
             ]
           },
           {
-            "value": "空闲信号可能用于事件流控制，但当前上下文无法确认具体机制",
-            "explanation": "接口契约列出空闲信号但未提供赋值依赖，FIFO级可能实现背压，但无证据表明空闲信号如何与FIFO状态交互",
+            "value": "两个Fifo1实例可能因满状态对上游产生反压，但当前流上下文未提供反压信号路径",
+            "explanation": "流中标记cFifo_1和cFifo_2为阻塞点，表明它们可能门控事件传播，但未提供反压信号（如full/almost_full）的连接信息，无法确定反压如何影响上游",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -533,8 +535,7 @@
             "semantic_claim_id": "semantic:flow:perip_slot_timer:flow_000_perip_slot_timer_i_driveFrmMesh:completion_backpressure:001",
             "doc_priority": "reference",
             "signals": [
-              "o_freeToMesh",
-              "i_freeNextFrmMesh"
+              "(未知反压信号)"
             ],
             "instances": [
               "cFifo_1",
@@ -550,14 +551,14 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
+                "source": "blocking_points",
                 "path": "perip_slot_timer.json"
               }
             ]
           },
           {
-            "value": "事件流与空闲信号可能存在控制耦合，但当前上下文未提供具体赋值关系",
-            "explanation": "接口契约显示输入事件i_driveFrmMesh关联空闲信号o_freeToMesh，输出事件o_driveNextToMesh关联空闲信号i_freeNextFrmMesh，表明事件传输可能受空闲/背压控制，但无赋值依赖支持此推断",
+            "value": "事件流与空闲信号（o_freeToMesh, i_freeNextFrmMesh）存在潜在耦合，但当前上下文未提供具体赋值关系",
+            "explanation": "接口契约显示输入事件i_driveFrmMesh关联空闲信号o_freeToMesh，输出事件o_driveNextToMesh关联空闲信号i_freeNextFrmMesh，表明事件传递可能受空闲信号控制，但当前流步骤中未体现空闲信号路径",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [

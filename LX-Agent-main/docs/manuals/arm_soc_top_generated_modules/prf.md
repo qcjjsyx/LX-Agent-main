@@ -1,8 +1,8 @@
 # 模块 `prf`
 
 - 源文件：`rtl/rtl/PRF/prf.v`。
-- 职责：AI 推断：物理寄存器文件模块，负责存储和转发来自发射、写回和异常阶段的寄存器数据与程序状态寄存器数据。。
-- 说明：模块通过多个Fifo1和MutexMerge组件管理来自不同流水线阶段（Launch、WB、Exp）的驱动事件，并输出对应的数据（prfData、psrData）和释放信号，实现寄存器数据的暂存与转发。
+- 职责：AI 推断：物理寄存器文件模块，负责存储和转发通用寄存器（PRF）和程序状态寄存器（PSR）的值，并管理驱动事件与释放信号的握手。。
+- 说明：模块通过多个Fifo1和MutexMerge组件，将来自发射、写回和异常阶段的驱动事件与对应的数据载荷（rdDataToPrf）同步，并输出驱动事件和数据到目标阶段。同时，模块管理释放信号，确保寄存器资源在消费后被正确回收。
 
 ## 1. 层级位置
 
@@ -75,7 +75,7 @@ prf
 - Payload：`i_prfDriveFromLaunch_1` -> `i_rdDataToPrf_32 [31:0]`, `o_prfDriveToLaunch_1` -> `o_prfDataToLaunch_32 [31:0]`, `o_prfDriveToLaunch_1` -> `o_psrDataToLaunch_32 [31:0]`。
 - 输出/影响：`o_prfDriveToLaunch_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应强调该流为单 FIFO 直通路径，事件从输入到输出透明传递，并说明 FIFO 可能引入的延迟和背压行为。
+- AI 推断：事件驱动流o_prfDriveToLaunch_1携带两个数据载荷o_prfDataToLaunch_32和o_psrDataToLaunch_32，分别来自内部寄存器r_prfValue_32和r_psrValue_32。
 
 ### `i_prfDriveFromWB_1`
 
@@ -83,7 +83,7 @@ prf
 - Payload：`i_prfDriveFromWB_1` -> `i_rdDataToPrf_32 [31:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：写回驱动事件携带 32 位读数据载荷 i_rdDataToPrf_32，数据与事件同步进入 FIFO。
+- AI 推断：手册应强调该流是写回数据进入PRF的唯一起点，并说明FIFO缓冲器的角色
 
 ### `i_psrDriveFromExp_1`
 
@@ -91,7 +91,7 @@ prf
 - Payload：`i_psrDriveFromExp_1` -> `i_rdDataToPrf_32 [31:0]`, `o_psrDriveToExp_1` -> `o_psrDataToExp_32 [31:0]`。
 - 输出/影响：`o_psrDriveToExp_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：最终手册应强调事件驱动流与数据载荷路径是分离的，数据可能通过内部寄存器间接提供。
+- AI 推断：最终手册应重点说明该驱动流是单级事件传递，并强调其数据载荷的来源（内部寄存器）与输入载荷不同，以及Fifo1实例可能引入的背压行为。
 
 ### `i_psrDriveFromLaunch_1`
 
@@ -99,7 +99,7 @@ prf
 - Payload：`i_psrDriveFromLaunch_1` -> `i_rdDataToPrf_32 [31:0]`, `o_psrDriveToLaunch_1` -> `o_prfDataToLaunch_32 [31:0]`, `o_psrDriveToLaunch_1` -> `o_psrDataToLaunch_32 [31:0]`。
 - 输出/影响：`o_psrDriveToLaunch_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：输入驱动事件控制着两个数据载荷的输出，这些载荷在事件通过FIFO级后同步呈现。
+- AI 推断：事件信号i_psrDriveFromLaunch_1控制数据信号o_prfDataToLaunch_32和o_psrDataToLaunch_32的传递时机，但数据本身由独立寄存器驱动。
 
 ### `i_psrDriveFromWB_1`
 
@@ -107,7 +107,7 @@ prf
 - Payload：`i_psrDriveFromWB_1` -> `i_rdDataToPrf_32 [31:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=2。
-- AI 推断：写回数据载荷随驱动事件流传输，但数据路径未在流中显式追踪
+- AI 推断：写请求驱动携带写数据载荷，两者共同构成一次物理寄存器写操作
 
 ### `i_psrwDriveFromExp_1`
 
@@ -115,7 +115,7 @@ prf
 - Payload：`i_psrwDriveFromExp_1` -> `i_rdDataToPrf_32 [31:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=2。
-- AI 推断：写驱动事件 i_psrwDriveFromExp_1 携带一个32位写数据负载 i_rdDataToPrf_32，该负载可能在此流中与事件同步传递。
+- AI 推断：事件驱动信号 i_psrwDriveFromExp_1 携带一个关联的32位写数据负载 i_rdDataToPrf_32，该负载在流中与事件并行传播。
 
 
 ## 5. 内部组件与 assign 影响
@@ -135,6 +135,6 @@ prf
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `o_psrDataToLaunch_32` | r_psrValue_32 | AI 推断：将内部寄存器r_psrValue_32的值直接赋值给输出端口，作为发射阶段的psr数据。 |
-| `assign_2` | data_path | `o_psrDataToExp_32` | r_psrValue2_32 | AI 推断：将内部寄存器r_psrValue2_32的值直接赋值给输出端口，作为异常阶段的psr数据。 |
-| `assign_0` | data_path | `o_prfDataToLaunch_32` | r_prfValue_32 | AI 推断：将内部寄存器r_prfValue_32的值直接赋值给输出端口，作为发射阶段的prf数据。 |
+| `assign_1` | data_path | `o_psrDataToLaunch_32` | r_psrValue_32 | AI 推断：将内部寄存器r_psrValue_32的值直接赋值给输出数据端口，用于向发射阶段提供PSR数据。 |
+| `assign_2` | data_path | `o_psrDataToExp_32` | r_psrValue2_32 | AI 推断：将内部寄存器r_psrValue2_32的值直接赋值给输出数据端口，用于向异常阶段提供PSR数据。 |
+| `assign_0` | data_path | `o_prfDataToLaunch_32` | r_prfValue_32 | AI 推断：将内部寄存器r_prfValue_32的值直接赋值给输出数据端口，用于向发射阶段提供PRF数据。 |

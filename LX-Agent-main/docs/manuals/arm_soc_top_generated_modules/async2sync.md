@@ -1,8 +1,8 @@
 # 模块 `async2sync`
 
 - 源文件：`rtl/rtl/SoC/async2sync.v`。
-- 职责：AI 推断：确认模块为异步复位同步释放电路，输出同步复位信号。
-- 说明：切片第2-7行声明clk、rst_async_n、rst_sync_n端口；第9-18行定义两級寄存器链，posedge clk与negedge rst_async_n触发，异步复位时清零，释放后级联传递1'b1；第20行assign将第二级rst_s2连至输出rst_sync_n，构成典型异步复位同步释放（双触发器同步器）
+- 职责：AI 推断：RTL 实现确认该模块是异步复位同步释放（复位同步器），输出同步复位信号。
+- 说明：切片第10-18行显示两级寄存器链（rst_s1, rst_s2）在 always 块中通过 posedge clk 和 negedge rst_async_n 敏感列表实现异步复位、同步释放，第20行 assign rst_sync_n = rst_s2 输出同步后的复位信号
 
 ## 1. 层级位置
 

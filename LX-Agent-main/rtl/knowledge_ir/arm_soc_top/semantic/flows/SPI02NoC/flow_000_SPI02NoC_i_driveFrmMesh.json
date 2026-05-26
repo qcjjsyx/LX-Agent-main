@@ -66,9 +66,9 @@
         "module": "SPI02NoC",
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
-      "summary": "该驱动流将来自Mesh的输入事件通过两级FIFO和一级透明延迟进行流水线化，最终输出到Mesh。",
+      "summary": "该驱动流将来自Mesh的输入事件信号i_driveFrmMesh，经过两级FIFO缓冲和一级透明延迟后，输出为o_driveNextToMesh，实现事件在SPI02NoC模块内的有序、可阻塞的转发。",
       "subject": "flow_000_SPI02NoC_i_driveFrmMesh",
-      "explanation": "流从输入端口i_driveFrmMesh开始，经过cFifo1缓冲，然后通过delay1进行固定延迟，再经过cFifo2缓冲，最后从输出端口o_driveNextToMesh输出。整个路径是单向的，没有分支或合并点，形成一个简单的流水线。",
+      "explanation": "流路径由cFifo1、delay1、cFifo2三个实例串联构成，每个实例都起到事件传递或缓冲作用，没有分支或合并点，因此这是一个单向、串行的驱动流。",
       "signals": [
         "i_driveFrmMesh",
         "w_driveNext",
@@ -89,11 +89,11 @@
       "evidence": [
         {
           "source": "instances.connections",
-          "path": "parser_module"
+          "path": "parser_pipeline_rtl/modules/SPI02NoC.json"
         },
         {
           "source": "transparent_flows",
-          "path": "parser_module"
+          "path": "knowledge_ir/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:flow_intent:001"
@@ -106,8 +106,8 @@
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
       "subject": "cFifo1",
-      "summary": "作为流的第一级FIFO缓冲，接收输入事件并可能进行门控。",
-      "explanation": "cFifo1是一个Fifo1类型的实例，其输入直接连接到模块的输入端口i_driveFrmMesh。它负责缓冲输入事件，并可能根据其内部状态（如满/空）对事件传播进行门控。",
+      "summary": "作为流的第一级FIFO缓冲，接收外部输入事件i_driveFrmMesh，并输出w_driveNext。",
+      "explanation": "cFifo1是Fifo1类型的实例，其角色为fifo_stage，可能根据内部满状态对事件进行门控或缓冲，是流的第一个阻塞点。",
       "signals": [
         "i_driveFrmMesh",
         "w_driveNext"
@@ -121,7 +121,7 @@
       "evidence": [
         {
           "source": "instances.connections",
-          "path": "parser_module"
+          "path": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:component_role:001"
@@ -134,8 +134,8 @@
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
       "subject": "delay1",
-      "summary": "提供透明的固定延迟，不改变事件语义。",
-      "explanation": "delay1是一个delay4U类型的实例，它接收来自cFifo1的输出w_driveNext，并在固定延迟后输出w_driveNext_delay。其角色是透明的，即不修改事件的有效性或数据，仅引入时间偏移。",
+      "summary": "作为透明延迟单元，将w_driveNext延迟后输出为w_driveNext_delay。",
+      "explanation": "delay1是delay4U类型的实例，其角色为transparent_delay，不改变事件语义，仅引入固定延迟，不产生阻塞。",
       "signals": [
         "w_driveNext",
         "w_driveNext_delay"
@@ -149,7 +149,7 @@
       "evidence": [
         {
           "source": "instances.connections",
-          "path": "parser_module"
+          "path": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:component_role:002"
@@ -162,8 +162,8 @@
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
       "subject": "cFifo2",
-      "summary": "作为流的第二级FIFO缓冲，在输出到Mesh前进行最终缓冲。",
-      "explanation": "cFifo2也是一个Fifo1类型的实例，其输入来自延迟后的信号w_driveNext_delay，输出直接连接到模块的输出端口o_driveNextToMesh。它负责在事件离开模块前提供缓冲，并可能进行门控。",
+      "summary": "作为流的第二级FIFO缓冲，接收延迟后的事件w_driveNext_delay，并输出到模块边界o_driveNextToMesh。",
+      "explanation": "cFifo2同样是Fifo1类型的实例，其角色为fifo_stage，是流的第二个阻塞点，最终驱动输出事件。",
       "signals": [
         "w_driveNext_delay",
         "o_driveNextToMesh"
@@ -177,7 +177,7 @@
       "evidence": [
         {
           "source": "instances.connections",
-          "path": "parser_module"
+          "path": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:component_role:003"
@@ -190,8 +190,8 @@
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
       "subject": "address",
-      "summary": "从输入数据中提取地址字段，用于后续处理。",
-      "explanation": "赋值语句将输入数据i_dataFrmNoc的[49:42]位提取为address信号。这表示该驱动流携带的数据包中包含一个地址字段，该字段在流路径中被解析出来，但当前流本身不直接使用此地址。",
+      "summary": "该赋值从输入数据i_dataFrmNoc的[49:42]位提取地址字段，可能用于后续的解码或路由，但当前流中未直接使用。",
+      "explanation": "赋值索引0将i_dataFrmNoc的部分位域赋给address，属于payload或数据相关的操作，与事件驱动流本身无直接耦合，但可能影响事件处理逻辑。",
       "signals": [
         "address",
         "i_dataFrmNoc"
@@ -200,12 +200,12 @@
         "0"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
-          "source": "related_assign_dependencies",
-          "path": "parser_module"
+          "source": "assignment_facts",
+          "path": "knowledge_ir/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:assignment_interpretation:001"
@@ -217,9 +217,9 @@
         "module": "SPI02NoC",
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
-      "summary": "输入事件i_driveFrmMesh携带一个51位的数据负载i_dataFrmNoc。",
-      "subject": "i_driveFrmMesh 与 i_dataFrmNoc",
-      "explanation": "接口负载契约表明，当i_driveFrmMesh事件有效时，会伴随一个51位的数据信号i_dataFrmNoc。该数据负载通过流路径，但当前流步骤中未显示其如何被传递或修改。",
+      "summary": "输入事件i_driveFrmMesh伴随有效载荷i_dataFrmNoc，但当前流仅传递事件信号，未显式传递或处理该载荷。",
+      "subject": "i_driveFrmMesh与i_dataFrmNoc",
+      "explanation": "接口载荷契约显示i_driveFrmMesh携带i_dataFrmNoc，但流步骤中未提及载荷传递，可能载荷在FIFO内部被关联或丢弃，需进一步确认。",
       "signals": [
         "i_driveFrmMesh",
         "i_dataFrmNoc"
@@ -230,13 +230,17 @@
       "related_assignments": [
         "0"
       ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
-          "source": "interface_payload_contracts",
-          "path": "module_facts"
+          "source": "interface.event_ports",
+          "path": "knowledge_ir/modules/SPI02NoC.json"
+        },
+        {
+          "source": "interface.data_ports",
+          "path": "knowledge_ir/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:data_control_effect:001"
@@ -248,20 +252,24 @@
         "module": "SPI02NoC",
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
-      "summary": "输出事件o_driveNextToMesh可能关联一个反压信号i_freeNextFrmMesh，但证据不足。",
-      "subject": "o_driveNextToMesh 与 i_freeNextFrmMesh",
-      "explanation": "接口负载契约中列出了输出事件o_driveNextToMesh的free信号为i_freeNextFrmMesh，但置信度为低。这表明可能存在反压机制，但当前上下文未提供连接或逻辑细节，无法确认其与流的直接关系。",
+      "summary": "输入事件i_driveFrmMesh关联空闲信号o_freeToMesh，输出事件o_driveNextToMesh关联空闲信号i_freeNextFrmMesh，但当前流未描述这些空闲信号如何与流交互。",
+      "subject": "o_freeToMesh与i_freeNextFrmMesh",
+      "explanation": "接口载荷契约列出了空闲信号，但流步骤和连接中未包含它们，因此无法确定背压或完成机制是否与FIFO状态直接相关。",
       "signals": [
-        "o_driveNextToMesh",
+        "o_freeToMesh",
         "i_freeNextFrmMesh"
+      ],
+      "instances": [
+        "cFifo1",
+        "cFifo2"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface_payload_contracts",
-          "path": "module_facts"
+          "source": "interface.event_ports",
+          "path": "knowledge_ir/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:completion_backpressure:001"
@@ -273,9 +281,9 @@
         "module": "SPI02NoC",
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
-      "summary": "手册应重点描述两级FIFO和一级延迟构成的流水线结构及其对事件传播的影响。",
-      "subject": "流水线缓冲与延迟",
-      "explanation": "该流的核心结构是cFifo1 -> delay1 -> cFifo2。手册应解释每个组件如何影响事件的时序和有效性，特别是FIFO可能引入的门控和延迟的固定时间偏移。",
+      "summary": "最终手册应重点描述事件如何通过两级FIFO和延迟单元传递，并强调cFifo1和cFifo2作为潜在阻塞点的作用。",
+      "subject": "流的事件传递与阻塞点",
+      "explanation": "流路径清晰，但FIFO的满状态和延迟单元的延迟值未提供，这些是理解流行为的关键，需从RTL源码补充。",
       "signals": [
         "i_driveFrmMesh",
         "w_driveNext",
@@ -288,12 +296,12 @@
         "cFifo2"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "flow.steps",
-          "path": "module_facts"
+          "source": "instances.connections",
+          "path": "parser_pipeline_rtl/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:documentation_focus:001"
@@ -305,23 +313,24 @@
         "module": "SPI02NoC",
         "flow_id": "flow_000_SPI02NoC_i_driveFrmMesh"
       },
-      "reason": "当前上下文对输出事件o_driveNextToMesh的反压信号i_freeNextFrmMesh的描述置信度低，需要查看RTL源以确认其连接和逻辑。",
-      "subject": "输出事件的反压机制",
-      "needed_source_slice": "实例连接和always块",
+      "reason": "当前上下文未提供FIFO的满/空状态信号及其与空闲信号o_freeToMesh和i_freeNextFrmMesh的连接，需RTL源码确认背压机制。",
+      "subject": "cFifo1和cFifo2的FIFO状态与空闲信号关联",
+      "needed_source_slice": "always block或assign块中与cFifo1和cFifo2相关的状态逻辑",
       "signals": [
-        "o_driveNextToMesh",
+        "o_freeToMesh",
         "i_freeNextFrmMesh"
       ],
       "instances": [
+        "cFifo1",
         "cFifo2"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "low",
       "evidence": [
         {
-          "source": "interface_payload_contracts",
-          "path": "module_facts"
+          "source": "interface.event_ports",
+          "path": "knowledge_ir/modules/SPI02NoC.json"
         }
       ],
       "id": "semantic:flow:SPI02NoC:flow_000_SPI02NoC_i_driveFrmMesh:source_review_request:001"
@@ -329,8 +338,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "数据负载在流中的传递路径",
-      "reason": "当前流步骤仅描述了事件驱动信号的路径，未显示数据负载i_dataFrmNoc如何通过cFifo1、delay1和cFifo2。需要RTL源确认数据是否与事件并行传递。"
+      "field": "载荷传递",
+      "reason": "输入事件i_driveFrmMesh携带载荷i_dataFrmNoc，但流步骤中未显示载荷如何通过FIFO或延迟单元，需RTL源码确认载荷是否被传递或丢弃。"
     }
   ]
 }

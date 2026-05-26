@@ -21,7 +21,7 @@
   },
   "purpose": {
     "value": "CPU2NoC 是 CPU 与 NoC 之间的双向事件驱动桥接模块，负责将 CPU 发起的请求分发到两个 NoC 通道，并将两个 NoC 通道的响应合并后返回给 CPU。",
-    "explanation": "模块具有对称的接口：一个 CPU 侧接口和两个 NoC 通道接口。内部事件流显示 CPU 输入事件 (i_drvFCPU) 被分发到两个 NoC 通道输出 (o_drv2NoCChanel0/1)，而两个 NoC 通道输入事件 (i_drvFNoCChannel0/1) 被合并到 CPU 输出 (o_drv2CPU)。这表明模块执行双向的请求分发和响应合并。",
+    "explanation": "模块通过事件驱动接口与 CPU 和 NoC 通道交互。输入事件 i_drvFCPU 经过内部 fifo 和选择器后，可分发到两个 NoC 通道输出；而两个 NoC 通道的输入事件则通过互斥合并后，最终输出到 CPU。这表明模块的核心作用是双向桥接和流量分发/合并。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -73,9 +73,6 @@
       },
       {
         "source": "key_component_connections"
-      },
-      {
-        "source": "key_instances"
       }
     ]
   },
@@ -568,29 +565,25 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_CPU2NoC_i_drvFCPU.json",
       "reader_takeaway": {
-        "value": "最终手册应重点描述事件从单输入到双通道输出及反馈合并的完整路径，强调扇出点和合并点的逻辑",
-        "explanation": "该流的核心特征是select0的通道分发、splitter的二次分裂、以及mutexWrite的互斥合并。手册需清晰说明每个分支点的选择条件（需RTL确认）和合并点的仲裁机制。",
+        "value": "事件i_drvFCPU携带51位数据载荷i_dataFCPU_51，该载荷随事件流传播，最终在splitterChannel0/1处输出为o_data2NoCChanel0_51和o_data2NoCChanel1_51。",
+        "explanation": "接口载荷契约显示i_drvFCPU关联i_dataFCPU_51，o_drv2NoCChanel0关联o_data2NoCChanel0_51，o_drv2NoCChanel1关联o_data2NoCChanel1_51。连接关系表明splitterChannel0和splitterChannel1的o_data0_51直接驱动这些输出载荷，说明载荷与事件同步传播，但中间组件（如FIFO、选择器）对载荷的处理方式（是否透传或修改）未在上下文中说明。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_drvFCPU",
-          "o_drv2NoCChanel0",
-          "o_drv2NoCChanel1",
-          "w_drv2CPUStore_dalay1"
+          "i_dataFCPU_51",
+          "o_data2NoCChanel0_51",
+          "o_data2NoCChanel1_51"
         ],
-        "instances": [
-          "select0",
-          "splitterChannel0",
-          "splitterChannel1",
-          "mutexWrite"
-        ],
+        "instances": [],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "(无)"
+        ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -599,18 +592,61 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "knowledge_ir/modules/CPU2NoC.json",
+            "path": "interface_data_contract"
           },
           {
-            "source": "transparent_flows"
+            "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+            "path": "connection_graph"
           }
         ],
         "supporting_claims": [
           {
-            "value": "从CPU驱动事件输入到NoC双通道输出及CPU存储回写的扇出与合并流",
-            "explanation": "该流将单个CPU驱动事件（i_drvFCPU）经过两级FIFO缓冲和延迟后，通过选择器扇出为两个通道，每个通道再经分裂器产生NoC输出和内部反馈路径，最终通过互斥合并器回写至CPU存储，形成完整的驱动-分发-回写闭环。",
+            "value": "最终手册应重点描述事件从单一输入到两个NoC通道输出及一路反馈合并的完整路径，强调分支点、合并点及可能的阻塞点。",
+            "explanation": "该流的核心特征是事件的分发与局部汇聚，select0、splitterChannel0/1、select2/select3构成多级分支，mutexWrite实现合并。手册需清晰说明每个分支的选择条件（需RTL源码补充）和合并的仲裁逻辑。",
             "certainty": "ai_inferred",
-            "confidence": "high",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvFCPU",
+              "o_drv2NoCChanel0",
+              "o_drv2NoCChanel1",
+              "w_drv2CPUStore_dalay1"
+            ],
+            "instances": [
+              "select0",
+              "splitterChannel0",
+              "splitterChannel1",
+              "select2",
+              "select3",
+              "mutexWrite"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "(无)"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU",
+              "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+                "path": "flow_graph"
+              }
+            ]
+          },
+          {
+            "value": "从CPU驱动事件i_drvFCPU出发，经过两级FIFO缓冲、延迟对齐、通道选择与拆分，最终分发至两个NoC通道输出，并同时将事件副本经二次拆分后送入互斥合并器，形成一条带分支与合并的驱动分发流。",
+            "explanation": "该流以i_drvFCPU为唯一起点，通过cfifo0和cfifo2两级FIFO实现事件缓冲与速率匹配，delay7提供时序对齐。select0将事件流拆分为两路，分别经splitterChannel0和splitterChannel1进一步拆分，主路径经delay18/delay20输出至o_drv2NoCChanel0/1，副路径经select2/select3送入mutexWrite合并，形成对CPU存储回路的反馈。整个流体现了事件驱动的分发与局部汇聚结构。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
@@ -620,18 +656,36 @@
               "i_drvFCPU",
               "o_drv2NoCChanel0",
               "o_drv2NoCChanel1",
+              "w_drv2fifo2",
+              "w_drv2fifo2_dalay",
+              "w_drvSelect0",
+              "w_drv2Channel0",
+              "w_drv2Channel1",
+              "w_drv2NoCChanel0",
+              "w_drv2NoCChanel1",
+              "w_drv2select2",
+              "w_drv2select3",
+              "w_drv2Mutex0Channel0",
+              "w_drv2Mutex0Channel1",
               "w_drv2CPUStore_dalay1"
             ],
             "instances": [
               "cfifo0",
+              "delay7",
               "cfifo2",
               "select0",
               "splitterChannel0",
               "splitterChannel1",
+              "delay18",
+              "delay20",
+              "select2",
+              "select3",
               "mutexWrite"
             ],
             "related_flows": [],
-            "related_assignments": [],
+            "related_assignments": [
+              "(无)"
+            ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -640,67 +694,32 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections"
+                "source": "knowledge_ir/modules/CPU2NoC.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows"
-              },
-              {
-                "source": "interface.event_ports"
+                "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+                "path": "flow_graph"
               }
             ]
           },
           {
-            "value": "事件驱动伴随51位数据载荷，经流路径同步传播至两个NoC输出",
-            "explanation": "输入事件i_drvFCPU携带51位数据i_dataFCPU_51，该载荷通过cfifo0、delay7、cfifo2、select0、splitterChannel0/1等实例，最终以o_data2NoCChanel0_51和o_data2NoCChanel1_51输出至NoC。反馈路径（select2/3 -> mutexWrite）可能也携带载荷，但未在接口合同中明确。",
+            "value": "输出事件o_drv2NoCChanel0和o_drv2NoCChanel1分别关联free信号i_freeFNoCChanel0和i_freeFNoCChanel1，表明流可能支持背压机制，但具体实现未在上下文中体现。",
+            "explanation": "接口载荷契约列出了free信号，但上下文中未提供这些信号与流内部组件的连接关系。背压可能通过FIFO的满标志或选择器的就绪信号实现，但无直接证据。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:data_control_effect:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_drvFCPU",
-              "i_dataFCPU_51",
-              "o_data2NoCChanel0_51",
-              "o_data2NoCChanel1_51"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU",
-              "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.data_ports"
-              },
-              {
-                "source": "interface.event_ports"
-              }
-            ]
-          },
-          {
-            "value": "两个NoC输出通道分别有独立的free输入信号，用于背压控制",
-            "explanation": "接口合同显示o_drv2NoCChanel0和o_drv2NoCChanel1分别关联i_freeFNoCChanel0和i_freeFNoCChanel1，表明NoC端可通过free信号反压事件流。但流路径中cfifo0/cfifo2的背压机制及free信号如何影响内部FIFO未在上下文中体现。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:CPU2NoC:flow_000_CPU2NoC_i_drvFCPU:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
-              "o_drv2NoCChanel0",
-              "o_drv2NoCChanel1",
               "i_freeFNoCChanel0",
               "i_freeFNoCChanel1"
             ],
-            "instances": [],
+            "instances": [
+              "(无)"
+            ],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -711,10 +730,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports"
-              },
-              {
-                "source": "interface.data_ports"
+                "source": "knowledge_ir/modules/CPU2NoC.json",
+                "path": "interface_data_contract"
               }
             ]
           }
@@ -733,8 +750,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_CPU2NoC_i_drvFNoCChannel0.json",
       "reader_takeaway": {
-        "value": "输入数据信号 i_dataFNoCChannel0_51 作为事件驱动信号 i_drvFNoCChannel0 的伴随载荷，共同进入流路径。",
-        "explanation": "接口合约表明 i_dataFNoCChannel0_51 是 i_drvFNoCChannel0 的载荷数据，宽度为 51 位。该数据信号连接到 mutexRead 的数据输入端口 i_data0_51，与驱动信号同步传递。在流路径中，数据载荷将随驱动事件一起被合并和缓冲，最终可能出现在输出端 o_drv2CPU 的载荷中（但输出端载荷未在上下文中明确）。",
+        "value": "输入数据载荷 i_dataFNoCChannel0_51 与驱动事件 i_drvFNoCChannel0 相关联，并随事件流传递。",
+        "explanation": "接口合约显示 i_dataFNoCChannel0_51 是 i_drvFNoCChannel0 的伴随数据载荷。该数据连接到 mutexRead 的数据输入端口 i_data0_51，表明数据与事件同步进入合并器，并可能随事件流一起被缓冲和传递。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -748,9 +765,7 @@
         ],
         "instances": [],
         "related_flows": [],
-        "related_assignments": [
-          "0"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -769,8 +784,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述从 NoC 通道0到 CPU 的完整数据流路径，包括互斥合并和 FIFO 缓冲的语义。",
-            "explanation": "该流是 CPU2NoC 模块的核心数据路径之一。手册应清晰说明 i_drvFNoCChannel0 如何与 i_drvFNoCChannel1 在 mutexRead 中交互（仲裁或合并），以及两级 FIFO 如何提供流水线寄存和背压。同时，应强调载荷数据 i_dataFNoCChannel0_51 随驱动事件同步传递的关系。",
+            "value": "手册应重点描述从 NoC 通道到 CPU 的单向事件传递路径，包括互斥合并和 FIFO 缓冲的时序影响。",
+            "explanation": "该流结构清晰，但缺少反压和完成信号细节。手册应强调 mutexRead 的仲裁行为、两级 FIFO 的流水线深度，以及 o_free2CPU 与 o_drv2CPU 的同步关系。对于数据载荷的传递路径也应明确说明。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -781,7 +796,8 @@
             "signals": [
               "i_drvFNoCChannel0",
               "i_dataFNoCChannel0_51",
-              "o_drv2CPU"
+              "o_drv2CPU",
+              "o_free2CPU"
             ],
             "instances": [
               "mutexRead",
@@ -804,14 +820,14 @@
                 "path": "internal_event_flow"
               },
               {
-                "source": "knowledge_ir/modules/CPU2NoC.json",
-                "path": "interface_data_contract"
+                "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
+                "path": "connection_graph"
               }
             ]
           },
           {
-            "value": "从输入事件驱动端口 i_drvFNoCChannel0 到输出事件驱动端口 o_drv2CPU 的单一路径数据流，经过互斥合并和两级 FIFO 缓冲。",
-            "explanation": "该流描述了来自 NoC 通道0的事件驱动信号如何通过互斥合并器 mutexRead 与通道1的驱动信号进行仲裁或合并，然后依次经过两个单深度 FIFO 缓冲级 cfifo1 和 cfifoOut，最终作为输出驱动信号 o_drv2CPU 发送给 CPU。这是一个纯事件驱动的数据传递路径，不包含分支。",
+            "value": "从输入事件驱动端口 i_drvFNoCChannel0 到输出事件驱动端口 o_drv2CPU 的单一路径事件传递流，经过互斥合并和两级 FIFO 缓冲。",
+            "explanation": "该流描述了来自 NoC 通道0的驱动事件如何通过互斥合并器 mutexRead 与通道1的事件进行仲裁，然后依次经过两个 FIFO 级 cfifo1 和 cfifoOut，最终作为驱动输出 o_drv2CPU 发送给 CPU。这是一个单向、无分支的事件传播路径。",
             "certainty": "ai_inferred",
             "confidence": "high",
             "source_layers": [
@@ -852,8 +868,8 @@
             ]
           },
           {
-            "value": "当前上下文未提供明确的背压或完成信号，但 FIFO 级的存在暗示了隐式的背压机制。",
-            "explanation": "流路径中的 cfifo1 和 cfifoOut 作为单深度 FIFO，通常具有就绪/有效握手信号来控制数据流动。然而，上下文中未列出这些信号（如 i_ready, o_valid 等）。因此，无法断言背压的具体实现方式。o_free2CPU 信号可能间接指示通道空闲状态，但其与背压的关系不明确。",
+            "value": "当前上下文未提供明确的完成或反压信号，但 FIFO 级的存在暗示了反压机制。",
+            "explanation": "流中包含了两个 cFifo1 实例，这类 FIFO 通常具有满标志或反压输出，用于阻止上游继续发送事件。然而，提供的连接和赋值信息中未包含这些信号，因此无法断言反压的具体实现方式。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -861,9 +877,7 @@
             ],
             "semantic_claim_id": "semantic:flow:CPU2NoC:flow_001_CPU2NoC_i_drvFNoCChannel0:completion_backpressure:001",
             "doc_priority": "reference",
-            "signals": [
-              "o_free2CPU"
-            ],
+            "signals": [],
             "instances": [
               "cfifo1",
               "cfifoOut"
@@ -878,12 +892,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
-                "path": "instances"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
-                "path": "assignments"
+                "source": "knowledge_ir/modules/CPU2NoC.json",
+                "path": "internal_event_flow"
               }
             ]
           }
@@ -902,8 +912,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_002_CPU2NoC_i_drvFNoCChannel1.json",
       "reader_takeaway": {
-        "value": "输入数据信号 i_dataFNoCChannel1_51 与事件驱动信号 i_drvFNoCChannel1 关联，作为该通道的负载。",
-        "explanation": "接口负载契约显示 i_dataFNoCChannel1_51（51 位宽）与 i_drvFNoCChannel1 配对，并连接到 mutexRead 的数据输入。这表明事件驱动信号携带数据负载，但流中未显示数据如何传递到输出。",
+        "value": "数据信号 i_dataFNoCChannel1_51 作为事件 i_drvFNoCChannel1 的伴随载荷，随事件流同步传递。",
+        "explanation": "数据信号直接连接到 mutexRead 的数据输入端口 i_data1_51，表明该流携带 51 位数据载荷。数据与事件驱动信号在合并器处保持同步，但后续 FIFO 是否传递数据需 RTL 确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -926,18 +936,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/CPU2NoC.json",
-            "path": "interface_data_contract"
-          },
-          {
             "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
             "path": "connection_graph"
+          },
+          {
+            "source": "knowledge_ir/modules/CPU2NoC.json",
+            "path": "interface_data_contract"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应强调从 i_drvFNoCChannel1 到 o_drv2CPU 的单一路径，以及数据负载 i_dataFNoCChannel1_51 的关联，但避免过度解释合并逻辑或背压。",
-            "explanation": "当前上下文仅支持流路径描述和数据耦合，合并器 mutexRead 的选择条件和 FIFO 内部行为需 RTL 源确认。手册应聚焦于事件驱动流的顺序和负载传递。",
+            "value": "最终手册应重点描述 i_drvFNoCChannel1 如何通过 mutexRead 仲裁、经两级 FIFO 缓冲后输出，并强调数据载荷的伴随传递。",
+            "explanation": "该流的核心是单一通道的端到端传递，仲裁和缓冲是主要行为。手册应说明 mutexRead 的互斥选择逻辑、FIFO 的深度和时序影响，以及数据信号与事件驱动的绑定关系。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -948,7 +958,8 @@
             "signals": [
               "i_drvFNoCChannel1",
               "i_dataFNoCChannel1_51",
-              "o_drv2CPU"
+              "o_drv2CPU",
+              "o_free2CPU"
             ],
             "instances": [
               "mutexRead",
@@ -972,13 +983,13 @@
               },
               {
                 "source": "parser_pipeline_rtl/modules/CPU2NoC.json",
-                "path": "flow_graph.assignment_dependencies"
+                "path": "connection_graph"
               }
             ]
           },
           {
-            "value": "从输入事件驱动端口 i_drvFNoCChannel1 到输出事件驱动端口 o_drv2CPU 的单一路径数据驱动流，经过互斥合并和两级 FIFO 缓冲。",
-            "explanation": "该流仅使用 i_drvFNoCChannel1 作为起点，经过 mutexRead 实例（与 i_drvFNoCChannel0 合并）、cfifo1 和 cfifoOut 两级 FIFO，最终到达 o_drv2CPU。流中无分支，所有步骤均为顺序事件驱动。",
+            "value": "从输入事件驱动 i_drvFNoCChannel1 到输出事件驱动 o_drv2CPU 的单一通道数据传递流，经过互斥合并与两级 FIFO 缓冲。",
+            "explanation": "该流仅处理 i_drvFNoCChannel1 这一路输入，经过 mutexRead 合并器（与另一通道 i_drvFNoCChannel0 竞争），再经两级 FIFO 缓冲后输出至 CPU。流的核心是确保该通道的数据在仲裁后有序传递。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -988,8 +999,6 @@
             "doc_priority": "primary",
             "signals": [
               "i_drvFNoCChannel1",
-              "w_drvMutexRead2select1",
-              "w_drvCPULoad",
               "o_drv2CPU"
             ],
             "instances": [
@@ -1019,8 +1028,8 @@
             ]
           },
           {
-            "value": "当前上下文未提供明确的空闲或背压信号，但 o_free2CPU 赋值暗示了空闲状态与事件驱动输出的耦合。",
-            "explanation": "流中无 free_signal 定义，且 o_free2CPU 仅通过赋值与 o_drv2CPU 关联。无法确定背压机制，但 FIFO 实例可能隐含背压逻辑。",
+            "value": "释放信号 o_free2CPU 直接跟随输出事件，但无明确反压信号。",
+            "explanation": "当前上下文仅显示 o_free2CPU 由 o_drv2CPU 驱动，未提供输入反压或完成握手信号。该流可能采用简单事件驱动协议，反压机制需 RTL 源码确认。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1032,10 +1041,7 @@
               "o_free2CPU",
               "o_drv2CPU"
             ],
-            "instances": [
-              "cfifo1",
-              "cfifoOut"
-            ],
+            "instances": [],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -1065,7 +1071,7 @@
     "components": 11,
     "assignments": 2,
     "evidence_gaps": 0,
-    "review_questions": 4
+    "review_questions": 2
   },
   "source_review_context": {
     "module": "CPU2NoC",
@@ -1094,109 +1100,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "select0 的选择逻辑",
-      "summary": "select0 的数据输入包含 w_channelChoose 信号作为选择依据。",
-      "explanation": "切片5显示select0实例的第3个输入为{~w_channelChoose, r_IOAddr, r_data_32}，其中w_channelChoose是一个组合逻辑信号（切片3第72-76行），根据r_IOAddr与多个地址范围的比较结果决定通道选择。因此select0的实际选择逻辑由w_channelChoose驱动，而w_channelChoose由r_IOAddr的地址范围决定。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "w_channelChoose",
-        "r_IOAddr",
-        "r_flag",
-        "r_data_32"
-      ],
-      "instances": [
-        "select0"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 72,
-          "line_end": 76
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 114,
-          "line_end": 118
-        }
-      ],
-      "evidence_refs": [
-        "ev:CPU2NoC:semantic_module",
-        "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU",
-        "ev:CPU2NoC:semantic_flow:flow_001_CPU2NoC_i_drvFNoCChannel0",
-        "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
-        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "splitter 的写回路径",
-      "summary": "splitterChannel0/1的写回路径经过select2/select3，由~r_flag选择是否写入mutexWrite。",
-      "explanation": "切片6和切片7显示splitterChannel0/1的o_data1_51分别连接至w_data2MutexWriteChannel0和w_data2Mutex0Channel1_51，两数据均包含r_flag。select2/select3的i_data_1连接至~r_flag，当其选择o_driveNext0时进入mutexWrite（切片6第158-159行，切片7第199-200行），选择o_driveNext1时通过延迟后返回。mutexWrite实例（切片10第259-261行）接收select2/select3的输出并写入CPU接口。因此写回路径触发条件由~r_flag控制，写回数据为splitter的输出。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "r_flag",
-        "w_data2MutexWriteChannel0",
-        "w_data2Mutex0Channel1_51",
-        "w_drv2Mutex0Channel0",
-        "w_drv2Mutex0Channel1"
-      ],
-      "instances": [
-        "splitterChannel0",
-        "splitterChannel1",
-        "select2",
-        "select3",
-        "mutexWrite"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 135,
-          "line_end": 147
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 153,
-          "line_end": 166
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 177,
-          "line_end": 189
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 194,
-          "line_end": 207
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 259,
-          "line_end": 261
-        }
-      ],
-      "evidence_refs": [
-        "ev:CPU2NoC:semantic_module",
-        "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU",
-        "ev:CPU2NoC:semantic_flow:flow_001_CPU2NoC_i_drvFNoCChannel0",
-        "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
-        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "semantic_flow.i_drvFCPU",
-      "summary": "i_drvFCPU作为驱动信号进入cfifo0，并触发select0的数据捕获。",
-      "explanation": "切片3第82行显示cfifo0的输入驱动为i_drvFCPU。切片5第101-112行显示在w_fireFifo0的上升沿（该信号由cfifo0产生），寄存器r_IOAddr、r_data_32、r_flag被更新。这些寄存器随后作为select0的数据输入。因此i_drvFCPU启动了从CPU读入数据并进入select0的flow。",
+      "subject": "flow_000_CPU2NoC_i_drvFCPU",
+      "summary": "事件 i_drvFCPU 的接收与数据载荷 i_dataFCPU_51 的输入接口匹配。",
+      "explanation": "切片1显示模块端口 i_drvFCPU（第24行）和 i_dataFCPU_51（第26行）同时存在，且切片2显示 i_drvFCPU 直接连接到 cfifo0 的 i_drive 端口，表明该事件被送入FIFO。切片未显示 i_dataFCPU_51 的后续连接，无法确认载荷是否被传入FIFO或后续处理。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -1205,46 +1111,38 @@
       ],
       "signals": [
         "i_drvFCPU",
-        "w_fireFifo0",
-        "r_IOAddr",
-        "r_data_32",
-        "r_flag"
+        "i_dataFCPU_51"
       ],
       "instances": [
-        "cfifo0",
-        "select0"
+        "cfifo0"
       ],
       "source_refs": [
         {
           "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 82,
+          "line_start": 24,
+          "line_end": 26
+        },
+        {
+          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
+          "line_start": 80,
           "line_end": 84
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 101,
-          "line_end": 112
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 114,
-          "line_end": 118
         }
       ],
       "evidence_refs": [
-        "ev:CPU2NoC:semantic_module",
         "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU",
         "ev:CPU2NoC:semantic_flow:flow_001_CPU2NoC_i_drvFNoCChannel0",
         "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
-        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU"
+        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU",
+        "ev:CPU2NoC:flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
+        "ev:CPU2NoC:flow:flow_001_CPU2NoC_i_drvFNoCChannel0"
       ],
       "review_status": "needs_review"
     },
     {
       "subject": "semantic_flow.i_drvFNoCChannel0",
-      "summary": "i_drvFNoCChannel0作为输入驱动mutexRead的通道0，其输出经select1和cfifo1后写入r_CPUdata。",
-      "explanation": "切片8第220-225行显示mutexRead实例接收i_drvFNoCChannel0作为输入驱动，输入数据为i_dataFNoCChannel0_51。切片10第244-251行显示在w_fireFifo1（由cfifo1产生）的上升沿，r_CPUdata被更新为w_dataMutexRead的低50位，该数据来自mutexRead的输出。因此i_drvFNoCChannel0的flow经过mutexRead、select1、cfifo1后更新r_CPUdata，最终通过o_data2CPU_51输出。",
-      "certainty": "evidence_gap",
+      "summary": "事件 i_drvFNoCChannel0 与数据载荷 i_dataFNoCChannel0_51 同步进入合并器 mutexRead。",
+      "explanation": "切片3显示 i_drvFNoCChannel0 连接到 mutexRead 的 i_drive0，i_dataFNoCChannel0_51 连接到 i_data0_51，数据与事件在同一合并器端口同步输入。",
+      "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
         "rtl_source",
@@ -1252,44 +1150,66 @@
       ],
       "signals": [
         "i_drvFNoCChannel0",
-        "i_dataFNoCChannel0_51",
-        "r_CPUdata",
-        "o_data2CPU_51"
+        "i_dataFNoCChannel0_51"
       ],
       "instances": [
-        "mutexRead",
-        "cfifo1"
+        "mutexRead"
       ],
       "source_refs": [
         {
           "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 218,
-          "line_end": 225
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 231,
-          "line_end": 240
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 244,
-          "line_end": 251
+          "line_start": 219,
+          "line_end": 226
         }
       ],
       "evidence_refs": [
-        "ev:CPU2NoC:semantic_module",
         "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU",
         "ev:CPU2NoC:semantic_flow:flow_001_CPU2NoC_i_drvFNoCChannel0",
         "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
-        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU"
+        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU",
+        "ev:CPU2NoC:flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
+        "ev:CPU2NoC:flow:flow_001_CPU2NoC_i_drvFNoCChannel0"
       ],
-      "review_status": "needs_review"
+      "review_status": "ready"
     },
     {
       "subject": "semantic_flow.i_drvFNoCChannel1",
-      "summary": "i_drvFNoCChannel1作为输入驱动mutexRead的通道1，其输出经select1和cfifo1后写入r_CPUdata。",
-      "explanation": "切片8第223-224行显示mutexRead实例接收i_drvFNoCChannel1作为输入驱动，输入数据为i_dataFNoCChannel1_51。与通道0类似，切片10第244-251行显示r_CPUdata更新自mutexRead的输出。因此i_drvFNoCChannel1的flow与通道0共用同一路径。",
+      "summary": "事件 i_drvFNoCChannel1 与数据载荷 i_dataFNoCChannel1_51 同步进入合并器 mutexRead。",
+      "explanation": "切片3显示 i_drvFNoCChannel1 连接到 mutexRead 的 i_drive1，i_dataFNoCChannel1_51 连接到 i_data1_51，数据与事件在同一合并器端口同步输入。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_drvFNoCChannel1",
+        "i_dataFNoCChannel1_51"
+      ],
+      "instances": [
+        "mutexRead"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
+          "line_start": 219,
+          "line_end": 226
+        }
+      ],
+      "evidence_refs": [
+        "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU",
+        "ev:CPU2NoC:semantic_flow:flow_001_CPU2NoC_i_drvFNoCChannel0",
+        "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
+        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU",
+        "ev:CPU2NoC:flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
+        "ev:CPU2NoC:flow:flow_001_CPU2NoC_i_drvFNoCChannel0"
+      ],
+      "review_status": "ready"
+    },
+    {
+      "subject": "flow_002_CPU2NoC_i_drvFNoCChannel1",
+      "summary": "事件 i_drvFNoCChannel1 的载荷 i_dataFNoCChannel1_51 在合并器 mutexRead 内同步，但后续 FIFO 是否传递数据需确认。",
+      "explanation": "切片3确认数据连接到 mutexRead 的 i_data1_51，但该实例之后的数据路径（如 FIFO 或选择器）在给定切片中未提供，无法验证载荷完整传输。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -1298,44 +1218,32 @@
       ],
       "signals": [
         "i_drvFNoCChannel1",
-        "i_dataFNoCChannel1_51",
-        "r_CPUdata",
-        "o_data2CPU_51"
+        "i_dataFNoCChannel1_51"
       ],
       "instances": [
-        "mutexRead",
-        "cfifo1"
+        "mutexRead"
       ],
       "source_refs": [
         {
           "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 223,
-          "line_end": 224
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 231,
-          "line_end": 240
-        },
-        {
-          "file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
-          "line_start": 244,
-          "line_end": 251
+          "line_start": 219,
+          "line_end": 226
         }
       ],
       "evidence_refs": [
-        "ev:CPU2NoC:semantic_module",
         "ev:CPU2NoC:semantic_flow:flow_000_CPU2NoC_i_drvFCPU",
         "ev:CPU2NoC:semantic_flow:flow_001_CPU2NoC_i_drvFNoCChannel0",
         "ev:CPU2NoC:semantic_flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
-        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU"
+        "ev:CPU2NoC:flow:flow_000_CPU2NoC_i_drvFCPU",
+        "ev:CPU2NoC:flow:flow_002_CPU2NoC_i_drvFNoCChannel1",
+        "ev:CPU2NoC:flow:flow_001_CPU2NoC_i_drvFNoCChannel0"
       ],
       "review_status": "needs_review"
     }
   ],
   "source_review_report": {
     "status": "reviewed",
-    "claim_count": 5,
+    "claim_count": 4,
     "open_question_count": 3,
     "source_file": "rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v",
     "report_file": "source_review_report.json"

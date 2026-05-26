@@ -1,8 +1,8 @@
 # 模块 `pwm1_top`
 
 - 源文件：`rtl/rtl/IONet/PWM/pwm1_top.v`。
-- 职责：AI 推断：该模块是一个PWM驱动事件流水线中的中间级，负责通过两级FIFO缓冲和转发驱动事件及关联消息，并输出PWM信号。。
-- 说明：模块接收i_drive事件及其关联的i_msg数据，通过pwm_fifo1和pwm_fifo2两级FIFO进行流水线缓冲，最终输出o_drive事件和o_msg数据。同时，模块内部包含pwm_module实例，输出pwm_out信号，表明模块还负责生成PWM波形。i_free和o_free信号构成独立的自由事件路径，可能用于旁路或控制。
+- 职责：AI 推断：该模块是一个PWM驱动事件流水线中的中间级，负责通过两个Fifo1组件串联传递驱动事件和自由事件，并输出PWM信号。。
+- 说明：模块接收i_drive事件，通过pwm_fifo1和pwm_fifo2两级Fifo1组件处理后输出o_drive事件；同时i_free事件通过pwm_fifo2后输出o_free；pwm_module输出pwm_out信号。这表明模块是事件驱动的PWM控制链中的转发和缓冲节点。
 
 ## 1. 层级位置
 
@@ -59,7 +59,7 @@ pwm1_top
 - Payload：`i_drive` -> `i_msg [50:0]`, `o_drive` -> `o_msg [50:0]`。
 - 输出/影响：`o_drive`。
 - 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：手册应重点描述两级 FIFO 流水线的直通事件传递路径，并明确负载数据传递的不确定性。
+- AI 推断：最终手册应重点描述事件流如何通过两级 FIFO 缓冲器传递，以及每个 FIFO 实例对事件门控和同步的影响。
 
 
 ## 5. 内部组件与 assign 影响
@@ -75,4 +75,4 @@ pwm1_top
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `o_msg` | o_msg_reg | AI 推断：输出消息o_msg由内部寄存器o_msg_reg驱动，表明消息数据在模块内部经过寄存后输出。 |
+| `assign_0` | unknown | `o_msg` | o_msg_reg | AI 推断：输出消息o_msg由内部寄存器o_msg_reg驱动，表明o_msg是经过内部处理的输出数据。 |

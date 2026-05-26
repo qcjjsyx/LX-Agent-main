@@ -68,7 +68,7 @@
       },
       "summary": "外部异常请求通过单级FIFO缓冲后直接转发为异常驱动输出",
       "subject": "flow_001_grf_i_driveFromExp_1",
-      "explanation": "该流仅包含一个FIFO实例cFifo1_5，输入i_driveFromExp_1直接驱动FIFO，FIFO输出直接驱动o_grfDriveToExp_1，无分支或合并点，表明异常请求在GRF模块内仅经过一级缓冲后立即转发",
+      "explanation": "该流仅包含一个FIFO实例cFifo1_5，输入i_driveFromExp_1直接驱动FIFO，FIFO输出直接驱动o_grfDriveToExp_1，无分支或合并点，表明异常事件在GRF模块内仅做缓冲转发",
       "signals": [
         "i_driveFromExp_1",
         "o_grfDriveToExp_1"
@@ -99,8 +99,8 @@
         "flow_id": "flow_001_grf_i_driveFromExp_1"
       },
       "subject": "cFifo1_5",
-      "summary": "单级FIFO缓冲器，作为异常请求的暂存与转发节点",
-      "explanation": "cFifo1_5属于Fifo1系列，输入i_driveFromExp_1直接连接其i_drive端口，输出o_driveNext直接连接o_grfDriveToExp_1，表明该FIFO仅提供一级缓冲，可能实现事件同步或速率匹配，但不改变数据内容",
+      "summary": "单级FIFO缓冲器，负责异常事件的存储转发",
+      "explanation": "cFifo1_5属于Fifo1系列，输入i_driveFromExp_1，输出o_grfDriveToExp_1，其FIFO特性可能引入事件传播的门控或延迟，但当前上下文未提供其满/空状态信号",
       "signals": [
         "i_driveFromExp_1",
         "o_grfDriveToExp_1"
@@ -109,7 +109,7 @@
         "cFifo1_5"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
@@ -131,8 +131,8 @@
         "flow_id": "flow_001_grf_i_driveFromExp_1"
       },
       "subject": "o_grfDataToExp_192",
-      "summary": "输出异常数据由内部寄存器r_rsValue_192直接驱动",
-      "explanation": "assign 12将r_rsValue_192赋值给o_grfDataToExp_192，该信号是o_grfDriveToExp_1事件的关联载荷，表明异常驱动输出时携带的192位数据来自内部寄存器，而非FIFO直接传递",
+      "summary": "输出异常数据由内部寄存器r_rsValue_192驱动",
+      "explanation": "assign 12将r_rsValue_192赋值给o_grfDataToExp_192，表明异常驱动事件携带的192位数据来自寄存器值，但该寄存器与当前流中FIFO的关系未在上下文中明确",
       "signals": [
         "o_grfDataToExp_192",
         "r_rsValue_192"
@@ -158,20 +158,17 @@
         "module": "grf",
         "flow_id": "flow_001_grf_i_driveFromExp_1"
       },
-      "summary": "事件流通过FIFO传递，而载荷数据由独立寄存器驱动",
-      "subject": "异常驱动事件与载荷分离",
-      "explanation": "事件信号i_driveFromExp_1和o_grfDriveToExp_1通过cFifo1_5传递，但输出载荷o_grfDataToExp_192由r_rsValue_192直接赋值，表明事件与数据在GRF模块内可能异步更新或由不同逻辑控制",
+      "summary": "输入异常事件携带地址和数据载荷，但载荷与FIFO的直接连接未在流步骤中体现",
+      "subject": "i_driveFromExp_1事件与输入载荷",
+      "explanation": "接口合同显示i_driveFromExp_1关联i_expAddr_8和i_expDataToGrf_64，但流步骤中FIFO仅连接事件信号，载荷信号i_expAddr_8和i_expDataToGrf_64连接到cMutexMerge3_end_74b，表明载荷可能通过另一路径处理",
       "signals": [
-        "i_driveFromExp_1",
-        "o_grfDriveToExp_1",
-        "o_grfDataToExp_192",
-        "r_rsValue_192"
+        "i_expAddr_8",
+        "i_expDataToGrf_64",
+        "i_driveFromExp_1"
       ],
       "related_payload": [
-        "o_grfDataToExp_192"
-      ],
-      "related_assignments": [
-        "12"
+        "i_expAddr_8",
+        "i_expDataToGrf_64"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
@@ -179,11 +176,11 @@
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/grf.json",
-          "path": "assignments"
+          "path": "interface"
         },
         {
-          "source": "knowledge_ir/modules/grf.json",
-          "path": "interface_data_contract"
+          "source": "parser_pipeline_rtl/modules/grf.json",
+          "path": "connection_graph"
         }
       ],
       "id": "semantic:flow:grf:flow_001_grf_i_driveFromExp_1:data_control_effect:001"
@@ -195,9 +192,9 @@
         "module": "grf",
         "flow_id": "flow_001_grf_i_driveFromExp_1"
       },
-      "summary": "输入反压信号o_grfFreeToExp_1和输出反压信号i_grfFreeFromExp_1存在但未在流步骤中体现",
-      "subject": "异常驱动流的反压信号",
-      "explanation": "接口载荷契约显示i_driveFromExp_1关联o_grfFreeToExp_1，o_grfDriveToExp_1关联i_grfFreeFromExp_1，但流步骤中未包含反压路径，表明反压可能由FIFO内部处理或通过独立连接实现，当前上下文无法确定具体机制",
+      "summary": "输入输出均有自由信号，但流步骤中未体现其与FIFO的交互",
+      "subject": "流完成与反压信号",
+      "explanation": "接口合同显示i_driveFromExp_1有o_grfFreeToExp_1，o_grfDriveToExp_1有i_grfFreeFromExp_1，但当前流上下文未提供这些信号与cFifo1_5的连接，无法确定反压机制",
       "signals": [
         "o_grfFreeToExp_1",
         "i_grfFreeFromExp_1"
@@ -211,7 +208,11 @@
       "evidence": [
         {
           "source": "knowledge_ir/modules/grf.json",
-          "path": "interface_data_contract"
+          "path": "interface"
+        },
+        {
+          "source": "parser_pipeline_rtl/modules/grf.json",
+          "path": "interface"
         }
       ],
       "id": "semantic:flow:grf:flow_001_grf_i_driveFromExp_1:completion_backpressure:001"
@@ -223,27 +224,29 @@
         "module": "grf",
         "flow_id": "flow_001_grf_i_driveFromExp_1"
       },
-      "summary": "手册应强调该流仅含一个FIFO缓冲，无分支或合并，事件与载荷分离",
-      "subject": "异常驱动流的单级缓冲特性",
-      "explanation": "流结构简单，但事件与载荷的分离机制（FIFO传递事件，寄存器驱动载荷）需要明确说明，避免用户误认为载荷也经过FIFO",
+      "summary": "手册应强调该流为单级FIFO直通路径，并说明载荷分离处理",
+      "subject": "异常事件缓冲转发路径",
+      "explanation": "流步骤仅含一个FIFO，但载荷信号连接到另一组件cMutexMerge3_end_74b，表明事件与载荷可能解耦处理，手册需明确FIFO仅转发事件控制信号",
       "signals": [
         "i_driveFromExp_1",
         "o_grfDriveToExp_1",
-        "o_grfDataToExp_192"
+        "i_expAddr_8",
+        "i_expDataToGrf_64"
       ],
       "instances": [
-        "cFifo1_5"
+        "cFifo1_5",
+        "cMutexMerge3_end_74b"
       ],
       "related_assignments": [
         "12"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/grf.json",
-          "path": "internal_event_flow"
+          "source": "parser_pipeline_rtl/modules/grf.json",
+          "path": "connection_graph"
         },
         {
           "source": "parser_pipeline_rtl/modules/grf.json",
@@ -259,24 +262,26 @@
         "module": "grf",
         "flow_id": "flow_001_grf_i_driveFromExp_1"
       },
-      "reason": "当前上下文仅显示r_rsValue_192驱动输出载荷，但未说明其更新源，可能涉及异常地址或数据输入",
-      "subject": "载荷寄存器r_rsValue_192的更新逻辑",
-      "needed_source_slice": "always block或assign块中r_rsValue_192的赋值逻辑",
+      "reason": "当前上下文未提供FIFO与载荷信号i_expAddr_8、i_expDataToGrf_64及自由信号o_grfFreeToExp_1、i_grfFreeFromExp_1的连接细节，需RTL源确认",
+      "subject": "cFifo1_5与载荷及反压信号的连接",
+      "needed_source_slice": "instance connections|always block",
       "signals": [
-        "r_rsValue_192",
         "i_expAddr_8",
-        "i_expDataToGrf_64"
+        "i_expDataToGrf_64",
+        "o_grfFreeToExp_1",
+        "i_grfFreeFromExp_1"
       ],
-      "related_assignments": [
-        "12"
+      "instances": [
+        "cFifo1_5",
+        "cMutexMerge3_end_74b"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/grf.json",
-          "path": "assignments"
+          "source": "rtl/rtl/GRF/grf.v",
+          "path": "module_source"
         }
       ],
       "id": "semantic:flow:grf:flow_001_grf_i_driveFromExp_1:source_review_request:001"
@@ -284,8 +289,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "反压路径",
-      "reason": "接口契约显示反压信号存在，但流步骤和连接图中未包含反压连接，无法确定反压如何与FIFO交互"
+      "field": "载荷与FIFO的关联",
+      "reason": "输入载荷信号连接到cMutexMerge3_end_74b而非cFifo1_5，但流步骤中FIFO是唯一组件，载荷如何与事件同步未明确"
     }
   ]
 }

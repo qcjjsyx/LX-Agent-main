@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "取指模块，负责接收来自ICache、Top和Dispatch的驱动事件，经过内部流水线处理后，向译码、异常、中断和ICache输出驱动事件。",
-    "explanation": "模块有三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch），分别对应ICache、顶层和Dispatch的请求。内部通过大量Fifo、MutexMerge、SelSplit等组件进行事件路由、合并和拆分，最终输出五个驱动事件（o_drv2Dec、o_drv2Excp、o_drv2Excp_2、o_drv2ICache、o_drv2Int），分别指向译码、异常、ICache和中断。同时，模块处理指令数据（i_inst_64）和PC值（i_pcFTop_32、i_pcFdispatch_32），输出取指地址（o_fetchAddr_32）和指令+PC组合（o_instAndPC_66）。",
+    "value": "取指模块，负责接收来自顶层、调度器和ICache的驱动事件，经过内部流水线仲裁、数据合并与异常处理，最终向译码、异常、中断和ICache输出驱动事件及指令/PC数据。",
+    "explanation": "模块接收三个输入驱动事件（i_drvFICache、i_drvFTop、i_drvFdispatch），分别对应ICache、顶层和调度器的取指请求。内部通过pmtLock、cfifo、spliter、select、merge等组件构成复杂的流水线，对指令和PC数据进行路由、合并和异常检测，最终输出五个驱动事件到译码、异常、中断和ICache。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -37,49 +37,36 @@
       "o_drv2Excp",
       "o_drv2Excp_2",
       "o_drv2ICache",
-      "o_drv2Int",
-      "i_inst_64",
-      "i_pcFTop_32",
-      "i_pcFdispatch_32",
-      "o_fetchAddr_32",
-      "o_instAndPC_66"
+      "o_drv2Int"
     ],
     "instances": [
-      "instSplit_inst",
       "pmtLock",
       "pmtLock_top",
       "cfifo0",
-      "cfifo0_save",
       "cfifo1",
-      "cfifo10",
-      "cfifo11",
-      "cfifo2",
-      "cfifo4",
-      "cfifo5",
       "cfifo6",
       "cfifo7",
       "cfifo8",
       "cfifo8_saveMerge1Data",
-      "cfifo9",
       "cfifo_lock",
       "merge0",
       "merge1",
       "merge2",
       "mergeErr",
       "mergeInt",
-      "merge2ToSpliterErr2Fifo",
+      "spliter0",
+      "spliter1",
+      "spliter2",
+      "spliter4",
+      "spliter5",
+      "spliter_err_2",
       "select0",
       "select1",
       "select2",
       "select3",
       "select4",
       "select5",
-      "spliter0",
-      "spliter1",
-      "spliter2",
-      "spliter4",
-      "spliter5",
-      "spliter_err_2"
+      "instSplit_inst"
     ],
     "related_flows": [
       "flow_000_fetch_i_drvFdispatch",
@@ -98,9 +85,6 @@
       },
       {
         "source": "parser_pipeline_rtl/modules/fetch.json"
-      },
-      {
-        "source": "rtl/rtl/IF/fetch.v"
       }
     ]
   },
@@ -755,8 +739,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_fetch_i_drvFICache.json",
       "reader_takeaway": {
-        "value": "输入事件通过选择、拆分和合并机制，根据控制信号分发到四个输出端点。",
-        "explanation": "该流中，数据（事件）的流向由多个选择器（select4、select3、select5）和拆分器（spliter1、spliter_err_2）的控制信号决定。合并器（mergeErr、merge1、merge2）则通过仲裁机制从多个输入中选择一个输出。FIFO（cfifo1、cfifo9、cfifo10等）提供缓冲和背压控制。延迟单元调整时序。整个流体现了事件驱动的分发和同步机制。",
+        "value": "输入事件通过一系列选择、拆分和合并操作，根据控制信号被分发到不同的输出端点。",
+        "explanation": "流中的选择器（select4、select3、select5）和拆分器（spliter1、spliter_err_2）决定了事件的分发路径。合并器（mergeErr、merge1、merge2）则从多个源中选择事件。这表明事件的分发不仅依赖于输入，还受到内部控制信号的影响，这些控制信号决定了事件是进入解码路径、异常路径还是指令缓存路径。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -782,13 +766,14 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/fetch.json"
+            "source": "instances.connections",
+            "path": "knowledge_ir/modules/fetch.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "手册应重点描述事件从i_drvFICache到四个输出端点的分发路径，以及选择器、拆分器、合并器和FIFO的同步作用。",
-            "explanation": "该流的核心是事件的分发和同步。选择器和拆分器决定了事件流向哪个下游模块，合并器则从多个源中选择事件，FIFO提供缓冲和可能的背压。手册应清晰描述这些组件的控制逻辑和时序关系，特别是选择信号和仲裁机制的来源。",
+            "value": "最终手册应重点描述事件从输入到多个输出的分发路径，以及选择器和拆分器如何根据控制信号决定事件流向。",
+            "explanation": "该流的核心功能是将输入事件分发到解码、异常和指令缓存等多个下游模块。手册应详细说明每个分支点（select4、select3、select5、spliter1、spliter_err_2）和汇合点（mergeErr、merge1、merge2）的作用，以及它们如何协同工作以实现事件的路由。同时，应强调 FIFO 缓冲级在流量控制和时序对齐中的作用。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -804,14 +789,27 @@
               "o_drv2ICache"
             ],
             "instances": [
+              "instSplit_inst",
+              "cfifo1",
               "select4",
               "spliter1",
-              "select3",
+              "cfifo9",
+              "cfifo10",
               "mergeErr",
               "merge1",
+              "select3",
+              "delayfifo8",
+              "cfifo4",
+              "cfifo5",
+              "delayfifo8_2",
               "merge2",
+              "cfifo8_saveMerge1Data",
+              "merge2ToSpliterErr2Fifo",
+              "cfifo8",
               "spliter_err_2",
-              "select5"
+              "select5",
+              "delayDrv2Dec",
+              "cfifo_lock"
             ],
             "related_flows": [],
             "related_assignments": [],
@@ -823,13 +821,14 @@
             ],
             "semantic_evidence": [
               {
-                "source": "parser_pipeline_rtl/modules/fetch.json"
+                "source": "instances.connections",
+                "path": "knowledge_ir/modules/fetch.json"
               }
             ]
           },
           {
-            "value": "从指令缓存接口接收的驱动事件，经过拆分、FIFO缓冲、选择、合并和延迟后，分发到解码、异常和指令缓存三个下游模块。",
-            "explanation": "该流以i_drvFICache为起点，通过instSplit_inst进行初步拆分，随后经过cfifo1缓冲和select4选择器，形成两条主要路径：一条经spliter1、cfifo10、select3等组件最终到达o_drv2Dec和o_drv2Excp_2；另一条经cfifo9、merge1、delayfifo8、cfifo8_saveMerge1Data等组件最终到达o_drv2ICache。同时，spliter1的异常路径与其它异常源在mergeErr处合并后输出o_drv2Excp。整个流体现了事件的分发、缓冲、合并和延迟特性。",
+            "value": "从指令缓存接口接收的驱动事件，经过拆分、FIFO缓冲、选择、合并和延迟后，分发到解码、异常和指令缓存等多个下游模块。",
+            "explanation": "该流以输入事件 i_drvFICache 为起点，通过 instSplit_inst 实例进行初步拆分，随后经过多个 FIFO 缓冲、选择器、拆分器和合并器的组合，最终生成四个输出事件：o_drv2Dec、o_drv2Excp、o_drv2Excp_2 和 o_drv2ICache。流中存在多个分支和汇合点，表明事件可以根据控制条件选择不同的路径，最终汇聚到不同的输出端点。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -849,15 +848,22 @@
               "cfifo1",
               "select4",
               "spliter1",
+              "cfifo9",
               "cfifo10",
-              "select3",
               "mergeErr",
               "merge1",
+              "select3",
               "delayfifo8",
-              "cfifo8_saveMerge1Data",
+              "cfifo4",
+              "cfifo5",
+              "delayfifo8_2",
               "merge2",
+              "cfifo8_saveMerge1Data",
+              "merge2ToSpliterErr2Fifo",
+              "cfifo8",
               "spliter_err_2",
               "select5",
+              "delayDrv2Dec",
               "cfifo_lock"
             ],
             "related_flows": [],
@@ -870,16 +876,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/fetch.json"
+                "source": "instances.connections",
+                "path": "knowledge_ir/modules/fetch.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/fetch.json"
+                "source": "transparent_flows",
+                "path": "knowledge_ir/modules/fetch.json"
               }
             ]
           },
           {
-            "value": "流中存在多个FIFO阶段，可能通过满/空信号实现背压控制，但具体机制未在上下文中明确。",
-            "explanation": "流中包含了cfifo1、cfifo9、cfifo10、cfifo4、cfifo5、cfifo8_saveMerge1Data、merge2ToSpliterErr2Fifo、cfifo8、cfifo_lock等多个FIFO实例。这些FIFO通常具有满/空信号，用于控制上游是否继续发送数据。然而，当前上下文中未提供这些FIFO的free_signal或背压连接信息，因此无法确认背压的具体实现方式。",
+            "value": "流中的多个 FIFO 实例是潜在的背压点，但当前上下文未提供 free/valid 信号的具体信息。",
+            "explanation": "流中包含了多个 FIFO 实例（如 cfifo1、cfifo9、cfifo10 等），这些实例通常具有满/空状态信号，用于实现背压。然而，当前提供的上下文未包含这些 FIFO 的 free 或 valid 信号，因此无法确定背压的具体实现方式。在最终手册中，应强调这些 FIFO 是潜在的阻塞点，但需要 RTL 源码审查来确认背压机制。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -887,7 +895,25 @@
             ],
             "semantic_claim_id": "semantic:flow:fetch:flow_001_fetch_i_drvFICache:completion_backpressure:001",
             "doc_priority": "secondary",
-            "signals": [],
+            "signals": [
+              "w_drv2cfifo1",
+              "w_drv2select4",
+              "w_drvselect42cfifo9",
+              "w_drvCfifo92merge1",
+              "w_drv2fifo10",
+              "w_drv2select3",
+              "w_drvselect32cfifo4",
+              "w_cfifo4Over",
+              "w_drvselect32mcfifo5",
+              "w_drvcfifo52merge2",
+              "w_drvMerge12cfifo8_delay_2",
+              "w_drvFifo8save",
+              "w_drvMerge22Merge3",
+              "w_drv2Dec",
+              "w_drvCfifo82Select5",
+              "w_drv2ICache",
+              "o_drv2ICache"
+            ],
             "instances": [
               "cfifo1",
               "cfifo9",
@@ -909,7 +935,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "parser_pipeline_rtl/modules/fetch.json"
+                "source": "instances.connections",
+                "path": "knowledge_ir/modules/fetch.json"
               }
             ]
           }
@@ -928,33 +955,22 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_002_fetch_i_drvFTop.json",
       "reader_takeaway": {
-        "value": "最终手册应重点描述 spliter5 和 select5 的分叉逻辑，以及 mergeInt 和 merge1 的合并/仲裁逻辑。",
-        "explanation": "该流的核心特征是单一驱动源经过分叉和合并后到达两个不同终点。分叉点（spliter5、select5）和合并点（mergeInt、merge1）决定了事件的路径选择和优先级，是理解流行为的关键。",
+        "value": "输入事件 i_drvFTop 携带一个 32 位 PC 值作为有效载荷。",
+        "explanation": "接口有效载荷合约显示，i_drvFTop 事件伴随一个 32 位信号 i_pcFTop_32。该 PC 值可能在整个流中作为数据被传递，最终用于指令缓存或中断处理。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "w_cFifo7Drv2Spliter5",
-          "w_drv2MergeInt",
-          "w_drvfifo32merge1",
-          "w_drvCfifo82Select5",
-          "w_drv2ICache",
-          "w_drvSelect52Merge3"
+          "i_drvFTop",
+          "i_pcFTop_32"
         ],
-        "instances": [
-          "spliter5",
-          "select5",
-          "mergeInt",
-          "merge1"
-        ],
+        "instances": [],
         "related_flows": [],
-        "related_assignments": [
-          "3"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -963,13 +979,62 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "interface.event_ports"
+          },
+          {
+            "source": "interface.data_ports"
           }
         ],
         "supporting_claims": [
           {
-            "value": "从外部输入 i_drvFTop 出发，经过锁存、分叉、合并和延迟，最终驱动两个内部事件输出 o_drv2Int 和 o_drv2ICache 的单一驱动内部事件流。",
-            "explanation": "该流由单一驱动源 i_drvFTop 启动，通过 pmtLock_top 锁存后，经 cfifo7 进入 spliter5 分叉器，一路经 mergeInt 合并后输出 o_drv2Int，另一路经 merge1 合并、两级延迟和两级 FIFO 后，由 select5 分叉，最终经 cfifo_lock 输出 o_drv2ICache。流中存在两个分支点（spliter5、select5）和两个合并点（mergeInt、merge1），多个 FIFO 和合并器构成潜在的阻塞点。",
+            "value": "最终手册应重点描述事件从 i_drvFTop 到 o_drv2Int 和 o_drv2ICache 的两条路径，包括 spliter5 和 select5 的分叉条件、mergeInt 和 merge1 的仲裁逻辑，以及 delayfifo8 和 delayfifo8_2 的延迟周期。",
+            "explanation": "该流的核心结构是单一输入经过分叉、合并和延迟后驱动两个输出。理解分叉和合并点的行为对于正确描述事件路由至关重要。延迟单元的存在表明时序要求，需明确其延迟周期。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvFTop",
+              "o_drv2Int",
+              "o_drv2ICache",
+              "w_drv2MergeInt",
+              "w_drvfifo32merge1",
+              "w_drvMerge12cfifo8",
+              "w_drv2ICache"
+            ],
+            "instances": [
+              "spliter5",
+              "mergeInt",
+              "merge1",
+              "delayfifo8",
+              "delayfifo8_2",
+              "select5"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "3"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:fetch:flow:flow_002_fetch_i_drvFTop",
+              "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "instances.connections"
+              },
+              {
+                "source": "transparent_flows"
+              }
+            ]
+          },
+          {
+            "value": "从外部输入 i_drvFTop 出发，经过锁存、分叉、合并和延迟后，最终驱动两个内部目标 o_drv2Int 和 o_drv2ICache 的单一驱动事件流。",
+            "explanation": "该流由单一驱动源 i_drvFTop 启动，通过 pmtLock_top 和 cfifo7 两级 FIFO 缓冲后，在 spliter5 处分为两路：一路经 mergeInt 合并后输出至 o_drv2Int；另一路经 merge1 合并、两级延迟和两级 FIFO 后，在 select5 处再次分叉，其中一路经 cfifo_lock 输出至 o_drv2ICache。流中存在多个阻塞点（FIFO 和合并器），表明事件传播可能受反压或仲裁影响。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -999,8 +1064,8 @@
             "related_assignments": [
               "3"
             ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
             "evidence_refs": [
               "ev:fetch:flow:flow_002_fetch_i_drvFTop",
               "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop"
@@ -1011,70 +1076,9 @@
               },
               {
                 "source": "transparent_flows"
-              }
-            ]
-          },
-          {
-            "value": "流中存在多个 FIFO 级（pmtLock_top、cfifo7、cfifo8_saveMerge1Data、cfifo8、cfifo_lock），它们可能通过满信号产生背压，但当前上下文未提供 free/backpressure 信号。",
-            "explanation": "这些 FIFO 实例的满状态可能阻止上游事件传播，但上下文未列出任何 free 或 backpressure 信号。因此，无法确定背压机制的具体实现，仅能指出这些是潜在的阻塞点。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:completion_backpressure:001",
-            "doc_priority": "secondary",
-            "signals": [],
-            "instances": [
-              "pmtLock_top",
-              "cfifo7",
-              "cfifo8_saveMerge1Data",
-              "cfifo8",
-              "cfifo_lock"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:fetch:flow:flow_002_fetch_i_drvFTop",
-              "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "instances.connections"
-              }
-            ]
-          },
-          {
-            "value": "输入事件 i_drvFTop 携带 32 位 PC 载荷 i_pcFTop_32，该载荷可能在整个流中传递。",
-            "explanation": "接口载荷合同显示 i_drvFTop 关联了 32 位 PC 信号 i_pcFTop_32，但输出端点 o_drv2Int 和 o_drv2ICache 的载荷信息缺失。流中的 FIFO 和合并器可能传递该 PC 值，但当前上下文未提供具体数据路径。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:data_control_effect:001",
-            "doc_priority": "secondary",
-            "signals": [
-              "i_drvFTop",
-              "i_pcFTop_32"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:fetch:flow:flow_002_fetch_i_drvFTop",
-              "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_ports"
               },
               {
-                "source": "interface.data_ports"
+                "source": "interface.event_ports"
               }
             ]
           }
@@ -1093,19 +1097,38 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_fetch_i_drvFdispatch.json",
       "reader_takeaway": {
-        "value": "输入事件 i_drvFdispatch 携带一个 32 位的 PC 值，该值直接连接到 merge0 的数据输入。",
-        "explanation": "接口负载合约显示 i_drvFdispatch 事件携带一个 32 位有效载荷 i_pcFdispatch_32。该信号直接连接到 merge0 的数据输入端口 i_data1_32。这表明事件流在分发过程中，PC 值作为数据负载被传递到 merge0，可能用于后续的译码或异常处理。",
+        "value": "最终手册应重点描述从单一输入到五个输出的扇出结构，包括分路点、合并点和 FIFO 缓冲。",
+        "explanation": "该流的核心是单一输入事件如何通过分路器、选择器、合并器和 FIFO 缓冲，最终分发到中断、异常、译码、二级异常和 ICache 五个目标。手册应清晰展示每个分路点和合并点的作用，以及 FIFO 缓冲的层级关系。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_pcFdispatch_32"
+          "i_drvFdispatch",
+          "o_drv2Int",
+          "o_drv2Excp",
+          "o_drv2Dec",
+          "o_drv2Excp_2",
+          "o_drv2ICache"
         ],
-        "instances": [],
+        "instances": [
+          "spliter2",
+          "select0",
+          "select1",
+          "spliter0",
+          "select2",
+          "spliter4",
+          "spliter_err_2",
+          "select5",
+          "mergeInt",
+          "mergeErr",
+          "merge0",
+          "merge2",
+          "merge1"
+        ],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -1116,87 +1139,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/fetch.json",
-            "path": "interface_data_contract"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/fetch.json",
-            "path": "connection_graph"
+            "source": "parser_pipeline_rtl/modules/fetch.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述从 i_drvFdispatch 到五个输出端口的完整事件分发路径，包括所有分支、合并、FIFO 缓冲和延迟单元。",
-            "explanation": "该流的核心是一个复杂的单源多目标事件分发网络。手册应清晰展示事件如何通过 spliter2、select0、select1、spliter0、select2、spliter4、spliter_err_2、select5 等分支点被分流，以及如何通过 mergeInt、mergeErr、merge0、merge2、merge1 等合并点被汇合。同时，应说明 FIFO 和延迟单元在路径中的作用。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_drvFdispatch",
-              "o_drv2Int",
-              "o_drv2Excp",
-              "o_drv2Dec",
-              "o_drv2Excp_2",
-              "o_drv2ICache"
-            ],
-            "instances": [
-              "pmtLock",
-              "cfifo6",
-              "spliter2",
-              "select0",
-              "mergeInt",
-              "mergeErr",
-              "cfifo0",
-              "cfifo0_save",
-              "delay_select1_1",
-              "delay_select1_2",
-              "select1",
-              "cfifo11",
-              "spliter0",
-              "merge0",
-              "merge2",
-              "select2",
-              "merge1",
-              "merge2ToSpliterErr2Fifo",
-              "spliter4",
-              "cfifo2",
-              "delayfifo8",
-              "spliter_err_2",
-              "delayfifo8_2",
-              "delayDrv2Dec",
-              "cfifo8_saveMerge1Data",
-              "cfifo8",
-              "select5",
-              "cfifo_lock"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "3"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:fetch:flow:flow_000_fetch_i_drvFdispatch",
-              "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/fetch.json",
-                "path": "internal_event_flow"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/fetch.json",
-                "path": "connection_graph"
-              }
-            ]
-          },
-          {
-            "value": "从外部输入 i_drvFdispatch 出发，经过多级 FIFO、选择器、分裂器和合并器，最终分发到五个内部目标模块（中断、异常、译码、ICache）的驱动事件流。",
-            "explanation": "该流是一个单驱动源、多分支、多合并的复杂内部事件分发网络。它从 i_drvFdispatch 进入，经过 pmtLock 和 cfifo6 两级 FIFO 缓冲后，由 spliter2 开始分裂，后续经过 select0、select1、spliter0、select2、spliter4、spliter_err_2、select5 等多个分支点，以及 mergeInt、mergeErr、merge0、merge2、merge1 等多个合并点，最终通过五个输出端口（o_drv2Int、o_drv2Excp、o_drv2Dec、o_drv2Excp_2、o_drv2ICache）离开模块。流中包含多个 FIFO 和延迟单元，用于缓冲和时序对齐。",
+            "value": "从外部输入 i_drvFdispatch 出发，经过多级 FIFO、选择器、分路器和仲裁合并器，最终分发到五个内部目标模块（中断、异常、译码、二级异常、指令缓存）的单一驱动事件流。",
+            "explanation": "该流由单一输入事件 i_drvFdispatch 驱动，通过 pmtLock 和 cfifo6 两级 FIFO 缓冲后，经 spliter2 分路，一路直接进入 mergeInt 合并输出到中断，另一路经 select0 选择后，分别进入异常合并路径和译码/ICache 分发路径。译码路径经过多级 FIFO、选择器、分路器和合并器，最终通过 spliter_err_2 分路输出到译码和二级异常，ICache 路径则通过 select5 和 cfifo_lock 输出。整个流展示了从单一输入到多目标输出的扇出结构。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -1206,35 +1155,6 @@
             "doc_priority": "primary",
             "signals": [
               "i_drvFdispatch",
-              "w_drvFdispatch",
-              "w_drv2selc0",
-              "w_drvSpliter22Select0",
-              "w_spliter2Drv2MergeInt",
-              "w_drvDisp2Err",
-              "w_drvDisp2cfifo0",
-              "w_drv2Save",
-              "w_drv2select1",
-              "w_drv2select1_dalay1",
-              "w_drv2select1_dalay2",
-              "w_drv2fifo11",
-              "w_drv2split0",
-              "w_drv2merge0",
-              "w_drv2merge2",
-              "w_drv2select2",
-              "w_drv2Spliter4",
-              "w_drvselect22cfifo2",
-              "w_drvMerge22Merge3",
-              "w_drv2Dec",
-              "w_drvSpliter42Excp",
-              "w_over",
-              "w_drvSplit02Merge0",
-              "w_drvMerge12cfifo8",
-              "w_drvMerge12cfifo8_delay",
-              "w_drvMerge12cfifo8_delay_2",
-              "w_drvFifo8save",
-              "w_drvCfifo82Select5",
-              "w_drv2ICache",
-              "w_drvSelect52Merge3",
               "o_drv2Int",
               "o_drv2Excp",
               "o_drv2Dec",
@@ -1283,18 +1203,19 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/fetch.json",
-                "path": "interface,internal_event_flow"
+                "source": "knowledge_ir/modules/fetch.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/fetch.json",
-                "path": "flow_graph.assignment_dependencies"
+                "source": "parser_pipeline_rtl/modules/fetch.json"
+              },
+              {
+                "source": "rtl/rtl/IF/fetch.v"
               }
             ]
           },
           {
-            "value": "流中包含多个 FIFO 实例，它们可能通过满/空信号实现背压，但当前上下文未提供具体的 free/backpressure 信号。",
-            "explanation": "流中列出了多个 FIFO 实例（pmtLock, cfifo6, cfifo0, cfifo0_save, cfifo11, merge2ToSpliterErr2Fifo, cfifo2, cfifo8_saveMerge1Data, cfifo8, cfifo_lock），它们都可能通过内部满/空状态来暂停上游事件驱动。然而，当前提供的 AI 上下文中没有包含这些 FIFO 的 free/backpressure 信号或相关赋值。因此，无法确定具体的背压机制和信号。",
+            "value": "流中存在多个 FIFO 和合并器，可能实现背压机制，但当前上下文未提供 free/backpressure 信号。",
+            "explanation": "流中的 pmtLock、cfifo6、cfifo0、cfifo0_save、cfifo11、cfifo2、merge2ToSpliterErr2Fifo、cfifo8_saveMerge1Data、cfifo8、cfifo_lock 等 FIFO 实例，以及 mergeInt、mergeErr、merge0、merge2、merge1 等合并器，都可能通过 ready/valid 握手实现背压。但当前上下文未提供相关信号，无法确认背压细节。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -1309,11 +1230,16 @@
               "cfifo0",
               "cfifo0_save",
               "cfifo11",
-              "merge2ToSpliterErr2Fifo",
               "cfifo2",
+              "merge2ToSpliterErr2Fifo",
               "cfifo8_saveMerge1Data",
               "cfifo8",
-              "cfifo_lock"
+              "cfifo_lock",
+              "mergeInt",
+              "mergeErr",
+              "merge0",
+              "merge2",
+              "merge1"
             ],
             "related_flows": [],
             "related_assignments": [],
@@ -1325,8 +1251,35 @@
             ],
             "semantic_evidence": [
               {
-                "source": "parser_pipeline_rtl/modules/fetch.json",
-                "path": "instances"
+                "source": "parser_pipeline_rtl/modules/fetch.json"
+              }
+            ]
+          },
+          {
+            "value": "输入事件 i_drvFdispatch 的 32 位 PC 载荷，直接连接到 merge0 的数据输入。",
+            "explanation": "接口载荷 i_pcFdispatch_32 直接连接到 merge0 的 i_data1_32 端口，表明该 PC 值在流中作为数据载荷传递，可能用于译码或异常处理。但其他输出端口的载荷未定义，需要 RTL 源码确认。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:fetch:flow_000_fetch_i_drvFdispatch:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_pcFdispatch_32"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:fetch:flow:flow_000_fetch_i_drvFdispatch",
+              "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "parser_pipeline_rtl/modules/fetch.json"
               }
             ]
           }
@@ -1370,5 +1323,308 @@
   "evidence_refs": [
     "ev:fetch:knowledge_module",
     "ev:fetch:parser_module"
-  ]
+  ],
+  "source_review_claims": [
+    {
+      "subject": "r_fetchAddr 更新逻辑",
+      "summary": "r_fetchAddr 在 w_firePCErrCFifo8 上升沿更新为 w_dataMerge1Save，未涉及其他条件。",
+      "explanation": "切片第 21 段显示 r_fetchAddr 仅在 w_firePCErrCFifo8 的上升沿且 rst 非低时更新，值为 w_dataMerge1Save。未出现其他更新条件。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "r_fetchAddr",
+        "w_firePCErrCFifo8",
+        "w_dataMerge1Save",
+        "rst"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 601,
+          "line_end": 610
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "r_PCErr 更新条件",
+      "summary": "r_PCErr 更新条件未在给定切片中出现。",
+      "explanation": "切片第 3 段声明 r_PCErr 为 reg，但未提供其赋值逻辑或 always 块。无法从切片推断其更新方式。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "r_PCErr"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 80,
+          "line_end": 80
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "r_curNum 更新逻辑",
+      "summary": "r_curNum 在 w_clk 上升沿（写指令且非最后一个）时自增 1，其他条件未完整给出。",
+      "explanation": "切片第 24 段显示 r_curNum 在 w_clk 上升沿且满足条件时加 1，但该条件仅部分可见（else if(r_writeInstPC && r_lastOne)），且未给出完整 always 块。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "r_curNum",
+        "w_clk",
+        "r_writeInstPC",
+        "r_lastOne"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 714,
+          "line_end": 718
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "释放信号协议",
+      "summary": "释放信号为电平驱动-释放握手，但协议细节（边沿/电平、时序）未明确。",
+      "explanation": "从切片可见 o_free2dispatch、i_freeFICache 等自由信号与驱动信号成对出现，表明使用驱动-释放握手。但切片未提供握手时序或边沿触发说明。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "o_free2dispatch",
+        "i_freeFICache",
+        "o_free2Top",
+        "i_freeFExcp",
+        "o_drv2ICache",
+        "i_freeFDec"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 31,
+          "line_end": 72
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "pmtLock 和 pmtLock_top 功能",
+      "summary": "pmtLock 和 pmtLock_top 实例接受驱动和释放信号，输出锁定信号，但内部实现未给出。",
+      "explanation": "切片第 9 和 11 段显示 pmtLock 和 pmtLock_top 均为 cPmtFifo1 实例，输入为 i_drive、o_free 和 pmt（visit_Icache_Lock），但无内部逻辑。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "visit_Icache_Lock"
+      ],
+      "instances": [
+        "pmtLock",
+        "pmtLock_top"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 255,
+          "line_end": 262
+        },
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 275,
+          "line_end": 279
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "拼接数据结构 o_instAndPC_66",
+      "summary": "o_instAndPC_66 为 66 位拼接信号，包含指令和 PC，具体字段映射需确认。",
+      "explanation": "切片第 5 行显示 w_bx 使用 o_instAndPC_66[15:10] 等位域，且第 5 段将 o_instAndPC_66[32] 用于异常判断，但未给出拼接定义。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "o_instAndPC_66"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 148,
+          "line_end": 150
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "semantic_flow.i_drvFICache",
+      "summary": "i_drvFICache 作为输入驱动，连接至 instSplit 实例，但 flow 内部路径未完全展示。",
+      "explanation": "切片第 22 段显示 i_drvFICache 连接到 instSplit 实例的 i_drvFICache 端口，但后续数据路径（如 o_inst0_33）未在给定切片中追踪。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_drvFICache",
+        "o_inst0_33"
+      ],
+      "instances": [
+        "instSplit_inst"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 647,
+          "line_end": 656
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "semantic_flow.i_drvFTop",
+      "summary": "i_drvFTop 作为输入驱动，连接至 pmtLock_top 和后续逻辑，但完整数据流未展开。",
+      "explanation": "切片第 11 段显示 i_drvFTop 驱动 pmtLock_top，但后续选择器或合并器连接不在切片中。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_drvFTop"
+      ],
+      "instances": [
+        "pmtLock_top"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 275,
+          "line_end": 279
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "semantic_flow.i_drvFdispatch",
+      "summary": "i_drvFdispatch 作为输入驱动，连接至 pmtLock 和 cfifo6，但后续路径缺失。",
+      "explanation": "切片第 9 和 10 段显示 i_drvFdispatch 同时驱动 pmtLock 和 cfifo6，但 cfifo6 输出 w_free2dispatch 被用于 o_free2dispatch，具体数据路径不完整。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_drvFdispatch",
+        "w_free2dispatch"
+      ],
+      "instances": [
+        "pmtLock",
+        "cfifo6"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 255,
+          "line_end": 262
+        },
+        {
+          "file": "rtl/rtl/IF/fetch.v",
+          "line_start": 264,
+          "line_end": 266
+        }
+      ],
+      "evidence_refs": [
+        "ev:fetch:semantic_module",
+        "ev:fetch:semantic_flow:flow_001_fetch_i_drvFICache",
+        "ev:fetch:semantic_flow:flow_002_fetch_i_drvFTop",
+        "ev:fetch:semantic_flow:flow_000_fetch_i_drvFdispatch"
+      ],
+      "review_status": "needs_review"
+    }
+  ],
+  "source_review_report": {
+    "status": "reviewed",
+    "claim_count": 9,
+    "open_question_count": 6,
+    "source_file": "rtl/rtl/IF/fetch.v",
+    "report_file": "source_review_report.json"
+  }
 }

@@ -125,8 +125,8 @@
         "w_fire_6[2]"
       ],
       "role_in_flow": {
-        "value": "事件缓冲和可能的阻塞点",
-        "explanation": "作为 FIFO 实例，cFifo1_3 接收输入驱动事件 i_driveFromLsu_1，并在内部缓冲后输出 w_fire_6[2]。它可能根据 FIFO 状态（满/空）对事件进行门控，从而成为流的阻塞点。",
+        "value": "作为 FIFO 级，缓冲来自 LSU 的驱动事件，并可能因 FIFO 满而阻塞事件传播",
+        "explanation": "cFifo1_3 是一个 cFifo1_grf 类型的 FIFO 实例，其输入由 i_driveFromLsu_1 驱动，输出驱动 w_fire_6[2]。它在流程中扮演缓冲和同步的角色，是流程中唯一的潜在阻塞点，当 FIFO 满时，它会阻止事件继续向后传播。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -143,17 +143,15 @@
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:grf:semantic_flow:flow_002_grf_i_driveFromLsu_1"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
-          },
-          {
-            "source": "flow.blocking_points"
+            "source": "instances.connections",
+            "path": "modules/grf.json"
           }
         ]
       },
@@ -176,10 +174,10 @@
         "o_grfDriveToLsu_1"
       ],
       "role_in_flow": {
-        "value": "透明延迟单元",
-        "explanation": "作为 delay8U 实例，cFifo1_3Delay0 接收来自 FIFO 的输出 w_fire_6[2]，经过固定延迟后输出为 o_grfDriveToLsu_1。其角色是透明的，不改变事件语义，仅引入时序延迟。",
+        "value": "作为透明延迟单元，为驱动事件提供固定周期的延迟，不改变事件语义",
+        "explanation": "cFifo1_3Delay0 是一个 delay8U 类型的实例，其输入来自 cFifo1_3 的输出 w_fire_6[2]，输出直接驱动 o_grfDriveToLsu_1。它在流程中提供透明的、固定周期的延迟，不引入任何数据或控制逻辑的修改。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -201,7 +199,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "transparent_flows"
+            "source": "instances.connections",
+            "path": "modules/grf.json"
           }
         ]
       },
@@ -272,8 +271,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "手册应强调事件从输入到输出的路径，以及 FIFO 作为潜在阻塞点的作用",
-    "explanation": "该流的核心是事件通过 FIFO 和延迟单元的传递。FIFO 的满/空状态可能阻塞事件，而延迟单元仅引入固定延迟。手册应说明这些组件如何影响事件时序和流控制。",
+    "value": "最终手册应强调驱动事件流路径与数据载荷路径在结构上是分离的，但通过接口契约相关联",
+    "explanation": "从提供的上下文看，驱动事件流 (i_driveFromLsu_1 -> cFifo1_3 -> cFifo1_3Delay0 -> o_grfDriveToLsu_1) 与数据载荷 (i_lsuDataToGrf_64, o_grfDataToLsu_64) 的路径是独立的。手册应清晰说明这种分离，并指出数据载荷通过其他组件 (如 cMutexMerge3_end_74b) 或赋值 (如 assign 8) 与事件流间接耦合。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -283,15 +282,19 @@
     "doc_priority": "primary",
     "signals": [
       "i_driveFromLsu_1",
-      "w_fire_6[2]",
-      "o_grfDriveToLsu_1"
+      "o_grfDriveToLsu_1",
+      "i_lsuDataToGrf_64",
+      "o_grfDataToLsu_64"
     ],
     "instances": [
       "cFifo1_3",
-      "cFifo1_3Delay0"
+      "cFifo1_3Delay0",
+      "cMutexMerge3_end_74b"
     ],
     "related_flows": [],
-    "related_assignments": [],
+    "related_assignments": [
+      "8"
+    ],
     "requires_rtl_source_review": false,
     "review_status": "ready",
     "evidence_refs": [
@@ -300,16 +303,18 @@
     ],
     "semantic_evidence": [
       {
-        "source": "flow.blocking_points"
+        "source": "internal_event_flow",
+        "path": "modules/grf.json"
       },
       {
-        "source": "transparent_flows"
+        "source": "interface_data_contract",
+        "path": "modules/grf.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从 LSU 输入的驱动事件经过 FIFO 和延迟单元后输出到 LSU 的驱动事件流",
-        "explanation": "该流描述了从 LSU 接收的驱动事件 i_driveFromLsu_1 如何通过 FIFO 缓冲和延迟单元后，最终输出为 o_grfDriveToLsu_1 的过程。FIFO 作为事件缓冲和可能的阻塞点，延迟单元则提供透明延迟。",
+        "value": "从 LSU 输入的驱动事件经过 FIFO 和延迟单元后，作为输出驱动事件返回 LSU",
+        "explanation": "该流程描述了从 LSU 发起的驱动事件 i_driveFromLsu_1 如何通过一个 FIFO 级 (cFifo1_3) 和一个透明延迟单元 (cFifo1_3Delay0) 进行缓冲和延迟，最终生成输出驱动事件 o_grfDriveToLsu_1 返回给 LSU。FIFO 级是流程中的潜在阻塞点，而延迟单元则提供固定的时序延迟。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -336,23 +341,25 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "instances.connections",
+            "path": "modules/grf.json"
           },
           {
-            "source": "transparent_flows"
+            "source": "transparent_flows",
+            "path": "modules/grf.json"
           }
         ]
       },
       {
-        "value": "流中存在空闲/反压信号，但当前上下文未提供其与事件流的直接连接",
-        "explanation": "接口契约显示输入事件 i_driveFromLsu_1 有关联空闲信号 o_grfFreeToLsu_1，输出事件 o_grfDriveToLsu_1 有关联空闲信号 i_grfFreeFromLsu_1。但当前流步骤中未包含这些信号，无法确定它们如何与 FIFO 或延迟单元交互。",
+        "value": "流程中存在与输入和输出事件关联的 free/backpressure 信号，但其在此流程中的具体作用不明确",
+        "explanation": "接口载荷契约列出了输入事件 i_driveFromLsu_1 的 free 信号 o_grfFreeToLsu_1 和输出事件 o_grfDriveToLsu_1 的 free 信号 i_grfFreeFromLsu_1。这些信号通常用于流控或握手，但在此流程的步骤和连接中并未体现它们与 cFifo1_3 或 cFifo1_3Delay0 的直接交互。它们可能由模块顶层或其他逻辑处理。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_002_grf_i_driveFromLsu_1:completion_backpressure:001",
-        "doc_priority": "secondary",
+        "doc_priority": "reference",
         "signals": [
           "o_grfFreeToLsu_1",
           "i_grfFreeFromLsu_1"
@@ -368,13 +375,14 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface_payload_contracts"
+            "source": "interface_data_contract",
+            "path": "modules/grf.json"
           }
         ]
       },
       {
-        "value": "输入负载数据与输出负载数据通过内部寄存器间接关联",
-        "explanation": "输入负载 i_lsuDataToGrf_64 连接到 cMutexMerge3_end_74b，而输出负载 o_grfDataToLsu_64 由 r_rsValue_32 驱动。两者之间没有直接的赋值依赖，表明数据可能经过内部处理或选择后输出。",
+        "value": "输入数据载荷 i_lsuDataToGrf_64 与输入驱动事件 i_driveFromLsu_1 相关联，但在此流程中未直接使用",
+        "explanation": "接口载荷契约表明 i_lsuDataToGrf_64 是输入事件 i_driveFromLsu_1 的伴随数据。然而，在此流程的步骤中，该数据信号被连接到 cMutexMerge3_end_74b 实例，并未直接参与从 i_driveFromLsu_1 到 o_grfDriveToLsu_1 的驱动事件传播路径。这表明数据载荷可能在流程的后续阶段或另一个并行路径中被处理。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -384,13 +392,11 @@
         "doc_priority": "reference",
         "signals": [
           "i_lsuDataToGrf_64",
-          "o_grfDataToLsu_64"
+          "i_driveFromLsu_1"
         ],
         "instances": [],
         "related_flows": [],
-        "related_assignments": [
-          "8"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -399,10 +405,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "related_component_connections"
+            "source": "interface_data_contract",
+            "path": "modules/grf.json"
           },
           {
-            "source": "related_assign_dependencies"
+            "source": "component_connection",
+            "path": "modules/grf.json"
           }
         ]
       }

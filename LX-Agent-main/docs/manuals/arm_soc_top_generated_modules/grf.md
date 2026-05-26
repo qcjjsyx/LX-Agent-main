@@ -1,8 +1,8 @@
 # 模块 `grf`
 
 - 源文件：`rtl/rtl/GRF/grf.v`。
-- 职责：AI 推断：通用寄存器文件模块，为处理器流水线各阶段提供寄存器读写访问与数据转发。
-- 说明：模块接收来自执行、异常、访存、写回和发射阶段的驱动事件，通过Fifo1实例进行事件同步，并通过MutexMerge3_end_74b仲裁写请求，最终将寄存器值分发到各阶段
+- 职责：AI 推断：通用寄存器文件模块，为处理器流水线各阶段提供寄存器读写访问与数据转发路径。。
+- 说明：模块接收来自执行、异常、访存、写回和发射阶段的驱动事件与数据，通过内部FIFO和互斥合并组件实现寄存器写入仲裁，并通过地址索引选择器将寄存器值分发到各阶段。
 
 ## 1. 层级位置
 
@@ -80,7 +80,7 @@ grf
 - Payload：`o_grfDriveToExe_1` -> `o_grfDataToExe_64 [63:0]`。
 - 输出/影响：`o_grfDriveToExe_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：最终手册应强调事件流与载荷生成是独立的，Fifo1仅负责事件传播。
+- AI 推断：强调单级FIFO缓冲路径，数据负载与事件分离，背压机制需RTL确认
 
 ### `i_driveFromExp_1`
 
@@ -88,7 +88,7 @@ grf
 - Payload：`i_driveFromExp_1` -> `i_expAddr_8 [7:0]`, `i_driveFromExp_1` -> `i_expDataToGrf_64 [63:0]`, `o_grfDriveToExp_1` -> `o_grfDataToExp_192 [191:0]`。
 - 输出/影响：`o_grfDriveToExp_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应强调该流仅含一个FIFO缓冲，无分支或合并，事件与载荷分离
+- AI 推断：手册应强调该流为单级FIFO直通路径，并说明载荷分离处理
 
 ### `i_driveFromLsu_1`
 
@@ -96,7 +96,7 @@ grf
 - Payload：`i_driveFromLsu_1` -> `i_lsuAddr_8 [7:0]`, `i_driveFromLsu_1` -> `i_lsuDataToGrf_64 [63:0]`, `o_grfDriveToLsu_1` -> `o_grfDataToLsu_64 [63:0]`。
 - 输出/影响：`o_grfDriveToLsu_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应强调事件从输入到输出的路径，以及 FIFO 作为潜在阻塞点的作用
+- AI 推断：最终手册应强调驱动事件流路径与数据载荷路径在结构上是分离的，但通过接口契约相关联
 
 ### `i_driveFromWb_1`
 
@@ -104,7 +104,7 @@ grf
 - Payload：`i_driveFromWb_1` -> `i_wbAddr_8 [7:0]`, `i_driveFromWb_1` -> `i_wbDataToGrf_64 [63:0]`, `o_grfDriveToWb_1` -> `o_grfDataToWb_64 [63:0]`。
 - 输出/影响：`o_grfDriveToWb_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：文档应强调FIFO的缓冲角色和事件传递的简单性，但需注明数据路径的独立性
+- AI 推断：文档应强调该流为简单的单级Fifo1直通路径，数据与事件路径解耦
 
 ### `i_grfDriveFromLaunch_1`
 
@@ -112,7 +112,7 @@ grf
 - Payload：`i_grfDriveFromLaunch_1` -> `i_expDataToGrf_64 [63:0]`, `i_grfDriveFromLaunch_1` -> `i_lsuDataToGrf_64 [63:0]`, `i_grfDriveFromLaunch_1` -> `i_wbDataToGrf_64 [63:0]`, `o_grfDriveToLaunch_1` -> `o_grfDataToLaunch_64 [63:0]`。
 - 输出/影响：`o_grfDriveToLaunch_1`。
 - 结构复杂度：branch=0，join=0，blocking=1。
-- AI 推断：手册应强调事件路径（FIFO+延迟）与数据路径（MutexMerge+寄存器拼接）的独立性和时序关系
+- AI 推断：数据载荷通过独立的MutexMerge3路径汇聚，与驱动事件流并行但不直接耦合
 
 ### `i_grfwDriveFromExp_1`
 
@@ -120,7 +120,7 @@ grf
 - Payload：`i_grfwDriveFromExp_1` -> `i_expDataToGrf_64 [63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=2。
-- AI 推断：写请求驱动信号i_grfwDriveFromExp_1携带其对应的写数据有效载荷i_expDataToGrf_64。
+- AI 推断：写请求驱动信号i_grfwDriveFromExp_1携带其对应的写数据载荷i_expDataToGrf_64。
 
 ### `i_grfwDriveFromLsu_1`
 
@@ -128,7 +128,7 @@ grf
 - Payload：`i_grfwDriveFromLsu_1` -> `i_lsuDataToGrf_64 [63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=2。
-- AI 推断：LSU写数据作为事件驱动的伴随负载，通过互斥合并器与事件同步传递
+- AI 推断：LSU写数据作为事件驱动流的伴随负载，与写事件信号同步传递
 
 ### `i_grfwDriveFromWB_1`
 
@@ -136,7 +136,6 @@ grf
 - Payload：`i_grfwDriveFromWB_1` -> `i_wbDataToGrf_64 [63:0]`。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=1，blocking=2。
-- AI 推断：写回数据作为有效载荷与写回驱动事件同步传递
 
 
 ## 5. 内部组件与 assign 影响
@@ -158,15 +157,15 @@ grf
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_1` | unknown | `w_lauindex2_4` | i_rsAddr_8[7:4] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `o_grfDataToLaunch_64` | {r_rsValue_32[1], r_rsValue_32[0]} | AI 推断：从r_rsValue_32中提取对应寄存器值，分别输出到发射、执行、访存和写回阶段 |
+| `assign_2` | data_path | `o_grfDataToLaunch_64` | {r_rsValue_32[1], r_rsValue_32[0]} | AI 推断：从r_rsValue_32中按固定位置提取寄存器值，组合成64位数据输出到各阶段。 |
 | `assign_3` | unknown | `w_exeindex1_4` | i_rs2Addr_8[3:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_4` | unknown | `w_exeindex2_4` | i_rs2Addr_8[7:4] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | data_path | `o_grfDataToExe_64` | {r_rsValue_32[3], r_rsValue_32[2]} | AI 推断：从r_rsValue_32中提取对应寄存器值，分别输出到发射、执行、访存和写回阶段 |
+| `assign_5` | data_path | `o_grfDataToExe_64` | {r_rsValue_32[3], r_rsValue_32[2]} | AI 推断：从r_rsValue_32中按固定位置提取寄存器值，组合成64位数据输出到各阶段。 |
 | `assign_6` | unknown | `w_lsuindex1_4` | i_rs3Addr_8[3:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_7` | unknown | `w_lsuindex2_4` | i_rs3Addr_8[7:4] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_8` | data_path | `o_grfDataToLsu_64` | {r_rsValue_32[5], r_rsValue_32[4]} | AI 推断：从r_rsValue_32中提取对应寄存器值，分别输出到发射、执行、访存和写回阶段 |
+| `assign_8` | data_path | `o_grfDataToLsu_64` | {r_rsValue_32[5], r_rsValue_32[4]} | AI 推断：从r_rsValue_32中按固定位置提取寄存器值，组合成64位数据输出到各阶段。 |
 | `assign_9` | unknown | `w_wbindex1_4` | i_rs4Addr_8[3:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_10` | unknown | `w_wbindex2_4` | i_rs4Addr_8[7:4] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_11` | data_path | `o_grfDataToWb_64` | {r_rsValue_32[7], r_rsValue_32[6]} | AI 推断：从r_rsValue_32中提取对应寄存器值，分别输出到发射、执行、访存和写回阶段 |
-| `assign_12` | data_path | `o_grfDataToExp_192` | r_rsValue_192 | AI 推断：将r_rsValue_192直接输出到异常阶段，提供192位宽的多寄存器值 |
+| `assign_11` | data_path | `o_grfDataToWb_64` | {r_rsValue_32[7], r_rsValue_32[6]} | AI 推断：从r_rsValue_32中按固定位置提取寄存器值，组合成64位数据输出到各阶段。 |
+| `assign_12` | data_path | `o_grfDataToExp_192` | r_rsValue_192 | AI 推断：将r_rsValue_192直接输出到异常阶段，提供6个寄存器的同时读取能力。 |
 | ... | ... | ... | ... | 其余 1 条 assign 省略 |

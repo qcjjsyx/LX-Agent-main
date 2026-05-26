@@ -63,9 +63,9 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "通用输入输出控制模块，提供寄存器映射的GPIO引脚控制和中断管理功能",
+      "summary": "通用输入输出控制模块，提供寄存器映射的GPIO引脚控制与中断管理功能",
       "subject": "gpio_module",
-      "explanation": "模块通过地址映射的寄存器接口（addr_i/data_i）实现对GPIO引脚的控制和状态读取，并产生中断请求信号irq，表明其作为APB/AXI总线从设备与外部处理器交互",
+      "explanation": "模块通过地址译码访问多个控制/状态寄存器，实现GPIO方向、数据、中断使能及边沿/电平触发配置，并产生中断请求信号",
       "signals": [
         "addr_i",
         "data_i",
@@ -75,14 +75,17 @@
         "irq"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "knowledge_ir/modules/gpio_module.json"
         },
         {
           "source": "parser_pipeline_rtl/modules/gpio_module.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v"
         }
       ],
       "id": "semantic:module:gpio_module:module_role:001"
@@ -93,9 +96,9 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "根据addr_i[7:0]解码访问地址，从多个内部寄存器中选择一个输出到data_o",
-      "subject": "寄存器地址解码与数据选择",
-      "explanation": "assign依赖索引2显示data_o通过多级条件选择器从gpio_ctrl、gpio_data、int_enable等8个寄存器中选取，实现标准的存储器映射外设读操作",
+      "summary": "根据地址输入选择对应寄存器内容输出到data_o",
+      "subject": "寄存器地址译码与数据读取",
+      "explanation": "assign依赖显示data_o通过多级条件表达式从gpio_ctrl、gpio_data、int_enable等寄存器中选择，构成地址译码读取通路",
       "signals": [
         "addr_i",
         "data_o",
@@ -109,11 +112,14 @@
         "low_level_en"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/gpio_module.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v"
         }
       ],
       "id": "semantic:module:gpio_module:structural_responsibility:001"
@@ -124,20 +130,23 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "将中断状态寄存器(int_status)与中断使能寄存器(int_enable)按位相与后归约，产生单一中断请求信号irq",
-      "subject": "中断生成逻辑",
-      "explanation": "assign依赖索引3显示irq = |(int_status & int_enable)，表明模块支持多个中断源，通过使能掩码控制哪些中断事件可以触发处理器中断",
+      "summary": "将中断状态与中断使能按位相与后归约产生中断请求",
+      "subject": "中断产生逻辑",
+      "explanation": "assign依赖显示irq由int_status和int_enable的按位与结果归约得到，表明中断输出是全局使能后的组合逻辑",
       "signals": [
         "irq",
         "int_status",
         "int_enable"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/gpio_module.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v"
         }
       ],
       "id": "semantic:module:gpio_module:structural_responsibility:002"
@@ -149,8 +158,8 @@
         "module": "gpio_module"
       },
       "subject": "gpio_ctrl_o",
-      "summary": "将内部寄存器gpio_ctrl的值直接驱动到模块输出端口，用于外部GPIO控制信号",
-      "explanation": "assign依赖索引0显示gpio_ctrl_o = gpio_ctrl，表明该输出端口是内部控制寄存器的直通映射，用于配置GPIO方向或功能模式",
+      "summary": "将内部gpio_ctrl寄存器值直接驱动到模块输出端口",
+      "explanation": "该赋值将内部寄存器内容直通到输出，用于外部观察GPIO控制配置",
       "signals": [
         "gpio_ctrl_o",
         "gpio_ctrl"
@@ -175,8 +184,8 @@
         "module": "gpio_module"
       },
       "subject": "gpio_data_o",
-      "summary": "将内部数据寄存器gpio_data的值直接驱动到模块输出端口，用于外部GPIO数据输出",
-      "explanation": "assign依赖索引1显示gpio_data_o = gpio_data，表明该输出端口是内部数据寄存器的直通映射，用于驱动GPIO引脚输出电平",
+      "summary": "将内部gpio_data寄存器值直接驱动到模块输出端口",
+      "explanation": "该赋值将内部GPIO数据寄存器内容直通到输出，用于外部读取当前引脚数据",
       "signals": [
         "gpio_data_o",
         "gpio_data"
@@ -200,46 +209,14 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "summary": "通过addr_i[7:0]解码访问8个内部寄存器，实现标准的存储器映射外设控制接口",
-      "subject": "地址映射寄存器接口",
-      "explanation": "assign依赖索引2中地址解码涉及GPIO_CTRL、GPIO_DATA、GPIO_INT_ENABLE等8个寄存器地址常量，表明模块遵循固定地址映射协议，支持读写控制、数据、中断配置等操作",
+      "summary": "通过addr_i选择内部寄存器，将对应值输出到data_o，实现寄存器映射读取协议",
+      "subject": "地址译码读取接口",
+      "explanation": "data_o的赋值表达式包含多个寄存器地址常量（GPIO_CTRL、GPIO_DATA等），表明模块遵循地址映射的寄存器读取接口",
       "signals": [
         "addr_i",
-        "data_i",
         "data_o"
       ],
       "related_payload": [
-        "gpio_ctrl",
-        "gpio_data",
-        "int_enable",
-        "rising_edge_en",
-        "falling_edge_en",
-        "int_status",
-        "high_level_en",
-        "low_level_en"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "parser_pipeline_rtl/modules/gpio_module.json"
-        }
-      ],
-      "id": "semantic:module:gpio_module:interface_intent:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "gpio_module"
-      },
-      "summary": "手册应重点描述8个内部寄存器的地址偏移、位定义和功能，包括控制、数据、中断使能、边沿/电平触发选择、中断状态等",
-      "subject": "寄存器地址映射表",
-      "explanation": "assign依赖索引2显示模块内部有8个可读寄存器，但上下文未提供各寄存器的位级定义，需要RTL源码补充详细寄存器描述",
-      "signals": [
-        "addr_i",
-        "data_o",
         "gpio_ctrl",
         "gpio_data",
         "int_enable",
@@ -255,6 +232,38 @@
       "evidence": [
         {
           "source": "parser_pipeline_rtl/modules/gpio_module.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v"
+        }
+      ],
+      "id": "semantic:module:gpio_module:interface_intent:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "module",
+        "module": "gpio_module"
+      },
+      "summary": "手册应重点描述各寄存器的地址偏移、位定义及读写行为",
+      "subject": "寄存器地址映射表",
+      "explanation": "从data_o的地址译码表达式可见模块包含至少8个可读寄存器，但上下文未提供各寄存器的位定义和写操作逻辑，需RTL源码补充",
+      "signals": [
+        "addr_i",
+        "data_i",
+        "data_o",
+        "gpio_ctrl_o",
+        "gpio_data_o"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/gpio_module.json"
+        },
+        {
+          "source": "rtl/rtl/IONet/GPIO/gpio_module.v"
         }
       ],
       "id": "semantic:module:gpio_module:documentation_focus:001"
@@ -265,16 +274,17 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "reason": "上下文仅列出寄存器名称，未提供各寄存器的位宽、位域功能、复位值等详细信息，无法生成完整的寄存器描述",
-      "subject": "寄存器位定义",
-      "needed_source_slice": "module declaration, always block, comments",
+      "reason": "上下文仅提供读取路径的assign依赖，缺少写操作（data_i到各寄存器的赋值）以及io_pin_i到gpio_data的输入采样逻辑",
+      "subject": "寄存器写操作逻辑",
+      "needed_source_slice": "always block, assign block",
       "signals": [
+        "data_i",
+        "io_pin_i",
         "gpio_ctrl",
         "gpio_data",
         "int_enable",
         "rising_edge_en",
         "falling_edge_en",
-        "int_status",
         "high_level_en",
         "low_level_en"
       ],
@@ -294,15 +304,18 @@
         "type": "module",
         "module": "gpio_module"
       },
-      "reason": "上下文包含io_pin_i输入端口，但未显示该信号如何影响内部寄存器（如gpio_data、int_status），无法描述输入路径",
-      "subject": "GPIO引脚输入处理",
-      "needed_source_slice": "always block, assign block, comments",
+      "reason": "上下文仅显示中断使能和状态寄存器的存在及irq产生方式，但未提供int_status如何由io_pin_i和边沿/电平使能寄存器产生的逻辑",
+      "subject": "中断状态产生逻辑",
+      "needed_source_slice": "always block, assign block",
       "signals": [
         "io_pin_i",
-        "gpio_data",
-        "int_status"
+        "int_status",
+        "rising_edge_en",
+        "falling_edge_en",
+        "high_level_en",
+        "low_level_en"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
@@ -313,18 +326,5 @@
       "id": "semantic:module:gpio_module:source_review_request:002"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "内部寄存器定义",
-      "reason": "上下文未提供gpio_ctrl、gpio_data等寄存器的位宽、位域功能、复位值、读写属性"
-    },
-    {
-      "field": "GPIO引脚输入路径",
-      "reason": "上下文未显示io_pin_i如何影响内部寄存器或中断状态"
-    },
-    {
-      "field": "中断触发条件",
-      "reason": "上下文未说明int_status如何被设置（上升沿、下降沿、高电平、低电平）"
-    }
-  ]
+  "evidence_gaps": []
 }

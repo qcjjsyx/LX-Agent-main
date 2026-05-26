@@ -64,12 +64,14 @@
         "type": "module",
         "module": "gpio_slot"
       },
-      "summary": "GPIO槽位模块，负责将Mesh网络驱动事件路由到GPIO外设，并返回驱动完成事件。",
+      "summary": "GPIO槽位模块，负责将Mesh网络驱动事件路由到内部GPIO外设，并返回驱动完成事件。",
       "subject": "gpio_slot",
-      "explanation": "模块接收来自Mesh网络的驱动事件i_driveFrmMesh，通过内部slot实例（perip_slot）处理，最终输出驱动完成事件o_driveNextToMesh。同时，模块包含一个gpio_module实例，用于实际的GPIO控制与数据交互。",
+      "explanation": "模块接收来自Mesh的驱动事件i_driveFrmMesh，通过内部perip_slot实例（slot）处理，最终输出驱动完成事件o_driveNextToMesh。同时，模块集成了gpio_module实例，处理GPIO数据路径（data_from/data_to）和IO引脚输入（io_pin_i），并输出GPIO控制与数据信号（gpio_ctrl_o, gpio_data_o）。空闲信号（i_freeNextFrmMesh/o_freeToMesh）表明该槽位支持基于握手的驱动-空闲协议。",
       "signals": [
         "i_driveFrmMesh",
         "o_driveNextToMesh",
+        "i_freeNextFrmMesh",
+        "o_freeToMesh",
         "data_from",
         "data_to",
         "io_pin_i",
@@ -94,7 +96,13 @@
           "source": "interface.event_outputs"
         },
         {
-          "source": "key_component_connections"
+          "source": "interface.free_inputs"
+        },
+        {
+          "source": "interface.free_outputs"
+        },
+        {
+          "source": "key_instances"
         },
         {
           "source": "internal_event_flow_refs"
@@ -108,9 +116,9 @@
         "type": "module",
         "module": "gpio_slot"
       },
-      "summary": "将Mesh网络的驱动事件通过perip_slot实例转发，并驱动gpio_module执行GPIO读写操作。",
-      "subject": "驱动事件路由与GPIO控制",
-      "explanation": "模块通过slot实例接收i_driveFrmMesh事件，并输出o_driveNextToMesh事件。同时，gpio_module实例接收来自slot的数据(data_i)和io_pin_i，输出gpio_ctrl_o和gpio_data_o，表明其负责GPIO控制与数据输出。",
+      "summary": "模块将Mesh驱动事件通过perip_slot实例转发，同时桥接GPIO模块的数据路径，实现GPIO外设的访问与控制。",
+      "subject": "驱动事件路由与GPIO数据路径桥接",
+      "explanation": "驱动事件i_driveFrmMesh直接连接到slot实例的i_driveFrmMesh，slot实例输出o_driveNextToMesh。数据路径data_from直接连接到slot实例，而slot实例的输出w_data_to通过赋值操作（assign index 0）连接到模块输出data_to。GPIO模块实例（gpio_module）接收io_pin_i输入，并输出gpio_ctrl_o和gpio_data_o。这表明模块的核心职责是事件路由和数据桥接。",
       "signals": [
         "i_driveFrmMesh",
         "o_driveNextToMesh",
@@ -136,6 +144,9 @@
         },
         {
           "source": "key_instances"
+        },
+        {
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:gpio_slot:structural_responsibility:001"
@@ -147,11 +158,13 @@
         "module": "gpio_slot"
       },
       "subject": "slot (perip_slot)",
-      "summary": "外围设备槽位实例，负责将Mesh驱动事件与数据路由到GPIO模块。",
-      "explanation": "slot实例接收来自模块边界的驱动事件(i_driveFrmMesh)和数据(data_from)，并输出驱动完成事件(o_driveNextToMesh)和内部数据(w_data_to)。它作为GPIO模块与Mesh网络之间的桥梁。",
+      "summary": "外围设备槽位实例，负责处理Mesh驱动事件，并管理数据路径的转发。",
+      "explanation": "slot实例接收来自模块边界的驱动事件i_driveFrmMesh和空闲信号i_freeNextFrmMesh，并输出驱动完成事件o_driveNextToMesh和空闲完成信号o_freeToMesh。它同时连接数据输入data_from和数据输出w_data_to，表明它负责在事件驱动下路由数据。",
       "signals": [
         "i_driveFrmMesh",
         "o_driveNextToMesh",
+        "i_freeNextFrmMesh",
+        "o_freeToMesh",
         "data_from",
         "w_data_to"
       ],
@@ -180,14 +193,15 @@
         "type": "module",
         "module": "gpio_slot"
       },
-      "subject": "gpio_module",
-      "summary": "GPIO功能模块，负责实际的GPIO引脚控制与数据采集。",
-      "explanation": "gpio_module实例接收来自slot的数据(data_i)和外部引脚输入(io_pin_i)，输出GPIO控制信号(gpio_ctrl_o)和GPIO数据信号(gpio_data_o)。它不直接参与Mesh事件流，而是由slot驱动。",
+      "subject": "gpio_module (gpio_module)",
+      "summary": "GPIO功能模块实例，负责处理GPIO引脚输入并生成控制与数据输出。",
+      "explanation": "gpio_module实例接收来自模块边界的IO引脚输入io_pin_i，并输出gpio_ctrl_o和gpio_data_o。它还与slot实例通过data_i和data_o信号进行数据交互，表明它作为GPIO外设核心，处理引脚状态并响应来自槽位的数据请求。",
       "signals": [
-        "data_i",
         "io_pin_i",
         "gpio_ctrl_o",
-        "gpio_data_o"
+        "gpio_data_o",
+        "data_i",
+        "data_o"
       ],
       "instances": [
         "gpio_module"
@@ -215,8 +229,8 @@
         "module": "gpio_slot"
       },
       "subject": "data_to",
-      "summary": "将内部数据w_data_to与XY信号拼接后输出到Mesh网络。",
-      "explanation": "赋值语句将w_data_to的高位部分与XY信号拼接，形成最终的data_to输出。这表明data_to不仅包含来自GPIO模块的数据，还可能包含其他控制或状态信息。",
+      "summary": "将slot实例输出的w_data_to与XY信号拼接后，作为模块的数据输出。",
+      "explanation": "赋值操作将w_data_to的高41位（[50:10]）与XY信号拼接，形成最终的data_to输出。这表明data_to不仅包含来自slot的数据，还附加了额外的控制或状态信息（XY），可能用于Mesh网络中的地址或标识。",
       "signals": [
         "data_to",
         "w_data_to",
@@ -244,9 +258,9 @@
         "type": "module",
         "module": "gpio_slot"
       },
-      "summary": "驱动事件(i_driveFrmMesh/o_driveNextToMesh)与释放信号(i_freeNextFrmMesh/o_freeToMesh)构成一对请求-确认握手协议。",
-      "subject": "驱动事件与释放信号",
-      "explanation": "每个驱动事件输入(i_driveFrmMesh)对应一个释放输出(o_freeToMesh)，每个驱动事件输出(o_driveNextToMesh)对应一个释放输入(i_freeNextFrmMesh)。这表明模块使用释放信号来确认事件处理完成，实现流控。",
+      "summary": "模块通过i_driveFrmMesh/o_driveNextToMesh和i_freeNextFrmMesh/o_freeToMesh实现基于事件的驱动-空闲握手协议。",
+      "subject": "驱动-空闲握手协议",
+      "explanation": "事件输入i_driveFrmMesh触发驱动操作，完成后输出o_driveNextToMesh。同时，空闲信号i_freeNextFrmMesh和o_freeToMesh构成反向握手，表明模块支持在驱动完成后释放资源。这种协议常见于Mesh网络中的外围设备访问控制。",
       "signals": [
         "i_driveFrmMesh",
         "o_driveNextToMesh",
@@ -259,11 +273,8 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
-        {
-          "source": "event_payload_contracts"
-        },
         {
           "source": "interface.event_inputs"
         },
@@ -275,6 +286,9 @@
         },
         {
           "source": "interface.free_outputs"
+        },
+        {
+          "source": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:gpio_slot:interface_intent:001"
@@ -285,18 +299,19 @@
         "type": "module",
         "module": "gpio_slot"
       },
-      "summary": "手册应重点描述驱动事件如何从Mesh网络通过slot路由到gpio_module，以及GPIO数据如何返回。",
-      "subject": "驱动事件流与GPIO数据路径",
-      "explanation": "模块的核心功能是事件驱动的GPIO访问。文档应详细说明i_driveFrmMesh事件如何触发gpio_module操作，以及data_to和gpio_data_o的数据内容。释放信号的作用也应明确。",
+      "summary": "手册应重点描述驱动事件如何通过slot实例触发GPIO数据路径，以及空闲信号如何管理资源释放。",
+      "subject": "驱动事件流与数据路径交互",
+      "explanation": "模块的核心功能是事件路由和数据桥接。文档应详细说明i_driveFrmMesh事件如何驱动data_from到data_to的传输，以及gpio_module如何响应。同时，空闲握手协议（i_freeNextFrmMesh/o_freeToMesh）的时序和条件需要明确，以确保正确使用。",
       "signals": [
         "i_driveFrmMesh",
         "o_driveNextToMesh",
+        "i_freeNextFrmMesh",
+        "o_freeToMesh",
         "data_from",
         "data_to",
+        "io_pin_i",
         "gpio_ctrl_o",
-        "gpio_data_o",
-        "i_freeNextFrmMesh",
-        "o_freeToMesh"
+        "gpio_data_o"
       ],
       "instances": [
         "slot",
@@ -316,7 +331,7 @@
           "source": "key_component_connections"
         },
         {
-          "source": "key_instances"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:gpio_slot:documentation_focus:001"
@@ -327,19 +342,23 @@
         "type": "module",
         "module": "gpio_slot"
       },
-      "reason": "当前上下文未提供XY信号的来源或定义，无法确定其在data_to拼接中的作用。",
-      "subject": "XY信号来源",
-      "needed_source_slice": "assign block; module declaration",
+      "reason": "赋值操作中使用了XY信号，但其来源和含义在上下文中未明确。需要查看RTL源代码以确定XY是常量、寄存器还是来自其他模块的信号。",
+      "subject": "XY信号来源与赋值细节",
+      "needed_source_slice": "assign block; always block; comments",
       "signals": [
         "XY",
-        "data_to"
+        "data_to",
+        "w_data_to"
+      ],
+      "instances": [
+        "slot"
       ],
       "related_flows": [
         "flow_000_gpio_slot_i_driveFrmMesh"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
           "source": "assign_dependencies"
@@ -348,10 +367,5 @@
       "id": "semantic:module:gpio_slot:source_review_request:001"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "XY信号定义",
-      "reason": "当前上下文未提供XY信号的来源或定义，无法确定其在data_to拼接中的作用。"
-    }
-  ]
+  "evidence_gaps": []
 }

@@ -93,10 +93,10 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "指令拆分与分发单元，将64位指令包拆分为最多4条32位指令，并管理指令流控制。",
-      "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址和异常分支条件，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO组件进行流控和事件同步后，将拆分后的指令和计数发送给Merge单元。",
+      "value": "指令拆分与分发模块，将取回的64位指令包拆分为最多4条指令，并管理指令FIFO的驱动与释放。",
+      "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位确定指令起始位置，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO缓存后输出给Merge模块。同时管理FIFO的释放信号回传给ICache。",
       "certainty": "ai_inferred",
-      "confidence": "high",
+      "confidence": "medium",
       "source_layers": [
         "semantic_layer"
       ],
@@ -116,7 +116,9 @@
         "o_inst3PC_32",
         "o_instCount",
         "o_normNextPc_32",
-        "o_drv2Merge"
+        "o_drv2Merge",
+        "o_free2ICache",
+        "i_freeFMerge"
       ],
       "instances": [
         "fetchFifo"
@@ -125,8 +127,8 @@
         "flow_000_instSplit_i_drvFICache"
       ],
       "related_assignments": [],
-      "requires_rtl_source_review": false,
-      "review_status": "ready",
+      "requires_rtl_source_review": true,
+      "review_status": "needs_review",
       "evidence_refs": [
         "ev:instSplit:semantic_module"
       ],
@@ -135,16 +137,16 @@
           "source": "knowledge_ir/modules/instSplit.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/instSplit.json"
+          "source": "rtl/rtl/IF/instSplit.v"
         }
       ]
     },
     "responsibility_claims": [
       {
-        "value": "指令拆分与分发单元，将64位指令包拆分为最多4条32位指令，并管理指令流控制。",
-        "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址和异常分支条件，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO组件进行流控和事件同步后，将拆分后的指令和计数发送给Merge单元。",
+        "value": "指令拆分与分发模块，将取回的64位指令包拆分为最多4条指令，并管理指令FIFO的驱动与释放。",
+        "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位确定指令起始位置，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO缓存后输出给Merge模块。同时管理FIFO的释放信号回传给ICache。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -164,7 +166,9 @@
           "o_inst3PC_32",
           "o_instCount",
           "o_normNextPc_32",
-          "o_drv2Merge"
+          "o_drv2Merge",
+          "o_free2ICache",
+          "i_freeFMerge"
         ],
         "instances": [
           "fetchFifo"
@@ -173,8 +177,8 @@
           "flow_000_instSplit_i_drvFICache"
         ],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:instSplit:semantic_module"
         ],
@@ -183,13 +187,13 @@
             "source": "knowledge_ir/modules/instSplit.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/instSplit.json"
+            "source": "rtl/rtl/IF/instSplit.v"
           }
         ]
       },
       {
-        "value": "将输入的64位指令包拆分为最多4条32位指令，并为每条指令生成对应的PC。",
-        "explanation": "通过assign_dependencies中的w_part1_16到w_part4_16，将64位指令i_inst_64拆分为4个16位片段，结合w_start（来自i_basePC_32[2:1]）确定有效指令的起始位置，最终输出o_inst0_33到o_inst3_33（33位，可能包含有效位）及其对应的PC。",
+        "value": "将64位指令包按PC低位对齐拆分为1-4条指令，通过FIFO缓存后输出，并管理驱动事件链和释放信号。",
+        "explanation": "模块使用i_basePC_32[2:1]确定指令起始位置（w_start），将i_inst_64拆分为4个16位半字（w_part1_16至w_part4_16），然后组合成33位指令（含有效位）。拆分后的指令和对应PC通过寄存器（r_inst0_33等）缓存，最终赋值给输出。驱动事件通过fetchFifoDelay链延迟后驱动fetchFifo，输出事件o_drv2Merge。释放信号i_freeFMerge直接进入fetchFifo，输出o_free2ICache。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -198,67 +202,29 @@
         "semantic_claim_id": "semantic:module:instSplit:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "i_inst_64",
           "i_basePC_32",
+          "i_inst_64",
           "w_start",
           "w_part1_16",
           "w_part2_16",
           "w_part3_16",
           "w_part4_16",
+          "r_inst0_33",
+          "r_inst1_33",
+          "r_inst2_33",
+          "r_inst3_33",
           "o_inst0_33",
           "o_inst1_33",
           "o_inst2_33",
           "o_inst3_33",
-          "o_inst0PC_32",
-          "o_inst1PC_32",
-          "o_inst2PC_32",
-          "o_inst3PC_32"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_instSplit_i_drvFICache"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:instSplit:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/instSplit.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/instSplit.json"
-          }
-        ]
-      },
-      {
-        "value": "通过FIFO组件和延迟链管理指令驱动事件和释放事件的同步与流控。",
-        "explanation": "输入驱动事件i_drvFICache经过fetchFifoDelay_in1、fetchFifoDelay_in2、fetchFifoDelay_in3延迟链后，驱动fetchFifo的输入事件w_drvFICache；fetchFifo的输出事件w_drv2Merge再经过fetchFifoDelay1延迟后，产生输出驱动事件o_drv2Merge。释放事件i_freeFMerge直接输入fetchFifo，其输出o_free作为o_free2ICache。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:instSplit:structural_responsibility:002",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFICache",
+          "o_instCount",
+          "o_normNextPc_32",
           "o_drv2Merge",
-          "i_freeFMerge",
           "o_free2ICache",
-          "w_drvFICache",
-          "w_drvFICache_t",
-          "w_drvFICache_t1",
-          "w_drv2Merge"
+          "i_freeFMerge"
         ],
         "instances": [
-          "fetchFifo",
-          "fetchFifoDelay_in1",
-          "fetchFifoDelay_in2",
-          "fetchFifoDelay_in3",
-          "fetchFifoDelay1"
+          "fetchFifo"
         ],
         "related_flows": [
           "flow_000_instSplit_i_drvFICache"
@@ -274,44 +240,43 @@
             "source": "knowledge_ir/modules/instSplit.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/instSplit.json"
+            "source": "rtl/rtl/IF/instSplit.v"
           }
         ]
       }
     ],
     "documentation_focus": [
       {
-        "value": "文档应重点描述64位指令包如何根据基地址和异常条件拆分为32位指令，以及FIFO和延迟链如何管理事件流。",
-        "explanation": "模块的核心功能是指令拆分和流控，接口和组件连接均围绕此展开。需要详细说明拆分算法（基于w_start和w_part）、异常分支对状态的影响，以及FIFO延迟链的时序作用。",
+        "value": "文档应重点描述指令拆分算法（基于PC低位对齐）、指令计数逻辑、以及驱动事件和释放信号的流控机制。",
+        "explanation": "模块的核心功能是将64位指令包拆分为1-4条指令，这依赖于i_basePC_32[2:1]的对齐。同时，驱动事件链和释放信号构成了流水线握手协议，是理解模块时序的关键。异常分支信号w_intExcpBranchValid对拆分流程的影响也需要说明。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:instSplit:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_inst_64",
           "i_basePC_32",
-          "w_intExcpBranchValid",
+          "i_inst_64",
           "w_start",
-          "w_state",
           "o_instCount",
-          "o_normNextPc_32"
+          "o_normNextPc_32",
+          "i_drvFICache",
+          "o_drv2Merge",
+          "i_freeFMerge",
+          "o_free2ICache",
+          "w_intExcpBranchValid"
         ],
         "instances": [
-          "fetchFifo",
-          "fetchFifoDelay_in1",
-          "fetchFifoDelay_in2",
-          "fetchFifoDelay_in3",
-          "fetchFifoDelay1"
+          "fetchFifo"
         ],
         "related_flows": [
           "flow_000_instSplit_i_drvFICache"
         ],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:instSplit:semantic_module"
         ],
@@ -322,7 +287,7 @@
         ]
       }
     ],
-    "review_status": "ready"
+    "review_status": "needs_review"
   },
   "interface_summary": {
     "counts": {
@@ -444,30 +409,20 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_instSplit_i_drvFICache.json",
       "reader_takeaway": {
-        "value": "手册应重点描述该流的三级延迟缓冲加FIFO的流水线结构，以及其作为纯事件驱动的单向传递特性。",
-        "explanation": "该流结构清晰，由延迟缓冲和FIFO串联组成，无分支或数据关联。手册应强调其延迟级数、FIFO的潜在门控作用，以及事件信号命名约定。",
+        "value": "该流仅传递事件信号，无关联的数据负载或控制信号，属于纯事件驱动路径。",
+        "explanation": "接口负载契约显示 i_drvFICache 和 o_drv2Merge 均无关联的 payload 信号或 free 信号，且流步骤中所有信号均为事件驱动类型。因此该流不携带数据，仅用于事件同步或触发。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:documentation_focus:001",
+        "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
           "i_drvFICache",
-          "w_drvFICache_t",
-          "w_drvFICache_t1",
-          "w_drvFICache",
-          "w_drv2Merge",
           "o_drv2Merge"
         ],
-        "instances": [
-          "fetchFifoDelay_in1",
-          "fetchFifoDelay_in2",
-          "fetchFifoDelay_in3",
-          "fetchFifo",
-          "fetchFifoDelay1"
-        ],
+        "instances": [],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": false,
@@ -478,13 +433,61 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/instSplit.json",
-            "path": "internal_event_flow"
+            "source": "interface.event_ports",
+            "path": "modules/instSplit.json"
+          },
+          {
+            "source": "interface.data_ports",
+            "path": "modules/instSplit.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "该驱动流将输入事件 i_drvFICache 通过三级延迟缓冲后送入一个FIFO，再经一级延迟缓冲输出为 o_drv2Merge，实现从ICache驱动到合并级的事件传递与同步。",
+            "value": "手册应重点描述三级延迟链和FIFO如何协同实现事件传递的时序控制，并指出背压和负载信息缺失。",
+            "explanation": "该流的核心结构是延迟链加FIFO，用于将输入事件延迟并缓冲后输出。手册应解释每个延迟级的延迟量（8U vs 4U）和FIFO的深度（3），以及它们对事件时序的影响。同时需注明无数据负载和背压信号，建议RTL审查确认FIFO的流控行为。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvFICache",
+              "w_drvFICache_t",
+              "w_drvFICache_t1",
+              "w_drvFICache",
+              "w_drv2Merge",
+              "o_drv2Merge"
+            ],
+            "instances": [
+              "fetchFifoDelay_in1",
+              "fetchFifoDelay_in2",
+              "fetchFifoDelay_in3",
+              "fetchFifo",
+              "fetchFifoDelay1"
+            ],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:instSplit:flow:flow_000_instSplit_i_drvFICache",
+              "ev:instSplit:semantic_flow:flow_000_instSplit_i_drvFICache"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "instances.connections",
+                "path": "modules/instSplit.json"
+              },
+              {
+                "source": "transparent_flows",
+                "path": "modules/instSplit.json"
+              }
+            ]
+          },
+          {
+            "value": "该驱动流将输入事件 i_drvFICache 通过三级延迟缓冲后送入一个FIFO，再经一级延迟缓冲输出为 o_drv2Merge，实现从ICache驱动到合并阶段的事件传递与同步。",
             "explanation": "流从模块输入端口 i_drvFICache 开始，依次经过三个 delay8U 实例（fetchFifoDelay_in1、_in2、_in3）形成三级流水延迟，然后进入 cFifo3_fetch 实例 fetchFifo 进行FIFO缓冲，最后通过一个 delay4U 实例 fetchFifoDelay1 输出到模块端口 o_drv2Merge。整个流是纯事件驱动的单向传递，无分支或合并点。",
             "certainty": "ai_inferred",
             "confidence": "medium",
@@ -518,52 +521,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/instSplit.json",
-                "path": "internal_event_flow"
+                "source": "instances.connections",
+                "path": "modules/instSplit.json"
               },
               {
-                "source": "parser_pipeline_rtl/modules/instSplit.json",
-                "path": "flow_graph"
+                "source": "transparent_flows",
+                "path": "modules/instSplit.json"
               }
             ]
           },
           {
-            "value": "该流仅传递事件信号，无显式载荷或控制信号关联。",
-            "explanation": "接口载荷契约显示 i_drvFICache 和 o_drv2Merge 均无关联载荷信号，free_signal 也为空。流中所有信号均为纯事件驱动，不携带数据或控制信息。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:data_control_effect:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_drvFICache",
-              "o_drv2Merge"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:instSplit:flow:flow_000_instSplit_i_drvFICache",
-              "ev:instSplit:semantic_flow:flow_000_instSplit_i_drvFICache"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "knowledge_ir/modules/instSplit.json",
-                "path": "interface_data_contract"
-              },
-              {
-                "source": "parser_pipeline_rtl/modules/instSplit.json",
-                "path": "interface"
-              }
-            ]
-          },
-          {
-            "value": "当前上下文未提供背压或完成信号信息，无法做出可靠声明。",
-            "explanation": "接口载荷契约中 free_signal 为空，且流中无相关信号或实例表明背压机制。FIFO实例 fetchFifo 可能隐含背压，但无证据支持。",
+            "value": "当前上下文未提供 free 信号或背压机制，无法确认流控细节。",
+            "explanation": "接口负载契约中 free_signal 为空，且流步骤中无背压相关信号。FIFO实例 fetchFifo 可能内部实现流控，但无证据表明其输出背压信号到上游。最终手册应注明背压信息缺失。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -585,8 +554,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "knowledge_ir/modules/instSplit.json",
-                "path": "interface_data_contract"
+                "source": "interface.event_ports",
+                "path": "modules/instSplit.json"
               }
             ]
           }
@@ -614,41 +583,13 @@
       "output_data": [],
       "doc_priority": "primary",
       "role_in_manual": {
-        "value": "核心指令流控FIFO，管理指令拆分后的驱动事件和释放事件的同步。",
-        "explanation": "该FIFO接收延迟后的驱动事件w_drvFICache和释放事件i_freeFMerge，输出驱动事件w_drv2Merge和释放事件o_free2ICache，确保指令拆分模块与后续Merge模块之间的指令流按序且无溢出。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:instSplit:component_role:001",
-        "doc_priority": "primary",
-        "signals": [
-          "w_drvFICache",
-          "i_freeFMerge",
-          "w_drv2Merge",
-          "o_free2ICache"
-        ],
-        "instances": [
-          "fetchFifo"
-        ],
-        "related_flows": [
-          "flow_000_instSplit_i_drvFICache"
-        ],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:instSplit:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/instSplit.json"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/instSplit.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No component role claim is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:instSplit:key_instances"
@@ -671,8 +612,8 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "异常分支条件对指令流状态的控制。",
-        "explanation": "w_state = ~w_intExcpBranchValid & r_preState 表明当异常分支有效时，状态被清零，可能用于暂停或刷新指令拆分流程。",
+        "value": "异常分支有效时强制清除状态，用于指令拆分流程的异常处理。",
+        "explanation": "w_state = ~w_intExcpBranchValid & r_preState，当异常分支有效时，w_state被强制为0，可能用于重置指令拆分状态机或清除当前拆分流程。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -681,12 +622,14 @@
         "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:002",
         "doc_priority": "secondary",
         "signals": [
-          "w_state",
           "w_intExcpBranchValid",
-          "r_preState"
+          "r_preState",
+          "w_state"
         ],
         "instances": [],
-        "related_flows": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
         "related_assignments": [
           "1"
         ],
@@ -724,17 +667,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将64位指令包拆分为4个16位半字，为后续指令组合做准备。",
+        "explanation": "从i_inst_64的[15:0]、[31:16]、[47:32]、[63:48]分别提取4个半字，这些半字将根据w_start组合成33位指令（含有效位）。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:003",
+        "doc_priority": "primary",
+        "signals": [
+          "i_inst_64",
+          "w_part1_16",
+          "w_part2_16",
+          "w_part3_16",
+          "w_part4_16"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -754,17 +727,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将64位指令包拆分为4个16位半字，为后续指令组合做准备。",
+        "explanation": "从i_inst_64的[15:0]、[31:16]、[47:32]、[63:48]分别提取4个半字，这些半字将根据w_start组合成33位指令（含有效位）。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:003",
+        "doc_priority": "primary",
+        "signals": [
+          "i_inst_64",
+          "w_part1_16",
+          "w_part2_16",
+          "w_part3_16",
+          "w_part4_16"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -784,17 +787,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将64位指令包拆分为4个16位半字，为后续指令组合做准备。",
+        "explanation": "从i_inst_64的[15:0]、[31:16]、[47:32]、[63:48]分别提取4个半字，这些半字将根据w_start组合成33位指令（含有效位）。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:003",
+        "doc_priority": "primary",
+        "signals": [
+          "i_inst_64",
+          "w_part1_16",
+          "w_part2_16",
+          "w_part3_16",
+          "w_part4_16"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -814,17 +847,47 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将64位指令包拆分为4个16位半字，为后续指令组合做准备。",
+        "explanation": "从i_inst_64的[15:0]、[31:16]、[47:32]、[63:48]分别提取4个半字，这些半字将根据w_start组合成33位指令（含有效位）。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:003",
+        "doc_priority": "primary",
+        "signals": [
+          "i_inst_64",
+          "w_part1_16",
+          "w_part2_16",
+          "w_part3_16",
+          "w_part4_16"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -844,17 +907,50 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的33位指令（含有效位）直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0_33至r_inst3_33的值直接传递给输出端口，表示拆分后的指令及其有效位。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:004",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0_33",
+          "r_inst1_33",
+          "r_inst2_33",
+          "r_inst3_33",
+          "o_inst0_33",
+          "o_inst1_33",
+          "o_inst2_33",
+          "o_inst3_33"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "10",
+          "11",
+          "12",
+          "13"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -874,17 +970,50 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的33位指令（含有效位）直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0_33至r_inst3_33的值直接传递给输出端口，表示拆分后的指令及其有效位。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:004",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0_33",
+          "r_inst1_33",
+          "r_inst2_33",
+          "r_inst3_33",
+          "o_inst0_33",
+          "o_inst1_33",
+          "o_inst2_33",
+          "o_inst3_33"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "10",
+          "11",
+          "12",
+          "13"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -904,17 +1033,50 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的33位指令（含有效位）直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0_33至r_inst3_33的值直接传递给输出端口，表示拆分后的指令及其有效位。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:004",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0_33",
+          "r_inst1_33",
+          "r_inst2_33",
+          "r_inst3_33",
+          "o_inst0_33",
+          "o_inst1_33",
+          "o_inst2_33",
+          "o_inst3_33"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "10",
+          "11",
+          "12",
+          "13"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -934,17 +1096,50 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的33位指令（含有效位）直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0_33至r_inst3_33的值直接传递给输出端口，表示拆分后的指令及其有效位。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:004",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0_33",
+          "r_inst1_33",
+          "r_inst2_33",
+          "r_inst3_33",
+          "o_inst0_33",
+          "o_inst1_33",
+          "o_inst2_33",
+          "o_inst3_33"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "10",
+          "11",
+          "12",
+          "13"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -964,17 +1159,50 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的指令PC值直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0PC_32至r_inst3PC_32的值直接传递给输出端口，表示每条指令对应的PC。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:005",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0PC_32",
+          "r_inst1PC_32",
+          "r_inst2PC_32",
+          "r_inst3PC_32",
+          "o_inst0PC_32",
+          "o_inst1PC_32",
+          "o_inst2PC_32",
+          "o_inst3PC_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "14",
+          "15",
+          "16",
+          "17"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -994,17 +1222,50 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的指令PC值直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0PC_32至r_inst3PC_32的值直接传递给输出端口，表示每条指令对应的PC。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:005",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0PC_32",
+          "r_inst1PC_32",
+          "r_inst2PC_32",
+          "r_inst3PC_32",
+          "o_inst0PC_32",
+          "o_inst1PC_32",
+          "o_inst2PC_32",
+          "o_inst3PC_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "14",
+          "15",
+          "16",
+          "17"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -1024,17 +1285,50 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的指令PC值直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0PC_32至r_inst3PC_32的值直接传递给输出端口，表示每条指令对应的PC。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:005",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0PC_32",
+          "r_inst1PC_32",
+          "r_inst2PC_32",
+          "r_inst3PC_32",
+          "o_inst0PC_32",
+          "o_inst1PC_32",
+          "o_inst2PC_32",
+          "o_inst3PC_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "14",
+          "15",
+          "16",
+          "17"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -1054,17 +1348,50 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "将寄存器缓存的指令PC值直接输出。",
+        "explanation": "这些赋值将内部寄存器r_inst0PC_32至r_inst3PC_32的值直接传递给输出端口，表示每条指令对应的PC。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:005",
+        "doc_priority": "primary",
+        "signals": [
+          "r_inst0PC_32",
+          "r_inst1PC_32",
+          "r_inst2PC_32",
+          "r_inst3PC_32",
+          "o_inst0PC_32",
+          "o_inst1PC_32",
+          "o_inst2PC_32",
+          "o_inst3PC_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "14",
+          "15",
+          "16",
+          "17"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -1084,17 +1411,41 @@
       "impact_area": "unknown",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "输出本次拆分出的有效指令数量。",
+        "explanation": "o_instCount = r_instCont_3，表示当前指令包中实际拆分出的指令数量（1-4），由内部逻辑根据w_start和指令类型计算。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:006",
+        "doc_priority": "primary",
+        "signals": [
+          "r_instCont_3",
+          "o_instCount"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "18"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -1114,17 +1465,41 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "输出下一条指令的正常PC值（无分支跳转）。",
+        "explanation": "o_normNextPc_32 = r_normNextPc_32，表示在当前指令包之后，下一条指令的正常PC地址，用于流水线连续取指。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:007",
+        "doc_priority": "primary",
+        "signals": [
+          "r_normNextPc_32",
+          "o_normNextPc_32"
+        ],
+        "instances": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
+        "related_assignments": [
+          "19"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:instSplit:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/instSplit.json"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:instSplit:assignments"
@@ -1144,26 +1519,28 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "从基地址提取指令拆分起始位置。",
-        "explanation": "w_start = i_basePC_32[2:1] 用于确定64位指令包中有效指令的起始偏移，指导后续指令拆分逻辑。",
+        "value": "从基地址PC的低位提取指令起始位置，用于指令对齐。",
+        "explanation": "w_start = i_basePC_32[2:1]，决定64位指令包中第一条指令的起始位置（0,1,2,3），影响后续指令拆分和计数。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:module:instSplit:assignment_interpretation:001",
-        "doc_priority": "secondary",
+        "doc_priority": "primary",
         "signals": [
-          "w_start",
-          "i_basePC_32"
+          "i_basePC_32",
+          "w_start"
         ],
         "instances": [],
-        "related_flows": [],
+        "related_flows": [
+          "flow_000_instSplit_i_drvFICache"
+        ],
         "related_assignments": [
           "0"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:instSplit:semantic_module"
         ],
@@ -1308,7 +1685,7 @@
       "signal": "o_drv2Merge",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 19,
+      "importance_score": 23,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1325,7 +1702,7 @@
       "signal": "i_drvFICache",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 16,
+      "importance_score": 20,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1339,10 +1716,26 @@
       ]
     },
     {
-      "signal": "i_basePC_32",
+      "signal": "o_free2ICache",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 16,
+      "importance_score": 20,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:interface",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeFMerge",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 20,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1358,7 +1751,7 @@
       "signal": "i_inst_64",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 14,
+      "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1367,6 +1760,70 @@
       ],
       "evidence_refs": [
         "ev:instSplit:interface",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_basePC_32",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:interface",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_instCount",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:interface",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_normNextPc_32",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:interface",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_start",
+      "kind": "wire",
+      "width_text": "[1:0]",
+      "importance_score": 16,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
         "ev:instSplit:semantic_module"
       ]
     },
@@ -1435,10 +1892,138 @@
       ]
     },
     {
+      "signal": "w_part1_16",
+      "kind": "wire",
+      "width_text": "[15:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_part2_16",
+      "kind": "wire",
+      "width_text": "[15:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_part3_16",
+      "kind": "wire",
+      "width_text": "[15:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_part4_16",
+      "kind": "wire",
+      "width_text": "[15:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst0_33",
+      "kind": "reg",
+      "width_text": "[32:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst1_33",
+      "kind": "reg",
+      "width_text": "[32:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst2_33",
+      "kind": "reg",
+      "width_text": "[32:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst3_33",
+      "kind": "reg",
+      "width_text": "[32:0]",
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
       "signal": "o_inst0PC_32",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 14,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1454,7 +2039,7 @@
       "signal": "o_inst1PC_32",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 14,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1470,7 +2055,7 @@
       "signal": "o_inst2PC_32",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 14,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1486,7 +2071,7 @@
       "signal": "o_inst3PC_32",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 14,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1495,54 +2080,6 @@
       ],
       "evidence_refs": [
         "ev:instSplit:interface",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_instCount",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:interface",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_normNextPc_32",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:interface",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_start",
-      "kind": "wire",
-      "width_text": "[1:0]",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
         "ev:instSplit:semantic_module"
       ]
     },
@@ -1550,7 +2087,7 @@
       "signal": "w_drvFICache",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 14,
+      "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1568,56 +2105,6 @@
       "signal": "w_drv2Merge",
       "kind": "wire",
       "width_text": "1",
-      "importance_score": 14,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:knowledge_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_freeFMerge",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:interface",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_free2ICache",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:interface",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_drvFICache_t",
-      "kind": "wire",
-      "width_text": "1",
       "importance_score": 10,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -1629,40 +2116,6 @@
       "evidence_refs": [
         "ev:instSplit:parser_module",
         "ev:instSplit:knowledge_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_drvFICache_t1",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:knowledge_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_state",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 10,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
         "ev:instSplit:semantic_module"
       ]
     },
@@ -1683,138 +2136,10 @@
       ]
     },
     {
-      "signal": "w_part1_16",
-      "kind": "wire",
-      "width_text": "[15:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_part2_16",
-      "kind": "wire",
-      "width_text": "[15:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_part3_16",
-      "kind": "wire",
-      "width_text": "[15:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "w_part4_16",
-      "kind": "wire",
-      "width_text": "[15:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_inst0_33",
-      "kind": "reg",
-      "width_text": "[32:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_inst1_33",
-      "kind": "reg",
-      "width_text": "[32:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_inst2_33",
-      "kind": "reg",
-      "width_text": "[32:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
-      "signal": "r_inst3_33",
-      "kind": "reg",
-      "width_text": "[32:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:instSplit:parser_module",
-        "ev:instSplit:semantic_module"
-      ]
-    },
-    {
       "signal": "r_instCont_3",
       "kind": "reg",
       "width_text": "[2:0]",
-      "importance_score": 4,
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -1828,6 +2153,106 @@
     },
     {
       "signal": "r_normNextPc_32",
+      "kind": "reg",
+      "width_text": "[31:0]",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_drvFICache_t",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:knowledge_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_drvFICache_t1",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 6,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:knowledge_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst0PC_32",
+      "kind": "reg",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst1PC_32",
+      "kind": "reg",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst2PC_32",
+      "kind": "reg",
+      "width_text": "[31:0]",
+      "importance_score": 4,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "r_inst3PC_32",
       "kind": "reg",
       "width_text": "[31:0]",
       "importance_score": 4,
@@ -1845,6 +2270,22 @@
     {
       "signal": "r_preState",
       "kind": "reg",
+      "width_text": "1",
+      "importance_score": 2,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:instSplit:parser_module",
+        "ev:instSplit:semantic_module"
+      ]
+    },
+    {
+      "signal": "w_state",
+      "kind": "wire",
       "width_text": "1",
       "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
@@ -2056,9 +2497,9 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "当前上下文仅提供指令片段提取和起始位置，但未说明如何根据w_start和异常条件组合出最终的4条指令及其有效位。",
-      "subject": "指令拆分算法细节",
-      "needed_source_slice": "always block",
+      "question": "紧凑上下文未提供指令拆分的具体组合逻辑（如何从半字和w_start生成33位指令）以及指令计数（r_instCont_3）的计算方式。需要查看RTL源文件中的always块和组合逻辑。",
+      "subject": "指令拆分与计数逻辑",
+      "needed_source_slice": "always block, assign block",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2067,9 +2508,9 @@
       ]
     },
     {
-      "question": "上下文提到fetchFifoDelay_in1、fetchFifoDelay_in2、fetchFifoDelay_in3和fetchFifoDelay1，但未提供其模块类型或实现细节，需要确认其是否为简单寄存器延迟或具有特殊功能。",
-      "subject": "延迟链组件实现",
-      "needed_source_slice": "module declaration",
+      "question": "紧凑上下文提到fetchFifoDelay_in1、_in2、_in3，但未提供这些延迟单元的实例化细节和延迟周期。需要查看RTL源文件中的实例连接和参数。",
+      "subject": "驱动事件延迟链 (fetchFifoDelay)",
+      "needed_source_slice": "instance connections, module declaration",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2102,13 +2543,13 @@
         "internal_components_and_assignments",
         "evidence_gaps"
       ],
-      "review_needed": false
+      "review_needed": true
     },
     "purpose": {
-      "value": "指令拆分与分发单元，将64位指令包拆分为最多4条32位指令，并管理指令流控制。",
-      "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址和异常分支条件，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO组件进行流控和事件同步后，将拆分后的指令和计数发送给Merge单元。",
+      "value": "指令拆分与分发模块，将取回的64位指令包拆分为最多4条指令，并管理指令FIFO的驱动与释放。",
+      "explanation": "模块接收来自FICache的驱动事件和64位指令包，根据基地址PC的低位确定指令起始位置，将指令包拆分为最多4条32位指令及其对应的PC，并通过FIFO缓存后输出给Merge模块。同时管理FIFO的释放信号回传给ICache。",
       "certainty": "ai_inferred",
-      "confidence": "high",
+      "confidence": "medium",
       "source_layers": [
         "semantic_layer"
       ],
@@ -2128,7 +2569,9 @@
         "o_inst3PC_32",
         "o_instCount",
         "o_normNextPc_32",
-        "o_drv2Merge"
+        "o_drv2Merge",
+        "o_free2ICache",
+        "i_freeFMerge"
       ],
       "instances": [
         "fetchFifo"
@@ -2137,8 +2580,8 @@
         "flow_000_instSplit_i_drvFICache"
       ],
       "related_assignments": [],
-      "requires_rtl_source_review": false,
-      "review_status": "ready",
+      "requires_rtl_source_review": true,
+      "review_status": "needs_review",
       "evidence_refs": [
         "ev:instSplit:semantic_module"
       ],
@@ -2147,7 +2590,7 @@
           "source": "knowledge_ir/modules/instSplit.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/instSplit.json"
+          "source": "rtl/rtl/IF/instSplit.v"
         }
       ]
     },
@@ -2614,30 +3057,20 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_instSplit_i_drvFICache.json",
         "reader_takeaway": {
-          "value": "手册应重点描述该流的三级延迟缓冲加FIFO的流水线结构，以及其作为纯事件驱动的单向传递特性。",
-          "explanation": "该流结构清晰，由延迟缓冲和FIFO串联组成，无分支或数据关联。手册应强调其延迟级数、FIFO的潜在门控作用，以及事件信号命名约定。",
+          "value": "该流仅传递事件信号，无关联的数据负载或控制信号，属于纯事件驱动路径。",
+          "explanation": "接口负载契约显示 i_drvFICache 和 o_drv2Merge 均无关联的 payload 信号或 free 信号，且流步骤中所有信号均为事件驱动类型。因此该流不携带数据，仅用于事件同步或触发。",
           "certainty": "ai_inferred",
           "confidence": "medium",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:documentation_focus:001",
+          "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:data_control_effect:001",
           "doc_priority": "primary",
           "signals": [
             "i_drvFICache",
-            "w_drvFICache_t",
-            "w_drvFICache_t1",
-            "w_drvFICache",
-            "w_drv2Merge",
             "o_drv2Merge"
           ],
-          "instances": [
-            "fetchFifoDelay_in1",
-            "fetchFifoDelay_in2",
-            "fetchFifoDelay_in3",
-            "fetchFifo",
-            "fetchFifoDelay1"
-          ],
+          "instances": [],
           "related_flows": [],
           "related_assignments": [],
           "requires_rtl_source_review": false,
@@ -2648,13 +3081,61 @@
           ],
           "semantic_evidence": [
             {
-              "source": "knowledge_ir/modules/instSplit.json",
-              "path": "internal_event_flow"
+              "source": "interface.event_ports",
+              "path": "modules/instSplit.json"
+            },
+            {
+              "source": "interface.data_ports",
+              "path": "modules/instSplit.json"
             }
           ],
           "supporting_claims": [
             {
-              "value": "该驱动流将输入事件 i_drvFICache 通过三级延迟缓冲后送入一个FIFO，再经一级延迟缓冲输出为 o_drv2Merge，实现从ICache驱动到合并级的事件传递与同步。",
+              "value": "手册应重点描述三级延迟链和FIFO如何协同实现事件传递的时序控制，并指出背压和负载信息缺失。",
+              "explanation": "该流的核心结构是延迟链加FIFO，用于将输入事件延迟并缓冲后输出。手册应解释每个延迟级的延迟量（8U vs 4U）和FIFO的深度（3），以及它们对事件时序的影响。同时需注明无数据负载和背压信号，建议RTL审查确认FIFO的流控行为。",
+              "certainty": "ai_inferred",
+              "confidence": "medium",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:documentation_focus:001",
+              "doc_priority": "primary",
+              "signals": [
+                "i_drvFICache",
+                "w_drvFICache_t",
+                "w_drvFICache_t1",
+                "w_drvFICache",
+                "w_drv2Merge",
+                "o_drv2Merge"
+              ],
+              "instances": [
+                "fetchFifoDelay_in1",
+                "fetchFifoDelay_in2",
+                "fetchFifoDelay_in3",
+                "fetchFifo",
+                "fetchFifoDelay1"
+              ],
+              "related_flows": [],
+              "related_assignments": [],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:instSplit:flow:flow_000_instSplit_i_drvFICache",
+                "ev:instSplit:semantic_flow:flow_000_instSplit_i_drvFICache"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "instances.connections",
+                  "path": "modules/instSplit.json"
+                },
+                {
+                  "source": "transparent_flows",
+                  "path": "modules/instSplit.json"
+                }
+              ]
+            },
+            {
+              "value": "该驱动流将输入事件 i_drvFICache 通过三级延迟缓冲后送入一个FIFO，再经一级延迟缓冲输出为 o_drv2Merge，实现从ICache驱动到合并阶段的事件传递与同步。",
               "explanation": "流从模块输入端口 i_drvFICache 开始，依次经过三个 delay8U 实例（fetchFifoDelay_in1、_in2、_in3）形成三级流水延迟，然后进入 cFifo3_fetch 实例 fetchFifo 进行FIFO缓冲，最后通过一个 delay4U 实例 fetchFifoDelay1 输出到模块端口 o_drv2Merge。整个流是纯事件驱动的单向传递，无分支或合并点。",
               "certainty": "ai_inferred",
               "confidence": "medium",
@@ -2688,52 +3169,18 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/instSplit.json",
-                  "path": "internal_event_flow"
+                  "source": "instances.connections",
+                  "path": "modules/instSplit.json"
                 },
                 {
-                  "source": "parser_pipeline_rtl/modules/instSplit.json",
-                  "path": "flow_graph"
+                  "source": "transparent_flows",
+                  "path": "modules/instSplit.json"
                 }
               ]
             },
             {
-              "value": "该流仅传递事件信号，无显式载荷或控制信号关联。",
-              "explanation": "接口载荷契约显示 i_drvFICache 和 o_drv2Merge 均无关联载荷信号，free_signal 也为空。流中所有信号均为纯事件驱动，不携带数据或控制信息。",
-              "certainty": "ai_inferred",
-              "confidence": "low",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:instSplit:flow_000_instSplit_i_drvFICache:data_control_effect:001",
-              "doc_priority": "primary",
-              "signals": [
-                "i_drvFICache",
-                "o_drv2Merge"
-              ],
-              "instances": [],
-              "related_flows": [],
-              "related_assignments": [],
-              "requires_rtl_source_review": true,
-              "review_status": "needs_review",
-              "evidence_refs": [
-                "ev:instSplit:flow:flow_000_instSplit_i_drvFICache",
-                "ev:instSplit:semantic_flow:flow_000_instSplit_i_drvFICache"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "knowledge_ir/modules/instSplit.json",
-                  "path": "interface_data_contract"
-                },
-                {
-                  "source": "parser_pipeline_rtl/modules/instSplit.json",
-                  "path": "interface"
-                }
-              ]
-            },
-            {
-              "value": "当前上下文未提供背压或完成信号信息，无法做出可靠声明。",
-              "explanation": "接口载荷契约中 free_signal 为空，且流中无相关信号或实例表明背压机制。FIFO实例 fetchFifo 可能隐含背压，但无证据支持。",
+              "value": "当前上下文未提供 free 信号或背压机制，无法确认流控细节。",
+              "explanation": "接口负载契约中 free_signal 为空，且流步骤中无背压相关信号。FIFO实例 fetchFifo 可能内部实现流控，但无证据表明其输出背压信号到上游。最终手册应注明背压信息缺失。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -2755,8 +3202,8 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "knowledge_ir/modules/instSplit.json",
-                  "path": "interface_data_contract"
+                  "source": "interface.event_ports",
+                  "path": "modules/instSplit.json"
                 }
               ]
             }

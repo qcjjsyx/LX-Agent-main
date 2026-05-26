@@ -20,10 +20,10 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "作为片上网络(NoC)中定时器外设的槽位封装模块，负责将定时器模块接入Mesh网络的事件驱动与数据通道。",
-    "explanation": "模块通过事件驱动接口(i_driveFrmMesh/o_driveNextToMesh)和数据接口(data_from/data_to)与Mesh网络交互，内部实例化perip_slot_timer和timer_module，构成定时器外设在Mesh中的标准槽位。",
+    "value": "作为定时器外设的槽位封装层，负责将网格驱动事件路由到内部定时器外设并返回结果。",
+    "explanation": "模块通过 i_driveFrmMesh 接收网格驱动事件，将 payload data_from 传递给内部 slot 实例 (perip_slot_timer)，并将处理后的 data_to 和中断信号 int_sig_o 输出。同时通过 o_freeToMesh 和 i_freeNextFrmMesh 实现事件释放握手。",
     "certainty": "ai_inferred",
-    "confidence": "high",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
@@ -34,7 +34,9 @@
       "o_driveNextToMesh",
       "data_from",
       "data_to",
-      "int_sig_o"
+      "int_sig_o",
+      "i_freeNextFrmMesh",
+      "o_freeToMesh"
     ],
     "instances": [
       "slot",
@@ -54,7 +56,7 @@
         "source": "knowledge_ir/modules/timer_slot.json"
       },
       {
-        "source": "rtl/rtl/IONet/Timer/timer_slot.v"
+        "source": "parser_pipeline_rtl/modules/timer_slot.json"
       }
     ]
   },
@@ -396,8 +398,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_timer_slot_i_driveFrmMesh.json",
       "reader_takeaway": {
-        "value": "最终手册应强调该流为简单的直通驱动事件路径，无数据处理或控制逻辑，并指出数据载荷 data_from 的路径需单独说明。",
-        "explanation": "流结构简单，但数据与驱动分离，手册需明确区分事件驱动路径和数据路径，避免混淆。",
+        "value": "最终手册应强调该流是简单的直通路径，并指出负载 data_from 的传递关系需要 RTL 源码确认。",
+        "explanation": "当前证据显示流无分支或阻塞，但负载 data_from 与输出事件的关系不明确，需进一步审查以完善文档。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -414,11 +416,9 @@
           "slot"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:timer_slot:flow:flow_000_timer_slot_i_driveFrmMesh",
           "ev:timer_slot:semantic_flow:flow_000_timer_slot_i_driveFrmMesh"
@@ -433,8 +433,8 @@
         ],
         "supporting_claims": [
           {
-            "value": "该驱动流描述了从网格输入事件驱动信号 i_driveFrmMesh 到网格输出事件驱动信号 o_driveNextToMesh 的直通路径，由实例 slot 透明转发。",
-            "explanation": "流仅包含一个步骤，实例 slot 接收 i_driveFrmMesh 并直接产生 o_driveNextToMesh，无分支、汇合或阻塞点，表明这是一个简单的直通驱动事件流。",
+            "value": "该驱动流描述了从网格输入事件 i_driveFrmMesh 到网格输出事件 o_driveNextToMesh 的透明直通路径，由实例 slot 直接转发。",
+            "explanation": "流仅包含一个步骤，即实例 slot 将输入驱动 i_driveFrmMesh 直接映射到输出驱动 o_driveNextToMesh，无分支、汇合或阻塞点，表明这是一个简单的直通事件流。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -450,9 +450,7 @@
               "slot"
             ],
             "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
+            "related_assignments": [],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -464,17 +462,13 @@
                 "source": "flow.steps"
               },
               {
-                "source": "flow.evidence",
-                "path": "transparent_flows"
-              },
-              {
                 "source": "related_component_connections"
               }
             ]
           },
           {
-            "value": "输入事件 i_driveFrmMesh 携带有效载荷 data_from，但该载荷在流中未与输出事件 o_driveNextToMesh 关联。",
-            "explanation": "接口有效载荷契约显示 i_driveFrmMesh 有 payload data_from，但 o_driveNextToMesh 无 payload，且流中无赋值依赖连接 data_from 到输出，表明数据路径与驱动路径分离。",
+            "value": "数据信号 data_from 与事件 i_driveFrmMesh 关联，作为输入事件的负载，但流中未明确其如何影响输出。",
+            "explanation": "接口负载契约显示 data_from 是 i_driveFrmMesh 的负载，但流步骤和连接中未提及 data_from 与 o_driveNextToMesh 的关系，表明负载可能被直通或由 slot 内部处理，但当前证据不足。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -484,14 +478,11 @@
             "doc_priority": "secondary",
             "signals": [
               "i_driveFrmMesh",
-              "o_driveNextToMesh",
               "data_from"
             ],
             "instances": [],
             "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
+            "related_assignments": [],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [
@@ -508,8 +499,8 @@
             ]
           },
           {
-            "value": "输入事件 i_driveFrmMesh 关联空闲信号 o_freeToMesh，输出事件 o_driveNextToMesh 关联空闲信号 i_freeNextFrmMesh，但流中未显示其交互。",
-            "explanation": "接口契约列出了空闲信号，但流步骤和连接中未包含这些信号，无法确定背压或完成机制是否与驱动流直接耦合。",
+            "value": "流中未明确 free/backpressure 信号与事件驱动的关系，但接口契约暗示了可能的流控信号。",
+            "explanation": "输入事件 i_driveFrmMesh 关联 free 信号 o_freeToMesh，输出事件 o_driveNextToMesh 关联 free 信号 i_freeNextFrmMesh，但流步骤和连接中未包含这些信号，表明流控可能独立于直通路径。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [

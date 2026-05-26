@@ -1,8 +1,8 @@
 # 模块 `cmsdk_apb_watchdog`
 
 - 源文件：`rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v`。
-- 职责：AI 推断：该模块是APB总线上的看门狗定时器控制器，负责管理看门狗定时器的配置、锁定、中断和复位输出。。
-- 说明：模块通过APB接口接收配置数据，内部实例化一个看门狗定时器核心（cmsdk_apb_watchdog_frc），并生成中断和复位输出信号。地址译码逻辑和写使能信号表明它负责寄存器访问控制。
+- 职责：AI 推断：该模块是APB总线从设备，负责看门狗定时器的寄存器接口与中断/复位输出控制。。
+- 说明：模块通过APB接口接收配置和命令，内部实例化cmsdk_apb_watchdog_frc作为核心定时器，并基于锁定机制和测试模式选择输出中断或复位信号。
 
 ## 1. 层级位置
 
@@ -59,12 +59,12 @@ cmsdk_apb_watchdog
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | control_path | `wdog_lock_wr_en` | (PADDR == {`ARM_WDOGLA,`ARM_WDOGLOCKA}) ? ((PSEL & PWRITE) & (~PENABLE)) : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `wdog_lock_wr_val` | (PWDATA == 32'h1ACCE551) ? 1'b0 : 1'b1 | AI 推断：该信号通过比较写入数据与特定密钥（0x1ACCE551）来决定是否解锁看门狗寄存器。 |
+| `assign_1` | control_path | `wdog_lock_wr_en` | (PADDR == {`ARM_WDOGLA,`ARM_WDOGLOCKA}) ? ((PSEL & PWRITE) & (~PENABLE)) : 1'b0 | AI 推断：实现锁定寄存器的写使能和锁定值判断。 |
+| `assign_2` | data_path | `wdog_lock_wr_val` | (PWDATA == 32'h1ACCE551) ? 1'b0 : 1'b1 | AI 推断：实现锁定寄存器的写使能和锁定值判断。 |
 | `assign_3` | control_path | `wdog_itcr_wr_en` | (PADDR == {`ARM_WDOGIA,`ARM_WDOGTCRA}) ? (PSEL & PWRITE & (~PENABLE) & (~wdog_lock)) : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_4` | control_path | `wdog_itop_wr_en` | (PADDR == {`ARM_WDOGIA,`ARM_WDOGTOPA}) ? (PSEL & PWRITE & (~PENABLE) & (~wdog_lock)) : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | control_path | `prdata_next_en` | PSEL & (~PWRITE) & (~PENABLE) | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_5` | control_path | `prdata_next_en` | PSEL & (~PWRITE) & (~PENABLE) | AI 推断：生成读数据使能信号，用于在APB地址相位采样读数据。 |
 | `assign_6` | data_path | `PRDATA` | i_prdata | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_7` | unknown | `WDOGINT` | (wdog_itcr == 1'b0) ? i_wdogint : wdog_itop[1] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_8` | unknown | `WDOGRES` | (wdog_itcr == 1'b0) ? i_wdogres : wdog_itop[0] | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | control_path | `frc_sel` | (PSEL & (PADDR [11:5] == `ARM_WDOG1A)) ? 1'b1 : 1'b0 | AI 推断：该信号用于选择看门狗核心的地址范围，决定是否响应APB访问。 |
+| `assign_0` | control_path | `frc_sel` | (PSEL & (PADDR [11:5] == `ARM_WDOG1A)) ? 1'b1 : 1'b0 | AI 推断：通过地址译码选择看门狗功能单元。 |

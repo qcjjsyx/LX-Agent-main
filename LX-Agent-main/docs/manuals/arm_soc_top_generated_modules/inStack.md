@@ -1,8 +1,8 @@
 # 模块 `inStack`
 
 - 源文件：`rtl/rtl/int/inStack.v`。
-- 职责：AI 推断：入栈数据合并与选择模块，负责将来自RGRF和RPSR的驱动事件及数据合并，并依据选择逻辑输出到SPDec或回送至RGRF/RPSR。。
-- 说明：模块通过dataMerge合并来自RGRF和RPSR的驱动事件与数据，生成224位栈数据；再通过inStackSele和dataSpli进行选择分发，最终输出到SPDec或回送至RGRF/RPSR。同时管理多个自由信号以协调模块间握手。
+- 职责：AI 推断：入栈数据打包与地址计算模块，负责将来自RGRF和RPSR的寄存器数据与PC值合并，并基于SP计算四个入栈槽位的地址，最终通过选择器输出一组96位数据（64位数据+32位地址）。。
+- 说明：模块接收来自RGRF和RPSR的驱动事件，通过dataMerge（WaitMerge）将192位GRF数据和32位PSR数据合并为224位栈数据，再通过assign将PC值与栈数据拼接形成四个64位数据块，同时基于SP计算四个递减的32位地址。最终通过多路选择器（由w_inNum_2选择）输出一组96位数据（64位数据+32位地址）。模块还包含inStackMerge（MutexMerge）和inStackSele（SelSplit）用于驱动事件的选择与合并，以及dataSpli（SelSplit）用于将输入驱动分发到RGRF和RPSR的输出驱动。
 
 ## 1. 层级位置
 
@@ -67,7 +67,7 @@ inStack
 - Payload：未记录。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=2，blocking=2。
-- AI 推断：最终手册应强调该流无明确端点，需RTL源码确认
+- AI 推断：该流无明确数据载荷，可能为纯控制事件流
 
 ### `i_driveFromRPSR_1`
 
@@ -75,7 +75,7 @@ inStack
 - Payload：未记录。
 - 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
 - 结构复杂度：branch=0，join=2，blocking=2。
-- AI 推断：该驱动事件无关联数据负载，仅作为控制事件传播
+- AI 推断：最终手册应强调该流程未到达模块输出端点，可能内部终止或需要进一步追踪
 
 
 ## 5. 内部组件与 assign 影响
@@ -92,10 +92,10 @@ inStack
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_4` | data_path | `w_inData0Addr_32` | i_SP_32 - 8 | AI 推断：基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。 |
-| `assign_5` | data_path | `w_inData1Addr_32` | i_SP_32 - 16 | AI 推断：基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。 |
-| `assign_6` | data_path | `w_inData2Addr_32` | i_SP_32 - 24 | AI 推断：基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。 |
-| `assign_7` | data_path | `w_inData3Addr_32` | i_SP_32 - 32 | AI 推断：基于当前SP值计算四个入栈数据项的地址，分别对应SP-8、SP-16、SP-24、SP-32。 |
-| `assign_10` | data_path | `o_data_96` | (w_inNum_2==2'b00)?({w_inData0_64,w_inData0Addr_32}): (w_inNum_2==2'b01)?({w_inData1_64,w_inD... | AI 推断：根据w_inNum_2选择一组64位数据+32位地址输出，实现入栈数据的选择输出。 |
+| `assign_4` | data_path | `w_inData0Addr_32` | i_SP_32 - 8 | AI 推断：基于SP计算四个递减的入栈地址，间隔8字节。 |
+| `assign_5` | data_path | `w_inData1Addr_32` | i_SP_32 - 16 | AI 推断：基于SP计算四个递减的入栈地址，间隔8字节。 |
+| `assign_6` | data_path | `w_inData2Addr_32` | i_SP_32 - 24 | AI 推断：基于SP计算四个递减的入栈地址，间隔8字节。 |
+| `assign_7` | data_path | `w_inData3Addr_32` | i_SP_32 - 32 | AI 推断：基于SP计算四个递减的入栈地址，间隔8字节。 |
+| `assign_10` | data_path | `o_data_96` | (w_inNum_2==2'b00)?({w_inData0_64,w_inData0Addr_32}): (w_inNum_2==2'b01)?({w_inData1_64,w_inD... | AI 推断：通过多路选择器输出一组96位数据（64位数据+32位地址）。 |
 | `assign_11` | data_path | `o_SP_32` | r_SP_32 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | data_path | `w_inData0_64` | {i_pc_32, w_stackData_224[223:192]} | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | data_path | `w_inData0_64` | {i_pc_32, w_stackData_224[223:192]} | AI 推断：将PC值与栈数据高位拼接，形成第一个入栈数据块。 |

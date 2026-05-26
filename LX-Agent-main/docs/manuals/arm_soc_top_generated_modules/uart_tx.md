@@ -1,8 +1,8 @@
 # 模块 `uart_tx`
 
 - 源文件：`rtl/rtl/memory/uart_tx.v`。
-- 职责：AI 推断：UART发送模块，负责将并行数据转换为串行比特流并通过tx_pin输出。
-- 说明：模块通过tx_data和tx_data_valid接收并行数据，使用tx_data_ready进行握手控制，最终通过tx_pin输出串行数据
+- 职责：AI 推断：该模块负责将并行数据转换为串行比特流，并通过单线 tx_pin 发送，实现 UART 发送功能。。
+- 说明：模块具有数据输入 tx_data[7:0] 和握手信号 tx_data_valid/tx_data_ready，表明其从系统总线接收并行数据。输出 tx_pin 由内部 tx_reg 驱动，表明串行化过程在内部完成。
 
 ## 1. 层级位置
 
@@ -51,4 +51,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `tx_pin` | tx_reg | AI 推断：串行输出引脚，由内部移位寄存器tx_reg驱动 |
+| `assign_0` | unknown | `tx_pin` | tx_reg | AI 推断：该赋值将内部串行化寄存器 tx_reg 的值直接驱动到输出引脚 tx_pin，是串行数据输出的关键路径。 |
