@@ -1,8 +1,8 @@
 # 模块 `decoder`
 
-- 源文件：`rtl/rtl/Decode/decoder.v`。
-- 职责：AI 推断：指令解码与分发核心模块，负责将取指阶段传入的PC和指令数据解码为控制信号，并分发至发射和异常处理阶段。。
-- 说明：模块接收来自IF阶段的驱动事件和PC+指令数据，通过内部选择器（decoderSele）根据指令宽度（16位或32位）分流至对应的解码器（decoder16/decoder32），解码结果经互斥合并器（decoMerge）汇总后，输出解码数据、分支立即数、写使能等信号，并产生驱动事件至发射（Launch）和异常（Exc）阶段。同时处理来自下游的释放信号以控制流控。
+- 源文件：`rtl\rtl\Decode\decoder.v`。
+- 职责（AI 推断）：模块通过选择器根据 `i_is16_1` 将输入驱动路由至对应的译码器（16 位或 32 位）；译码后的驱动经过合并与延迟链路后，由分离器产生 `o_driveToLaunch_1` 和 `o_driveToExc_1`，同时提取译码数据。
+- 数据流说明：切片显示 `i_driveFromIF` 连接至 `decoderSele.i_drive`（line 61）；`decoderSele` 依据 `{i_is16_1, ...}` 选择驱动到 `decoder_16` 或 `decoder_32`（lines 60‑64）；两个译码器的驱动完成信号分别接至 `decoMerge.i_drive0` 和 `.i_drive1`（lines 77‑83, 86‑90, 99‑104）；`decoMerge` 的输出驱动 `decoDriToDecSpli_1`（line 102），经 delay 与 `cFifo1`（lines 112‑115）到达 `decSpli.i_drive`（line 146）；`decSpli` 最终生成 `o_driveToLaunch_1` 与 `o_driveToExc_1`（lines 145‑150）。数据通路与驱动路由与声明一致。
 
 ## 1. 层级位置
 
@@ -42,8 +42,8 @@ decoder
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_driveFromIF`；数据输入：`i_pcAndIns_64`；free 输入：`i_freeFromExc_1`, `i_freeFromLaunch_1`；其他输入：`i_is16_1`, `i_isInInt`。
-- 输出：drive 输出：`o_driveToExc_1`, `o_driveToLaunch_1`；数据输出：`o_blImm9_9`, `o_decPCAndNum_36`, `o_decoderData_187`；控制输出：`o_nzcvWen_4`, `o_wen_2`；free 输出：`o_freeToIF`。
+- 接收：drive 输入 `i_driveFromIF`；数据输入 `i_pcAndIns_64`；free 输入 `i_freeFromExc_1`、`i_freeFromLaunch_1`；其他输入 `i_is16_1`、`i_isInInt`。
+- 输出：drive 输出 `o_driveToExc_1`、`o_driveToLaunch_1`；数据输出 `o_blImm9_9`、`o_decPCAndNum_36`、`o_decoderData_187`；控制输出 `o_nzcvWen_4`、`o_wen_2`；free 输出 `o_freeToIF`。
 
 ### 2.1 端口分组
 
@@ -57,7 +57,7 @@ decoder
 
 | Interface | 方向 | Event | Payload | Free/backpressure |
 | --- | --- | --- | --- | --- |
-| `i_driveFromIF` | input | `i_driveFromIF` | `i_pcAndIns_64 [ 63:0]` | `o_freeToIF` |
+| `i_driveFromIF` | input | `i_driveFromIF` | `i_pcAndIns_64 [63:0]` | `o_freeToIF` |
 | `o_driveToExc_1` | output | `o_driveToExc_1` | 未记录 | `i_freeFromExc_1` |
 | `o_driveToLaunch_1` | output | `o_driveToLaunch_1` | 未记录 | `i_freeFromLaunch_1` |
 
@@ -65,12 +65,11 @@ decoder
 
 ### `i_driveFromIF`
 
-- 确定性事实：`decoder flow from i_driveFromIF`；flow_id=`flow_000_decoder_i_driveFromIF`。
-- Payload：`i_driveFromIF` -> `i_pcAndIns_64 [ 63:0]`。
-- 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
+- Flow 名称：`decoder flow from i_driveFromIF`（ID: `flow_000_decoder_i_driveFromIF`）。
+- Payload：`i_driveFromIF` → `i_pcAndIns_64 [63:0]`。
+- 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.
 - 结构复杂度：branch=1，join=1，blocking=1。
-- AI 推断：指令数据作为共享载荷，同时提供给选择器和两个解码器，用于解码操作。
-
+- AI 推断：手册应强调由 selector 驱动的并行解码架构，并明确指出当前知识未能覆盖合并后的驱动去向，不可臆造下游端点。
 
 ## 5. 内部组件与 assign 影响
 
@@ -86,8 +85,8 @@ decoder
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | data_path | `o_decoderData_187` | {1'b0, w_decoderData1_191[186:2], w_is16_1} | AI 推断：从合并后的解码数据中提取并组装最终解码输出，包含指令类型、操作数等关键信息。 |
-| `assign_3` | control_path | `o_wen_2` | w_decoderData1_191[1:0] | AI 推断：从解码数据中提取写使能信号，控制寄存器写操作。 |
+| `assign_2` | data_path | `o_decoderData_187` | {1'b0, w_decoderData1_191[186:2], w_is16_1} | AI 推断：将内部宽译码数据重组为187位输出，末位插入 w_is16_1 标识指令集。 |
+| `assign_3` | control_path | `o_wen_2` | w_decoderData1_191[1:0] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_4` | unknown | `o_blImm9_9` | r_blImm9_9 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_5` | control_path | `o_nzcvWen_4` | r_nzcvWen_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_6` | data_path | `o_decPCAndNum_36` | {w_decoderData1_191[136:105],w_decoderData1_191[190:187]} | AI 推断：从解码数据中提取PC值和指令编号，用于异常处理和调试。 |
+| `assign_6` | data_path | `o_decPCAndNum_36` | {w_decoderData1_191[136:105],w_decoderData1_191[190:187]} | AI 推断：从译码数据中提取 PC 相关字段和立即数，组成36位计算用值。 |

@@ -1,16 +1,16 @@
 # 模块 `CPU2NoC`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/CPU2NoC.v`。
-- 职责：AI 推断：事件 i_drvFNoCChannel0 与数据载荷 i_dataFNoCChannel0_51 同步进入合并器 mutexRead。。
-- 说明：切片3显示 i_drvFNoCChannel0 连接到 mutexRead 的 i_drive0，i_dataFNoCChannel0_51 连接到 i_data0_51，数据与事件在同一合并器端口同步输入。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\CPU2NoC.v`
+- 职责：AI 推断：CPU2NoC 是一个连接 CPU 与双通道 NoC 的双向适配器桥接模块，负责根据 IO 地址将 CPU 发起的写事务选择性路由至目标 NoC 通道，并将两个 NoC 通道返回的读响应合并后递交给 CPU。
+- 说明：模块接口包含 CPU 侧的一组 event+data+free 信号和 NoC 侧两通道独立的 event+data+free 信号。内部事件流显示 CPU 驱动的 i_drvFCPU 经多级缓存与选择逻辑后同时流向 o_drv2NoCChanel0 和 o_drv2NoCChanel1，而两个 NoC 通道的 i_drvFNoCChannel0/1 经互斥合并后流向 o_drv2CPU，形成双向全双工通道。组件实例包含 FIFO、MutexMerge、Selector 和 Splitter，承担缓冲、仲裁、选通与扇出等结构角色。
 
 ## 1. 层级位置
 
-- Parents：`IONet_slot`。
-- Children：无。
-- Component children：`cFifo1`, `cMutexMerge2_51b`, `cSelector2_1b`, `cSelector2_41b`, `cSplitter2_51b`。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`IONet_slot`
+- Children：无
+- Component children：`cFifo1`, `cMutexMerge2_51b`, `cSelector2_1b`, `cSelector2_41b`, `cSplitter2_51b`
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -56,8 +56,12 @@ CPU2NoC
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_drvFCPU`, `i_drvFNoCChannel0`, `i_drvFNoCChannel1`；数据输入：`i_dataFCPU_51`, `i_dataFNoCChannel0_51`, `i_dataFNoCChannel1_51`；free 输入：`i_freeFCPU`, `i_freeFNoCChanel0`, `i_freeFNoCChanel1`。
-- 输出：drive 输出：`o_drv2CPU`, `o_drv2NoCChanel0`, `o_drv2NoCChanel1`；数据输出：`o_data2CPU_51`, `o_data2NoCChanel0_51`, `o_data2NoCChanel1_51`；free 输出：`o_free2CPU`, `o_free2NocChannel0`, `o_free2NocChannel1`。
+- 驱动事件输入：`i_drvFCPU`, `i_drvFNoCChannel0`, `i_drvFNoCChannel1`
+- 数据输入：`i_dataFCPU_51`, `i_dataFNoCChannel0_51`, `i_dataFNoCChannel1_51`
+- 流控（free）输入：`i_freeFCPU`, `i_freeFNoCChanel0`, `i_freeFNoCChanel1`
+- 驱动事件输出：`o_drv2CPU`, `o_drv2NoCChanel0`, `o_drv2NoCChanel1`
+- 数据输出：`o_data2CPU_51`, `o_data2NoCChanel0_51`, `o_data2NoCChanel1_51`
+- 流控（free）输出：`o_free2CPU`, `o_free2NocChannel0`, `o_free2NocChannel1`
 
 ### 2.1 端口分组
 
@@ -82,28 +86,27 @@ CPU2NoC
 
 ### `i_drvFCPU`
 
-- 确定性事实：`i_drvFCPU to o_drv2NoCChanel0, o_drv2NoCChanel1`；flow_id=`flow_000_CPU2NoC_i_drvFCPU`。
-- Payload：`i_drvFCPU` -> `i_dataFCPU_51 [50:0]`, `o_drv2NoCChanel0` -> `o_data2NoCChanel0_51 [50:0]`, `o_drv2NoCChanel1` -> `o_data2NoCChanel1_51 [50:0]`。
-- 输出/影响：`o_drv2NoCChanel0`, `o_drv2NoCChanel1`。
-- 结构复杂度：branch=5，join=1，blocking=3。
-- AI 推断：事件i_drvFCPU携带51位数据载荷i_dataFCPU_51，该载荷随事件流传播，最终在splitterChannel0/1处输出为o_data2NoCChanel0_51和o_data2NoCChanel1_51。
+- 确定性事实：`i_drvFCPU to o_drv2NoCChanel0, o_drv2NoCChanel1`；flow_id=`flow_000_CPU2NoC_i_drvFCPU`
+- Payload：`i_drvFCPU` -> `i_dataFCPU_51 [50:0]`，`o_drv2NoCChanel0` -> `o_data2NoCChanel0_51 [50:0]`，`o_drv2NoCChanel1` -> `o_data2NoCChanel1_51 [50:0]`
+- 输出/影响：`o_drv2NoCChanel0`, `o_drv2NoCChanel1`
+- 结构复杂度：branch=5，join=1，blocking=3
+- AI 推断：重点描述输入事件通过两级 FIFO 到输出通道的流水线结构、`select0` 的分发行为以及 `mutexWrite` 的仲裁模式，并强调数据通路与背压交互；弱化透明延迟组件（如 delay7、delay18、delay20）的内部作用。
 
 ### `i_drvFNoCChannel0`
 
-- 确定性事实：`i_drvFNoCChannel0 to o_drv2CPU`；flow_id=`flow_001_CPU2NoC_i_drvFNoCChannel0`。
-- Payload：`i_drvFNoCChannel0` -> `i_dataFNoCChannel0_51 [50:0]`。
-- 输出/影响：`o_drv2CPU`。
-- 结构复杂度：branch=0，join=1，blocking=3。
-- AI 推断：输入数据载荷 i_dataFNoCChannel0_51 与驱动事件 i_drvFNoCChannel0 相关联，并随事件流传递。
+- 确定性事实：`i_drvFNoCChannel0 to o_drv2CPU`；flow_id=`flow_001_CPU2NoC_i_drvFNoCChannel0`
+- Payload：`i_drvFNoCChannel0` -> `i_dataFNoCChannel0_51 [50:0]`
+- 输出/影响：`o_drv2CPU`
+- 结构复杂度：branch=0，join=1，blocking=3
+- AI 推断：该流是 NoC 通道 0 到 CPU 的轻量事件通知，输出无数据伴随，内部经由互斥合并与两级 FIFO；应避免夸大数据传递细节。
 
 ### `i_drvFNoCChannel1`
 
-- 确定性事实：`i_drvFNoCChannel1 to o_drv2CPU`；flow_id=`flow_002_CPU2NoC_i_drvFNoCChannel1`。
-- Payload：`i_drvFNoCChannel1` -> `i_dataFNoCChannel1_51 [50:0]`。
-- 输出/影响：`o_drv2CPU`。
-- 结构复杂度：branch=0，join=1，blocking=3。
-- AI 推断：数据信号 i_dataFNoCChannel1_51 作为事件 i_drvFNoCChannel1 的伴随载荷，随事件流同步传递。
-
+- 确定性事实：`i_drvFNoCChannel1 to o_drv2CPU`；flow_id=`flow_002_CPU2NoC_i_drvFNoCChannel1`
+- Payload：`i_drvFNoCChannel1` -> `i_dataFNoCChannel1_51 [50:0]`
+- 输出/影响：`o_drv2CPU`
+- 结构复杂度：branch=0，join=1，blocking=3
+- AI 推断：侧重描述仲裁合并流程、两级 FIFO 的流水线作用以及输出完成反压方案，弱化内部 FIFO 细节。
 
 ## 5. 内部组件与 assign 影响
 

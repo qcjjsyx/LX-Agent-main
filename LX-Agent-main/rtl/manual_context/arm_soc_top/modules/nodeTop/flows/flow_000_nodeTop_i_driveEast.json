@@ -300,10 +300,10 @@
         "w_east2westR"
       ],
       "role_in_flow": {
-        "value": "事件路由分发器，将东向输入事件根据目标方向扇出到五个仲裁器。",
-        "explanation": "eastRouteMsg 接收 i_driveEast 事件，并根据事件携带的目标方向信息，将事件驱动信号（w_east2*R）分别发送到五个方向仲裁器的对应输入端口。这是流中唯一的分支点。",
+        "value": "路由模块，负责将i_driveEast事件根据消息目的地选择性分发到东/本地/北/南/西五个输出通道之一。",
+        "explanation": "作为i_driveEast事件在模块内遇见的第一个实例，eastRouteMsg接收i_driveEast驱动和i_eastInMsg_51负载，内部判定消息应前往哪个方向，然后使能对应的o_driveEArb/o_driveLArb/o_driveNArb/o_driveSArb/o_driveWArb之一，从而将事件送入目标方向的仲裁器。该行为体现为流步骤中的分支点，实际是条件选择而非广播。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -322,17 +322,19 @@
         ],
         "related_flows": [],
         "related_assignments": [
-          "(none)"
+          "无"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:nodeTop:semantic_flow:flow_000_nodeTop_i_driveEast"
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/nodeTop.json",
-            "path": "connection_graph"
+            "source": "compact_context.flow.steps[order=1]"
+          },
+          {
+            "source": "related_component_connections (connections from eastRouteMsg to arbiters)"
           }
         ]
       },
@@ -598,10 +600,10 @@
     }
   ],
   "semantic_meaning": {
-    "value": "手册应重点描述从东向输入事件到五个方向输出事件驱动的完整路径，以及 eastRouteMsg 的路由分发作用和 arbMsg 的仲裁作用。",
-    "explanation": "该流的核心是 eastRouteMsg 的分支扇出和 arbMsg 的合并仲裁。手册应清晰说明事件如何从单一输入被路由到多个方向，并强调每个方向输出是多个来源事件仲裁的结果。反压和负载数据路径可作为次要内容提及，但需注明需要 RTL 源码确认。",
+    "value": "手册应突出该流展现的东向输入到多方向仲裁的拓扑结构，弱化具体路由算法和仲裁优先级，因为缺少内部逻辑证据。",
+    "explanation": "现有上下文仅提供实例及其连接关系，未给出eastRouteMsg的路由决策逻辑（是查表、按消息字段或轮询）以及arbMsg的仲裁机制（固定优先级、轮转等）。手册应把nodeTop描绘为将东向输入经路由/仲裁后分发至某方向输出的节点，并标注“内部实现待查阅RTL”以保持准确。",
     "certainty": "ai_inferred",
-    "confidence": "high",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
@@ -625,30 +627,25 @@
     ],
     "related_flows": [],
     "related_assignments": [
-      "(none)"
+      "无"
     ],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:nodeTop:flow:flow_000_nodeTop_i_driveEast",
       "ev:nodeTop:semantic_flow:flow_000_nodeTop_i_driveEast"
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/nodeTop.json",
-        "path": "internal_event_flow"
-      },
-      {
-        "source": "parser_pipeline_rtl/modules/nodeTop.json",
-        "path": "connection_graph"
+        "source": "compact_context.flow"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从东向输入事件驱动，经路由后扇出到五个方向仲裁器，最终产生五个方向输出事件驱动的单源多目标内部事件流。",
-        "explanation": "该流以 i_driveEast 为唯一起点，通过 eastRouteMsg 实例将事件路由到五个方向（东、本地、北、南、西）的仲裁器，每个仲裁器再输出对应的 o_drive* 信号。流中无阻塞点，但存在分支和合并点，表明事件可能被路由到多个方向，并在每个方向与其他来源的事件进行仲裁。",
+        "value": "i_driveEast事件在nodeTop内部先经eastRouteMsg路由，再抵达各方向仲裁器并可能产生五个方向的输出驱动之一。",
+        "explanation": "该流从输入端口i_driveEast开始，通过eastRouteMsg实例进行路由分发（可能依据消息携带的目的地信息），路由结果分别通过w_east2eastR等信号送入东、本地、北、南、西五个方向的arbMsg仲裁器；仲裁器再合并其他来源而来的同方向请求，最终输出到o_driveEast/o_driveLocal/o_driveNorth/o_driveSouth/o_driveWest。因此这是一个条件扩散流，具体哪个输出端点被激活依赖于eastRouteMsg内部的路由决策。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -656,6 +653,11 @@
         "doc_priority": "primary",
         "signals": [
           "i_driveEast",
+          "w_east2eastR",
+          "w_east2localR",
+          "w_east2northR",
+          "w_east2southR",
+          "w_east2westR",
           "o_driveEast",
           "o_driveLocal",
           "o_driveNorth",
@@ -672,37 +674,37 @@
         ],
         "related_flows": [],
         "related_assignments": [
-          "(none)"
+          "无"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:nodeTop:flow:flow_000_nodeTop_i_driveEast",
           "ev:nodeTop:semantic_flow:flow_000_nodeTop_i_driveEast"
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/nodeTop.json",
-            "path": "internal_event_flow"
+            "source": "compact_context.flow.steps"
           },
           {
-            "source": "parser_pipeline_rtl/modules/nodeTop.json",
-            "path": "flow_graph"
+            "source": "related_component_connections"
+          },
+          {
+            "source": "interface_payload_contracts"
           }
         ]
       },
       {
-        "value": "i_driveEast 事件驱动信号与 51 位数据负载 i_eastInMsg_51 相关联，共同构成东向输入接口。",
-        "explanation": "接口契约显示 i_driveEast 事件输入伴随一个 51 位数据负载 i_eastInMsg_51。该数据负载通过 eastRouteMsg 实例，并可能随事件路由到各个方向仲裁器，最终作为 o_*Msg_51 输出。",
+        "value": "i_eastInMsg_51负载中包含的目标方向字段支配eastRouteMsg的路由选择，并最终传递到获胜仲裁器的输出负载中。",
+        "explanation": "事件i_driveEast携带51位负载i_eastInMsg_51，该负载在eastRouteMsg内被解析，其中的目的地信息决定eastRouteMsg选择哪一个输出通道（从而决定哪个仲裁器被启动）。当选通仲裁器完成仲裁后，其输出负载（如o_eastMsg_51）将反映该消息内容。由于没有assign揭示具体路由逻辑，上述推断基于典型路由消息；真实的控制场若不存在，则路由可能为广播或多播，但当前拓扑外观支持条件单播。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:nodeTop:flow_000_nodeTop_i_driveEast:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_driveEast",
           "i_eastInMsg_51",
           "o_eastMsg_51",
           "o_localMsg_51",
@@ -713,37 +715,48 @@
         "instances": [],
         "related_flows": [],
         "related_assignments": [
-          "(none)"
+          "无"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:nodeTop:flow:flow_000_nodeTop_i_driveEast",
           "ev:nodeTop:semantic_flow:flow_000_nodeTop_i_driveEast"
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/nodeTop.json",
-            "path": "interface_data_contract"
+            "source": "interface_payload_contracts"
+          },
+          {
+            "source": "related_component_connections (只显示连接，未揭露数据场选择逻辑)"
           }
         ]
       },
       {
-        "value": "接口契约表明存在反压信号 o_freeEast，但本流上下文未提供其与事件驱动信号的直接连接或逻辑关系。",
-        "explanation": "虽然接口契约列出了 i_driveEast 事件对应的 free_signal 为 o_freeEast，但提供的流步骤和连接图中未包含该信号。因此，无法在本流中确定反压机制的具体实现或影响。",
+        "value": "输入free信号o_freeEast和各自输出free信号i_freeEast等构成可能的跨组件反压链，但具体链路在上下文中未充分显现。",
+        "explanation": "接口payload合同显示i_driveEast关联o_freeEast，表明下游模块可以通过该信号反压i_driveEast事件的发送；同时各输出驱动关联对应的i_freeLocal/i_freeNorth等free信号，然而这些free信号如何影响o_freeEast（即反压如何从输出端回传至输入端）并不清楚。从设计惯例推测，可能由eastRouteMsg或仲裁器聚合下游free状态并反馈至输入端，但这需要RTL源确认。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:nodeTop:flow_000_nodeTop_i_driveEast:completion_backpressure:001",
-        "doc_priority": "reference",
+        "doc_priority": "secondary",
         "signals": [
-          "i_driveEast",
-          "o_freeEast"
+          "o_freeEast",
+          "i_freeEast",
+          "i_freeLocal",
+          "i_freeNorth",
+          "i_freeSouth",
+          "i_freeWest"
         ],
         "instances": [
-          "(none)"
+          "eastRouteMsg",
+          "eastArbMsg",
+          "localArbMsg",
+          "northArbMsg",
+          "southArbMsg",
+          "westArbMsg"
         ],
         "related_flows": [],
         "related_assignments": [],
@@ -755,8 +768,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/nodeTop.json",
-            "path": "interface_data_contract"
+            "source": "interface_payload_contracts中的free_signal字段"
           }
         ]
       }

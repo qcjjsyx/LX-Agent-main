@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "grf",
   "flow_id": "flow_003_grf_i_driveFromWb_1",
-  "input_hash": "34966ec680b6f72b0ad5e3f3a6390abd70999e21c656d0109812c568473fe317",
+  "input_hash": "85ee138599076565d7765508250dc5643875ccfe234f1a578ed9c2bd2f0ef4cf",
   "source_context": "ai_context/modules/grf/flows/flow_003_grf_i_driveFromWb_1.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/GRF/grf.v",
+      "source": "rtl\\rtl\\GRF\\grf.v",
       "paths": [
         "module_source"
       ]
@@ -41,7 +41,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/GRF/grf.v",
+        "rtl_file": "rtl\\rtl\\GRF\\grf.v",
         "parser_module": "modules/grf.json"
       }
     }
@@ -66,12 +66,14 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "写回阶段驱动事件流，通过单个Fifo1实例将外部写请求事件从输入端口转发至输出端口",
+      "summary": "该流将写总线输入驱动事件经深度为1的FIFO缓冲后产生输出驱动事件，作为通用寄存器文件写回阶段的事件传递通道。",
       "subject": "flow_003_grf_i_driveFromWb_1",
-      "explanation": "该流仅包含一个Fifo1实例cFifo1_4作为直通级，输入i_driveFromWb_1直接驱动其输入，其输出o_driveNext直接驱动模块输出o_grfDriveToWb_1，无分支或合并点，表明这是一个简单的写请求事件转发路径",
+      "explanation": "提供的上下文仅包含一个cFifo1_4实例，其输入直连i_driveFromWb_1，输出直连o_grfDriveToWb_1，无分支或合并点，因此该流本质上是单级事件缓冲，主要用途可能是隔离或同步写回请求的控制信号。",
       "signals": [
         "i_driveFromWb_1",
-        "o_grfDriveToWb_1"
+        "o_grfDriveToWb_1",
+        "cFifo1_4.i_drive",
+        "cFifo1_4.o_driveNext"
       ],
       "instances": [
         "cFifo1_4"
@@ -100,27 +102,26 @@
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
       "subject": "cFifo1_4",
-      "summary": "写请求事件直通级，可能实现事件传播的门控或缓冲",
-      "explanation": "该Fifo1实例位于流路径中间，输入i_driveFromWb_1直接连接其i_drive端口，输出o_driveNext直接连接o_grfDriveToWb_1，无其他分支或合并，表明其角色是事件转发级，可能根据内部状态（如满/空）决定是否允许事件通过",
+      "summary": "该实例作为1深度事件FIFO，用于缓冲和可能隔离写回驱动事件，不携带数据负载。",
+      "explanation": "实例类型cFifo1_grf属于Fifo1家族，其输入i_drive和输出o_driveNext直接绑定到模块边界的事件端口，仅传播控制令牌，没有并行数据路径，因此它在流中充当纯事件管道，其满/空状态可影响背压。",
       "signals": [
+        "cFifo1_4.i_drive",
+        "cFifo1_4.o_driveNext",
         "i_driveFromWb_1",
         "o_grfDriveToWb_1"
       ],
       "instances": [
         "cFifo1_4"
       ],
-      "related_assignments": [
-        "11"
-      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.steps"
         },
         {
-          "source": "transparent_flows"
+          "source": "component_connections"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:component_role:001"
@@ -132,9 +133,9 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "subject": "o_grfDataToWb_64",
-      "summary": "输出数据由内部寄存器r_rsValue_32的部分位拼接而成，与流事件路径分离",
-      "explanation": "赋值索引11显示o_grfDataToWb_64由r_rsValue_32[7]和r_rsValue_32[6]拼接，该寄存器并非流路径上的cFifo1_4的输出，表明数据路径与事件驱动路径解耦，数据可能来自其他内部逻辑而非直接来自输入payload",
+      "subject": "assign 11 (o_grfDataToWb_64)",
+      "summary": "该连续赋值从内部读寄存器r_rsValue_32中抽取位段并拼接，为输出驱动事件提供数据负载，但不参与事件流的控制决策。",
+      "explanation": "赋值将r_rsValue_32的两部分组合成64位输出数据，该信号是o_grfDriveToWb_1接口契约中指定的负载，说明写回阶段返回的读数据来源于寄存器文件内部状态，而事件流仅负责时序触发。此赋值与流步骤无直接依赖。",
       "signals": [
         "o_grfDataToWb_64",
         "r_rsValue_32"
@@ -147,7 +148,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_module.assignments"
+          "source": "parser_pipeline_rtl/modules/grf.json assignments"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:assignment_interpretation:001"
@@ -159,26 +160,33 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "输入payload信号连接到cMutexMerge3_end_74b，与流事件路径无关",
-      "subject": "i_wbAddr_8与i_wbDataToGrf_64",
-      "explanation": "输入payload信号i_wbAddr_8和i_wbDataToGrf_64连接到cMutexMerge3_end_74b实例，而非cFifo1_4，表明这些数据可能用于其他内部逻辑（如地址译码或数据合并），与当前流的事件转发路径无直接数据耦合",
+      "summary": "驱动事件流与控制令牌严格同步传递，数据负载与事件解耦：输入负载(i_wbAddr_8, i_wbDataToGrf_64)未进入cFifo1_4，输出负载来自内部寄存器，表明负载处理与事件传递分离。",
+      "subject": "payload/control decoupling",
+      "explanation": "相关连接显示输入负载信号路由至cMutexMerge3_end_74b，完全旁路FIFO实例，输出负载由独立寄存器赋值产生。因此，事件流只负责握手和背压，数据写入和读出在独立的数据路径中完成。",
       "signals": [
         "i_wbAddr_8",
-        "i_wbDataToGrf_64"
+        "i_wbDataToGrf_64",
+        "o_grfDataToWb_64",
+        "i_driveFromWb_1",
+        "o_grfDriveToWb_1"
       ],
       "related_payload": [
         "i_wbAddr_8",
-        "i_wbDataToGrf_64"
+        "i_wbDataToGrf_64",
+        "o_grfDataToWb_64"
       ],
       "related_assignments": [
         "11"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "related_component_connections"
+          "source": "component_connections"
+        },
+        {
+          "source": "interface.payload_contracts"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:data_control_effect:001"
@@ -190,25 +198,27 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "流路径上存在free信号，但当前上下文未提供其与cFifo1_4的连接细节",
-      "subject": "o_grfFreeToWb_1与i_grfFreeFromWb_1",
-      "explanation": "接口payload合同显示输入事件i_driveFromWb_1关联free信号o_grfFreeToWb_1，输出事件o_grfDriveToWb_1关联free信号i_grfFreeFromWb_1，但未提供这些free信号与cFifo1_4的实例连接，无法确认背压机制是否通过该Fifo1实现",
+      "summary": "接口契约分别为输入和输出事件定义了自由信号(o_grfFreeToWb_1与i_grfFreeFromWb_1)，暗示该流使用标准自由-驱动协议进行背压，FIFO的内部状态将协调这两个信号。",
+      "subject": "free/drive handshake",
+      "explanation": "阻塞点指明cFifo1_4可能门控传播，典型FIFO通过满/空状态产生上游自由信号，并接受下游自由信号以控制驱动。尽管未显式给出连接，但通常FIFO连接到这些端口。",
       "signals": [
         "o_grfFreeToWb_1",
-        "i_grfFreeFromWb_1"
+        "i_grfFreeFromWb_1",
+        "i_driveFromWb_1",
+        "o_grfDriveToWb_1"
       ],
       "instances": [
         "cFifo1_4"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "interface.payload_contracts"
         },
         {
-          "source": "interface.data_ports"
+          "source": "flow.blocking_points"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:completion_backpressure:001"
@@ -220,13 +230,14 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "summary": "文档应强调该流为简单的单级Fifo1直通路径，数据与事件路径解耦",
-      "subject": "写请求事件转发路径",
-      "explanation": "该流结构简单，仅一个Fifo1实例，无分支或合并，但数据路径（o_grfDataToWb_64）来自内部寄存器而非输入payload，文档需明确区分事件转发与数据生成逻辑，避免误导读者认为数据直接来自输入",
+      "summary": "最终手册应强调该流是一个简单的1级事件FIFO通道，用于写回请求的跨流水级或跨域传递，并明确指出数据负载与事件物理分离，避免假设FIFO内部实现或负载同步细节。",
+      "subject": "manual emphasis",
+      "explanation": "上下文只提供了最精简的事件传输骨架，无其他控制或分支行为，因此最优文档策略是将其描述为隔离缓冲器，并指出输入/输出负载分别由其他逻辑负责。",
       "signals": [
         "i_driveFromWb_1",
         "o_grfDriveToWb_1",
-        "o_grfDataToWb_64"
+        "o_grfFreeToWb_1",
+        "i_grfFreeFromWb_1"
       ],
       "instances": [
         "cFifo1_4"
@@ -239,13 +250,7 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
-        },
-        {
-          "source": "parser_module.assignments"
+          "source": "flow and interface data"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:documentation_focus:001"
@@ -257,28 +262,30 @@
         "module": "grf",
         "flow_id": "flow_003_grf_i_driveFromWb_1"
       },
-      "reason": "当前上下文未提供cFifo1_4的free/backpressure端口连接，无法确认背压机制",
-      "subject": "cFifo1_4内部逻辑与free信号连接",
-      "needed_source_slice": "instance connections for cFifo1_4; always block for cFifo1_4",
+      "reason": "紧凑上下文未展示i_wbAddr_8、i_wbDataToGrf_64如何与事件配合写入寄存器文件，也未说明r_rsValue_32何时读出并稳定到输出，缺少这些细节将导致流文档不完整。",
+      "subject": "load synchronization and register update",
+      "needed_source_slice": "cMutexMerge3_end_74b实例连接和其驱动逻辑；r_rsValue_32的更新always块；assign 11所在的完整赋值块。",
       "signals": [
-        "o_grfFreeToWb_1",
-        "i_grfFreeFromWb_1"
+        "i_wbAddr_8",
+        "i_wbDataToGrf_64",
+        "r_rsValue_32",
+        "o_grfDataToWb_64"
       ],
       "instances": [
-        "cFifo1_4"
+        "cMutexMerge3_end_74b"
       ],
       "related_assignments": [
         "11"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "component_connections"
         },
         {
-          "source": "interface.data_ports"
+          "source": "assignment dependencies"
         }
       ],
       "id": "semantic:flow:grf:flow_003_grf_i_driveFromWb_1:source_review_request:001"
@@ -286,12 +293,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "cFifo1_4内部逻辑",
-      "reason": "未提供cFifo1_4的实例端口列表或内部行为描述，无法确认其是否实现门控、缓冲或背压"
-    },
-    {
-      "field": "free信号连接",
-      "reason": "未提供o_grfFreeToWb_1和i_grfFreeFromWb_1与cFifo1_4或其他实例的连接，无法确认背压路径"
+      "field": "input payload routing",
+      "reason": "连接显示i_wbAddr_8和i_wbDataToGrf_64进入cMutexMerge3_end_74b.i_data1_74，但该实例的角色和合并后数据是否用于寄存器写入未知，AI上下文中缺失此信息。"
     }
   ]
 }

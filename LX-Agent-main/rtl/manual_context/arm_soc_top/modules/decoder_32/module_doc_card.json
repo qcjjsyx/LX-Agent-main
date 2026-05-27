@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "decoder_32",
-  "source_file": "rtl/rtl/Decode/decoder_32.v",
+  "source_file": "rtl\\rtl\\Decode\\decoder_32.v",
   "module_role": "leaf",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "32位Thumb指令解码器，将输入的32位指令字解码为执行单元所需的控制与数据字段。",
-    "explanation": "模块接收64位输入数据（包含32位PC和32位指令），通过大量组合逻辑解码出指令类型、操作数、立即数、条件码等，并打包成187位宽的解码数据输出给发射阶段。同时输出异常编号、分支立即数和NZCV写使能信号。",
+    "value": "将64位输入数据(指令与PC)解码为发射级所需的187位控制数据包，同时产生分支偏移、异常号、条件码写使能，并以i_drive事件驱动流水。",
+    "explanation": "接口显示单一事件驱动i_drive/o_drive，输入i_data_64，输出o_data_187等。assign 0拆分为PC和指令部分，assign 241打包了大量解码信号，体现了解码器的功能。自由信号透传。异常固定为4'b1111。符合解码阶段职责。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -30,11 +30,15 @@
     "semantic_claim_id": "semantic:module:decoder_32:module_role:001",
     "doc_priority": "primary",
     "signals": [
+      "i_drive",
+      "o_drive",
       "i_data_64",
       "o_data_187",
       "o_excNum_4",
       "o_blImm9_9",
-      "o_nzcvWen_4"
+      "o_nzcvWen_4",
+      "i_free",
+      "o_free"
     ],
     "instances": [
       "topdelay0"
@@ -53,7 +57,7 @@
         "source": "knowledge_ir/modules/decoder_32.json"
       },
       {
-        "source": "parser_pipeline_rtl/modules/decoder_32.json"
+        "source": "ai_context/modules/decoder_32/flows/flow_000_decoder_32_i_drive.json"
       }
     ]
   },
@@ -261,7 +265,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/Decode/decoder_32.v",
+          "rtl_file": "rtl\\rtl\\Decode\\decoder_32.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -296,7 +300,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/Decode/decoder_32.v",
+          "rtl_file": "rtl\\rtl\\Decode\\decoder_32.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -349,7 +353,7 @@
         ],
         "summary": "other_ports ports, count=5, directions=input:1, output:4",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/Decode/decoder_32.v",
+          "rtl_file": "rtl\\rtl\\Decode\\decoder_32.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -366,8 +370,8 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_decoder_32_i_drive.json",
       "reader_takeaway": {
-        "value": "文档应强调该流为无分支、无阻塞的直通延迟路径，并说明 topdelay0 的延迟参数对时序的影响。",
-        "explanation": "由于流结构简单，文档应聚焦于延迟单元的透明特性及其对事件信号传播的时序影响，避免过度解读数据耦合。",
+        "value": "手册应强调 i_drive 到 o_drive 的纯事件传递及其时序延迟作用，弱化数据流细节（数据拆分单独说明）。",
+        "explanation": "由于该流仅包含透明延迟，其意义在于时序和对齐，而非逻辑。在手册中，应解释 topdelay0 引入的延迟周期数（需查 delay16U 参数）以及为何需要此延迟（可能参考设计约束）。数据部分 w_pc_32、w_int_32 的生成可在数据路径章节叙述。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -386,22 +390,26 @@
         "related_assignments": [
           "0"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:decoder_32:flow:flow_000_decoder_32_i_drive",
           "ev:decoder_32:semantic_flow:flow_000_decoder_32_i_drive"
         ],
         "semantic_evidence": [
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/decoder_32.json"
+            "source": "module_facts",
+            "path": "internal_event_flow"
+          },
+          {
+            "source": "parser_module",
+            "path": "instances"
           }
         ],
         "supporting_claims": [
           {
-            "value": "输入事件驱动信号 i_drive 经过一个透明延迟单元 topdelay0 后直接产生输出事件驱动信号 o_drive，构成一个无分支、无阻塞的直通事件流。",
-            "explanation": "该流仅包含一个延迟单元实例 topdelay0，其输入直接连接模块输入端口 i_drive，输出直接连接模块输出端口 o_drive，无任何分支或合并点，表明这是一个纯粹的信号传播路径。",
+            "value": "该驱动流将输入事件 i_drive 通过透明延迟单元 topdelay0 传递至输出事件 o_drive，为指令获取或译码前级提供时序对齐。",
+            "explanation": "流仅包含一个步骤，即 delay16U 实例 topdelay0 作为透明延迟，直接将 i_drive 驱动到 o_drive。这表明 i_drive 与 o_drive 之间存在固定延迟的握手或触发关系，用于补偿前后级的时序差异，不改变事件本身的语义。",
             "certainty": "ai_inferred",
             "confidence": "medium",
             "source_layers": [
@@ -428,35 +436,36 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/decoder_32.json"
+                "source": "module_facts",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/decoder_32.json"
+                "source": "parser_module",
+                "path": "connection_graph"
               }
             ]
           },
           {
-            "value": "输入事件驱动信号 i_drive 与输入数据信号 i_data_64 在模块接口上共存，但当前流中无证据表明两者存在时序或选通耦合。",
-            "explanation": "接口负载合约显示 i_drive 事件携带 i_data_64 作为负载，但流内部 topdelay0 仅传递事件驱动信号，未涉及数据信号，因此数据与事件在流内是解耦的。",
+            "value": "i_drive 事件有效时，i_data_64 上的指令数据同时有效，形成事件‑数据对；输出 o_drive 无显式载荷。",
+            "explanation": "接口载荷合约显示，输入方向由 i_drive 触发，伴随64位数据 i_data_64。输出 o_drive 没有关联载荷，表明输出事件可能仅作为下一级的流水线推进信号，数据已在 decoder_32 内部通过赋值0提取。这符合译码级事件驱动数据流的常见模式。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:decoder_32:flow_000_decoder_32_i_drive:data_control_effect:001",
-            "doc_priority": "secondary",
+            "doc_priority": "primary",
             "signals": [
               "i_drive",
-              "i_data_64"
+              "i_data_64",
+              "o_drive"
             ],
             "instances": [],
             "related_flows": [],
             "related_assignments": [
               "0"
             ],
-            "requires_rtl_source_review": true,
+            "requires_rtl_source_review": false,
             "review_status": "needs_review",
             "evidence_refs": [
               "ev:decoder_32:flow:flow_000_decoder_32_i_drive",
@@ -464,25 +473,25 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/decoder_32.json"
+                "source": "interface_payload_contracts",
+                "path": "i_drive"
               },
               {
-                "source": "interface.data_ports",
-                "path": "knowledge_ir/modules/decoder_32.json"
+                "source": "interface_payload_contracts",
+                "path": "o_drive"
               }
             ]
           },
           {
-            "value": "当前流上下文未提供任何完成或反压信号，无法推断流完成条件或反压机制。",
-            "explanation": "流步骤、连接和赋值中均未出现 free_signal 或类似控制信号，表明该流可能为纯组合逻辑或简单延迟路径，不涉及握手协议。",
+            "value": "该驱动流未显示任何反压或完成确认机制，推断为无条件自由流动。",
+            "explanation": "上下文未提供 o_drive 是否被后续模块暂停或与就绪信号相关的信息。因此，当前流模型假设 i_drive 到达后，经 topdelay0 延迟后无条件输出 o_drive，不存在背压。若实际设计存在反压，需要查看 RTL 中 o_drive 的扇出和可能的握手信号。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:decoder_32:flow_000_decoder_32_i_drive:completion_backpressure:001",
-            "doc_priority": "reference",
+            "doc_priority": "secondary",
             "signals": [],
             "instances": [
               "topdelay0"
@@ -497,8 +506,12 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/decoder_32.json"
+                "source": "module_facts",
+                "path": "internal_event_flow"
+              },
+              {
+                "source": "parser_module",
+                "path": "connection_graph"
               }
             ]
           }
@@ -520,7 +533,7 @@
   },
   "source_review_context": {
     "module": "decoder_32",
-    "rtl_file": "rtl/rtl/Decode/decoder_32.v",
+    "rtl_file": "rtl\\rtl\\Decode\\decoder_32.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

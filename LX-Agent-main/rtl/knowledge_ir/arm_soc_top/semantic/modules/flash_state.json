@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "flash_state",
-  "input_hash": "a3862c74241b7711b24020ff7cac41c28f5f8ba5bd77d3de56c8e987f2478b64",
+  "input_hash": "792a73b5bd0c964923bc0fa2897e30f3d30511e935ffec3df1e6486a169169b3",
   "source_context": "ai_context/modules/flash_state.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+      "source": "rtl\\rtl\\IONet\\SPI\\SPI0\\flash_state.v",
       "paths": [
         "module_source"
       ]
@@ -40,20 +40,19 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/IONet/SPI/SPI0/flash_state.v",
+        "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI0\\flash_state.v",
         "parser_module": "modules/flash_state.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 10,
+    "count": 7,
     "by_type": {
       "assignment_interpretation": 2,
       "component_role": 1,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
-      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -64,30 +63,37 @@
         "type": "module",
         "module": "flash_state"
       },
-      "summary": "flash_state 是 SPI 主控制器与外部 Flash 存储器之间的状态驱动桥接模块，负责管理 SPI 事务的启动、数据路由和完成指示。",
+      "summary": "该模块是SPI主控的结构化状态机封装层，负责管理面向SPI Flash的读写传输状态与使能时序。",
       "subject": "flash_state",
-      "explanation": "该模块通过内部状态机（r_state）控制 SPI 主控制器实例（u_spi_master）的使能信号（w_spi_en），并将 SPI 主控制器的数据输出（data_out）直接映射到模块输出（o_dataFspi）。其行为由输入控制信号（i_ctl）和读标志（i_readflag）驱动，并通过输出 o_finish 指示事务完成。",
+      "explanation": "模块内部实例化spi_master_spi0，通过状态机（r_state）控制SPI启动条件（assign 0表达的w_spi_en逻辑）并利用片选信号产生完成指示（assign 2表达的o_finish）。连接的i_ctl与i_data2spi提供命令与写数据，读取数据由o_dataFspi输出，体现了Flash协议端的封装。",
       "signals": [
-        "i_ctl",
-        "i_readflag",
+        "w_spi_en",
         "o_finish",
-        "o_dataFspi"
+        "r_state",
+        "i_startRead",
+        "r_start_spi",
+        "i_ctl",
+        "i_data2spi",
+        "o_dataFspi",
+        "i_readflag",
+        "w_spi_cs_n",
+        "o_RXNE",
+        "o_TXE"
       ],
       "instances": [
         "u_spi_master"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/flash_state.json"
+          "source": "module_facts",
+          "path": "knowledge_ir/modules/flash_state.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/flash_state.json"
         }
       ],
       "id": "semantic:module:flash_state:module_role:001"
@@ -98,28 +104,31 @@
         "type": "module",
         "module": "flash_state"
       },
-      "summary": "flash_state 根据内部状态（r_state）和输入条件（i_startRead, r_start_spi）生成 SPI 主控制器的使能信号（w_spi_en），并输出片选信号（w_spi_cs_n）作为事务完成标志（o_finish）。",
-      "subject": "SPI 事务状态控制",
-      "explanation": "赋值依赖显示 w_spi_en 在 READ 或 PAGE_PRO 状态下由 i_startRead 或 r_start_spi 触发，否则仅由 r_start_spi 触发。o_finish 直接跟随 w_spi_cs_n，表明片选信号下降沿表示事务结束。",
+      "summary": "模块根据当前状态（r_state）及外部启动信号（i_startRead、r_start_spi）动态产生SPI使能（w_spi_en），并将片选信号映射为完成指示，从而协调每一次FLASH传输的启停。",
+      "subject": "SPI传输使能与状态管理",
+      "explanation": "assign 0逻辑区分READ/PAGE_PRO状态与其他状态，在这些状态下需要外部i_startRead触发或内部r_start_spi上升沿才能使能SPI，其他状态仅由内部启动信号控制；assign 2直接将内部片选低有效信号传递给o_finish，将传输结束与物理波形解耦。这些驱动了SPI主控的关键控制时序。",
       "signals": [
         "w_spi_en",
-        "o_finish",
         "w_spi_cs_n",
+        "o_finish",
+        "r_state",
         "i_startRead",
-        "r_start_spi"
+        "r_start_spi",
+        "r_start_spi_buf"
       ],
       "instances": [
         "u_spi_master"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/flash_state.json (assign_dependencies index 0"
         },
         {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "index 2)"
         }
       ],
       "id": "semantic:module:flash_state:structural_responsibility:001"
@@ -130,33 +139,35 @@
         "type": "module",
         "module": "flash_state"
       },
-      "subject": "u_spi_master",
-      "summary": "u_spi_master 是 SPI 协议引擎实例，负责将 flash_state 的控制和数据信号转换为 SPI 总线协议。",
-      "explanation": "该实例接收来自 flash_state 的时钟（clk）、控制寄存器（CR）、读标志（DR_r）、写使能（w_en）和数据（r_data2spi），并输出接收数据（data_out）、接收非空标志（RXNE）、发送空标志（TXE）以及 SPI 总线信号（o_mosi, o_sclk）。",
+      "subject": "u_spi_master (spi_master_spi0)",
+      "summary": "底层SPI物理主控，负责串行移位、时钟生成以及收发缓冲标志。",
+      "explanation": "它接收由flash_state转发的控制命令（CR）、写数据（r_data2spi）、写使能（w_en）和读标志（DR_r），提供接收非空（RXNE）、发送空（TXE）中断状态及接收数据（data_out）。flash_state利用这些物理接口完成高层协议的状态编排。",
       "signals": [
-        "clk",
-        "CR",
-        "rx",
-        "DR_r",
-        "w_en",
-        "tx",
-        "data_out",
-        "RXNE",
-        "TXE",
-        "sclk_out"
+        "i_ctl",
+        "i_data2spi",
+        "i_readflag",
+        "i_w_en",
+        "o_RXNE",
+        "o_TXE",
+        "o_dataFspi",
+        "o_mosi",
+        "o_sclk",
+        "i_miso"
       ],
       "instances": [
         "u_spi_master"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
+          "source": "key_component_connections",
+          "path": "compact_context"
         },
         {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "key_instances",
+          "path": "compact_context"
         }
       ],
       "id": "semantic:module:flash_state:component_role:001"
@@ -167,9 +178,9 @@
         "type": "module",
         "module": "flash_state"
       },
-      "subject": "w_spi_en",
-      "summary": "w_spi_en 是 SPI 主控制器的使能信号，其生成逻辑体现了状态相关的触发条件。",
-      "explanation": "在 READ 或 PAGE_PRO 状态下，w_spi_en 由 i_startRead 或 r_start_spi 触发；在其他状态下，仅由 r_start_spi 触发。r_start_spi_buf 用于去抖或同步，确保使能信号稳定。",
+      "subject": "w_spi_en (assign index 0)",
+      "summary": "生成SPI主控的使能脉冲，状态机根据当前状态和外部启动信号决定是否允许传输。",
+      "explanation": "当处于READ或PAGE_PRO状态时，使能由外部i_startRead直接触发，或由r_start_spi上升沿（通过r_start_spi_buf作为延迟）触发；其他状态下仅由r_start_spi上升沿产生使能脉冲。这反映了Flash不同命令阶段的启动控制策略。",
       "signals": [
         "w_spi_en",
         "r_state",
@@ -177,18 +188,13 @@
         "r_start_spi",
         "r_start_spi_buf"
       ],
-      "related_assignments": [
-        "0"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/flash_state.json (assign_dependencies index 0)"
         }
       ],
       "id": "semantic:module:flash_state:assignment_interpretation:001"
@@ -199,25 +205,20 @@
         "type": "module",
         "module": "flash_state"
       },
-      "subject": "o_finish",
-      "summary": "o_finish 直接跟随 SPI 片选信号 w_spi_cs_n，指示 SPI 事务的完成。",
-      "explanation": "该赋值表明 o_finish 是 w_spi_cs_n 的别名，当片选信号释放（高电平）时，o_finish 变为高电平，表示当前 SPI 事务结束。",
+      "subject": "o_finish (assign index 2)",
+      "summary": "将片选信号的无效沿作为传输完成的指示。",
+      "explanation": "直接赋值w_spi_cs_n到o_finish，表明当SPI物理片选由低变高（传输结束）时，该信号有效，通知上层状态机或控制逻辑当前操作已完成。该映射简化了完成状态的提取。",
       "signals": [
         "o_finish",
         "w_spi_cs_n"
       ],
-      "related_assignments": [
-        "2"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/flash_state.json (assign_dependencies index 2)"
         }
       ],
       "id": "semantic:module:flash_state:assignment_interpretation:002"
@@ -228,58 +229,34 @@
         "type": "module",
         "module": "flash_state"
       },
-      "summary": "i_data2spi 和 o_dataFspi 构成 flash_state 与外部的数据传输通道，分别用于发送和接收 SPI 数据。",
-      "subject": "数据路径接口",
-      "explanation": "i_data2spi 是 32 位输入数据，通过内部信号 r_data2spi 连接到 u_spi_master 的 tx 端口；o_dataFspi 直接来自 u_spi_master 的 data_out 输出，形成完整的数据路径。",
-      "signals": [
-        "i_data2spi",
-        "o_dataFspi",
-        "r_data2spi"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/flash_state.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
-        }
-      ],
-      "id": "semantic:module:flash_state:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "flash_state"
-      },
-      "summary": "i_ctl 和 i_readflag 是 flash_state 的控制输入，分别用于配置 SPI 主控制器和触发读操作。",
-      "subject": "控制接口",
-      "explanation": "i_ctl 直接连接到 u_spi_master 的 CR 端口，用于设置 SPI 控制寄存器；i_readflag 连接到 DR_r 端口，可能用于触发数据读取。这些信号与内部状态机协同工作。",
+      "summary": "i_ctl作为SPI命令寄存器，i_data2spi承载待写入Flash的数据，o_dataFspi承载读回数据，i_readflag辅助指示读操作就绪，三者构成字节级的命令-数据界面。",
+      "subject": "Flash控制与数据传输负载",
+      "explanation": "信号命名与连接关系表明i_ctl直接连接到SPI主控的控制寄存器（CR），用于设定SPI帧格式或命令字；i_data2spi送入主控发送缓冲，经r_data2spi抵达；读取通道由主控data_out经o_dataFspi输出，形成完整的Flash访问数据路径。i_readflag可能是命令/地址阶段结束后的就绪标志。",
       "signals": [
         "i_ctl",
+        "i_data2spi",
+        "o_dataFspi",
         "i_readflag"
       ],
+      "related_payload": [
+        "i_ctl",
+        "i_data2spi",
+        "o_dataFspi"
+      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/flash_state.json"
+          "source": "interface",
+          "path": "compact_context"
         },
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
-        },
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "key_component_connections",
+          "path": "compact_context"
         }
       ],
-      "id": "semantic:module:flash_state:interface_intent:002"
+      "id": "semantic:module:flash_state:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -287,80 +264,49 @@
         "type": "module",
         "module": "flash_state"
       },
-      "summary": "文档应重点描述 flash_state 的内部状态机（r_state）如何控制 SPI 事务的启动、执行和完成，以及状态与输入信号（i_startRead, r_start_spi）的交互。",
-      "subject": "状态机与 SPI 事务控制",
-      "explanation": "赋值依赖显示 w_spi_en 的生成与状态相关，且 o_finish 直接反映片选状态。理解状态机是理解模块行为的关键。",
+      "summary": "应突出状态机驱动的传输启停逻辑、完成指示生成以及Flash操作状态的抽象，弱化底层SPI位级时序细节。",
+      "subject": "模块手册重点",
+      "explanation": "flash_state的核心价值在于将无序的SPI物理接口提升为面向Flash命令的状态容器；手册宜用READ、PAGE_PRO等状态说明启动条件，结合startRead和finish信号解释一次传输的生命周期，并明确与spi_master的职责边界。",
       "signals": [
-        "r_state",
         "w_spi_en",
         "o_finish",
+        "r_state",
         "i_startRead",
-        "r_start_spi"
+        "i_ctl",
+        "i_data2spi",
+        "o_dataFspi"
       ],
       "instances": [
         "u_spi_master"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/flash_state.json"
+          "source": "compact_context overall"
         },
         {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
+          "source": "assign_dependencies"
         }
       ],
       "id": "semantic:module:flash_state:documentation_focus:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "flash_state"
-      },
-      "reason": "紧凑上下文未提供状态机（r_state）的状态定义、状态转换条件和复位行为，这些是理解模块核心行为的关键。",
-      "subject": "内部状态机定义",
-      "needed_source_slice": "always block",
-      "signals": [
-        "r_state",
-        "i_startRead",
-        "r_start_spi",
-        "r_start_spi_buf"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
-        }
-      ],
-      "id": "semantic:module:flash_state:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "flash_state"
-      },
-      "reason": "o_finish 直接跟随 w_spi_cs_n，但紧凑上下文未提供 w_spi_cs_n 的生成逻辑，无法确认其与状态机或 SPI 主控制器的具体关系。",
-      "subject": "w_spi_cs_n 生成逻辑",
-      "needed_source_slice": "assign block",
-      "signals": [
-        "w_spi_cs_n",
-        "o_finish"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "rtl/rtl/IONet/SPI/SPI0/flash_state.v"
-        }
-      ],
-      "id": "semantic:module:flash_state:source_review_request:002"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "interface_io_list",
+      "reason": "接口摘要中未列出o_mosi, o_sclk, o_cs_n, i_miso, i_w_en, i_startRead等连接中出现的信号，尽管这些信号在连接图中存在，但模块顶层端口声明缺失可能导致手册生成不完整。",
+      "evidence": [
+        {
+          "source": "key_component_connections",
+          "path": "compact_context"
+        },
+        {
+          "source": "interface",
+          "path": "compact_context"
+        }
+      ]
+    }
+  ]
 }

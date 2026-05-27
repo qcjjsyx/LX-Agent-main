@@ -1,8 +1,8 @@
 # 模块 `spi_m`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/spi_m.v`。
-- 职责：AI 推断：SPI主设备控制器，负责管理SPI总线的发送、接收和CRC校验时序。
-- 说明：模块通过TXCRC、data_in和data_out数据接口以及busy、rx_done、tx_done、crc_done状态信号，实现SPI主设备的数据传输控制，包括发送完成、接收完成和CRC校验完成等关键时序事件
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\spi_m.v`。
+- 职责：**AI 推断**：该模块实现了带 CRC 计算/校验功能的 SPI 主机控制器，负责数据的收发和传输完成状态管理。
+- 说明：在 compact 上下文中，数据输入包括发送数据 `data_in` 与 CRC 校验值 `TXCRC`，数据输出为 `data_out`；assign 依赖中出现的 `busy`、`rx_done`、`tx_done`、`crc_done` 等信号表明模块内部生成传输状态，并控制数据帧完成判断。无内部实例化，推测逻辑均由本模块实现，承担完整的 SPI 主设备功能和 CRC 处理。
 
 ## 1. 层级位置
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`TXCRC`, `data_in`；其他输入：`CPHA`, `CRC_next`, `DFF`, `DR_r`, `... +8`。
-- 输出：数据输出：`data_out`；其他输出：`OVR`, `RXNE`, `TXE`, `busy`, `... +3`。
+- **接收（输入）**：数据输入为 `TXCRC`、`data_in`；其他输入包括 `CPHA`、`CRC_next`、`DFF`、`DR_r` 等（共 14 个输入端口）。
+- **发送（输出）**：数据输出为 `data_out`；其他输出包括 `OVR`、`RXNE`、`TXE`、`busy` 等（共 8 个输出端口）。
 
 ### 2.1 端口分组
 
@@ -37,7 +37,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 4. 主要 Drive-centered Flow
 
-- 证据不足：Manual Context 未提供本模块 drive flow。
+- **证据不足**：Manual Context 未提供本模块 drive flow。
 
 ## 5. 内部组件与 assign 影响
 
@@ -51,7 +51,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `rx_done` | (rxonly^DFF) ? (DFF ? ((~rx_cnt[4]) & cnt_buf_rx) : (~rx_cnt[2]) & cnt_buf_rx) : ((~rx_cnt[3]... | AI 推断：接收完成标志，根据rxonly和DFF配置选择不同的位计数阈值 |
-| `assign_2` | unknown | `tx_done` | (CPHA^DFF) ? ((~tx_cnt[3]) & cnt_buf_tx) : (DFF ? ((~tx_cnt[4]) & cnt_buf_tx) : (~tx_cnt[2]) ... | AI 推断：发送完成标志，根据CPHA和DFF配置选择不同的位计数阈值 |
-| `assign_3` | unknown | `crc_done` | (CPHA^DFF) ? ((~crc_cnt[3]) & cnt_buf_crc) : (DFF ? ((~crc_cnt[4]) & cnt_buf_crc) : (~crc_cnt... | AI 推断：CRC校验完成标志，根据CPHA和DFF配置选择不同的位计数阈值 |
-| `assign_0` | unknown | `busy` | enable \| !TXE \| crc_en | AI 推断：模块忙状态标志，由使能信号、发送缓冲空标志和CRC使能共同驱动 |
+| `assign_1` | unknown | `rx_done` | (rxonly^DFF) ? (DFF ? ((~rx_cnt[4]) & cnt_buf_rx) : (~rx_cnt[2]) & cnt_buf_rx) : ((~rx_cnt[3]... | **证据不足**：缺少语义层赋值解释。 |
+| `assign_2` | unknown | `tx_done` | (CPHA^DFF) ? ((~tx_cnt[3]) & cnt_buf_tx) : (DFF ? ((~tx_cnt[4]) & cnt_buf_tx) : (~tx_cnt[2]) ... | **证据不足**：缺少语义层赋值解释。 |
+| `assign_3` | unknown | `crc_done` | (CPHA^DFF) ? ((~crc_cnt[3]) & cnt_buf_crc) : (DFF ? ((~crc_cnt[4]) & cnt_buf_crc) : (~crc_cnt... | **证据不足**：缺少语义层赋值解释。 |
+| `assign_0` | unknown | `busy` | enable \| !TXE \| crc_en | **证据不足**：缺少语义层赋值解释。 |

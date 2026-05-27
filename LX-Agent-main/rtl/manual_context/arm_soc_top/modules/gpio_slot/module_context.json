@@ -6,10 +6,10 @@
     "module_name": "gpio_slot",
     "module_role": "submodule",
     "source_files": [
-      "rtl/rtl/IONet/GPIO/gpio_slot.v"
+      "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v"
     ],
     "source": {
-      "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+      "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
       "parser_module": "modules/gpio_slot.json"
     },
     "certainty": "deterministic_fact",
@@ -98,8 +98,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "GPIO槽位模块，负责将Mesh网络驱动事件路由到内部GPIO外设，并返回驱动完成事件。",
-      "explanation": "模块接收来自Mesh的驱动事件i_driveFrmMesh，通过内部perip_slot实例（slot）处理，最终输出驱动完成事件o_driveNextToMesh。同时，模块集成了gpio_module实例，处理GPIO数据路径（data_from/data_to）和IO引脚输入（io_pin_i），并输出GPIO控制与数据信号（gpio_ctrl_o, gpio_data_o）。空闲信号（i_freeNextFrmMesh/o_freeToMesh）表明该槽位支持基于握手的驱动-空闲协议。",
+      "value": "将GPIO外设集成到Mesh总线的封装模块，负责总线协议握手与数据路径转换，同时直接暴露GPIO控制、数据、引脚状态和中断信号。",
+      "explanation": "模块内部例化了 perip_slot（总线插槽）和 gpio_module（GPIO控制器），通过 slot 处理 i_driveFrmMesh/i_freeNextFrmMesh 等事件，将总线数据转发给 gpio_module；gpio_module 生成的 gpio_ctrl_o、gpio_data_o、io_pin_i 和 irq 直接作为模块边界信号输出，体现了GPIO功能与总线适配的合并。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -114,9 +114,10 @@
         "o_freeToMesh",
         "data_from",
         "data_to",
-        "io_pin_i",
         "gpio_ctrl_o",
-        "gpio_data_o"
+        "gpio_data_o",
+        "io_pin_i",
+        "irq"
       ],
       "instances": [
         "slot",
@@ -133,29 +134,20 @@
       ],
       "semantic_evidence": [
         {
-          "source": "interface.event_inputs"
+          "source": "compact_context.interface"
         },
         {
-          "source": "interface.event_outputs"
+          "source": "compact_context.key_instances"
         },
         {
-          "source": "interface.free_inputs"
-        },
-        {
-          "source": "interface.free_outputs"
-        },
-        {
-          "source": "key_instances"
-        },
-        {
-          "source": "internal_event_flow_refs"
+          "source": "compact_context.key_component_connections"
         }
       ]
     },
     "responsibility_claims": [
       {
-        "value": "GPIO槽位模块，负责将Mesh网络驱动事件路由到内部GPIO外设，并返回驱动完成事件。",
-        "explanation": "模块接收来自Mesh的驱动事件i_driveFrmMesh，通过内部perip_slot实例（slot）处理，最终输出驱动完成事件o_driveNextToMesh。同时，模块集成了gpio_module实例，处理GPIO数据路径（data_from/data_to）和IO引脚输入（io_pin_i），并输出GPIO控制与数据信号（gpio_ctrl_o, gpio_data_o）。空闲信号（i_freeNextFrmMesh/o_freeToMesh）表明该槽位支持基于握手的驱动-空闲协议。",
+        "value": "将GPIO外设集成到Mesh总线的封装模块，负责总线协议握手与数据路径转换，同时直接暴露GPIO控制、数据、引脚状态和中断信号。",
+        "explanation": "模块内部例化了 perip_slot（总线插槽）和 gpio_module（GPIO控制器），通过 slot 处理 i_driveFrmMesh/i_freeNextFrmMesh 等事件，将总线数据转发给 gpio_module；gpio_module 生成的 gpio_ctrl_o、gpio_data_o、io_pin_i 和 irq 直接作为模块边界信号输出，体现了GPIO功能与总线适配的合并。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -170,9 +162,10 @@
           "o_freeToMesh",
           "data_from",
           "data_to",
-          "io_pin_i",
           "gpio_ctrl_o",
-          "gpio_data_o"
+          "gpio_data_o",
+          "io_pin_i",
+          "irq"
         ],
         "instances": [
           "slot",
@@ -189,30 +182,56 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_inputs"
+            "source": "compact_context.interface"
           },
           {
-            "source": "interface.event_outputs"
+            "source": "compact_context.key_instances"
           },
           {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "key_instances"
-          },
-          {
-            "source": "internal_event_flow_refs"
+            "source": "compact_context.key_component_connections"
           }
         ]
       },
       {
-        "value": "模块将Mesh驱动事件通过perip_slot实例转发，同时桥接GPIO模块的数据路径，实现GPIO外设的访问与控制。",
-        "explanation": "驱动事件i_driveFrmMesh直接连接到slot实例的i_driveFrmMesh，slot实例输出o_driveNextToMesh。数据路径data_from直接连接到slot实例，而slot实例的输出w_data_to通过赋值操作（assign index 0）连接到模块输出data_to。GPIO模块实例（gpio_module）接收io_pin_i输入，并输出gpio_ctrl_o和gpio_data_o。这表明模块的核心职责是事件路由和数据桥接。",
+        "value": "封装 gpio_module 实例，将 GPIO 的控制输出、数据输出、引脚输入和中断信号直接引出到模块边界，不经过 slot 数据通路。",
+        "explanation": "gpio_module 的 gpio_ctrl_o、gpio_data_o、io_pin_i、irq 信号直接连接到 self 的同名端口，未出现在 slot 的数据路径中，说明这些信号是控制/状态通路，独立于总线数据流，直接提供给顶层使用。",
         "certainty": "ai_inferred",
         "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:gpio_slot:structural_responsibility:002",
+        "doc_priority": "primary",
+        "signals": [
+          "gpio_ctrl_o",
+          "gpio_data_o",
+          "io_pin_i",
+          "irq"
+        ],
+        "instances": [
+          "gpio_module"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:gpio_slot:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "compact_context.key_component_connections"
+          },
+          {
+            "source": "compact_context.interface"
+          }
+        ]
+      },
+      {
+        "value": "负责接收来自Mesh的驱动事件，经 slot 处理后生成下一级驱动事件，并完成从 data_from 到 data_to 的数据路径拼接与转发。",
+        "explanation": "实例 slot（perip_slot）的 i_driveFrmMesh 直接由模块输入驱动，其 o_driveNextToMesh 驱动模块输出；数据路径 data_from 进入 slot，slot 的输出 w_data_to 参与构成 data_to 输出，形成完整的总线读写路径。自由信号握手线也全部通过 slot 完成。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -221,15 +240,13 @@
         "signals": [
           "i_driveFrmMesh",
           "o_driveNextToMesh",
+          "i_freeNextFrmMesh",
+          "o_freeToMesh",
           "data_from",
-          "data_to",
-          "io_pin_i",
-          "gpio_ctrl_o",
-          "gpio_data_o"
+          "data_to"
         ],
         "instances": [
-          "slot",
-          "gpio_module"
+          "slot"
         ],
         "related_flows": [
           "flow_000_gpio_slot_i_driveFrmMesh"
@@ -242,21 +259,21 @@
         ],
         "semantic_evidence": [
           {
-            "source": "key_component_connections"
+            "source": "compact_context.key_component_connections"
           },
           {
-            "source": "key_instances"
+            "source": "compact_context.assign_dependencies"
           },
           {
-            "source": "assign_dependencies"
+            "source": "compact_context.interface"
           }
         ]
       }
     ],
     "documentation_focus": [
       {
-        "value": "手册应重点描述驱动事件如何通过slot实例触发GPIO数据路径，以及空闲信号如何管理资源释放。",
-        "explanation": "模块的核心功能是事件路由和数据桥接。文档应详细说明i_driveFrmMesh事件如何驱动data_from到data_to的传输，以及gpio_module如何响应。同时，空闲握手协议（i_freeNextFrmMesh/o_freeToMesh）的时序和条件需要明确，以确保正确使用。",
+        "value": "手册应重点描述模块如何将 GPIO 外设通过 perip_slot 挂载到 Mesh 总线，解释事件驱动的数据读写流程；弱化内部连线列表，而是以协议流转视角说明 i_driveFrmMesh->o_driveNextToMesh 传递和 data_to 拼接的原因。",
+        "explanation": "由于 gpio_ctrl_o、gpio_data_o、io_pin_i、irq 直连 gpio_module，属于软硬件接口关注点，应作为独立小节说明配置/状态字段。同时应标注 data_to 中 XY 的内存映射意义，待 RTL 审查明确。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -267,13 +284,12 @@
         "signals": [
           "i_driveFrmMesh",
           "o_driveNextToMesh",
-          "i_freeNextFrmMesh",
-          "o_freeToMesh",
           "data_from",
           "data_to",
-          "io_pin_i",
           "gpio_ctrl_o",
-          "gpio_data_o"
+          "gpio_data_o",
+          "io_pin_i",
+          "irq"
         ],
         "instances": [
           "slot",
@@ -290,13 +306,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "internal_event_flow_refs"
+            "source": "compact_context.interface"
           },
           {
-            "source": "key_component_connections"
+            "source": "compact_context.assign_dependencies"
           },
           {
-            "source": "assign_dependencies"
+            "source": "compact_context.internal_event_flow_refs"
           }
         ]
       }
@@ -423,20 +439,22 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_gpio_slot_i_driveFrmMesh.json",
       "reader_takeaway": {
-        "value": "该流为纯事件驱动，无有效载荷信号参与，事件传递不携带数据。",
-        "explanation": "interface_payload_contracts 显示 i_driveFrmMesh 和 o_driveNextToMesh 的 payloads 均为空，表明该流仅传递事件脉冲，无数据耦合。",
+        "value": "应强调此流为单向事件直通，无需数据转换或仲裁，忽略数据负载和背压细节。",
+        "explanation": "流的极简结构适合作为基本事件转发示例，避免混淆负载或 flow control 假设，确保最终手册突出其透明性。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
           "i_driveFrmMesh",
           "o_driveNextToMesh"
         ],
-        "instances": [],
+        "instances": [
+          "slot"
+        ],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": false,
@@ -447,48 +465,16 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/gpio_slot.json"
+            "source": "knowledge_ir/modules/gpio_slot.json",
+            "path": "internal_event_flow"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应强调该流为无数据、无逻辑的直通事件路径，并注明其依赖 slot 实例的透明转发特性。",
-            "explanation": "由于流简单且无分支，文档应聚焦于事件传递的起点和终点，以及 slot 实例的中继角色，避免过度复杂化。",
+            "value": "输入事件 i_driveFrmMesh 直接透明转发为输出事件 o_driveNextToMesh，无数据操作，仅事件传递。",
+            "explanation": "流中仅有一个步骤，即实例 slot（perip_slot）接收 i_driveFrmMesh 并驱动 o_driveNextToMesh，无分支、条件或赋值依赖，属于典型的事件直通路径。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFrmMesh",
-              "o_driveNextToMesh"
-            ],
-            "instances": [
-              "slot"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:gpio_slot:flow:flow_000_gpio_slot_i_driveFrmMesh",
-              "ev:gpio_slot:semantic_flow:flow_000_gpio_slot_i_driveFrmMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/gpio_slot.json"
-              }
-            ]
-          },
-          {
-            "value": "该驱动流将输入事件 i_driveFrmMesh 通过内部 slot 实例透明地转发至输出事件 o_driveNextToMesh，实现 GPIO 槽位到网格的直通事件传递。",
-            "explanation": "流仅包含一个步骤，即 slot 实例，其输入驱动为 i_driveFrmMesh，输出驱动为 o_driveNextToMesh，且无分支、汇合或阻塞点，表明这是一个简单的直通路径。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "high",
             "source_layers": [
               "semantic_layer"
             ],
@@ -503,6 +489,40 @@
             ],
             "related_flows": [],
             "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:gpio_slot:flow:flow_000_gpio_slot_i_driveFrmMesh",
+              "ev:gpio_slot:semantic_flow:flow_000_gpio_slot_i_driveFrmMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "parser_pipeline_rtl/modules/gpio_slot.json",
+                "path": "connection_graph"
+              },
+              {
+                "source": "knowledge_ir/modules/gpio_slot.json",
+                "path": "interface_event_flow"
+              }
+            ]
+          },
+          {
+            "value": "事件驱动无伴随数据负载，仅靠事件令牌控制流，无数据通路参与。",
+            "explanation": "接口负载合同显示虽有 free 信号但无数据载荷，驱动关系仅传递事件，不代表任何数据流转。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_driveFrmMesh",
+              "o_driveNextToMesh"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -511,18 +531,14 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/gpio_slot.json"
-              },
-              {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/gpio_slot.json"
+                "source": "knowledge_ir/modules/gpio_slot.json",
+                "path": "interface_data_contract"
               }
             ]
           },
           {
-            "value": "该驱动流本身不包含完成或反压信号，但接口中关联的 free 信号可能用于外部流控，需进一步确认。",
-            "explanation": "interface_payload_contracts 中 i_driveFrmMesh 关联 o_freeToMesh，o_driveNextToMesh 关联 i_freeNextFrmMesh，但当前流步骤未涉及这些信号，表明流控可能由外部模块处理。",
+            "value": "未提供背压或完成信号的直接证据，仅存在接口级 free 信号（o_freeToMesh 和 i_freeNextFrmMesh）与本流无显式关联。",
+            "explanation": "流过租中未出现任何完成或等待信号，无法断言背压行为；free 信号可能属于协议层，但不影响本流的事件转发语义。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -547,8 +563,8 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/gpio_slot.json"
+                "source": "knowledge_ir/modules/gpio_slot.json",
+                "path": "interface_data_contract"
               }
             ]
           }
@@ -611,42 +627,17 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "将slot实例输出的w_data_to与XY信号拼接后，作为模块的数据输出。",
-        "explanation": "赋值操作将w_data_to的高41位（[50:10]）与XY信号拼接，形成最终的data_to输出。这表明data_to不仅包含来自slot的数据，还附加了额外的控制或状态信息（XY），可能用于Mesh网络中的地址或标识。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:gpio_slot:assignment_interpretation:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "data_to",
-          "w_data_to",
-          "XY"
-        ],
-        "instances": [],
-        "related_flows": [
-          "flow_000_gpio_slot_i_driveFrmMesh"
-        ],
-        "related_assignments": [
-          "0"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:gpio_slot:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "assign_dependencies"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:gpio_slot:assignments"
@@ -658,7 +649,7 @@
       "signal": "i_driveFrmMesh",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 28,
+      "importance_score": 24,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -675,7 +666,7 @@
       "signal": "o_driveNextToMesh",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 27,
+      "importance_score": 23,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -689,42 +680,10 @@
       ]
     },
     {
-      "signal": "i_freeNextFrmMesh",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:gpio_slot:interface",
-        "ev:gpio_slot:semantic_module"
-      ]
-    },
-    {
-      "signal": "o_freeToMesh",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:gpio_slot:interface",
-        "ev:gpio_slot:semantic_module"
-      ]
-    },
-    {
       "signal": "data_from",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 18,
+      "importance_score": 22,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -740,23 +699,7 @@
       "signal": "data_to",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 18,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:gpio_slot:interface",
-        "ev:gpio_slot:semantic_module"
-      ]
-    },
-    {
-      "signal": "io_pin_i",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 18,
+      "importance_score": 22,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -801,10 +744,74 @@
       ]
     },
     {
+      "signal": "io_pin_i",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:gpio_slot:interface",
+        "ev:gpio_slot:semantic_module"
+      ]
+    },
+    {
+      "signal": "irq",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 18,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:gpio_slot:interface",
+        "ev:gpio_slot:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_freeNextFrmMesh",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 14,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:gpio_slot:interface",
+        "ev:gpio_slot:semantic_module"
+      ]
+    },
+    {
+      "signal": "o_freeToMesh",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 14,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:gpio_slot:interface",
+        "ev:gpio_slot:semantic_module"
+      ]
+    },
+    {
       "signal": "w_data_to",
       "kind": "wire",
       "width_text": "[50:0]",
-      "importance_score": 8,
+      "importance_score": 12,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -820,7 +827,23 @@
       "signal": "data_i",
       "kind": "wire",
       "width_text": "[31:0]",
-      "importance_score": 4,
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:gpio_slot:parser_module",
+        "ev:gpio_slot:semantic_module"
+      ]
+    },
+    {
+      "signal": "XY",
+      "kind": "reg",
+      "width_text": "[9:0]",
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -849,23 +872,7 @@
       ]
     },
     {
-      "signal": "XY",
-      "kind": "reg",
-      "width_text": "[9:0]",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:gpio_slot:parser_module",
-        "ev:gpio_slot:semantic_module"
-      ]
-    },
-    {
-      "signal": "rst",
+      "signal": "rst_finish",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -893,21 +900,7 @@
       ]
     },
     {
-      "signal": "rst_finish",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir"
-      ],
-      "evidence_refs": [
-        "ev:gpio_slot:interface"
-      ]
-    },
-    {
-      "signal": "irq",
+      "signal": "rst",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 2,
@@ -1000,9 +993,20 @@
   "evidence_gaps": [],
   "review_questions": [
     {
-      "question": "赋值操作中使用了XY信号，但其来源和含义在上下文中未明确。需要查看RTL源代码以确定XY是常量、寄存器还是来自其他模块的信号。",
-      "subject": "XY信号来源与赋值细节",
-      "needed_source_slice": "assign block; always block; comments",
+      "question": "关键连接列表没有显示 slot 输出到 gpio_module.data_i 的连线，无法确认总线写入 data_from 如何进入 GPIO 控制器，缺失完整数据通路。",
+      "subject": "gpio_module 的 data_i 驱动源及与 slot 的数据交互",
+      "needed_source_slice": "gpio_module 实例连接、slot 实例连接（数据信号部分）",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:gpio_slot:semantic_module"
+      ]
+    },
+    {
+      "question": "紧凑上下文仅显示赋值右侧包含 {w_data_to[50:10],XY}，但未提供 XY 的定义、驱动逻辑及其与 GPIO 状态或配置的关系，无法给出可靠语义解释。",
+      "subject": "data_to 拼接信号 XY 的来源与位段含义",
+      "needed_source_slice": "assign block 或 XY 信号声明及驱动 always 块",
       "source_layers": [
         "semantic_layer"
       ],
@@ -1021,7 +1025,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "gpio_slot",
-    "source_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+    "source_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -1038,8 +1042,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "GPIO槽位模块，负责将Mesh网络驱动事件路由到内部GPIO外设，并返回驱动完成事件。",
-      "explanation": "模块接收来自Mesh的驱动事件i_driveFrmMesh，通过内部perip_slot实例（slot）处理，最终输出驱动完成事件o_driveNextToMesh。同时，模块集成了gpio_module实例，处理GPIO数据路径（data_from/data_to）和IO引脚输入（io_pin_i），并输出GPIO控制与数据信号（gpio_ctrl_o, gpio_data_o）。空闲信号（i_freeNextFrmMesh/o_freeToMesh）表明该槽位支持基于握手的驱动-空闲协议。",
+      "value": "将GPIO外设集成到Mesh总线的封装模块，负责总线协议握手与数据路径转换，同时直接暴露GPIO控制、数据、引脚状态和中断信号。",
+      "explanation": "模块内部例化了 perip_slot（总线插槽）和 gpio_module（GPIO控制器），通过 slot 处理 i_driveFrmMesh/i_freeNextFrmMesh 等事件，将总线数据转发给 gpio_module；gpio_module 生成的 gpio_ctrl_o、gpio_data_o、io_pin_i 和 irq 直接作为模块边界信号输出，体现了GPIO功能与总线适配的合并。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -1054,9 +1058,10 @@
         "o_freeToMesh",
         "data_from",
         "data_to",
-        "io_pin_i",
         "gpio_ctrl_o",
-        "gpio_data_o"
+        "gpio_data_o",
+        "io_pin_i",
+        "irq"
       ],
       "instances": [
         "slot",
@@ -1073,22 +1078,13 @@
       ],
       "semantic_evidence": [
         {
-          "source": "interface.event_inputs"
+          "source": "compact_context.interface"
         },
         {
-          "source": "interface.event_outputs"
+          "source": "compact_context.key_instances"
         },
         {
-          "source": "interface.free_inputs"
-        },
-        {
-          "source": "interface.free_outputs"
-        },
-        {
-          "source": "key_instances"
-        },
-        {
-          "source": "internal_event_flow_refs"
+          "source": "compact_context.key_component_connections"
         }
       ]
     },
@@ -1342,7 +1338,7 @@
           ],
           "summary": "clock_reset_init ports, count=2, directions=input:2",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+            "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1383,7 +1379,7 @@
           ],
           "summary": "gpio ports, count=3, directions=input:1, output:2",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+            "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1418,7 +1414,7 @@
           ],
           "summary": "drive_event ports, count=2, directions=input:1, output:1",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+            "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1453,7 +1449,7 @@
           ],
           "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+            "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1494,7 +1490,7 @@
           ],
           "summary": "other_ports ports, count=3, directions=input:1, output:2",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+            "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1511,20 +1507,22 @@
         "doc_priority": "primary",
         "source_file": "flows/flow_000_gpio_slot_i_driveFrmMesh.json",
         "reader_takeaway": {
-          "value": "该流为纯事件驱动，无有效载荷信号参与，事件传递不携带数据。",
-          "explanation": "interface_payload_contracts 显示 i_driveFrmMesh 和 o_driveNextToMesh 的 payloads 均为空，表明该流仅传递事件脉冲，无数据耦合。",
+          "value": "应强调此流为单向事件直通，无需数据转换或仲裁，忽略数据负载和背压细节。",
+          "explanation": "流的极简结构适合作为基本事件转发示例，避免混淆负载或 flow control 假设，确保最终手册突出其透明性。",
           "certainty": "ai_inferred",
-          "confidence": "medium",
+          "confidence": "high",
           "source_layers": [
             "semantic_layer"
           ],
-          "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:data_control_effect:001",
+          "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:documentation_focus:001",
           "doc_priority": "primary",
           "signals": [
             "i_driveFrmMesh",
             "o_driveNextToMesh"
           ],
-          "instances": [],
+          "instances": [
+            "slot"
+          ],
           "related_flows": [],
           "related_assignments": [],
           "requires_rtl_source_review": false,
@@ -1535,48 +1533,16 @@
           ],
           "semantic_evidence": [
             {
-              "source": "interface.event_ports",
-              "path": "knowledge_ir/modules/gpio_slot.json"
+              "source": "knowledge_ir/modules/gpio_slot.json",
+              "path": "internal_event_flow"
             }
           ],
           "supporting_claims": [
             {
-              "value": "最终手册应强调该流为无数据、无逻辑的直通事件路径，并注明其依赖 slot 实例的透明转发特性。",
-              "explanation": "由于流简单且无分支，文档应聚焦于事件传递的起点和终点，以及 slot 实例的中继角色，避免过度复杂化。",
+              "value": "输入事件 i_driveFrmMesh 直接透明转发为输出事件 o_driveNextToMesh，无数据操作，仅事件传递。",
+              "explanation": "流中仅有一个步骤，即实例 slot（perip_slot）接收 i_driveFrmMesh 并驱动 o_driveNextToMesh，无分支、条件或赋值依赖，属于典型的事件直通路径。",
               "certainty": "ai_inferred",
-              "confidence": "medium",
-              "source_layers": [
-                "semantic_layer"
-              ],
-              "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:documentation_focus:001",
-              "doc_priority": "primary",
-              "signals": [
-                "i_driveFrmMesh",
-                "o_driveNextToMesh"
-              ],
-              "instances": [
-                "slot"
-              ],
-              "related_flows": [],
-              "related_assignments": [],
-              "requires_rtl_source_review": false,
-              "review_status": "ready",
-              "evidence_refs": [
-                "ev:gpio_slot:flow:flow_000_gpio_slot_i_driveFrmMesh",
-                "ev:gpio_slot:semantic_flow:flow_000_gpio_slot_i_driveFrmMesh"
-              ],
-              "semantic_evidence": [
-                {
-                  "source": "transparent_flows",
-                  "path": "knowledge_ir/modules/gpio_slot.json"
-                }
-              ]
-            },
-            {
-              "value": "该驱动流将输入事件 i_driveFrmMesh 通过内部 slot 实例透明地转发至输出事件 o_driveNextToMesh，实现 GPIO 槽位到网格的直通事件传递。",
-              "explanation": "流仅包含一个步骤，即 slot 实例，其输入驱动为 i_driveFrmMesh，输出驱动为 o_driveNextToMesh，且无分支、汇合或阻塞点，表明这是一个简单的直通路径。",
-              "certainty": "ai_inferred",
-              "confidence": "medium",
+              "confidence": "high",
               "source_layers": [
                 "semantic_layer"
               ],
@@ -1591,6 +1557,40 @@
               ],
               "related_flows": [],
               "related_assignments": [],
+              "requires_rtl_source_review": true,
+              "review_status": "needs_review",
+              "evidence_refs": [
+                "ev:gpio_slot:flow:flow_000_gpio_slot_i_driveFrmMesh",
+                "ev:gpio_slot:semantic_flow:flow_000_gpio_slot_i_driveFrmMesh"
+              ],
+              "semantic_evidence": [
+                {
+                  "source": "parser_pipeline_rtl/modules/gpio_slot.json",
+                  "path": "connection_graph"
+                },
+                {
+                  "source": "knowledge_ir/modules/gpio_slot.json",
+                  "path": "interface_event_flow"
+                }
+              ]
+            },
+            {
+              "value": "事件驱动无伴随数据负载，仅靠事件令牌控制流，无数据通路参与。",
+              "explanation": "接口负载合同显示虽有 free 信号但无数据载荷，驱动关系仅传递事件，不代表任何数据流转。",
+              "certainty": "ai_inferred",
+              "confidence": "high",
+              "source_layers": [
+                "semantic_layer"
+              ],
+              "semantic_claim_id": "semantic:flow:gpio_slot:flow_000_gpio_slot_i_driveFrmMesh:data_control_effect:001",
+              "doc_priority": "secondary",
+              "signals": [
+                "i_driveFrmMesh",
+                "o_driveNextToMesh"
+              ],
+              "instances": [],
+              "related_flows": [],
+              "related_assignments": [],
               "requires_rtl_source_review": false,
               "review_status": "ready",
               "evidence_refs": [
@@ -1599,18 +1599,14 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "instances.connections",
-                  "path": "parser_pipeline_rtl/modules/gpio_slot.json"
-                },
-                {
-                  "source": "transparent_flows",
-                  "path": "knowledge_ir/modules/gpio_slot.json"
+                  "source": "knowledge_ir/modules/gpio_slot.json",
+                  "path": "interface_data_contract"
                 }
               ]
             },
             {
-              "value": "该驱动流本身不包含完成或反压信号，但接口中关联的 free 信号可能用于外部流控，需进一步确认。",
-              "explanation": "interface_payload_contracts 中 i_driveFrmMesh 关联 o_freeToMesh，o_driveNextToMesh 关联 i_freeNextFrmMesh，但当前流步骤未涉及这些信号，表明流控可能由外部模块处理。",
+              "value": "未提供背压或完成信号的直接证据，仅存在接口级 free 信号（o_freeToMesh 和 i_freeNextFrmMesh）与本流无显式关联。",
+              "explanation": "流过租中未出现任何完成或等待信号，无法断言背压行为；free 信号可能属于协议层，但不影响本流的事件转发语义。",
               "certainty": "ai_inferred",
               "confidence": "low",
               "source_layers": [
@@ -1635,8 +1631,8 @@
               ],
               "semantic_evidence": [
                 {
-                  "source": "interface.event_ports",
-                  "path": "knowledge_ir/modules/gpio_slot.json"
+                  "source": "knowledge_ir/modules/gpio_slot.json",
+                  "path": "interface_data_contract"
                 }
               ]
             }
@@ -1654,11 +1650,11 @@
       "components": 1,
       "assignments": 1,
       "evidence_gaps": 0,
-      "review_questions": 1
+      "review_questions": 2
     },
     "source_review_context": {
       "module": "gpio_slot",
-      "rtl_file": "rtl/rtl/IONet/GPIO/gpio_slot.v",
+      "rtl_file": "rtl\\rtl\\IONet\\GPIO\\gpio_slot.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",

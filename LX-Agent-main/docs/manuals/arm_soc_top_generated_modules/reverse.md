@@ -1,8 +1,8 @@
 # 模块 `reverse`
 
-- 源文件：`rtl/rtl/Execute/reverse.v`。
-- 职责：AI 推断：该模块根据 reverseType 选择信号，对 32 位操作数 oprand 执行位反转、字节反转、半字反转或带符号扩展的半字反转操作，并输出结果 result。。
-- 说明：模块的输入为数据 oprand 和控制信号 reverseType，输出为 result。assign 依赖显示，模块内部生成了 w_rbitResult_32（位反转）、w_revResult_32（字节反转）、w_rev16Result_32（半字反转）和 w_revshResult_32（带符号扩展的半字反转）四个中间结果，最终通过多路选择器根据 reverseType 的值选择输出。这符合一个数据格式转换单元的设计意图。
+- 源文件：`rtl\rtl\Execute\reverse.v`。
+- 职责：AI 推断：根据控制信号对输入操作数执行四种数据反转操作的组合逻辑模块。
+- 说明：无事件或状态寄存器，所有输出由assign组合生成。接口仅有数据输入、控制输入和数据输出，符合纯功能单元的设计意图。
 
 ## 1. 层级位置
 
@@ -51,10 +51,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `w_rbitResult_32[30]` | oprand[1] | AI 推断：该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。 |
-| `assign_2` | data_path | `w_rbitResult_32[29]` | oprand[2] | AI 推断：该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。 |
-| `assign_3` | data_path | `w_rbitResult_32[28]` | oprand[3] | AI 推断：该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。 |
-| `assign_4` | data_path | `w_rbitResult_32[27]` | oprand[4] | AI 推断：该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。 |
-| `assign_5` | data_path | `w_rbitResult_32[26]` | oprand[5] | AI 推断：该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。 |
-| `assign_6` | data_path | `w_rbitResult_32[25]` | oprand[6] | AI 推断：该信号通过 32 条连续赋值语句，将 oprand 的每一位进行反转，生成位反转结果。 |
+| `assign_1` | data_path | `w_rbitResult_32[30]` | oprand[1] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | data_path | `w_rbitResult_32[29]` | oprand[2] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_3` | data_path | `w_rbitResult_32[28]` | oprand[3] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_4` | data_path | `w_rbitResult_32[27]` | oprand[4] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_5` | data_path | `w_rbitResult_32[26]` | oprand[5] | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_6` | data_path | `w_rbitResult_32[25]` | oprand[6] | 证据不足：No Semantic Layer assignment interpretation is available. |
 | ... | ... | ... | ... | 其余 9 条 assign 省略 |

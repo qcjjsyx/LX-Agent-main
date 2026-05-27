@@ -3,23 +3,27 @@
   "schema_version": "0.1",
   "module": "SPI2NoC",
   "status": "reviewed",
-  "source_file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+  "source_file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
   "targets": [
     {
       "kind": "responsibility_claim",
       "module": "SPI2NoC",
       "subject": "semantic:module:SPI2NoC:structural_responsibility:001",
-      "summary": "SPI2NoC 将来自 SPI 控制器的数据 (r_apbrdata) 与位置信息 (r_X, r_Y) 打包成 51 位宽的 NoC 数据包 (o_data2Noc_51)。",
-      "explanation": "赋值依赖显示 o_data2Noc_51 由 r_dataFNoc_51、r_apbrdata、r_X 和 r_Y 拼接而成，表明模块负责将 SPI 读取的数据与路由坐标组合成 NoC 数据包格式。",
+      "summary": "模块在结构上接收NoC驱动和数据输入，经cfifo0缓冲后传递给SPI_control进行SPI事务，再将SPI响应数据经cfifo1缓冲后以驱动和数据输出至NoC。",
+      "explanation": "关键连接显示i_drvFNoc驱动cfifo0.i_drive，o_drv2Noc来自cfifo1.o_driveNext，o_free2Noc来自cfifo0.o_free，暗示输入驱动触发SPI操作，输出驱动由SPI响应生成。assign依赖说明输出载荷由r_dataFNoc_51与SPI_control的PRDATA拼装，表明响应包携带请求上下文与SPI读取数据。但cfifo0输出至cfifo1输入的事件连接未在本次上下文中明确给出，内部完整数据流需RTL源码审查。",
       "reason": "",
       "signals": [
+        "i_drvFNoc",
+        "o_drv2Noc",
+        "i_dataFNoc_51",
         "o_data2Noc_51",
-        "r_dataFNoc_51",
-        "r_apbrdata",
-        "r_X",
-        "r_Y"
+        "w_drvnext_fifo1",
+        "r_drv2fifo1",
+        "r_dataFNoc_51"
       ],
       "instances": [
+        "cfifo0",
+        "cfifo1",
         "SPI_control_u"
       ],
       "evidence_refs": [
@@ -46,10 +50,10 @@
     {
       "kind": "evidence_gap",
       "module": "SPI2NoC",
-      "subject": "内部事件流细节",
+      "subject": "从cfifo0输出到cfifo1输入的内部事件流",
       "summary": "",
       "explanation": "",
-      "reason": "当前上下文仅提供输入事件流 (i_drvFNoc) 的起点，未描述其如何到达 cfifo1 或 SPI_control_u，以及 r_drv2fifo1 如何产生。",
+      "reason": "AI上下文显示cfifo0输出事件w_drvnext_fifo1和cfifo1输入事件r_drv2fifo1，但没有显式连接与SPI_control的关联。为完整记录数据路径，必须获得RTL源码以确认内部连线、复用及状态机。",
       "signals": [],
       "instances": [],
       "evidence_refs": [
@@ -76,10 +80,10 @@
     {
       "kind": "review_question",
       "module": "SPI2NoC",
-      "subject": "内部事件流细节",
-      "summary": "当前上下文仅提供输入事件流 (i_drvFNoc) 的起点，未描述其如何到达 cfifo1 或 SPI_control_u，以及 r_drv2fifo1 如何产生。",
+      "subject": "从cfifo0输出到cfifo1输入的内部事件流",
+      "summary": "AI上下文显示cfifo0输出事件w_drvnext_fifo1和cfifo1输入事件r_drv2fifo1，但没有显式连接与SPI_control的关联。为完整记录数据路径，必须获得RTL源码以确认内部连线、复用及状态机。",
       "explanation": "",
-      "reason": "当前上下文仅提供输入事件流 (i_drvFNoc) 的起点，未描述其如何到达 cfifo1 或 SPI_control_u，以及 r_drv2fifo1 如何产生。",
+      "reason": "AI上下文显示cfifo0输出事件w_drvnext_fifo1和cfifo1输入事件r_drv2fifo1，但没有显式连接与SPI_control的关联。为完整记录数据路径，必须获得RTL源码以确认内部连线、复用及状态机。",
       "signals": [],
       "instances": [],
       "evidence_refs": [
@@ -123,8 +127,8 @@
       "kind": "flow",
       "module": "SPI2NoC",
       "subject": "flow_000_SPI2NoC_i_drvFNoc",
-      "summary": "事件驱动信号 i_drvFNoc 与 51 位数据负载 i_dataFNoc_51 同时作为模块输入，但当前流上下文未显示两者在 cfifo0 内的具体关联方式。",
-      "explanation": "接口负载契约表明 i_drvFNoc 是事件端口，i_dataFNoc_51 是其关联数据负载。然而，在流步骤中仅提及 i_drvFNoc 连接到 cfifo0 的 i_drive，未说明数据负载是否也进入同一 FIFO 或通过其他路径传递。这种耦合关系需要 RTL 源码确认。",
+      "summary": "驱动事件与 51 位数据负载同时有效，负载内容可能为 SPI 帧数据，随事件进入 FIFO。",
+      "explanation": "接口负载合同将 i_drvFNoc 与 i_dataFNoc_51 配对，但 AI 上下文未显示 cfifo0 的数据输入端口连接，故仅能推断负载伴随事件传递，具体连接需从 RTL 确认。",
       "reason": "no module event output reached from i_drvFNoc; Semantic Layer requested RTL source review for this flow.",
       "signals": [
         "i_drvFNoc"
@@ -140,72 +144,67 @@
   ],
   "source_refs": [
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 6,
       "line_end": 10
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 21,
       "line_end": 45
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+      "line_start": 58,
+      "line_end": 62
+    },
+    {
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 66,
-      "line_end": 72
+      "line_end": 70
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-      "line_start": 77,
-      "line_end": 82
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+      "line_start": 74,
+      "line_end": 85
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-      "line_start": 85,
-      "line_end": 100
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+      "line_start": 89,
+      "line_end": 98
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 118,
-      "line_end": 139
+      "line_end": 142
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-      "line_start": 184,
-      "line_end": 188
-    },
-    {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 194,
       "line_end": 199
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 202,
       "line_end": 207
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-      "line_start": 215,
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+      "line_start": 212,
       "line_end": 221
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 224,
       "line_end": 228
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-      "line_start": 231,
-      "line_end": 235
-    },
-    {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 248,
       "line_end": 255
     },
     {
-      "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
+      "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
       "line_start": 262,
       "line_end": 266
     }
@@ -213,8 +212,8 @@
   "claims": [
     {
       "subject": "semantic:module:SPI2NoC:structural_responsibility:001",
-      "summary": "SPI2NoC 将来自 SPI 控制器的数据 (r_apbrdata) 与位置信息 (r_X, r_Y) 打包成 51 位宽的 NoC 数据包 (o_data2Noc_51)。",
-      "explanation": "第 250 行赋值显示 o_data2Noc_51 由 r_dataFNoc_51[50]、r_dataFNoc_51[49:42]、r_apbrdata、r_X 和 r_Y 拼接而成，其中 r_apbrdata 来自 SPI 控制器的 PRDATA（第 233 行），r_X 常为 5'b10001（第 97 行），r_Y 常为 5'b00000（第 98 行）。",
+      "summary": "声称的完整结构路径中，cfifo0到cfifo1的事件流断裂，数据输出未经过cfifo1缓冲，责任声称不成立。",
+      "explanation": "RTL显示i_drvFNoc经cfifo0（i_drive，第80行）接收，但cfifo0的输出驱动w_drvnext_fifo1（第83行）未连接至cfifo1或其它逻辑，处于悬空。cfifo1的输入驱动r_drv2fifo1（第121行）由状态机在FINISH状态（第127-128行）产生，而非来自cfifo0。输出驱动o_drv2Noc由cfifo1.o_driveNext（第140行）驱动，数据输出o_data2Noc_51由assign直接组合逻辑生成（第250行），未经cfifo1缓冲。因此，声称的“经cfifo0缓冲后传递给SPI_control，再将SPI响应数据经cfifo1缓冲后以驱动和数据输出”与RTL实际连接不符，内部事件流存在明显缝隙。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -222,20 +221,114 @@
         "manual_context"
       ],
       "signals": [
-        "o_data2Noc_51",
-        "r_dataFNoc_51",
-        "r_apbrdata",
-        "r_X",
-        "r_Y"
+        "i_drvFNoc",
+        "o_drv2Noc",
+        "w_drvnext_fifo1",
+        "r_drv2fifo1",
+        "o_data2Noc_51"
       ],
       "instances": [
+        "cfifo0",
+        "cfifo1",
         "SPI_control_u"
       ],
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-          "line_start": 250,
-          "line_end": 250
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 79,
+          "line_end": 85
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 89,
+          "line_end": 98
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 118,
+          "line_end": 142
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 248,
+          "line_end": 251
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI2NoC:semantic_module",
+        "ev:SPI2NoC:knowledge_module",
+        "ev:SPI2NoC:semantic_flow:flow_000_SPI2NoC_i_drvFNoc",
+        "ev:SPI2NoC:flow:flow_000_SPI2NoC_i_drvFNoc"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "internal_event_flow.i_drvFNoc",
+      "summary": "从i_drvFNoc没有模块事件输出可达，路径不完整。",
+      "explanation": "输入事件i_drvFNoc进入cfifo0（第80行），cfifo0输出w_drvnext_fifo1未连接任何目标（第83行声明但未使用）。cfifo1输入由r_drv2fifo1驱动（第137行），该信号由内部状态机FINISH状态产生（第127-128行），且无来自i_drvFNoc的事件传递至o_drv2Noc的完整通路，无法确认事件最终输出。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "i_drvFNoc",
+        "w_drvnext_fifo1",
+        "o_drv2Noc"
+      ],
+      "instances": [
+        "cfifo0",
+        "cfifo1"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 79,
+          "line_end": 85
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 118,
+          "line_end": 142
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI2NoC:semantic_module",
+        "ev:SPI2NoC:knowledge_module",
+        "ev:SPI2NoC:semantic_flow:flow_000_SPI2NoC_i_drvFNoc",
+        "ev:SPI2NoC:flow:flow_000_SPI2NoC_i_drvFNoc"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "从cfifo0输出到cfifo1输入的内部事件流",
+      "summary": "cfifo0输出事件w_drvnext_fifo1与cfifo1输入事件r_drv2fifo1之间无连接，不存在直接事件流。",
+      "explanation": "cfifo0的o_driveNext输出w_drvnext_fifo1（第83行）在提供的RTL切片中未被连接到cfifo1或任何其他逻辑。cfifo1的i_drive输入由寄存器r_drv2fifo1（第137行）驱动，该寄存器仅在状态机达到FINISH时置1（第127-128行）。因此，没有从cfifo0输出到cfifo1输入的事件流，内部路径断裂。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "w_drvnext_fifo1",
+        "r_drv2fifo1"
+      ],
+      "instances": [
+        "cfifo0",
+        "cfifo1"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 79,
+          "line_end": 85
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 118,
+          "line_end": 142
         }
       ],
       "evidence_refs": [
@@ -248,8 +341,8 @@
     },
     {
       "subject": "flow_000_SPI2NoC_i_drvFNoc",
-      "summary": "输入 i_drvFNoc 连接到 cfifo0 的 i_drive，输入数据 i_dataFNoc_51 在 w_firefifo0[0] 上升沿加载到 r_dataFNoc_51。",
-      "explanation": "第 80 行显示 i_drvFNoc 连接到 cfifo0 的 i_drive。第 89-100 行 always 块在 w_firefifo0[0] 上升沿将 i_dataFNoc_51 赋值给 r_dataFNoc_51，同时 r_X、r_Y 被设为固定值。",
+      "summary": "i_drvFNoc与i_dataFNoc_51可以推断为同时有效，数据随事件被捕获到模块内部，形成关联。",
+      "explanation": "cfifo0的fire输出w_firefifo0[0]（第84行）用于在上升沿锁存i_dataFNoc_51到r_dataFNoc_51（第89-96行）。该fire信号由cfifo0内部基于i_drvFNoc产生，表明数据负载与驱动事件相关联。数据随事件进入模块内部寄存器，可认为负载进入了“FIFO”概念（即控制FIFO触发下的数据捕获），但具体FIFO行为由cfifo0内部定义，提供的RTL未显示其内部结构，因此该推断是AI推理的结果。",
       "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
@@ -259,19 +352,16 @@
       "signals": [
         "i_drvFNoc",
         "i_dataFNoc_51",
-        "r_dataFNoc_51",
-        "w_firefifo0",
-        "r_X",
-        "r_Y"
+        "w_firefifo0"
       ],
       "instances": [
         "cfifo0"
       ],
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-          "line_start": 80,
-          "line_end": 100
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 79,
+          "line_end": 98
         }
       ],
       "evidence_refs": [
@@ -281,38 +371,17 @@
         "ev:SPI2NoC:flow:flow_000_SPI2NoC_i_drvFNoc"
       ],
       "review_status": "ready"
-    },
+    }
+  ],
+  "open_questions": [
     {
-      "subject": "internal_event_flow.i_drvFNoc",
-      "summary": "输入 i_drvFNoc 作为事件驱动 cfifo0，但 r_drv2fifo1 的生成来自 SPI_control_u 的状态机，而非直接源于 i_drvFNoc。",
-      "explanation": "第 127-128 行显示 r_drv2fifo1 在 state == FINISH 时置 1，该 state 由 SPI_control_u 的状态机（第 196-199 行）驱动，而状态机启动条件依赖 VAL（未在切片中显示来源）和 r_dataFNoc_51[50]。i_drvFNoc 对应 cfifo0，但 r_drv2fifo1 的触发路径需要 SPI_control_u 内部状态流转，切片未提供完整路径。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "i_drvFNoc",
-        "r_drv2fifo1",
-        "state",
-        "r_dataFNoc_51",
-        "VAL"
-      ],
-      "instances": [
-        "cfifo0",
-        "SPI_control_u"
-      ],
+      "subject": "w_drvnext_fifo1的实际连接",
+      "question": "cfifo0的输出驱动信号w_drvnext_fifo1在提供的RTL切片中悬空，需检查完整源码确认其是否未连接或被优化，或是否用于触发SPI_control等。",
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-          "line_start": 127,
-          "line_end": 128
-        },
-        {
-          "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-          "line_start": 196,
-          "line_end": 199
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 76,
+          "line_end": 76
         }
       ],
       "evidence_refs": [
@@ -320,19 +389,27 @@
         "ev:SPI2NoC:knowledge_module",
         "ev:SPI2NoC:semantic_flow:flow_000_SPI2NoC_i_drvFNoc",
         "ev:SPI2NoC:flow:flow_000_SPI2NoC_i_drvFNoc"
-      ],
-      "review_status": "needs_review"
-    }
-  ],
-  "open_questions": [
+      ]
+    },
     {
-      "subject": "内部事件流细节",
-      "question": "i_drvFNoc 通过 cfifo0 产生 w_firefifo0，但 w_firefifo0 与 SPI_control_u 状态机启动信号 VAL 的关系不明确，需要确认 w_firefifo0 是否直接影响 VAL 或状态机跳转。",
+      "subject": "cfifo0与cfifo1内部数据路径",
+      "question": "cfifo0和cfifo1模块（cFifo3_spi1）的内部实现未提供，需审查其行为以确认数据负载是否被推入FIFO，以及w_firefifo0的确切产生逻辑。",
+      "source_refs": [],
+      "evidence_refs": [
+        "ev:SPI2NoC:semantic_module",
+        "ev:SPI2NoC:knowledge_module",
+        "ev:SPI2NoC:semantic_flow:flow_000_SPI2NoC_i_drvFNoc",
+        "ev:SPI2NoC:flow:flow_000_SPI2NoC_i_drvFNoc"
+      ]
+    },
+    {
+      "subject": "r_drv2fifo1的生成逻辑有效性",
+      "question": "r_drv2fifo1仅在state==FINISH时置1，但FINISH状态与SPI_control完成握手的关系未展示，需验证此事件是否准确反映SPI事务完成并向NoC输出驱动。",
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/SPI/SPI1/SPI2NoC.v",
-          "line_start": 89,
-          "line_end": 100
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI2NoC.v",
+          "line_start": 122,
+          "line_end": 134
         }
       ],
       "evidence_refs": [
@@ -343,5 +420,5 @@
       ]
     }
   ],
-  "raw_model_chars": 2360
+  "raw_model_chars": 4581
 }

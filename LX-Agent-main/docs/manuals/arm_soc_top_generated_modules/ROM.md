@@ -1,8 +1,8 @@
 # 模块 `ROM`
 
-- 源文件：`rtl/rtl/memory/ROM.v`。
-- 职责：AI 推断：只读存储器模块，提供基于地址的固定数据查找功能。
-- 说明：模块仅包含地址输入和数据输出，无事件或控制输入，表明其功能为组合逻辑或同步读取的只读存储器，用于向系统提供预存储的常量数据。
+- 源文件：`rtl\rtl\memory\ROM.v`。
+- 职责：AI 推断：ROM 是一个只读存储器模块，根据地址输入提供指令或常量数据输出，用于 SoC 的取指或常量表访问。
+- 说明：接口仅包含数据输入 `i_addr` 和数据输出 `o_data`，没有握手或控制信号，表明该模块是简单的只读存储器，典型用途为指令存储器或固定数据表。内部存储阵列 `rom_mem` 通过 `assign` 拼接两个相邻地址的数据产生 64 位输出，符合 64 位取指场景。
 
 ## 1. 层级位置
 
@@ -51,4 +51,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data` | {rom_mem[addr+10'd1],rom_mem[addr]} | AI 推断：将两个连续地址的rom_mem数据拼接成64位输出 |
+| `assign_0` | data_path | `o_data` | {rom_mem[addr+10'd1],rom_mem[addr]} | 证据不足：No Semantic Layer assignment interpretation is available. |

@@ -1,8 +1,8 @@
 # 模块 `NoCUART0`
 
-- 源文件：`rtl/rtl/IONet/UART/NoCUART0.v`。
-- 职责：AI 推断：NoCUART0 是一个 UART 桥接模块，负责在 NoC 协议接口与标准 UART 内核 (m16550s) 之间进行事件驱动的数据和控制信号转换与同步。。
-- 说明：模块通过事件驱动接口 (i_drvFNoc/o_drv2Noc) 和有效载荷 (i_dataFNoc_51/o_data2Noc_51) 与 NoC 通信，内部使用 FIFO (cfifo0, cfifo1) 和确认单元 (pmtAck) 进行事件同步和延迟，最终连接到标准 UART 实例 (uart_instance) 的众多控制/状态/数据信号 (如 SIN, SOUT, BAUD, IRQ 等)。这表明其核心作用是协议适配和信号桥接。
+- 源文件：`rtl\rtl\IONet\UART\NoCUART0.v`。
+- 职责：AI 推断：NoC与UART外设之间的桥接模块，实现NoC数据包到UART串行接口的协议转换。
+- 说明：模块名称NoCUART0表明其连接NoC和UART，接口信号使用NoC风格的事件/数据/释放信号，内部实例化标准UART（m16550s），事件流显示从NoC输入事件经FIFO和延迟链产生NoC输出事件，输出数据组合了UART接收数据，符合桥接器角色。
 
 ## 1. 层级位置
 
@@ -38,8 +38,8 @@ NoCUART0
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_drvFNoc`；数据输入：`i_dataFNoc_51`；free 输入：`i_freeFNoc`；其他输入：`BRGE`, `CLOCK`, `NCTS`, `NDCD`, `... +6`。
-- 输出：drive 输出：`o_drv2Noc`；数据输出：`o_data2Noc_51`；free 输出：`o_free2Noc`；其他输出：`BAUD`, `IRQ`, `NDTR`, `NOUT1`, `... +3`。
+- **接收**：drive 输入：`i_drvFNoc`；数据输入：`i_dataFNoc_51`；free 输入：`i_freeFNoc`；其他输入：`BRGE`, `CLOCK`, `NCTS`, `NDCD`, `NDSR`, `NRI`, `RCLK`, `RCLK_BAUD`, `rst_finish`, `SIN`。
+- **输出**：drive 输出：`o_drv2Noc`；数据输出：`o_data2Noc_51`；free 输出：`o_free2Noc`；其他输出：`BAUD`, `IRQ`, `NDTR`, `NOUT1`, `NOUT2`, `NRTS`, `SOUT`。
 
 ### 2.1 端口分组
 
@@ -48,7 +48,7 @@ NoCUART0
 | `clock_reset_init` | input:3 | `RCLK`, `RCLK_BAUD`, `rst_finish` |
 | `drive_event` | input:1, output:1 | `i_drvFNoc`, `o_drv2Noc` |
 | `free_backpressure` | input:1, output:1 | `i_freeFNoc`, `o_free2Noc` |
-| `other_ports` | input:8, output:8 | `i_dataFNoc_51`, `o_data2Noc_51`, `BRGE`, `CLOCK`, `NCTS`, `NDCD`, `NDSR`, `NRI`, `SIN`, `BAUD`, `... +6` |
+| `other_ports` | input:8, output:8 | `i_dataFNoc_51`, `o_data2Noc_51`, `BRGE`, `CLOCK`, `NCTS`, `NDCD`, `NDSR`, `NRI`, `SIN`, `BAUD`, `NDTR`, `NOUT1`, `NOUT2`, `NRTS`, `SOUT` |
 
 ## 3. Drive/Data/Free 契约
 
@@ -59,18 +59,17 @@ NoCUART0
 
 ## 4. 主要 Drive-centered Flow
 
-### `i_drvFNoc`
+### `i_drvFNoc` → `o_drv2Noc`
 
-- 确定性事实：`i_drvFNoc to o_drv2Noc`；flow_id=`flow_000_NoCUART0_i_drvFNoc`。
-- Payload：`i_drvFNoc` -> `i_dataFNoc_51 [50:0]`, `o_drv2Noc` -> `o_data2Noc_51 [50:0]`。
-- 输出/影响：`o_drv2Noc`。
-- 结构复杂度：branch=0，join=0，blocking=3。
-- AI 推断：最终手册应重点描述事件从输入到输出的串行传播路径，包括 FIFO 缓冲和延迟链的时序对齐作用，以及数据载荷的打包过程。
-
+- **确定性事实**：事件通路 `i_drvFNoc` 到 `o_drv2Noc`；flow_id = `flow_000_NoCUART0_i_drvFNoc`。
+- **Payload**：输入 `i_drvFNoc` 携带 `i_dataFNoc_51 [50:0]`，输出 `o_drv2Noc` 携带 `o_data2Noc_51 [50:0]`。
+- **输出/影响**：最终产生 `o_drv2Noc` 事件。
+- **结构复杂度**：branch=0，join=0，blocking=3。
+- **AI 推断**：手册应强调事件流的级数和组件功能（cfifo0 → pmtAck → 延迟 → cfifo1 → 延迟链 → o_drv2Noc）、总传输延迟、输出数据组合逻辑来源，弱化FIFO内部实现细节。
 
 ## 5. 内部组件与 assign 影响
 
-### 5.1 内部组件
+### 5.1 内部组件（实例）
 
 | 实例 | 类型 | 输入事件 | 输出事件 |
 | --- | --- | --- | --- |
@@ -80,6 +79,6 @@ NoCUART0
 
 ### 5.2 assign 影响
 
-| Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
+| Assign | 影响区域 | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50],r_dataFNoc_51[49:42],r_dataHigh,ReceiveData,r_X,r_Y} | AI 推断：将 UART 内核的读取数据、状态位和输入数据的高位部分打包成 51 位输出数据。 |
+| `assign_0` | data_path | `o_data2Noc_51` | {r_dataFNoc_51[50], r_dataFNoc_51[49:42], r_dataHigh, ReceiveData, r_X, r_Y} | AI 推断：构建UART读响应数据包，将输入命令部分字段、接收字节和状态位组合输出。 |

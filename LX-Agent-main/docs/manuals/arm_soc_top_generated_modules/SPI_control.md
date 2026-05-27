@@ -1,8 +1,8 @@
 # 模块 `SPI_control`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI1/SPI_control.v`。
-- 职责：AI 推断：SPI 主从控制器，通过 APB 接口配置寄存器并驱动 SPI 协议引擎。
-- 说明：模块通过 reg_apb 实例接收 APB 总线配置，内部包含主模式引擎 spi_m_u、从模式引擎 spi_s_u、时钟分频器 clk_div_u、CRC 校验单元及错误状态单元，实现 SPI 协议控制
+- 源文件：`rtl\rtl\IONet\SPI\SPI1\SPI_control.v`。
+- 职责：**AI 推断**：作为 SPI 外设的顶层集成模块，通过 APB 从接口提供寄存器级配置，并整合 SPI 主/从收发、时钟生成、CRC 校验、错误检测与中断管理功能。
+- 说明：该模块拥有完整的 APB 从接口（PADDR、PWDATA、PRDATA 等），并直接连接到寄存器实例 `reg_apb_u`。同时，它将时钟与复位分发到 `clk_div_u`、`spi_m_u`、`spi_s_u`、`CRC_rx_u`、`CRC_tx_u`、`MODF_u` 和 `OVR_u` 等功能子模块，并将内部状态组合为 `SPI_interrupt` 输出，从而承担 SPI 外设的顶层控制角色。
 
 ## 1. 层级位置
 
@@ -46,7 +46,7 @@ SPI_control
 | 端口组 | 方向统计 | 代表信号 |
 | --- | --- | --- |
 | `clock_reset_init` | input:3, output:2 | `clk`, `rst_n`, `sclk_in`, `io_ctl_sclk`, `sclk_out` |
-| `other_ports` | input:8, output:11 | `PADDR`, `PWDATA`, `PRDATA`, `PENABLE`, `PSEL`, `PWRITE`, `miso_in`, `mosi_in`, `nss_in`, `PREADY`, `... +9` |
+| `other_ports` | input:8, output:11 | `PADDR`, `PWDATA`, `PRDATA`, `PENABLE`, `PSEL`, `PWRITE`, `miso_in`, `mosi_in`, `nss_in`, `PREADY`, 及其余 9 个输出端口 |
 
 ## 3. Drive/Data/Free 契约
 
@@ -57,7 +57,7 @@ SPI_control
 
 ## 4. 主要 Drive-centered Flow
 
-- 证据不足：Manual Context 未提供本模块 drive flow。
+- **证据不足**：Manual Context 未提供本模块的 drive flow。
 
 ## 5. 内部组件与 assign 影响
 
@@ -65,17 +65,17 @@ SPI_control
 
 | 实例 | 类型 | 输入事件 | 输出事件 |
 | --- | --- | --- | --- |
-| - | - | - | Manual Context 未提供 primary internal component |
+| - | - | - | Manual Context 未提供主要内部组件 |
 
 ### 5.2 assign 影响
 
-| Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
+| Assign | 影响区域 | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `io_ctl_sclk` | MSTR ? 1'b1 : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | unknown | `io_ctl_miso` | MSTR ? 1'b0 : ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_3` | unknown | `io_ctl_mosi` | MSTR ? ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_4` | unknown | `io_ctl_nss` | (MSTR & SSOE) ? 1'b1 : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_5` | unknown | `nss_reg` | SSM ? SSI : nss_in | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_6` | unknown | `mosi_out` | (BIDIMODE & !BIDIOE) ? 1'b0 : tx_m | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_12` | unknown | `SPI_interrupt` | (RXNE & RXNEIE) \| ((MODF \| OVR \| CRCERR) & ERRIE) \| (TXE & TXEIE) \| 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | unknown | `sclk_out` | CPOL ? ~sclk_out_div : sclk_out_div | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_1` | unknown | `io_ctl_sclk` | MSTR ? 1'b1 : 1'b0 | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_2` | unknown | `io_ctl_miso` | MSTR ? 1'b0 : ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_3` | unknown | `io_ctl_mosi` | MSTR ? ((BIDIMODE & !BIDIOE) ? 1'b0 : 1'b1) : 1'b0 | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_4` | unknown | `io_ctl_nss` | (MSTR & SSOE) ? 1'b1 : 1'b0 | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_5` | unknown | `nss_reg` | SSM ? SSI : nss_in | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_6` | unknown | `mosi_out` | (BIDIMODE & !BIDIOE) ? 1'b0 : tx_m | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_12` | unknown | `SPI_interrupt` | (RXNE & RXNEIE) \| ((MODF \| OVR \| CRCERR) & ERRIE) \| (TXE & TXEIE) \| 1'b0 | **证据不足**：无可用的语义层赋值解释。 |
+| `assign_0` | unknown | `sclk_out` | CPOL ? ~sclk_out_div : sclk_out_div | **证据不足**：无可用的语义层赋值解释。 |

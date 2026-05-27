@@ -1,16 +1,16 @@
 # 模块 `orrer`
 
-- 源文件：`rtl/rtl/Execute/or.v`。
-- 职责：AI 推断：执行按位逻辑或运算的组合逻辑单元。
-- 说明：模块通过组合赋值将两个32位操作数按位相或，直接产生结果，无时钟或控制信号参与，属于纯组合逻辑数据通路单元。
+- 源文件：`rtl\rtl\Execute\or.v`
+- 职责：AI 推断：在 ALU/执行数据通路中实现按位逻辑“或”运算，将两个 32 位操作数组合产生结果。
+- 说明：上下文表明该模块仅包含连续赋值 `result = oprand1 | oprand2`，无控制信号和事件，位于 Execute 路径下，属于纯组合逻辑单元，向调用者提供无延迟的按位或功能。
 
 ## 1. 层级位置
 
-- Parents：`execute`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`execute`
+- Children：无
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`oprand1`, `oprand2`。
-- 输出：数据输出：`result`。
+- 接收：数据输入 `oprand1`, `oprand2`
+- 输出：数据输出 `result`
 
 ### 2.1 端口分组
 
@@ -50,4 +50,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | data_path | `result` | oprand1 \| oprand2 | AI 推断：将两个输入操作数按位或的结果赋值给输出端口。 |
+| `assign_0` | data_path | `result` | oprand1 \| oprand2 | AI 推断：赋值 `result = oprand1 \| oprand2` 定义了模块唯一的组合逻辑输出，是纯按位或运算的数据路径。 |

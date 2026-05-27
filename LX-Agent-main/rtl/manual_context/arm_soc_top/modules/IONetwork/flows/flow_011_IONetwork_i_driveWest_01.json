@@ -956,10 +956,10 @@
     }
   ],
   "semantic_meaning": {
-    "value": "最终手册应强调该流是一个事件广播流，事件信号与数据消息的传播路径可能不同，且反压机制需要单独说明。",
-    "explanation": "当前上下文显示事件信号通过节点网格广播到所有输出，但数据消息（如 i_westInMsg_51_01）的传播路径与事件流不完全一致。手册应明确区分事件驱动与数据负载的关联，并指出反压信号 o_freeWest_00 的作用域。",
+    "value": "最终手册应强调该流揭示了IONetwork中西向输入能够抵达所有输出端口的拓扑可达性，但需明确指出路由选择逻辑和实际分发策略依赖于nodeTop内部实现，本分析未涵盖。",
+    "explanation": "由于AI上下文仅提供了连接关系和驱动流步骤，而缺少节点内部状态机或仲裁逻辑，手册不能保证每个i_driveWest_01事件都会在所有端点上产生输出，而应将其标注为“潜在传播路径”。强调需要查看nodeTop源码以确认具体的多播/单播行为。",
     "certainty": "ai_inferred",
-    "confidence": "medium",
+    "confidence": "high",
     "source_layers": [
       "semantic_layer"
     ],
@@ -967,9 +967,9 @@
     "doc_priority": "primary",
     "signals": [
       "i_driveWest_01",
-      "i_westInMsg_51_00",
-      "i_westInMsg_51_01",
-      "o_freeWest_00"
+      "o_driveLocal_01",
+      "o_driveNorth_01",
+      "..."
     ],
     "instances": [
       "node_01",
@@ -978,9 +978,7 @@
       "node_10"
     ],
     "related_flows": [],
-    "related_assignments": [
-      "(none)"
-    ],
+    "related_assignments": [],
     "requires_rtl_source_review": true,
     "review_status": "needs_review",
     "evidence_refs": [
@@ -989,18 +987,54 @@
     ],
     "semantic_evidence": [
       {
-        "source": "instances.connections",
-        "path": "knowledge_ir/modules/IONetwork.json"
+        "source": "flow.confidence",
+        "path": "context (medium)"
       },
       {
-        "source": "interface.event_ports",
-        "path": "knowledge_ir/modules/IONetwork.json"
+        "source": "flow.branch_points",
+        "path": "context"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从模块西侧输入端口 i_driveWest_01 注入的事件驱动信号，经过 2x2 节点阵列的透明转发，最终从所有 12 个输出端口扇出。",
-        "explanation": "该流以 i_driveWest_01 为唯一起点，通过 node_01 进入 2x2 网格。事件信号在 node_01、node_00、node_11、node_10 四个节点之间通过 w_drive* 内部连线进行东西南北方向的透明转发，最终从所有 o_drive* 端口输出。这表明该流描述了一个广播或泛洪行为，而非点对点路由。",
+        "value": "输入驱动事件i_driveWest_01关联西向数据包i_westInMsg_51_00和i_westInMsg_51_01，其背压信号为o_freeWest_00，表明该流具有标准的数据有效/就绪握手合约。",
+        "explanation": "从interface_payload_contracts可知，当i_driveWest_01触发时，对应西向入口数据（宽度51位）可能被节点采样并根据内部路由转发。free信号o_freeWest_00用于流控，整个握手关系通过网格传递至输出。然而未提供节点内部如何将i_westInMsg_51映射到各o_*Msg_51信号的机制。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:IONetwork:flow_011_IONetwork_i_driveWest_01:data_control_effect:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_driveWest_01",
+          "i_westInMsg_51_00",
+          "i_westInMsg_51_01",
+          "o_freeWest_00"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:IONetwork:flow:flow_011_IONetwork_i_driveWest_01",
+          "ev:IONetwork:semantic_flow:flow_011_IONetwork_i_driveWest_01"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface_payload_contracts",
+            "path": "context"
+          },
+          {
+            "source": "evidence[module_facts]",
+            "path": "context"
+          }
+        ]
+      },
+      {
+        "value": "该流描述了来自输入端口i_driveWest_01的西向驱动事件在2×2 nodeTop网格中多播并最终到达所有方向输出端口的传播意图。",
+        "explanation": "从node_01接收i_driveWest_01开始，通过内部互连线(w_drive01200, w_drive00210, w_drive11201等)依次经过node_00, node_11, node_10，每个节点将事件驱动到其本地和方向输出，从而实现了西向输入事件的准全网格分发。提供的连接图与端点列表支持这一解释，但没有显露节点内部选择逻辑。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1010,14 +1044,6 @@
         "doc_priority": "primary",
         "signals": [
           "i_driveWest_01",
-          "w_drive01200",
-          "w_drive01211",
-          "w_drive00201",
-          "w_drive00210",
-          "w_drive10200",
-          "w_drive10211",
-          "w_drive11201",
-          "w_drive11210",
           "o_driveLocal_01",
           "o_driveNorth_01",
           "o_driveWest_01",
@@ -1038,9 +1064,7 @@
           "node_10"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -1049,68 +1073,36 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/IONetwork.json"
+            "source": "flow.steps",
+            "path": "context"
           },
           {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/IONetwork.json"
+            "source": "related_component_connections",
+            "path": "context"
+          },
+          {
+            "source": "interface_payload_contracts",
+            "path": "context"
           }
         ]
       },
       {
-        "value": "事件信号 i_driveWest_01 与 51 位宽的数据消息 i_westInMsg_51_01 相关联，但数据消息的传播路径与事件流不完全一致。",
-        "explanation": "接口契约显示 i_driveWest_01 的负载包括 i_westInMsg_51_00 和 i_westInMsg_51_01，但 i_westInMsg_51_00 连接到 node_00，而 i_driveWest_01 连接到 node_01。这表明事件信号与数据消息的关联可能通过节点内部逻辑实现，而非简单的直连。数据消息的传播路径需要进一步分析。",
+        "value": "输入驱动i_driveWest_01的背压由o_freeWest_00表示，并且可能通过nodeTop网格的链路级反压机制传播至该信号，形成闭环流控。",
+        "explanation": "虽然每个输出驱动事件也有各自的free信号，但根据payload合约，i_driveWest_01直接使用o_freeWest_00作为整体西向可用性指示。由于节点间通过w_drive*互连，反压可能在整个网格内逐跳累加，但具体细节需要检查nodeTop内部实现。对于最终手册，可描述为“西向输入流控由o_freeWest_00管理，实现与西向输出共享的反压”。",
         "certainty": "ai_inferred",
         "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:IONetwork:flow_011_IONetwork_i_driveWest_01:data_control_effect:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "i_driveWest_01",
-          "i_westInMsg_51_00",
-          "i_westInMsg_51_01"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:IONetwork:flow:flow_011_IONetwork_i_driveWest_01",
-          "ev:IONetwork:semantic_flow:flow_011_IONetwork_i_driveWest_01"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/IONetwork.json"
-          },
-          {
-            "source": "interface.data_ports",
-            "path": "knowledge_ir/modules/IONetwork.json"
-          }
-        ]
-      },
-      {
-        "value": "事件流 i_driveWest_01 的完成/反压信号为 o_freeWest_00，但该信号与流中其他信号的关系不明确。",
-        "explanation": "接口契约显示 i_driveWest_01 的 free_signal 是 o_freeWest_00，但 o_freeWest_00 未出现在流步骤或连接中。这表明反压机制可能由节点内部处理，或 free 信号与事件流解耦。需要 RTL 源码确认。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:IONetwork:flow_011_IONetwork_i_driveWest_01:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
-          "i_driveWest_01",
-          "o_freeWest_00"
+          "o_freeWest_00",
+          "i_driveWest_01"
         ],
         "instances": [
-          "(none)"
+          "node_01",
+          "node_00"
         ],
         "related_flows": [],
         "related_assignments": [],
@@ -1122,8 +1114,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/IONetwork.json"
+            "source": "interface_payload_contracts",
+            "path": "context"
           }
         ]
       }

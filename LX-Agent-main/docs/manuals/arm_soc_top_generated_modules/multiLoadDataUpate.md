@@ -1,16 +1,16 @@
 # 模块 `multiLoadDataUpate`
 
-- 源文件：`rtl/rtl/Lsu/multiLoadDataUpate.v`。
-- 职责：AI 推断：多加载数据更新与写回控制模块，负责从加载数据路由中选择并组合数据，生成写回使能、结束标志及下一轮地址/寄存器列表。。
-- 说明：模块接收地址、加载数据路由数据及寄存器列表，通过内部状态机（r_k_4, r_j_4, r_count_2, num）控制数据选择和写回逻辑，输出写回数据、写回使能、结束标志及下一轮地址和寄存器列表。无事件接口，纯数据驱动。
+- 源文件：`rtl\rtl\Lsu\multiLoadDataUpate.v`
+- 职责：AI 推断：该模块可能作为多负载操作的数据更新与回写控制单元，根据寄存器掩码和来自数据路由的返回数据生成下一状态信息及写回数据。
+- 说明：分配显示 `o_nextAddress_32` 与 `o_nextRegisterList_16` 直通内部寄存器，`o_endFlag_1` 依据 `r_registerList_16` 归零判断传输完成，`o_wbackData_64` 结合 `num` 和 `r_count_2` 对 `i_fromDataRoutData_64` 做对齐选通，符合多负载迭代更新场景。模块名称含“Update”，必有寄存器更新逻辑，但当前上下文未提供时钟和复位行为，需审查 RTL 源码。
 
 ## 1. 层级位置
 
-- Parents：`lsu`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`lsu`
+- Children：无
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -18,14 +18,14 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`i_address_32`, `i_fromDataRoutData_64`, `i_fromDataRout_1`, `i_registerList_16`。
-- 输出：数据输出：`o_dHi_4`, `o_dLo_4`, `o_nextAddress_32`, `o_nextRegisterList_16`, `... +1`；控制输出：`o_endFlag_1`, `o_wbackWen_2`。
+- 接收：数据输入：`i_address_32`, `i_fromDataRoutData_64`, `i_fromDataRout_1`, `i_registerList_16`
+- 输出：数据输出：`o_dHi_4`, `o_dLo_4`, `o_nextAddress_32`, `o_nextRegisterList_16`, `o_wbackData_64`；控制输出：`o_endFlag_1`, `o_wbackWen_2`
 
 ### 2.1 端口分组
 
 | 端口组 | 方向统计 | 代表信号 |
 | --- | --- | --- |
-| `other_ports` | input:4, output:7 | `i_address_32`, `i_fromDataRoutData_64`, `i_fromDataRout_1`, `i_registerList_16`, `o_dHi_4`, `o_dLo_4`, `o_nextAddress_32`, `o_nextRegisterList_16`, `o_wbackData_64`, `o_endFlag_1`, `... +1` |
+| `other_ports` | input:4, output:7 | `i_address_32`, `i_fromDataRoutData_64`, `i_fromDataRout_1`, `i_registerList_16`, `o_dHi_4`, `o_dLo_4`, `o_nextAddress_32`, `o_nextRegisterList_16`, `o_wbackData_64`, `o_endFlag_1`, `o_wbackWen_2` |
 
 ## 3. Drive/Data/Free 契约
 
@@ -51,10 +51,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `o_dLo_4` | r_j_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_2` | data_path | `o_wbackData_64` | num==2'b10 ? i_fromDataRoutData_64 : (num==2'b01 ? (r_count_2 == 2'b10 ? {32'b0,i_fromDataRou... | AI 推断：根据num和r_count_2选择写回数据，支持64位或32位数据组合。 |
-| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：根据num生成写回使能，支持单字节或双字节写回。 |
-| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | AI 推断：当寄存器列表全零时，输出结束标志。 |
+| `assign_1` | data_path | `o_dLo_4` | r_j_4 | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_2` | data_path | `o_wbackData_64` | num==2'b10 ? i_fromDataRoutData_64 : (num==2'b01 ? (r_count_2 == 2'b10 ? {32'b0,i_fromDataRoutData_64[63:32]} : {32'b0,i_fromDataRoutData_64[31:0]}) : ...) | AI 推断：该组合赋值根据操作宽度 `num` 和低字选择 `r_count_2`，从 64 位输入数据中选取全字、高 32 位或低 32 位并高位补零，生成写回数据。 |
+| `assign_3` | control_path | `o_wbackWen_2` | num == 2'b01 ? 2'b01 : (num == 2'b10 ? 2'b11 : 2'b00) | AI 推断：该赋值生成写回字节使能，半字操作时输出 2'b01，全字操作时输出 2'b11，其他情况输出 2'b00，以控制目标寄存器的写使能。 |
+| `assign_4` | control_path | `o_endFlag_1` | (\|r_registerList_16) == 0 ? 1'b1 : 1'b0 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_5` | data_path | `o_nextAddress_32` | r_nextAddress_32 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_6` | unknown | `o_nextRegisterList_16` | r_registerList_16 | 证据不足：No Semantic Layer assignment interpretation is available. |
 | ... | ... | ... | ... | 其余 1 条 assign 省略 |

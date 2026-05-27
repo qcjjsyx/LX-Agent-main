@@ -1,16 +1,14 @@
 # 模块 `flash_state`
 
-- 源文件：`rtl/rtl/IONet/SPI/SPI0/flash_state.v`。
-- 职责：AI 推断：flash_state 是 SPI 主控制器与外部 Flash 存储器之间的状态驱动桥接模块，负责管理 SPI 事务的启动、数据路由和完成指示。。
-- 说明：该模块通过内部状态机（r_state）控制 SPI 主控制器实例（u_spi_master）的使能信号（w_spi_en），并将 SPI 主控制器的数据输出（data_out）直接映射到模块输出（o_dataFspi）。其行为由输入控制信号（i_ctl）和读标志（i_readflag）驱动，并通过输出 o_finish 指示事务完成。
+- 源文件：`rtl\rtl\IONet\SPI\SPI0\flash_state.v`
+- 职责（AI 推断）：该模块是 SPI 主控的结构化状态机封装层，负责管理面向 SPI Flash 的读写传输状态与使能时序。
+- 说明：模块内部实例化 `spi_master_spi0`，通过状态机（`r_state`）控制 SPI 启动条件（由 `assign_0` 表达的 `w_spi_en` 逻辑），并利用片选信号产生完成指示（由 `assign_2` 表达的 `o_finish`）。外部通过 `i_ctl` 与 `i_data2spi` 提供命令与写数据，读取数据由 `o_dataFspi` 输出，实现了对 Flash 协议端的封装。
 
 ## 1. 层级位置
 
-- Parents：`SPI02NoC`。
-- Children：`spi_master_spi0`。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`SPI02NoC`
+- Children：`spi_master_spi0`
+- Component children：无
 
 ### 1.1 本模块结构图
 
@@ -26,8 +24,13 @@ flash_state
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`i_ctl`, `i_data2spi`；控制输入：`i_readflag`；其他输入：`clk`, `i_miso`, `i_startRead`, `i_w_en`, `... +1`。
-- 输出：数据输出：`o_dataFspi`；其他输出：`o_RXNE`, `o_TXE`, `o_busy`, `o_cs_n`, `... +3`。
+- 输入：
+  - 数据输入：`i_ctl`, `i_data2spi`
+  - 控制输入：`i_readflag`
+  - 其他输入：`clk`, `i_miso`, `i_startRead`, `i_w_en`, `... +1`
+- 输出：
+  - 数据输出：`o_dataFspi`
+  - 其他输出：`o_RXNE`, `o_TXE`, `o_busy`, `o_cs_n`, `... +3`
 
 ### 2.1 端口分组
 
@@ -60,5 +63,5 @@ flash_state
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_2` | unknown | `o_finish` | w_spi_cs_n | AI 推断：o_finish 直接跟随 SPI 片选信号 w_spi_cs_n，指示 SPI 事务的完成。 |
-| `assign_0` | unknown | `w_spi_en` | (r_state == READ \| r_state == PAGE_PRO) ? (i_startRead \| ((~r_start_spi_buf) & r_start_spi)) ... | AI 推断：w_spi_en 是 SPI 主控制器的使能信号，其生成逻辑体现了状态相关的触发条件。 |
+| `assign_2` | unknown | `o_finish` | w_spi_cs_n | 证据不足：No Semantic Layer assignment interpretation is available. |
+| `assign_0` | unknown | `w_spi_en` | (r_state == READ \| r_state == PAGE_PRO) ? (i_startRead \| ((~r_start_spi_buf) & r_start_spi)) ... | 证据不足：No Semantic Layer assignment interpretation is available. |

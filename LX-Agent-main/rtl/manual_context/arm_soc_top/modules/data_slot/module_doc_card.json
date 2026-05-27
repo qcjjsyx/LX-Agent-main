@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "data_slot",
-  "source_file": "rtl/rtl/slot/data_slot.v",
+  "source_file": "rtl\\rtl\\slot\\data_slot.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "数据槽模块，作为CPU、Dcache和Mesh之间的数据通路仲裁与分发中心",
-    "explanation": "模块接收来自Dcache、Mesh和CPU的驱动事件，通过内部组件（MutexMerge、SelSplit、cFifo1）进行仲裁和选择，最终将数据分发到CPU、Dcache和Mesh。事件流和自由信号机制表明这是一个基于握手的多源数据通路。",
+    "value": "数据槽模块，负责SoC中CPU、Dcache和Mesh网络之间的数据事务路由与地址解码，实现双向事件驱动传输。",
+    "explanation": "根据接口事件与数据合同，模块接收来自CPU的驱动事件i_drvCpu2Mux及其105位数据，通过内部cfifo0缓冲、地址解码（assign中多个地址范围判断）确定目标是Dcache（地址>=0x21200）还是Mesh网络（地址0x1000-0x11FF），并利用选择器select1分派事件到o_driveToDcache或o_driveToMesh。同时，来自Dcache和Mesh的驱动事件通过MutexMerge合并后路由至CPU，实现反向数据通路。自由信号完成握手流控。证据包括接口事件合同、内部事件流refs以及assign依赖中的地址解码逻辑。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -30,9 +30,9 @@
     "semantic_claim_id": "semantic:module:data_slot:module_role:001",
     "doc_priority": "primary",
     "signals": [
+      "i_drvCpu2Mux",
       "i_driveFromDcache",
       "i_driveFromMesh",
-      "i_drvCpu2Mux",
       "o_driveToCpu",
       "o_driveToDcache",
       "o_driveToMesh"
@@ -55,10 +55,22 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/data_slot.json"
+        "source": "interface.event_ports"
       },
       {
-        "source": "parser_pipeline_rtl/modules/data_slot.json"
+        "source": "event_payload_contracts"
+      },
+      {
+        "source": "internal_event_flow_refs"
+      },
+      {
+        "source": "assign_dependencies(index 4-15)"
+      },
+      {
+        "source": "key_instances"
+      },
+      {
+        "source": "key_component_connections"
       }
     ]
   },
@@ -442,7 +454,7 @@
         ],
         "summary": "drive_event ports, count=6, directions=input:3, output:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/data_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\data_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -501,7 +513,7 @@
         ],
         "summary": "free_backpressure ports, count=6, directions=input:3, output:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/data_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\data_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -572,7 +584,7 @@
         ],
         "summary": "other_ports ports, count=8, directions=input:3, output:5",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/slot/data_slot.v",
+          "rtl_file": "rtl\\rtl\\slot\\data_slot.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -589,22 +601,30 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_data_slot_i_driveFromDcache.json",
       "reader_takeaway": {
-        "value": "数据负载与驱动事件并行传输，在MutexMerge处与事件同步",
-        "explanation": "数据信号i_dcache_data直接连接到MutexMerge的数据输入i_data1_64，与来自Dcache的驱动事件i_driveFromDcache属于同一事件-数据对，在合并点与事件同步处理",
+        "value": "强调从 Dcache 到 CPU 的事件路径包含八个时钟延迟和互斥合并，避免深入仲裁机制或 payload 传递的细节，除非从 RTL 获得额外证据。",
+        "explanation": "此流的核心是将两个来源中的一个事件安全传递到 CPU，延迟和合并是实现关键。由于合并器的具体行为和 payload 去向不明，手册应将其描述为“事件合并”并标注为待 RTL 确认，重点放在时序和管道结构上。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_dcache_data",
-          "i_driveFromDcache"
+          "i_driveFromDcache",
+          "w_driveToCpu",
+          "o_driveToCpu"
         ],
-        "instances": [],
+        "instances": [
+          "MutexMerge",
+          "delay_driveFromDcache",
+          "delay2CPU",
+          "delay2CPU2"
+        ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "无"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -613,62 +633,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.data_ports",
-            "path": "modules/data_slot.json"
+            "source": "flow.steps",
+            "path": "module_facts"
           },
           {
-            "source": "component_connection",
-            "path": "modules/data_slot.json"
+            "source": "interface.event_ports",
+            "path": "module_facts"
           }
         ],
         "supporting_claims": [
           {
-            "value": "应重点描述从Dcache到CPU的驱动事件路径，以及MutexMerge的互斥合并行为",
-            "explanation": "该流的核心是Dcache驱动事件经过延迟和互斥合并后到达CPU，MutexMerge作为关键仲裁点决定了事件是否被阻塞或转发，同时数据负载i_dcache_data在合并点与事件同步",
+            "value": "该驱动流建立从 Dcache 输入事件经透明延迟与互斥合并后传递至 CPU 输出事件的管道。",
+            "explanation": "流内步骤显示 i_driveFromDcache 先经过 delay_driveFromDcache（delay8U）消抖，然后进入 MutexMerge（cMutexMerge2_64b）作为输入之一，与来自 Mesh 的 w_delay_driveFromMesh 合并；合并后的 w_driveToCpu 再经过两级 delay4U（delay2CPU、delay2CPU2）最终输出 o_driveToCpu，构成典型的单向事件管道。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFromDcache",
-              "w_delay_driveFromDcache",
-              "w_driveToCpu",
-              "o_driveToCpu",
-              "i_dcache_data"
-            ],
-            "instances": [
-              "delay_driveFromDcache",
-              "MutexMerge",
-              "delay2CPU",
-              "delay2CPU2"
-            ],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
-              "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "instances.connections",
-                "path": "modules/data_slot.json"
-              },
-              {
-                "source": "transparent_flows",
-                "path": "modules/data_slot.json"
-              }
-            ]
-          },
-          {
-            "value": "从Dcache到CPU的驱动事件流，经过延迟和互斥合并后输出",
-            "explanation": "该流将来自Dcache的驱动事件信号i_driveFromDcache，通过延迟单元delay_driveFromDcache进行透明延迟，然后与来自Mesh的驱动事件在MutexMerge中进行互斥合并，再经过两级延迟单元delay2CPU和delay2CPU2后，最终输出为o_driveToCpu信号",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "high",
             "source_layers": [
               "semantic_layer"
             ],
@@ -688,7 +666,9 @@
               "delay2CPU2"
             ],
             "related_flows": [],
-            "related_assignments": [],
+            "related_assignments": [
+              "无"
+            ],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -698,29 +678,74 @@
             "semantic_evidence": [
               {
                 "source": "instances.connections",
-                "path": "modules/data_slot.json"
+                "path": "parser_module"
               },
               {
-                "source": "transparent_flows",
-                "path": "modules/data_slot.json"
+                "source": "flow.steps",
+                "path": "module_facts"
+              },
+              {
+                "source": "interface.event_ports",
+                "path": "module_facts"
               }
             ]
           },
           {
-            "value": "输入和输出端口的流控信号存在但未在流中体现",
-            "explanation": "接口契约显示输入事件i_driveFromDcache关联free信号o_freeToDcache，输出事件o_driveToCpu关联free信号i_freeFromCpu，但当前流步骤中未包含这些流控信号的连接关系，无法确定背压机制",
+            "value": "输入有效载荷 i_dcache_data 连至 MutexMerge 的数据输入，但其在合并器内的使用及与输出事件的关联未在流步骤中体现。",
+            "explanation": "接口合同标明 i_driveFromDcache 伴随 64 位 payload i_dcache_data，连接图中该 payload 信号接入 MutexMerge.i_data1_64，但输出端无对应的数据信号连接，且 o_driveToCpu 无 payload。因此，有效载荷可能被 MutexMerge 用于内部仲裁或忽略，或需通过其他路径传递，目前无法从提供的上下文确定。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:data_control_effect:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_dcache_data"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [
+              "无"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
+              "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface.event_ports",
+                "path": "module_facts"
+              },
+              {
+                "source": "component_connection (i_dcache_data -> MutexMerge.i_data1_64)",
+                "path": "parser_module"
+              },
+              {
+                "source": "interface_data_contract",
+                "path": "module_facts"
+              }
+            ]
+          },
+          {
+            "value": "此驱动流未直接涉及反压/完成信号，但它们从接口合同可见，可能控制事件管道的速率。",
+            "explanation": "i_driveFromDcache 关联 free 输出 o_freeToDcache，o_driveToCpu 关联 free 输入 i_freeFromCpu，但这些信号未出现在任何流步骤或连接中，表明该流水线可能采用分离的控制通道，或是简单的前压式传输，free 信号用于独立握手。由于上下文未提供其连接关系，无法确定其对流的影响。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:data_slot:flow_001_data_slot_i_driveFromDcache:completion_backpressure:001",
-            "doc_priority": "secondary",
+            "doc_priority": "reference",
             "signals": [
               "o_freeToDcache",
               "i_freeFromCpu"
             ],
-            "instances": [],
+            "instances": [
+              "无"
+            ],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -732,7 +757,11 @@
             "semantic_evidence": [
               {
                 "source": "interface.event_ports",
-                "path": "modules/data_slot.json"
+                "path": "module_facts"
+              },
+              {
+                "source": "interface_data_contract",
+                "path": "module_facts"
               }
             ]
           }
@@ -751,24 +780,29 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_002_data_slot_i_driveFromMesh.json",
       "reader_takeaway": {
-        "value": "该流为纯事件驱动流，不涉及数据负载的传递或变换。",
-        "explanation": "根据提供的接口负载契约，i_driveFromMesh和o_driveToCpu均无关联的负载信号。所有组件（延迟单元和合并器）仅传递事件信号，不处理数据。因此，该流的核心语义是事件的控制流，而非数据流。",
+        "value": "文档需突出事件延迟合计、MutexMerge仲裁语义以及free握手协议，弱化数据路径。",
+        "explanation": "流无数据，故延迟周期和仲裁行为成为主要内容；free信号是流控关键，需明确背压传播方式；两级延迟块提供确定时序，便于上下游适配。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
           "i_driveFromMesh",
-          "o_driveToCpu"
+          "o_driveToCpu",
+          "o_freeToMesh",
+          "i_freeFromCpu"
         ],
-        "instances": [],
+        "instances": [
+          "delay_driveFromMesh",
+          "MutexMerge",
+          "delay2CPU",
+          "delay2CPU2"
+        ],
         "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -777,64 +811,15 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "modules/data_slot.json"
-          },
-          {
-            "source": "interface.data_ports",
-            "path": "modules/data_slot.json"
+            "source": "整体上下文"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应重点描述从Mesh输入到CPU输出的事件传播路径，特别是MutexMerge处的互斥合并行为。",
-            "explanation": "该流的核心是事件从输入到输出的单向传播，其中MutexMerge是唯一的合并点和潜在的阻塞点。手册应清晰说明事件如何经过延迟单元，以及MutexMerge如何仲裁来自Mesh和Dcache的事件。同时，应指出该流不涉及数据负载。",
+            "value": "该流从网格接口接收驱动事件，经延迟和合并后输出至CPU接口，构成网格到CPU的无数据事件传递路径。",
+            "explanation": "输入事件i_driveFromMesh经延迟8U后送入MutexMerge，与来自Dcache的另一路事件合并(可能仲裁)，再经两级延迟4U最终输出o_driveToCpu。因无有效载荷合约，推断仅传递事件脉冲，用于时序握手或通知。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_driveFromMesh",
-              "w_delay_driveFromMesh",
-              "w_delay_driveFromDcache",
-              "w_driveToCpu",
-              "o_driveToCpu"
-            ],
-            "instances": [
-              "delay_driveFromMesh",
-              "MutexMerge",
-              "delay2CPU",
-              "delay2CPU2"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:data_slot:flow:flow_002_data_slot_i_driveFromMesh",
-              "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "instances.connections",
-                "path": "modules/data_slot.json"
-              },
-              {
-                "source": "transparent_flows",
-                "path": "modules/data_slot.json"
-              }
-            ]
-          },
-          {
-            "value": "从Mesh输入事件驱动，经过延迟和互斥合并后，最终输出到CPU的事件传播路径。",
-            "explanation": "该流描述了从模块输入端口i_driveFromMesh接收的事件，经过一个透明延迟单元delay_driveFromMesh后，与来自Dcache的另一条事件路径在MutexMerge处进行互斥合并，合并后的结果再经过两级延迟单元delay2CPU和delay2CPU2，最终从模块输出端口o_driveToCpu送出。整个流是单向的、基于事件驱动的，不涉及数据负载的变换。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "high",
             "source_layers": [
               "semantic_layer"
             ],
@@ -842,9 +827,6 @@
             "doc_priority": "primary",
             "signals": [
               "i_driveFromMesh",
-              "w_delay_driveFromMesh",
-              "w_driveToCpu",
-              "a",
               "o_driveToCpu"
             ],
             "instances": [
@@ -854,9 +836,7 @@
               "delay2CPU2"
             ],
             "related_flows": [],
-            "related_assignments": [
-              "(无)"
-            ],
+            "related_assignments": [],
             "requires_rtl_source_review": false,
             "review_status": "ready",
             "evidence_refs": [
@@ -865,31 +845,29 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "modules/data_slot.json"
+                "source": "module_facts:internal_event_flow"
               },
               {
-                "source": "transparent_flows",
-                "path": "modules/data_slot.json"
+                "source": "parser_module:flow_graph"
               }
             ]
           },
           {
-            "value": "该流存在潜在的反压机制，但当前上下文未提供具体实现细节。",
-            "explanation": "接口负载契约中提到了与事件端口关联的free信号（o_freeToMesh和i_freeFromCpu），表明可能存在基于握手的流控。然而，当前流描述中未包含这些free信号如何与事件传播路径交互的信息。因此，在最终手册中应提及反压的可能性，但需注明需要RTL源码审查以确认具体实现。",
+            "value": "模块使用free信号指示下游接收能力，可能构成两级背压，但内部合成细节未知。",
+            "explanation": "o_freeToMesh指示该流的上游可发送事件，i_freeFromCpu指示下游可接收事件。延迟单元通常透明传递背压，但MutexMerge可能整合两路free，需要查看RTL确认其反压合成规则。",
             "certainty": "ai_inferred",
-            "confidence": "low",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
             "semantic_claim_id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:completion_backpressure:001",
-            "doc_priority": "secondary",
+            "doc_priority": "primary",
             "signals": [
               "o_freeToMesh",
               "i_freeFromCpu"
             ],
             "instances": [
-              "(无)"
+              "MutexMerge"
             ],
             "related_flows": [],
             "related_assignments": [],
@@ -901,8 +879,39 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "modules/data_slot.json"
+                "source": "interface_payload_contracts"
+              },
+              {
+                "source": "内部连接缺失"
+              }
+            ]
+          },
+          {
+            "value": "流为纯事件，无数据载荷，通过free信号实现背压式流控。",
+            "explanation": "接口合约显示i_driveFromMesh伴随free输出o_freeToMesh，o_driveToCpu伴随free输入i_freeFromCpu。无数据总线定义，故事件仅作有效指示，模块内合并器和延迟可能对free信号有隐式约束。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:data_slot:flow_002_data_slot_i_driveFromMesh:data_control_effect:001",
+            "doc_priority": "primary",
+            "signals": [
+              "o_freeToMesh",
+              "i_freeFromCpu"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:data_slot:flow:flow_002_data_slot_i_driveFromMesh",
+              "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "interface_payload_contracts"
               }
             ]
           }
@@ -921,16 +930,169 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_data_slot_i_drvCpu2Mux.json",
       "reader_takeaway": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer description is available.",
-        "review_status": "needs_review"
+        "value": "输入负载 i_dataCPU2Mux_105 可能包含地址、数据与控制位，这些信息通过寄存器间接绑定到 dcache 的输出有效负载，事件流仅提供时序合法性。",
+        "explanation": "所提供的 payload_contracts 显示输入事件带有宽负载 [104:0]，而 output contract 表明 o_driveToDcache 的数据由 r_cpu_addr、r_cpu_data、r_cpuWen_8 提供，未展示从输入负载到这些寄存器的采样逻辑。事件流中的驱动信号在 cfifo0->select1 后传播，当对应输出事件触发时，组合逻辑的赋值结果被下游采样。这种分离意味着数据通路与事件通路独立，但事件的有效性决定了负载更新时刻。select1 的路由选择条件可能也来自该负载，需 RTL 分析确认。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:data_slot:flow_000_data_slot_i_drvCpu2Mux:data_control_effect:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_dataCPU2Mux_105",
+          "o_dcache_addr",
+          "o_dcache_data",
+          "o_dcache_we"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [
+          "0",
+          "1",
+          "2"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+          "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "module_facts",
+            "path": "knowledge_ir/modules/data_slot.json"
+          },
+          {
+            "source": "parser_module",
+            "path": "parser_pipeline_rtl/modules/data_slot.json"
+          }
+        ],
+        "supporting_claims": [
+          {
+            "value": "应强调该流作为CPU请求到dcache/mesh的分发作用，解释事件驱动的分支结构与数据负载的分离，并警示选择条件未明示。",
+            "explanation": "最终手册需突出流的整体功能——CPU写请求或访存请求的扇出分发。重点放在 cfifo0 的缓冲、select1 的分支角色以及外部 payload 赋值的配套。应弱化 delay 元件的内部时序编号，除非它们为关键流水级；需特别提醒读者流程未展示 select 条件，推荐查阅 RTL 补充该信息。对于 o_driveToMesh 无明确负载的情况，应标注为待核实字段。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:data_slot:flow_000_data_slot_i_drvCpu2Mux:documentation_focus:001",
+            "doc_priority": "primary",
+            "signals": [
+              "o_driveToDcache",
+              "o_driveToMesh",
+              "i_drvCpu2Mux"
+            ],
+            "instances": [
+              "select1",
+              "cfifo0"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "0",
+              "1",
+              "2"
+            ],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+              "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "module_facts",
+                "path": "knowledge_ir/modules/data_slot.json"
+              },
+              {
+                "source": "parser_module",
+                "path": "parser_pipeline_rtl/modules/data_slot.json"
+              }
+            ]
+          },
+          {
+            "value": "该单驱动事件流从CPU接口输入，经FIFO缓冲与延迟匹配后，通过选择器split为两路，最终分别驱动至dcache与mesh输出端点，实现请求的分发。",
+            "explanation": "流从 i_drvCpu2Mux 启动，经过 cfifo0 缓冲（可能产生反压），再通过 delaymux 进行时序调整，统一的事件在 select1 处发生分支，形成 w_driveToDcache 和 w_driveToMesh 两个子事件，最终各自经延迟元件驱动到模块外部。分支点暗示存在路由条件，但条件来源未在提供步骤中体现。整体反映了从CPU到缓存与互联网络的请求分发结构。",
+            "certainty": "ai_inferred",
+            "confidence": "medium",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:data_slot:flow_000_data_slot_i_drvCpu2Mux:flow_intent:001",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvCpu2Mux",
+              "o_driveToDcache",
+              "o_driveToMesh"
+            ],
+            "instances": [
+              "cfifo0",
+              "delaymux",
+              "select1",
+              "delay3",
+              "delay2"
+            ],
+            "related_flows": [],
+            "related_assignments": [
+              "0",
+              "1",
+              "2"
+            ],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+              "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "module_facts",
+                "path": "knowledge_ir/modules/data_slot.json"
+              },
+              {
+                "source": "parser_module",
+                "path": "parser_pipeline_rtl/modules/data_slot.json"
+              }
+            ]
+          },
+          {
+            "value": "流内存在 cfifo0 作为潜在反压点，输出端点具有独立的 free 信号，但流程步骤未显式建模反压互锁。",
+            "explanation": "cfifo0 为 FIFO 级，可因满状态阻塞上游事件的推进，构成隐式反压。输出合约显示 o_driveToDcache 对应 i_freeFromDcache，o_driveToMesh 对应 i_freeFromMesh，这些信号通常由下游模块用来指示可接收性，但在当前流的事件传播链中并未作为驱动事件的条件出现，因此暂不能直接宣称流执行了握手反压。完成/背压的完整行为需从 RTL 的 assign/always 块进一步澄清。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:data_slot:flow_000_data_slot_i_drvCpu2Mux:completion_backpressure:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_freeFromDcache",
+              "i_freeFromMesh"
+            ],
+            "instances": [
+              "cfifo0"
+            ],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+              "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "module_facts",
+                "path": "knowledge_ir/modules/data_slot.json"
+              }
+            ]
+          }
+        ]
       },
       "evidence_refs": [
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
+        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux"
       ]
     }
   ],
@@ -940,11 +1102,11 @@
     "components": 3,
     "assignments": 25,
     "evidence_gaps": 0,
-    "review_questions": 3
+    "review_questions": 2
   },
   "source_review_context": {
     "module": "data_slot",
-    "rtl_file": "rtl/rtl/slot/data_slot.v",
+    "rtl_file": "rtl\\rtl\\slot\\data_slot.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -969,9 +1131,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "地址解码详细逻辑",
-      "summary": "从切片中确认地址信号i_data_bus_addr的驱动逻辑不完全，仍存在证据缺口。",
-      "explanation": "切片中未出现i_data_bus_addr信号，无法从给定切片确认其来源和更新逻辑。切片[4]显示w_meshAddr_8由r_cpu_addr驱动，但r_cpu_addr的来源未在切片中给出。",
+      "subject": "select1控制条件",
+      "summary": "从当前 RTL 切片无法确认 select1 的选择控制信号连接，属于证据缺口。",
+      "explanation": "切片中出现了疑似 select1 实例的端口连接（line 170‑179），包括 .i_drive(w_drvCpu2Mux_delay)、.i_data_1(w_toMesh_1)、.o_driveNext0(w_driveToMesh)、.o_driveNext1(w_driveToDcache) 等，但未给出该实例的模块名及选择控制端口（如指示 Mesh/Dcache 方向的信号）。早期分析提到的 w_toCache_1 及 w_toMesh_1 信号也未在切片中作为控制信号出现。因此无法推断选择逻辑的具体实现。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -979,30 +1141,34 @@
         "manual_context"
       ],
       "signals": [
-        "i_data_bus_addr",
-        "r_cpu_addr",
-        "w_meshAddr_8"
+        "w_drvCpu2Mux_delay",
+        "w_toMesh_1",
+        "w_driveToMesh",
+        "w_driveToDcache"
       ],
       "instances": [],
       "source_refs": [
         {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 130,
-          "line_end": 130
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 170,
+          "line_end": 179
         }
       ],
       "evidence_refs": [
         "ev:data_slot:semantic_module",
         "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache",
         "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh",
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
+        "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
+        "ev:data_slot:flow:flow_002_data_slot_i_driveFromMesh"
       ],
       "review_status": "needs_review"
     },
     {
-      "subject": "数据打包逻辑",
-      "summary": "从切片确认了w_meshWen_1、w_meshAddr_8、w_meshData_32、w_meshX_5、w_meshY_5的驱动来源。",
-      "explanation": "切片[4]显示w_meshWen_1由r_cpuWen_8的多位或逻辑生成；w_meshAddr_8由r_cpu_addr驱动；w_meshData_32根据we和data按字节选择。切片[5]显示w_meshX_5由多个地址解码条件组合生成。切片[6]显示data_pre_51由这五个信号拼接而成。但r_cpuWen_8、r_cpu_addr、data、we的更新逻辑未在切片中提供。",
+      "subject": "flow_000_data_slot_i_drvCpu2Mux",
+      "summary": "从切片可见部分数据流，但缺失关键延迟连接，无法完整确认 flow，标记为证据缺口。",
+      "explanation": "RTL 显示 i_drvCpu2Mux 输入至 cFifo1 cfifo0（line 158‑163），生成 w_drvCpu2Mux 和 fire0。后续 select1 驱动为 w_drvCpu2Mux_delay（line 170），但切片中未给出 w_drvCpu2Mux 到 w_drvCpu2Mux_delay 之间的延迟逻辑或直连。因此从 CPU 驱动信号到最终选择器的完整路径存在空白。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -1010,47 +1176,40 @@
         "manual_context"
       ],
       "signals": [
-        "w_meshWen_1",
-        "w_meshAddr_8",
-        "w_meshData_32",
-        "w_meshX_5",
-        "w_meshY_5",
-        "r_cpuWen_8",
-        "r_cpu_addr",
-        "data",
-        "we",
-        "data_pre_51"
+        "i_drvCpu2Mux",
+        "w_drvCpu2Mux",
+        "w_drvCpu2Mux_delay"
       ],
-      "instances": [],
+      "instances": [
+        "cfifo0"
+      ],
       "source_refs": [
         {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 128,
-          "line_end": 132
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 158,
+          "line_end": 163
         },
         {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 143,
-          "line_end": 145
-        },
-        {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 152,
-          "line_end": 152
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 170,
+          "line_end": 170
         }
       ],
       "evidence_refs": [
         "ev:data_slot:semantic_module",
         "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache",
         "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh",
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
+        "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
+        "ev:data_slot:flow:flow_002_data_slot_i_driveFromMesh"
       ],
       "review_status": "needs_review"
     },
     {
-      "subject": "semantic_flow.i_driveFromDcache",
-      "summary": "从切片确认了i_driveFromDcache经过delay单元后连接至MutexMerge输入。",
-      "explanation": "切片[8]第209行显示i_driveFromDcache经过delay8U实例delay_driveFromDcache，输出w_delay_driveFromDcache，该信号通过MutexMerge实例处理。但delay单元的具体功能和MutexMerge内部的仲裁逻辑未在切片中完整描述。",
+      "subject": "flow_001_data_slot_i_driveFromDcache",
+      "summary": "RTL 清楚展示了从 Dcache 到 CPU 的事件路径，包括 8 周期延迟、MutexMerge 仲裁及后续 8 周期延迟，与语义描述一致。",
+      "explanation": "i_driveFromDcache 经过 delay8U delay_driveFromDcache（line 209）获得 w_delay_driveFromDcache，然后进入 cMutexMerge2_64b 的 .i_drive1 及 .i_data1_64（line 216‑218）。MutexMerge 输出 w_driveToCpu 经过两级 delay4U（line 226‑227）最终到达 o_driveToCpu，总延迟为 8+4+4=16 周期。事件合并与延迟完全匹配语义流描述。",
       "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
@@ -1060,32 +1219,48 @@
       "signals": [
         "i_driveFromDcache",
         "w_delay_driveFromDcache",
-        "o_freeToDcache"
+        "w_driveToCpu",
+        "o_driveToCpu"
       ],
       "instances": [
         "delay_driveFromDcache",
-        "MutexMerge"
+        "MutexMerge",
+        "delay2CPU",
+        "delay2CPU2"
       ],
       "source_refs": [
         {
-          "file": "rtl/rtl/slot/data_slot.v",
+          "file": "rtl\\rtl\\slot\\data_slot.v",
           "line_start": 209,
           "line_end": 209
+        },
+        {
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 216,
+          "line_end": 218
+        },
+        {
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 226,
+          "line_end": 227
         }
       ],
       "evidence_refs": [
         "ev:data_slot:semantic_module",
         "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache",
         "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh",
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
+        "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
+        "ev:data_slot:flow:flow_002_data_slot_i_driveFromMesh"
       ],
       "review_status": "ready"
     },
     {
-      "subject": "semantic_flow.i_driveFromMesh",
-      "summary": "从切片确认了i_driveFromMesh经过delay单元后影响数据路径。",
-      "explanation": "切片[8]第203行显示w_dataFromMesh_64由r_data0和i_dataFMesh[41:10]拼接而成。第206行显示i_driveFromMesh经过delay8U实例delay_driveFromMesh，输出w_delay_driveFromMesh。但r_data0的来源未在切片中给出。",
-      "certainty": "evidence_gap",
+      "subject": "flow_002_data_slot_i_driveFromMesh",
+      "summary": "RTL 清楚展示了从 Mesh 到 CPU 的事件路径，包含 8 周期延迟、MutexMerge 仲裁及后级延迟，与语义描述一致。",
+      "explanation": "i_driveFromMesh 经过 delay8U delay_driveFromMesh（line 206）得到 w_delay_driveFromMesh，进入 cMutexMerge2_64b 的 .i_drive0（通过 line 213 附近推断，输出 free 信号也可证明其连接）。输出 w_driveToCpu 再经两级 delay4U 到 o_driveToCpu，总延迟 8+4+4=16 周期，结构与 Dcache 流对称。free 握手由 o_freeToMesh 体现。",
+      "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
         "rtl_source",
@@ -1094,105 +1269,50 @@
       "signals": [
         "i_driveFromMesh",
         "w_delay_driveFromMesh",
-        "w_dataFromMesh_64",
-        "r_data0",
-        "i_dataFMesh"
+        "o_freeToMesh",
+        "w_driveToCpu",
+        "o_driveToCpu"
       ],
       "instances": [
-        "delay_driveFromMesh"
+        "delay_driveFromMesh",
+        "MutexMerge",
+        "delay2CPU",
+        "delay2CPU2"
       ],
       "source_refs": [
         {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 203,
-          "line_end": 203
-        },
-        {
-          "file": "rtl/rtl/slot/data_slot.v",
+          "file": "rtl\\rtl\\slot\\data_slot.v",
           "line_start": 206,
           "line_end": 206
-        }
-      ],
-      "evidence_refs": [
-        "ev:data_slot:semantic_module",
-        "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache",
-        "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh",
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "semantic_flow.i_drvCpu2Mux",
-      "summary": "从切片确认了i_drvCpu2Mux连接到cFifo1实例的输入，但后续逻辑未完整呈现。",
-      "explanation": "切片[7]第159行显示i_drvCpu2Mux连接到cFifo1实例cfifo0的i_drive端口。但cFifo1内部的流控制和输出端口的连接未在给定切片中完全描述。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "i_drvCpu2Mux",
-        "o_freeCPUFMux",
-        "w_freeCPUFMux"
-      ],
-      "instances": [
-        "cfifo0"
-      ],
-      "source_refs": [
+        },
         {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 159,
-          "line_end": 160
-        }
-      ],
-      "evidence_refs": [
-        "ev:data_slot:semantic_module",
-        "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache",
-        "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh",
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "flow_000_data_slot_i_drvCpu2Mux",
-      "summary": "切片提供了i_drvCpu2Mux连接到cFifo1输入的证据，但不足以完整解释整个flow的语义。",
-      "explanation": "切片[7]显示i_drvCpu2Mux驱动cFifo1，cFifo1输出o_freeCPUFMux。但i_drvCpu2Mux的语义（如来源、驱动条件）及cFifo1后续的数据路径（如数据信号i_dataCPU2Mux_105的使用）未在切片中体现。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "i_drvCpu2Mux",
-        "o_freeCPUFMux",
-        "i_dataCPU2Mux_105"
-      ],
-      "instances": [
-        "cfifo0"
-      ],
-      "source_refs": [
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 214,
+          "line_end": 214
+        },
         {
-          "file": "rtl/rtl/slot/data_slot.v",
-          "line_start": 159,
-          "line_end": 161
+          "file": "rtl\\rtl\\slot\\data_slot.v",
+          "line_start": 226,
+          "line_end": 227
         }
       ],
       "evidence_refs": [
         "ev:data_slot:semantic_module",
         "ev:data_slot:semantic_flow:flow_001_data_slot_i_driveFromDcache",
         "ev:data_slot:semantic_flow:flow_002_data_slot_i_driveFromMesh",
-        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux"
+        "ev:data_slot:semantic_flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_000_data_slot_i_drvCpu2Mux",
+        "ev:data_slot:flow:flow_001_data_slot_i_driveFromDcache",
+        "ev:data_slot:flow:flow_002_data_slot_i_driveFromMesh"
       ],
-      "review_status": "needs_review"
+      "review_status": "ready"
     }
   ],
   "source_review_report": {
     "status": "reviewed",
-    "claim_count": 6,
-    "open_question_count": 6,
-    "source_file": "rtl/rtl/slot/data_slot.v",
+    "claim_count": 4,
+    "open_question_count": 2,
+    "source_file": "rtl\\rtl\\slot\\data_slot.v",
     "report_file": "source_review_report.json"
   }
 }

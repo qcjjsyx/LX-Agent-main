@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "timer_module",
-  "input_hash": "b977f3adff42d1756a7a751c1222479f9162958d85024db68401122487f55b83",
+  "input_hash": "a38cad75c62e77dbab4e92f9f4504d14ff34caf15ce0303084dc83f1665fb9e3",
   "source_context": "ai_context/modules/timer_module.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/IONet/Timer/timer_module.v",
+      "source": "rtl\\rtl\\IONet\\Timer\\timer_module.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/IONet/Timer/timer_module.v",
+        "rtl_file": "rtl\\rtl\\IONet\\Timer\\timer_module.v",
         "parser_module": "modules/timer_module.json"
       }
     }
@@ -49,10 +49,12 @@
     "count": 8,
     "by_type": {
       "assignment_interpretation": 2,
+      "component_role": 1,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
-      "structural_responsibility": 2
+      "source_review_request": 1,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -62,9 +64,9 @@
         "type": "module",
         "module": "timer_module"
       },
-      "summary": "该模块是一个基于内存映射寄存器接口的定时器单元，提供可编程定时计数和软件中断功能。",
+      "summary": "实现了一个内存映射的定时器外设，负责寄存器读访问与软件中断信号合成。",
       "subject": "timer_module",
-      "explanation": "模块通过 addr_i 和 data_i 接收地址和数据，通过 data_o 输出寄存器读取结果，并通过 int_sig_o 输出中断信号。assign 依赖显示其内部包含 timer_value、timer_ctrl、timer_count 和 msip_value 等寄存器，支持定时值、控制、计数和软件中断寄存器访问。",
+      "explanation": "data_o 的多路选择器根据 addr_i 的低8位读出定时器内部寄存器（timer_value、timer_ctrl、timer_count、msip_value），int_sig_o 将 msip_value 的四个字节各自归约（&）后与 int_sig_r 拼接出5位中断输出，表明该模块通过组合逻辑提供软件可见的定时器状态和中断，符合典型系统外设角色。",
       "signals": [
         "addr_i",
         "data_i",
@@ -72,14 +74,14 @@
         "int_sig_o"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/timer_module.json"
+          "source": "parser_pipeline_rtl/modules/timer_module.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
+          "source": "knowledge_ir/modules/timer_module.json"
         }
       ],
       "id": "semantic:module:timer_module:module_role:001"
@@ -90,40 +92,57 @@
         "type": "module",
         "module": "timer_module"
       },
-      "summary": "模块通过地址译码将内部寄存器值输出到 data_o，实现读写寄存器的功能。",
-      "subject": "寄存器访问与数据输出",
-      "explanation": "assign 依赖显示 data_o 根据 addr_i[7:0] 的值选择输出 timer_value、timer_ctrl、timer_count 或 msip_value，表明模块实现了寄存器地址映射和读取逻辑。",
+      "summary": "该模块结构上负责将内部定时器寄存器根据地址译码组合输出到 data_o，并生成软件中断向量 int_sig_o。",
+      "subject": "寄存器读多路复用与中断组合",
+      "explanation": "assign 1 使用 addr_i[7:0] 与 REG_VALUE_L、REG_VALUE_H、REG_CTRL、REG_COUNT_L、REG_COUNT_H、REG_MSIP 等常量比较，选择对应的寄存器字段输出；assign 0 将 msip_value 四个字节分别进行按位与得到4个位，再与 int_sig_r 拼接成5位中断信号，实现了纯组合的读数据路径和中断生成路径，不提供事件流控制。",
       "signals": [
         "addr_i",
-        "data_i",
         "data_o",
+        "int_sig_o",
+        "msip_value",
+        "int_sig_r",
         "timer_value",
         "timer_ctrl",
-        "timer_count",
-        "msip_value"
+        "timer_count"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/timer_module.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
+          "source": "parser_pipeline_rtl/modules/timer_module.json (assign_dependencies)"
         }
       ],
       "id": "semantic:module:timer_module:structural_responsibility:001"
     },
     {
-      "claim_type": "structural_responsibility",
+      "claim_type": "component_role",
       "scope": {
         "type": "module",
         "module": "timer_module"
       },
-      "summary": "模块通过组合逻辑将 msip_value 的字节归约结果与 int_sig_r 拼接，生成 5 位中断输出信号 int_sig_o。",
-      "subject": "中断信号生成",
-      "explanation": "assign 依赖显示 int_sig_o 由 msip_value 的四个字节的归约结果（&msip_value[31:24] 等）和 int_sig_r 组成，表明模块支持基于软件中断寄存器和内部中断状态的中断输出。",
+      "subject": "内部定时器子组件",
+      "summary": "当前紧凑上下文中未发现任何子实例，无法推断计数器、预分频器或比较器等组件的语义角色。",
+      "explanation": "key_component_connections 与 instances 均为空，没有提供定时器核心逻辑（如递减计数器、时钟分频、匹配比较）的实现信息，仅可观察到寄存器读多路器和中断产生逻辑。",
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/timer_module.json"
+        }
+      ],
+      "id": "semantic:module:timer_module:component_role:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "timer_module"
+      },
+      "subject": "int_sig_o",
+      "summary": "该组合赋值产生5位软件中断输出，由 msip_value 字节归约与 int_sig_r 拼接组成。",
+      "explanation": "表达式 {&msip_value[31:24],&msip_value[23:16],&msip_value[15:8],&msip_value[7:0],int_sig_r} 将 msip_value 每个字节所有位相与，生成4个单比特状态，再附加上寄存器 int_sig_r，形成一个5位中断向量，可直接用于系统中断控制器，表明软件可通过设置 msip_value 的相应字节位来触发中断。",
       "signals": [
         "int_sig_o",
         "msip_value",
@@ -134,40 +153,7 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/timer_module.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
-        }
-      ],
-      "id": "semantic:module:timer_module:structural_responsibility:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "timer_module"
-      },
-      "subject": "data_o",
-      "summary": "该赋值实现寄存器读取地址译码，根据 addr_i 选择输出对应寄存器值。",
-      "explanation": "通过条件表达式将 addr_i[7:0] 与预定义寄存器地址（REG_VALUE_L、REG_VALUE_H、REG_CTRL、REG_COUNT_L、REG_COUNT_H、REG_MSIP）比较，输出相应寄存器值，是模块数据通路的核心部分。",
-      "signals": [
-        "data_o",
-        "addr_i",
-        "timer_value",
-        "timer_ctrl",
-        "timer_count",
-        "msip_value"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/timer_module.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
+          "source": "parser_pipeline_rtl/modules/timer_module.json (assign index 0)"
         }
       ],
       "id": "semantic:module:timer_module:assignment_interpretation:001"
@@ -178,23 +164,23 @@
         "type": "module",
         "module": "timer_module"
       },
-      "subject": "int_sig_o",
-      "summary": "该赋值将软件中断寄存器的字节归约结果与内部中断状态拼接，生成中断输出。",
-      "explanation": "通过位拼接操作，将 msip_value 的四个字节的归约结果（每个字节的与运算）与 int_sig_r 组合成 5 位信号，用于驱动外部中断线。",
+      "subject": "data_o",
+      "summary": "基于地址的寄存器读回多路选择器，输出选中的32位寄存器数据。",
+      "explanation": "当 addr_i[7:0] 匹配 REG_VALUE_L、REG_VALUE_H、REG_CTRL、REG_COUNT_L、REG_COUNT_H、REG_MSIP 定义的地址常量时，选择对应的 timer_value[31:0]、timer_value[63:32]、timer_ctrl、timer_count[31:0]、timer_count[63:32]、msip_value 输出；否则输出32’b0。实现了典型的存储器映射读响应。",
       "signals": [
-        "int_sig_o",
-        "msip_value",
-        "int_sig_r"
+        "data_o",
+        "addr_i",
+        "timer_value",
+        "timer_ctrl",
+        "timer_count",
+        "msip_value"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/timer_module.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
+          "source": "parser_pipeline_rtl/modules/timer_module.json (assign index 1)"
         }
       ],
       "id": "semantic:module:timer_module:assignment_interpretation:002"
@@ -205,55 +191,27 @@
         "type": "module",
         "module": "timer_module"
       },
-      "summary": "addr_i 和 data_i/data_o 构成一个内存映射寄存器读写接口，用于配置和读取定时器状态。",
-      "subject": "寄存器访问接口",
-      "explanation": "模块没有事件输入输出，所有控制通过地址和数据总线完成，表明其采用寄存器编程模型，支持读写定时值、控制寄存器、计数器和软件中断寄存器。",
+      "summary": "该模块的接口意图为提供一个类 APB 的存储器映射读写通道和独立中断输出。",
+      "subject": "APB-like 从设备接口",
+      "explanation": "data_i 与 addr_i 输入构成写通道（写操作未在组合assign中体现，应存在于时序逻辑），data_o 为读通道，int_sig_o 为纯组合中断输出。缺少典型的 PENABLE、PREADY 等控制信号，因此可能为简化版总线从设备，需要查看 RTL 源以确认读写握手与寄存器的更新机制。",
       "signals": [
         "addr_i",
         "data_i",
-        "data_o"
+        "data_o",
+        "int_sig_o"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/timer_module.json"
+          "source": "module_facts (interface)"
         },
         {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
+          "source": "parser_module (interface)"
         }
       ],
       "id": "semantic:module:timer_module:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "timer_module"
-      },
-      "summary": "int_sig_o 提供多路中断输出，支持软件中断和内部定时中断。",
-      "subject": "中断输出接口",
-      "explanation": "5 位中断输出信号由软件中断寄存器（msip_value）的字节归约和内部中断状态（int_sig_r）组成，表明模块支持多个中断源。",
-      "signals": [
-        "int_sig_o"
-      ],
-      "related_payload": [
-        "msip_value",
-        "int_sig_r"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/timer_module.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/timer_module.json"
-        }
-      ],
-      "id": "semantic:module:timer_module:interface_intent:002"
     },
     {
       "claim_type": "documentation_focus",
@@ -261,19 +219,17 @@
         "type": "module",
         "module": "timer_module"
       },
-      "summary": "手册应重点描述寄存器地址映射、各寄存器功能以及中断信号的生成逻辑。",
-      "subject": "寄存器映射与中断机制",
-      "explanation": "模块的核心功能通过寄存器访问实现，中断输出依赖于 msip_value 和 int_sig_r，因此需要详细说明寄存器定义和中断信号组合方式。",
+      "summary": "最终模块手册应强调内存映射寄存器地址布局、读回数据格式、中断使能与状态位的语义；当前紧凑上下文不足以描述计数器递减逻辑或匹配比较功能，手册需等待 RTL 审查后补充内部定时器行为。",
+      "subject": "定时器模块手册重点",
+      "explanation": "可见的资源仅限于组合读多路选择器和中断合成，未提供计数器时钟驱动、递减、加载、比较等动态描述，因此文档应聚焦于软件可见的寄存器映射和中断生成，并明确指出内部定时机制待设计者确认。",
       "signals": [
         "addr_i",
         "data_i",
         "data_o",
-        "int_sig_o",
-        "msip_value",
-        "int_sig_r"
+        "int_sig_o"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "high",
       "evidence": [
         {
@@ -284,12 +240,35 @@
         }
       ],
       "id": "semantic:module:timer_module:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "timer_module"
+      },
+      "reason": "紧凑上下文仅提供读路径和中断组合逻辑，未包含写操作、寄存器时钟域更新、计数器递减/加载控制、预分频或匹配比较等核心行为，无法推断完整的定时器功能。",
+      "subject": "寄存器写操作与定时器核心逻辑",
+      "needed_source_slice": "always block; 时序逻辑描述；寄存器赋值块",
+      "signals": [
+        "data_i",
+        "addr_i",
+        "timer_value",
+        "timer_count",
+        "timer_ctrl",
+        "msip_value",
+        "int_sig_r"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_pipeline_rtl/modules/timer_module.json (no flow or always block info)"
+        }
+      ],
+      "id": "semantic:module:timer_module:source_review_request:001"
     }
   ],
-  "evidence_gaps": [
-    {
-      "field": "内部定时器逻辑",
-      "reason": "上下文未提供 timer_value、timer_ctrl、timer_count 和 int_sig_r 的生成逻辑，无法推断定时器计数、控制或中断状态更新的具体实现。"
-    }
-  ]
+  "evidence_gaps": []
 }

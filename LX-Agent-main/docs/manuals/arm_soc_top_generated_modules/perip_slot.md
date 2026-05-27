@@ -1,16 +1,16 @@
 # 模块 `perip_slot`
 
-- 源文件：`rtl/rtl/IONet/GPIO/perip_slot.v`。
-- 职责：AI 推断：外围设备插槽模块，通过两级FIFO和延迟链实现Mesh网络驱动的流水线转发与释放同步。。
-- 说明：模块接收来自Mesh的驱动事件i_driveFrmMesh，经过cFifo_1、delay0、delay1两级延迟后，由cFifo_2转发为o_driveNextToMesh；同时通过i_freeNextFrmMesh和o_freeToMesh实现释放信号的同步回传，构成完整的驱动-释放握手协议。
+- 源文件：`rtl\rtl\IONet\GPIO\perip_slot.v`
+- 职责（AI 推断）：本模块作为 Mesh 互连与外设之间的槽位适配器，负责转发 Mesh 驱动事件和数据至外设，同时提供符合本地时序的访问信号并实现流控与缓冲。
+- 结构说明：接口中包含 `i_driveFrmMesh` 与 `o_driveNextToMesh` 事件对；内部通过 `cFifo` 实例及延迟单元构建流水线；数据通道 `data_from`/`data_to` 对应 Mesh 数据输入/输出；此外还有 `addr_i`、`data_i`、`data_o`、`we` 等疑似外设总线信号，构成典型的适配器结构。
 
 ## 1. 层级位置
 
-- Parents：`gpio_slot`。
-- Children：`fire2SyncPluse`。
-- Component children：`cFifo1`。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`gpio_slot`
+- Children：`fire2SyncPluse`
+- Component children：`cFifo1`
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -32,8 +32,16 @@ perip_slot
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_driveFrmMesh`；数据输入：`data_from`, `data_o`；free 输入：`i_freeNextFrmMesh`；其他输入：`clk`, `rst_finish`。
-- 输出：drive 输出：`o_driveNextToMesh`；数据输出：`addr_i`, `data_i`, `data_to`；free 输出：`o_freeToMesh`；其他输出：`we`。
+- 输入信号：
+  - 驱动事件：`i_driveFrmMesh`
+  - 数据输入：`data_from`、`data_o`
+  - 流控/反压：`i_freeNextFrmMesh`
+  - 时钟与复位：`clk`、`rst_finish`
+- 输出信号：
+  - 驱动事件：`o_driveNextToMesh`
+  - 数据输出：`addr_i`、`data_i`、`data_to`
+  - 流控/反压：`o_freeToMesh`
+  - 写使能：`we`
 
 ### 2.1 端口分组
 
@@ -55,12 +63,11 @@ perip_slot
 
 ### `i_driveFrmMesh`
 
-- 确定性事实：`i_driveFrmMesh to o_driveNextToMesh`；flow_id=`flow_000_perip_slot_i_driveFrmMesh`。
-- Payload：未记录。
-- 输出/影响：`o_driveNextToMesh`。
-- 结构复杂度：branch=0，join=0，blocking=2。
-- AI 推断：从Mesh输入事件驱动，经过两级FIFO缓冲和两级延迟单元，最终输出到Mesh的事件传播路径
-
+- 确定性事实：`i_driveFrmMesh`→`o_driveNextToMesh`（flow_id: `flow_000_perip_slot_i_driveFrmMesh`）
+- Payload：未记录
+- 输出/影响：`o_driveNextToMesh`
+- 结构复杂度：branch=0，join=0，blocking=2
+- AI 推断：该流为单事件隧道，内部经过双重 FIFO 缓冲，固定总延迟为 96 个单位；free 信号在拥塞控制中起关键作用，手册中应重点说明这些特性。
 
 ## 5. 内部组件与 assign 影响
 
@@ -75,4 +82,4 @@ perip_slot
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | control_path | `we` | (!we_r) & rise | AI 推断：写使能信号，由驱动事件上升沿触发，用于控制数据路径的写入操作。 |
+| `assign_0` | unknown | `we` | (!we_r) & rise | AI 推断：该 assign 可能生成对外设的写使能脉冲，组合逻辑为(!we_r)&rise，其中 rise 可能来自 f2p_we 模块，用于在事件到达且未写使能时产生单周期写脉冲。 |

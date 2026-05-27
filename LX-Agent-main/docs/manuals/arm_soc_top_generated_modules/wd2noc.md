@@ -1,16 +1,15 @@
 # 模块 `wd2noc`
 
-- 源文件：`rtl/rtl/IONet/Watchdog/wd2noc.v`。
-- 职责：AI 推断：看门狗中断与复位信号到NoC的同步与分发桥接模块。
-- 说明：模块将看门狗子模块utt_wd产生的中断和复位信号，通过7级Fifo1链同步后，转换为NoC兼容的驱动事件和消息输出。i_drive/i_msg输入事件携带看门狗状态，经Fifo链流水传递后由o_drive/o_msg输出；i_free/o_free构成独立的释放握手。o_INT和o_RES直接映射看门狗原始中断和复位输出。
+- 源文件：`rtl\rtl\IONet\Watchdog\wd2noc.v`
+- 职责：AI 推断：看门狗到 NoC 的跨时钟域桥接与封装模块，集成 CMSDK APB 看门狗，将其事件、状态通过 FIFO 链同步输出。
+- 说明：内部实例化 `utt_wd`（`cmsdk_apb_watchdog`），并通过 7 级 `cFifo1_pwm` 事件链将驱动事件从 `i_drive` 传递至 `o_drive`；同时将消息、中断、复位经同步后输出到 NoC 接口。信号命名包含看门狗时钟（`wd_clk`）和复位（`rst_finish`），接口提供事件驱动握手，支持桥接功能。
 
 ## 1. 层级位置
 
-- Parents：`IONet_slot`。
-- Children：`cmsdk_apb_watchdog`。
-- Component children：`cFifo1_pwm`。
-- Upstream modules：无。
-- Downstream modules：无。
+- **Parents**：`IONet_slot`
+- **Children**：`cmsdk_apb_watchdog`
+- **Component children**：`cFifo1_pwm`
+- **Upstream / Downstream modules**：无
 
 ### 1.1 本模块结构图
 
@@ -40,10 +39,23 @@ wd2noc
 `-- cFifo1_pwm
 ```
 
-## 2. 输入/输出接口摘要
+## 2. 输入 / 输出接口摘要
 
-- 接收：drive 输入：`i_drive`；数据输入：`i_msg`；free 输入：`i_free`；其他输入：`Noc_RES`, `rst_finish`, `wd_clk`。
-- 输出：drive 输出：`o_drive`；数据输出：`o_msg`；free 输出：`o_free`；其他输出：`o_INT`, `o_RES`。
+### 端口列表
+
+| 方向 | 端口名 | 组别 |
+|------|--------|------|
+| 输入 | `Noc_RES` | other_ports |
+| 输入 | `i_drive` | drive_event |
+| 输入 | `i_free` | free_backpressure |
+| 输入 | `i_msg` | other_ports |
+| 输出 | `o_INT` | other_ports |
+| 输出 | `o_RES` | other_ports |
+| 输出 | `o_drive` | drive_event |
+| 输出 | `o_free` | free_backpressure |
+| 输出 | `o_msg` | other_ports |
+| 输入 | `rst_finish` | clock_reset_init |
+| 输入 | `wd_clk` | clock_reset_init |
 
 ### 2.1 端口分组
 
@@ -54,27 +66,26 @@ wd2noc
 | `free_backpressure` | input:1, output:1 | `i_free`, `o_free` |
 | `other_ports` | input:2, output:3 | `i_msg`, `o_msg`, `Noc_RES`, `o_INT`, `o_RES` |
 
-## 3. Drive/Data/Free 契约
+## 3. Drive / Data / Free 契约
 
-| Interface | 方向 | Event | Payload | Free/backpressure |
+| Interface | 方向 | Event | Payload | Free / Backpressure |
 | --- | --- | --- | --- | --- |
 | `i_drive` | input | `i_drive` | `i_msg [50:0]` | 未记录 |
 | `o_drive` | output | `o_drive` | `o_msg [50:0]` | 未记录 |
 
-## 4. 主要 Drive-centered Flow
+## 4. 主要 Drive‑Centered Flow
 
-### `i_drive`
+### `i_drive` 流
 
-- 确定性事实：`wd2noc flow from i_drive`；flow_id=`flow_000_wd2noc_i_drive`。
-- Payload：`i_drive` -> `i_msg [50:0]`。
-- 输出/影响：证据不足：Knowledge IR did not find a module output endpoint for this flow.。
-- 结构复杂度：branch=0，join=0，blocking=0。
-- AI 推断：最终手册应强调 i_drive 输入在 wd2noc 模块内部的处理路径不明确，需要 RTL 源码审查。
-
+- **确定性事实**：`wd2noc flow from i_drive`；flow_id = `flow_000_wd2noc_i_drive`
+- **Payload**：`i_drive` → `i_msg [50:0]`
+- **输出 / 影响**：证据不足：Knowledge IR 未找到该流的模块输出端点。
+- **结构复杂度**：branch = 0，join = 0，blocking = 0
+- **AI 推断**：手册应突出 `i_drive` 作为独立输入事件的存在，避免猜测其内部处理或功能。
 
 ## 5. 内部组件与 assign 影响
 
-### 5.1 内部组件
+### 5.1 内部 FIFO 链
 
 | 实例 | 类型 | 输入事件 | 输出事件 |
 | --- | --- | --- | --- |
@@ -86,9 +97,9 @@ wd2noc
 | `fifo5` | `cFifo1_pwm` | `o_driveNext[4]` | `o_driveNext[5]` |
 | `fifo6` | `cFifo1_pwm` | `o_driveNext[5]` | `o_drive` |
 
-### 5.2 assign 影响
+### 5.2 Assign 影响
 
-| Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
+| Assign | 影响区域 | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
 | `assign_2` | unknown | `o_msg` | o_msg_reg | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_3` | unknown | `o_INT` | wdogint | 证据不足：No Semantic Layer assignment interpretation is available. |

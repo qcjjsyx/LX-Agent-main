@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "ROM",
-  "input_hash": "a2019be5a9c6a61ada23f791a53d320af85d95bf40fcd94614a60b882755ad7e",
+  "input_hash": "531891f7ecd95e82266670ef69c3456466fbea352b2b5a575d225a7a52339450",
   "source_context": "ai_context/modules/ROM.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/memory/ROM.v",
+      "source": "rtl\\rtl\\memory\\ROM.v",
       "paths": [
         "module_source"
       ]
@@ -40,18 +40,20 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/memory/ROM.v",
+        "rtl_file": "rtl\\rtl\\memory\\ROM.v",
         "parser_module": "modules/ROM.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 4,
+    "count": 6,
     "by_type": {
       "assignment_interpretation": 1,
       "documentation_focus": 1,
       "interface_intent": 1,
-      "module_role": 1
+      "module_role": 1,
+      "source_review_request": 1,
+      "structural_responsibility": 1
     }
   },
   "claims": [
@@ -61,27 +63,57 @@
         "type": "module",
         "module": "ROM"
       },
-      "summary": "只读存储器模块，提供基于地址的固定数据查找功能",
+      "summary": "ROM作为只读存储器模块，依据地址输入提供指令或常量数据输出，服务于 SoC 的取指或常量表访问。",
       "subject": "ROM",
-      "explanation": "模块仅包含地址输入和数据输出，无事件或控制输入，表明其功能为组合逻辑或同步读取的只读存储器，用于向系统提供预存储的常量数据。",
+      "explanation": "接口仅有纯数据输入 i_addr 和纯数据输出 o_data，无握手或控制信号，说明该模块是简单的只读存储功能块，典型用途为指令存储器或固定数据表。内部存储阵列 rom_mem 通过 assign 拼接两个相邻地址的数据产生 64 位输出，符合 64 位取指场景。",
       "signals": [
         "i_addr",
         "o_data"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/ROM.json",
-          "path": "interface"
+          "source": "module_facts",
+          "path": "knowledge_ir/modules/ROM.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/ROM.json",
-          "path": "interface"
+          "source": "assign_dependencies[0]",
+          "path": "parser_pipeline_rtl/modules/ROM.json"
         }
       ],
       "id": "semantic:module:ROM:module_role:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "ROM"
+      },
+      "summary": "模块以组合逻辑方式根据地址输入从内部存储阵列读取并拼接为 64 位数据输出。",
+      "subject": "异步只读数据提供",
+      "explanation": "唯一赋值 o_data = {rom_mem[addr+10'd1], rom_mem[addr]} 表明输出完全由存储内容和地址计算得到，未见时序元素，暗示为组合读取。addr 信号虽在接口摘要中未出现，但映射自 i_addr 的可能性极高，需源码确认。复位端口 rst 的作用未在赋值中体现，可能控制输出使能或地址锁存，同样待源码澄清。",
+      "signals": [
+        "i_addr",
+        "o_data",
+        "rst",
+        "addr"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "assign_dependencies[0]",
+          "path": "parser_pipeline_rtl/modules/ROM.json"
+        },
+        {
+          "source": "interface",
+          "path": "knowledge_ir/modules/ROM.json"
+        }
+      ],
+      "id": "semantic:module:ROM:structural_responsibility:001"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -89,28 +121,22 @@
         "type": "module",
         "module": "ROM"
       },
-      "subject": "o_data",
-      "summary": "将两个连续地址的rom_mem数据拼接成64位输出",
-      "explanation": "赋值语句将rom_mem[addr+10'd1]作为高32位，rom_mem[addr]作为低32位，组合成64位输出o_data，表明ROM内部存储为32位字宽，外部接口提供64位数据。",
+      "subject": "o_data (assign index 0)",
+      "summary": "该赋值将内部 ROM 阵列的两个连续地址的 32 位数据拼接为 64 位输出，可能用于支持宽取指或不规则位宽存储。",
+      "explanation": "右值 {rom_mem[addr+10'd1], rom_mem[addr]} 表明每个 rom_mem 单元很可能是 32 位宽，两次读取拼接后得到 64 位 o_data。这种结构在 ROM 物理宽度为 32 位而取指宽度为 64 位时常见。addr 的具体生成（例如来自 i_addr 的位段）决定了地址计算方式，当前上下文未揭示。",
       "signals": [
         "o_data",
-        "i_addr",
-        "rom_mem"
-      ],
-      "related_assignments": [
-        "0"
+        "rom_mem",
+        "addr",
+        "i_addr"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/ROM.json",
-          "path": "assignment_facts"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/ROM.json",
-          "path": "assignments"
+          "source": "assign_dependencies[0]",
+          "path": "parser_pipeline_rtl/modules/ROM.json"
         }
       ],
       "id": "semantic:module:ROM:assignment_interpretation:001"
@@ -121,24 +147,21 @@
         "type": "module",
         "module": "ROM"
       },
-      "summary": "地址输入i_addr用于索引内部存储阵列，数据输出o_data返回拼接后的64位只读数据",
-      "subject": "地址-数据接口",
-      "explanation": "无事件或控制信号，表明该模块为纯数据查找接口，地址直接映射到存储内容，无握手或流控协议。",
+      "summary": "接口设计为纯功能的地址到数据映射，无握手或时序控制，适用于组合路径或时钟同步下的只读访问。",
+      "subject": "只读数据接口（i_addr → o_data）",
+      "explanation": "接口只包含一个数据输入 i_addr[11:0] 和一个数据输出 o_data[63:0]，无事件信号。这暗示模块可能作为外部请求的直接映射，外部给出地址即获得数据。复位信号 rst 的存在提示可能存在初始化行为（如输出清零），但其对数据路径的影响需源码审查。缺少明确的时钟端口，说明模块可能是纯组合的，但若存在 always 块则可能有时钟，当前信息不足。",
       "signals": [
         "i_addr",
-        "o_data"
+        "o_data",
+        "rst"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/ROM.json",
-          "path": "interface_data_contract"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/ROM.json",
-          "path": "interface"
+          "source": "interface",
+          "path": "knowledge_ir/modules/ROM.json"
         }
       ],
       "id": "semantic:module:ROM:interface_intent:001"
@@ -149,12 +172,13 @@
         "type": "module",
         "module": "ROM"
       },
-      "summary": "手册应重点说明地址如何映射到内部32位存储阵列，以及如何拼接成64位输出",
-      "subject": "数据组织与地址映射",
-      "explanation": "赋值语句显示地址addr对应两个连续32位字，需明确地址对齐要求（如addr应为偶数）及内部存储深度。",
+      "summary": "手册应强调 ROM 的存储组织（字宽、深度）、地址到输出的拼接规则、复位行为以及是否有时钟和组合/同步读取方式。",
+      "subject": "手册内容重点",
+      "explanation": "由于上下文信息不完整，需避免假设无时钟或完全组合，应核实后说明实际时序。同时需描述 rom_mem 的初始化方式以及 addr 信号与 i_addr 的关系，这些是正确使用模块的关键。",
       "signals": [
         "i_addr",
         "o_data",
+        "rst",
         "rom_mem"
       ],
       "doc_priority": "primary",
@@ -162,25 +186,51 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/ROM.json",
-          "path": "assignment_facts"
-        },
-        {
-          "source": "rtl/rtl/memory/ROM.v",
-          "path": "module_source"
+          "source": "all evidence"
         }
       ],
       "id": "semantic:module:ROM:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "ROM"
+      },
+      "reason": "紧凑上下文未给出 addr 的定义及其与 i_addr 的关系；也未明确是否有时钟端口 clk 以及复位 rst 对 addr 或 o_data 的影响。这些细节对确定模块行为至关重要。",
+      "subject": "addr 信号的生成和 ROM 读取时序",
+      "needed_source_slice": "module declaration, assign block, always block, comments",
+      "signals": [
+        "i_addr",
+        "o_data",
+        "rst",
+        "addr",
+        "clk (可能)"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/ROM.json"
+        },
+        {
+          "source": "rtl_source",
+          "path": "rtl\\rtl\\memory\\ROM.v"
+        }
+      ],
+      "id": "semantic:module:ROM:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "内部存储阵列rom_mem的声明与初始化",
-      "reason": "上下文未提供rom_mem的宽度、深度及初始化方式（如综合工具推断或外部加载），需RTL源码确认。"
+      "field": "addr signal origin and width",
+      "reason": "addr 出现在赋值中但未在接口或内部连接声明中显示，无法确定其与 i_addr 的映射关系及是否受复位或时钟影响。"
     },
     {
-      "field": "地址addr的生成逻辑",
-      "reason": "赋值中使用了addr变量，但上下文未说明addr与输入i_addr的关系（如直接赋值或地址转换），需RTL源码确认。"
+      "field": "clock presence",
+      "reason": "模块可能包含时钟引脚但接口摘要未列出，需确认 ROM 是组合读取还是同步读取，以正确描述时序。"
     }
   ]
 }

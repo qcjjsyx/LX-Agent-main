@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "lsu",
   "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1",
-  "input_hash": "4b1b697a38bdc25b792d5f254fe019a61eb7446892168bd4ebb526617b190cd4",
+  "input_hash": "ab3e437e504fb95310af5c7811672ca4f2803e02aa4ecb57efddcdd09616b310",
   "source_context": "ai_context/modules/lsu/flows/flow_002_lsu_i_dataRoutDriveToLsu_1.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/Lsu/lsu.v",
+      "source": "rtl\\rtl\\Lsu\\lsu.v",
       "paths": [
         "module_source"
       ]
@@ -41,21 +41,21 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/Lsu/lsu.v",
+        "rtl_file": "rtl\\rtl\\Lsu\\lsu.v",
         "parser_module": "modules/lsu.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 14,
+    "count": 12,
     "by_type": {
       "assignment_interpretation": 2,
       "completion_backpressure": 1,
-      "component_role": 7,
+      "component_role": 4,
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 1
+      "source_review_request": 2
     }
   },
   "claims": [
@@ -66,24 +66,21 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "summary": "数据路由驱动事件从外部输入开始，经过互斥合并、延迟、选择与分支，最终汇聚到发射路径和LSU内部更新路径，是LSU处理数据请求的主干驱动流。",
+      "summary": "数据路由驱动事件输入LSU后，经互斥合并、延迟、多路选择和等待合并，最终产生启动输出并分发至状态更新与多存储通路。",
       "subject": "flow_002_lsu_i_dataRoutDriveToLsu_1",
-      "explanation": "该流从i_dataRoutDriveToLsu_1进入，首先与icache驱动在icacheOrDataRoutMutexMerge中互斥合并，经outdelay10延迟后由dataRoutSelector分发给多加载、多存储和更新等待三个子路径，随后通过多个合并与选择节点（如updateWaitMerge、multiStoreMutexMerge、updateFinalSelector）分别导向发射（o_lsuDriveToLaunch_1）和内部状态更新（stateUpdate），体现了数据路由事件在LSU内的分发与汇聚结构。",
+      "explanation": "该流以 i_dataRoutDriveToLsu_1 为起点，首先在 icacheOrDataRoutMutexMerge 与 i_icacheDriveToLsu_1 互斥合并，经 outdelay10 透明延迟后由 dataRoutSelector 选择拆分至 multiLoadDataUpate、multiStoreSelector 和 updateWaitMerge。multiStoreSelector 再拆分出 over 信号；updateWaitMerge 等待状态更新选择器驱动后输出至 updateFinalSelector，后者进一步拆分至 launchMutexMerge 与 lsuMutexMerge。最终 launchMutexMerge 合并 bitOpSelector 驱动输出 o_lsuDriveToLaunch_1，lsuMutexMerge 经 updateSplitter 驱动 stateUpdate 和 dataUpdate。流体现数据路由进入LSU后的仲裁、分类与同步机制。",
       "signals": [
         "i_dataRoutDriveToLsu_1",
-        "o_lsuDriveToLaunch_1"
+        "o_lsuDriveToLaunch_1",
+        "w_icacheOrDataRoutMutexMergeDriveToLsu_1",
+        "w_dataRoutToUpdateWaitMerge_1",
+        "w_updateSplitterToDataUpdate_1"
       ],
       "instances": [
         "icacheOrDataRoutMutexMerge",
-        "outdelay10",
         "dataRoutSelector",
         "updateWaitMerge",
-        "multiStoreMutexMerge",
-        "updateFinalSelector",
-        "launchMutexMerge",
-        "lsuMutexMerge",
-        "updateSplitter",
-        "stateUpdate"
+        "launchMutexMerge"
       ],
       "related_assignments": [
         "8",
@@ -91,13 +88,14 @@
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow",
+          "path": "internal_event_flow"
         },
         {
-          "source": "transparent_flows"
+          "source": "instances.connections"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:flow_intent:001"
@@ -110,8 +108,8 @@
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
       "subject": "icacheOrDataRoutMutexMerge",
-      "summary": "作为互斥合并器，仲裁数据路由驱动与icache驱动的输入，确保同一时刻只有一个驱动通过。",
-      "explanation": "该实例为cMutexMerge2_64b_lsu类型，输入i_dataRoutDriveToLsu_1和i_icacheDriveToLsu_1，输出w_icacheOrDataRoutMutexMergeDriveToLsu_1，在流中充当第一个仲裁点，决定数据路由事件是否继续传播。",
+      "summary": "互斥合并器，仲裁 i_dataRoutDriveToLsu_1 与 i_icacheDriveToLsu_1，输出统一事件驱动，避免同时竞争。",
+      "explanation": "作为 cMutexMerge2_64b_lsu 实例，该合并器确保数据路由与指令缓存发起的LSU访问不会冲突，仅选通其一传递至后续 delay 和选择器。",
       "signals": [
         "i_dataRoutDriveToLsu_1",
         "i_icacheDriveToLsu_1",
@@ -121,11 +119,14 @@
         "icacheOrDataRoutMutexMerge"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
           "source": "instances.connections"
+        },
+        {
+          "source": "module_type: cMutexMerge2_64b_lsu"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:001"
@@ -138,8 +139,8 @@
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
       "subject": "dataRoutSelector",
-      "summary": "作为选择器/分路器，将合并后的数据路由事件分发给三个下游路径：多加载数据更新、多存储选择器和更新等待合并器。",
-      "explanation": "该实例为cSelector3_66b_lsu类型，输入来自outdelay10的输出，输出w_dataRoutToMultiLoadDataUpdate_1、w_dataRoutToMultiStoreSelector_1和w_dataRoutToUpdateWaitMerge_1，是流中关键的分支节点，决定了数据路由事件的不同处理方向。",
+      "summary": "三输出选择拆分器，根据输入命令将驱动事件分发至多加载、多存储或更新等待路径。",
+      "explanation": "cSelector3_66b_lsu 接收延迟后的合并驱动，基于内部逻辑（可能来自命令有效载荷）仅激活一个输出，实现请求类型初分类。",
       "signals": [
         "w_icacheOrDataRoutMutexMergeDriveToLsu1_1",
         "w_dataRoutToMultiLoadDataUpdate_1",
@@ -150,9 +151,12 @@
         "dataRoutSelector"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
+        {
+          "source": "flow.branch_points"
+        },
         {
           "source": "instances.connections"
         }
@@ -167,8 +171,8 @@
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
       "subject": "updateWaitMerge",
-      "summary": "作为等待合并器，将数据路由事件与状态更新选择器的事件合并，等待两者都就绪后输出。",
-      "explanation": "该实例为cWaitMerge2_76b_lsu类型，输入w_dataRoutToUpdateWaitMerge_1和w_stateUpdateSelectorToUpdateWaitMerge_1，输出w_updateWaitMergeToUpdateFinalSelector_1，在流中充当同步点，确保数据路由事件与状态更新事件在时间上对齐。",
+      "summary": "等待合并器，将来自数据路由的驱动与状态更新选择器驱动同步后输出，确保状态一致性。",
+      "explanation": "cWaitMerge2_76b_lsu 可能要求两路输入均有效或满足某种握手条件后才会产生输出，实现数据路由事件与内部状态更新的汇合。",
       "signals": [
         "w_dataRoutToUpdateWaitMerge_1",
         "w_stateUpdateSelectorToUpdateWaitMerge_1",
@@ -178,11 +182,14 @@
         "updateWaitMerge"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.join_points"
+        },
+        {
+          "source": "flow.blocking_points"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:003"
@@ -194,40 +201,12 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "subject": "updateFinalSelector",
-      "summary": "作为最终选择器/分路器，将更新等待合并后的事件分发给发射路径和LSU内部更新路径。",
-      "explanation": "该实例为cSelector2_76b_lsu类型，输入来自updateWaitMerge的输出，输出w_updateFinalSelectorToLaunchMutexMerge_1和w_updateFinalSelectorToLsuMutexMerge_1，是流中决定事件最终去向的关键分支节点。",
-      "signals": [
-        "w_updateWaitMergeToUpdateFinalSelector_1",
-        "w_updateFinalSelectorToLaunchMutexMerge_1",
-        "w_updateFinalSelectorToLsuMutexMerge_1"
-      ],
-      "instances": [
-        "updateFinalSelector"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
-      },
       "subject": "launchMutexMerge",
-      "summary": "作为互斥合并器，仲裁来自更新最终选择器与位操作选择器的事件，输出到发射路径。",
-      "explanation": "该实例为cMutexMerge2_64b_lsu类型，输入w_bitOpSelectorDrv2LaunchMutexMerge_1和w_updateFinalSelectorToLaunchMutexMerge_1，输出o_lsuDriveToLaunch_1，是流中通往发射路径的最后仲裁点。",
+      "summary": "互斥合并器，合并状态更新后的数据路由事件与位操作选择器事件，输出最终启动驱动和数据。",
+      "explanation": "将 updateFinalSelector 分支与 bitOpSelector 的驱动合并，生成 o_lsuDriveToLaunch_1 及 o_lsuToLaunchData_64，完成数据路由请求向执行单元的转发。",
       "signals": [
-        "w_bitOpSelectorDrv2LaunchMutexMerge_1",
         "w_updateFinalSelectorToLaunchMutexMerge_1",
+        "w_bitOpSelectorDrv2LaunchMutexMerge_1",
         "o_lsuDriveToLaunch_1"
       ],
       "instances": [
@@ -238,66 +217,13 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "instances.connections"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:005"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
-      },
-      "subject": "lsuMutexMerge",
-      "summary": "作为互斥合并器，仲裁来自更新最终选择器与LAS互斥合并延迟的事件，输出到更新分路器。",
-      "explanation": "该实例为cMutexMerge2_76b_lsu类型，输入w_LASMutexMergeToLsuMutexMergeDelay2_1和w_updateFinalSelectorToLsuMutexMerge_1，输出w_lsuMutexMergeToUpdateSplitter_1，是流中通往内部更新路径的仲裁点。",
-      "signals": [
-        "w_LASMutexMergeToLsuMutexMergeDelay2_1",
-        "w_updateFinalSelectorToLsuMutexMerge_1",
-        "w_lsuMutexMergeToUpdateSplitter_1"
-      ],
-      "instances": [
-        "lsuMutexMerge"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
+          "source": "flow.endpoints"
+        },
         {
           "source": "instances.connections"
         }
       ],
-      "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:006"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "lsu",
-        "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
-      },
-      "subject": "updateSplitter",
-      "summary": "作为分路器，将LSU互斥合并后的事件分发给状态更新和数据更新模块。",
-      "explanation": "该实例为cSplitter2_64b_lsu类型，输入来自lsuMutexMerge的输出，输出w_udpateSplitterToStateUpdate_1和w_updateSplitterToDataUpdate_1，是流中内部更新路径的最终分支节点。",
-      "signals": [
-        "w_lsuMutexMergeToUpdateSplitter_1",
-        "w_udpateSplitterToStateUpdate_1",
-        "w_updateSplitterToDataUpdate_1"
-      ],
-      "instances": [
-        "updateSplitter"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        }
-      ],
-      "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:007"
+      "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:component_role:004"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -306,9 +232,9 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "subject": "assign index 8",
-      "summary": "该赋值定义了通用寄存器文件到LSU的数据在双字加载/存储时的字节交换逻辑。",
-      "explanation": "赋值w_grfToLsuData_64根据w_isMultiLS_1和i_wen_2条件选择是否交换i_grfToLsuData_64的高低32位，与流中数据路由事件的处理相关，但并非直接驱动流中的事件信号。",
+      "subject": "assign_8 (w_grfToLsuData_64)",
+      "summary": "根据多加载/存储标志和写使能对GRF数据执行字节交换或直通，准备好供LSU操作的数据字段。",
+      "explanation": "当 w_isMultiLS_1 为高且 i_wen_2==2'b11 时，交换 i_grfToLsuData_64 的高低32位；否则保持原序。这决定了数据路由事件所携带存储数据的排列，影响 multiLoadDataUpate 等路径的写入内容。",
       "signals": [
         "w_grfToLsuData_64",
         "w_isMultiLS_1",
@@ -320,10 +246,10 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_module.assignments"
+          "source": "related_assign_dependencies.index=8"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:assignment_interpretation:001"
@@ -335,9 +261,9 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "subject": "assign index 20",
-      "summary": "该赋值将多加载和多存储选择器的完成信号合并为多加载或存储完成输出。",
-      "explanation": "赋值o_multiLoadOrStoreOver = w_multiLoadSelectorOver1_1 | w_multiStoreSelectorOver_1，与流中dataRoutSelector分支出的多存储路径相关，但仅指示完成状态，不参与事件传播。",
+      "subject": "assign_20 (o_multiLoadOrStoreOver)",
+      "summary": "多加载或多存储完成指示信号，由多加载选择器溢出和多存储选择器溢出逻辑或产生。",
+      "explanation": "该信号标记一个多周期加载或存储事务结束，虽不直接参与流的事件传播，但反映数据路由事件可能触发的长操作已完成。",
       "signals": [
         "o_multiLoadOrStoreOver",
         "w_multiLoadSelectorOver1_1",
@@ -348,10 +274,10 @@
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_module.assignments"
+          "source": "related_assign_dependencies.index=20"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:assignment_interpretation:002"
@@ -363,32 +289,31 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "summary": "数据路由驱动事件携带执行单元和通用寄存器文件的数据，这些数据在流中通过选择器分发到不同处理路径。",
-      "subject": "i_dataRoutDriveToLsu_1 事件与 i_exeToLsuData_163 和 i_grfToLsuData_64 数据",
-      "explanation": "接口负载契约显示i_dataRoutDriveToLsu_1事件关联i_exeToLsuData_163和i_grfToLsuData_64数据，这些数据在流中通过dataRoutSelector分发给多加载、多存储和更新等待路径，最终部分数据通过o_lsuToLaunchData_64输出到发射单元。",
+      "summary": "i_dataRoutDriveToLsu_1 关联的 163 位执行数据和 64 位 GRF 数据控制着选择器分支并最终形成启动输出数据。",
+      "subject": "data_routing_payload_influence",
+      "explanation": "163 位 i_exeToLsuData_163 可能包含操作码，决定 dataRoutSelector 和 multiStoreSelector 的输出选择；i_grfToLsuData_64 经 assign_8 处理后通过内部路径传输，最终在 launchMutexMerge 输出 o_lsuToLaunchData_64，构成启动数据。有效负载的位域定义缺失，无法精确解析控制与数据如何耦合。",
       "signals": [
-        "i_dataRoutDriveToLsu_1",
         "i_exeToLsuData_163",
         "i_grfToLsuData_64",
-        "o_lsuToLaunchData_64"
+        "o_lsuToLaunchData_64",
+        "w_dataRoutToUpdateWaitMerge_1"
       ],
       "related_payload": [
         "i_exeToLsuData_163",
-        "i_grfToLsuData_64",
-        "o_lsuToLaunchData_64"
+        "i_grfToLsuData_64"
       ],
       "related_assignments": [
         "8"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "interface_payload_contracts"
         },
         {
-          "source": "interface.data_ports"
+          "source": "related_assign_dependencies.index=8"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:data_control_effect:001"
@@ -400,19 +325,27 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "summary": "流的两端存在反压信号，但当前上下文未提供反压在流内部传播的细节。",
-      "subject": "o_lsuFreeToDataRout_1 和 i_lsuFreeFromLaunch_1",
-      "explanation": "接口负载契约显示输入事件i_dataRoutDriveToLsu_1关联反压信号o_lsuFreeToDataRout_1，输出事件o_lsuDriveToLaunch_1关联反压信号i_lsuFreeFromLaunch_1，但流步骤中未包含反压信号的连接或传播路径，无法确定反压如何影响流中的合并器或选择器。",
+      "summary": "输入输出端点均存在 free/ready 信号，整个流为背压敏感，内部合并器可能实现标准就绪-有效握手。",
+      "subject": "flow_free_backpressure",
+      "explanation": "输入事件 i_dataRoutDriveToLsu_1 依赖 o_lsuFreeToDataRout_1 反压，表示 LSU 可接收；输出 o_lsuDriveToLaunch_1 受 i_lsuFreeFromLaunch_1 反压，启动单元可暂停接收。内部 cMutexMerge 和 cWaitMerge 等实例大概率遵循相同协议，使得数据路由事件在整个路径中的传播受背压控制。",
       "signals": [
         "o_lsuFreeToDataRout_1",
         "i_lsuFreeFromLaunch_1"
       ],
-      "doc_priority": "secondary",
+      "instances": [
+        "icacheOrDataRoutMutexMerge",
+        "updateWaitMerge",
+        "launchMutexMerge"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "interface_payload_contracts.i_dataRoutDriveToLsu_1.free_signal"
+        },
+        {
+          "source": "interface_payload_contracts.o_lsuDriveToLaunch_1.free_signal"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:completion_backpressure:001"
@@ -424,30 +357,33 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "summary": "最终手册应重点描述数据路由事件从输入到输出的完整路径，包括关键分支和合并点的作用。",
-      "subject": "数据路由事件的分发与汇聚结构",
-      "explanation": "该流展示了数据路由事件在LSU内的复杂分发结构，包括dataRoutSelector的三路分支、updateWaitMerge的同步等待、updateFinalSelector的最终分发，以及launchMutexMerge和lsuMutexMerge的仲裁，这些是理解LSU数据流处理的关键。",
+      "summary": "应突出 数据路由事件如何经 互斥合并、分类选择与等待合并后转化为启动输出，淡化透明延迟单元细节。",
+      "subject": "manual_emphasis",
+      "explanation": "最终手册应强调 icacheOrDataRoutMutexMerge 的仲裁、dataRoutSelector 的分支条件、updateWaitMerge 的同步语义以及 launchMutexMerge 的输出生成，以帮助理解LSU并发处理逻辑。outdelay10 仅为时序匹配，无需在功能流程中详述。",
       "signals": [
         "i_dataRoutDriveToLsu_1",
+        "w_dataRoutToUpdateWaitMerge_1",
         "o_lsuDriveToLaunch_1"
       ],
       "instances": [
         "icacheOrDataRoutMutexMerge",
         "dataRoutSelector",
         "updateWaitMerge",
-        "updateFinalSelector",
-        "launchMutexMerge",
-        "lsuMutexMerge"
+        "launchMutexMerge"
+      ],
+      "related_assignments": [
+        "8",
+        "20"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.steps"
         },
         {
-          "source": "transparent_flows"
+          "source": "flow.branch_points"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:documentation_focus:001"
@@ -459,35 +395,71 @@
         "module": "lsu",
         "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
       },
-      "reason": "当前上下文仅提供流两端反压信号的存在，但未包含反压信号在流内部如何连接或影响合并器、选择器的信息，需要RTL源码确认反压机制。",
-      "subject": "反压信号在流内部的传播路径",
-      "needed_source_slice": "实例连接或always块中涉及o_lsuFreeToDataRout_1和i_lsuFreeFromLaunch_1的驱动逻辑",
+      "reason": "缺少 cSelector3_66b_lsu 的选择逻辑，无法确定事件被分发到三个目标的具体条件。",
+      "subject": "dataRoutSelector_selection_condition",
+      "needed_source_slice": "dataRoutSelector 实例的模块代码或选择信号生成逻辑",
       "signals": [
-        "o_lsuFreeToDataRout_1",
-        "i_lsuFreeFromLaunch_1"
+        "w_icacheOrDataRoutMutexMergeDriveToLsu1_1",
+        "w_dataRoutToMultiLoadDataUpdate_1",
+        "w_dataRoutToMultiStoreSelector_1",
+        "w_dataRoutToUpdateWaitMerge_1"
       ],
       "instances": [
-        "icacheOrDataRoutMutexMerge",
-        "dataRoutSelector",
-        "updateWaitMerge",
-        "launchMutexMerge",
-        "lsuMutexMerge"
+        "dataRoutSelector"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "instances.connections"
+        },
+        {
+          "source": "flow.branch_points"
         }
       ],
       "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "flow",
+        "module": "lsu",
+        "flow_id": "flow_002_lsu_i_dataRoutDriveToLsu_1"
+      },
+      "reason": "cWaitMerge2_76b_lsu 的等待/合并策略未知，无法明确其同步行为和阻塞条件。",
+      "subject": "updateWaitMerge_merge_policy",
+      "needed_source_slice": "updateWaitMerge 实例的模块源或例化参数",
+      "signals": [
+        "w_dataRoutToUpdateWaitMerge_1",
+        "w_stateUpdateSelectorToUpdateWaitMerge_1",
+        "w_updateWaitMergeToUpdateFinalSelector_1"
+      ],
+      "instances": [
+        "updateWaitMerge"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "flow.join_points"
+        },
+        {
+          "source": "flow.blocking_points"
+        }
+      ],
+      "id": "semantic:flow:lsu:flow_002_lsu_i_dataRoutDriveToLsu_1:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "反压信号内部连接",
-      "reason": "当前上下文未提供反压信号在流内部实例间的连接信息，无法确定反压如何影响事件传播。"
+      "field": "i_exeToLsuData_163 bit fields",
+      "reason": "未提供 163 位有效载荷的位域说明，无法推导 dataRoutSelector 及 multiStoreSelector 的选择判据。"
+    },
+    {
+      "field": "internal backpressure wiring",
+      "reason": "提供的连接只描述了事件驱动，未显示各合并器和选择器的 free/ready 信号，不能确认背压传播路径和暂停机制。"
     }
   ]
 }

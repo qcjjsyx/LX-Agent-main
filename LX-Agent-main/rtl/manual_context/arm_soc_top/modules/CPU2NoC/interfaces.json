@@ -73,8 +73,8 @@
         ]
       },
       "manual_description": {
-        "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-        "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
+        "value": "该接口采用事件驱动、数据伴随、下游释放的三相信号集，CPU 通过 i_drvFCPU 发起写事务，i_dataFCPU_51 携带地址/数据，模块通过 i_freeFCPU 接收 CPU 的释放（但 free 信号指向 cfifoOut，可能用于响应路径的释放），实际反映 CPU 与模块间基于 FIFO 通道的高吞吐握手机制。",
+        "explanation": "i_drvFCPU 连接模块内部 cfifo0 的事件驱动，表明写事务进入 FIFO 缓冲；i_dataFCPU_51 为 [50:0] 宽度，作为 payload 与驱动事件配对；free 信号 i_freeFCPU 却连接 cfifoOut.i_freeNext，即 CPU 的释放作用到了读响应输出 FIFO 的释放端，说明 CPU 的 free 用于流控从模块到 CPU 的响应路径，而非写路径。这揭示 CPU 接口的“接收就绪”信号是共享或复用的，写路径可能依赖内部 FIFO 反压逻辑（未见直接 free 连接），需要进一步查看 RTL 源确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -85,36 +85,24 @@
         "signals": [
           "i_drvFCPU",
           "i_dataFCPU_51",
-          "o_drv2NoCChanel0",
-          "o_data2NoCChanel0_51",
-          "i_freeFNoCChanel0",
-          "o_drv2NoCChanel1",
-          "o_data2NoCChanel1_51",
-          "i_freeFNoCChanel1"
+          "i_freeFCPU"
         ],
         "instances": [],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:CPU2NoC:semantic_module"
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_inputs"
+            "source": "event_payload_contracts",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
           },
           {
-            "source": "interface.data_inputs"
-          },
-          {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "event_payload_contracts"
+            "source": "key_component_connections",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
           }
         ],
         "supporting_claims": []
@@ -218,13 +206,42 @@
         ]
       },
       "manual_description": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer description is available.",
-        "review_status": "needs_review"
+        "value": "每个 NoC 通道接口遵循事件-数据-自由报文协议，其中 i_drvFNoCChannelX 为 NoC 返回的读响应事件，i_dataFNoCChannelX_51 为相应数据，i_freeFNoCChanelX 由模块输出给 NoC，表示模块可接收新响应。",
+        "explanation": "读路径上，i_drvFNoCChannelX 进入 mutexRead，i_dataFNoCChannelX_51 直接连接 mutexRead 数据输入；free 方面，模块产生的 o_free2NocChannelX 来自 mutexRead 的 free 输出，形成了完整的握手闭环。而在写路径上，模块通过 splitterChannelX 的 i_freeNextX 接收 i_freeFNoCChanelX 信号，用于流控写入 NoC 的速率，表明 NoC 下游是否就绪。接口定义清晰，无歧义。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:002",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drvFNoCChannel0",
+          "i_dataFNoCChannel0_51",
+          "i_freeFNoCChanel0",
+          "i_drvFNoCChannel1",
+          "i_dataFNoCChannel1_51",
+          "i_freeFNoCChanel1"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:CPU2NoC:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "event_payload_contracts",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
+          },
+          {
+            "source": "key_component_connections",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
+          }
+        ],
+        "supporting_claims": []
       },
       "evidence_refs": [
         "ev:CPU2NoC:interface",
@@ -325,13 +342,42 @@
         ]
       },
       "manual_description": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer description is available.",
-        "review_status": "needs_review"
+        "value": "每个 NoC 通道接口遵循事件-数据-自由报文协议，其中 i_drvFNoCChannelX 为 NoC 返回的读响应事件，i_dataFNoCChannelX_51 为相应数据，i_freeFNoCChanelX 由模块输出给 NoC，表示模块可接收新响应。",
+        "explanation": "读路径上，i_drvFNoCChannelX 进入 mutexRead，i_dataFNoCChannelX_51 直接连接 mutexRead 数据输入；free 方面，模块产生的 o_free2NocChannelX 来自 mutexRead 的 free 输出，形成了完整的握手闭环。而在写路径上，模块通过 splitterChannelX 的 i_freeNextX 接收 i_freeFNoCChanelX 信号，用于流控写入 NoC 的速率，表明 NoC 下游是否就绪。接口定义清晰，无歧义。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:002",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drvFNoCChannel0",
+          "i_dataFNoCChannel0_51",
+          "i_freeFNoCChanel0",
+          "i_drvFNoCChannel1",
+          "i_dataFNoCChannel1_51",
+          "i_freeFNoCChanel1"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:CPU2NoC:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "event_payload_contracts",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
+          },
+          {
+            "source": "key_component_connections",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
+          }
+        ],
+        "supporting_claims": []
       },
       "evidence_refs": [
         "ev:CPU2NoC:interface",
@@ -522,51 +568,13 @@
         ]
       },
       "manual_description": {
-        "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-        "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFCPU",
-          "i_dataFCPU_51",
-          "o_drv2NoCChanel0",
-          "o_data2NoCChanel0_51",
-          "i_freeFNoCChanel0",
-          "o_drv2NoCChanel1",
-          "o_data2NoCChanel1_51",
-          "i_freeFNoCChanel1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:CPU2NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_inputs"
-          },
-          {
-            "source": "interface.data_inputs"
-          },
-          {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "event_payload_contracts"
-          }
-        ],
-        "supporting_claims": []
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer description is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:CPU2NoC:interface",
@@ -683,51 +691,13 @@
         ]
       },
       "manual_description": {
-        "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-        "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFCPU",
-          "i_dataFCPU_51",
-          "o_drv2NoCChanel0",
-          "o_data2NoCChanel0_51",
-          "i_freeFNoCChanel0",
-          "o_drv2NoCChanel1",
-          "o_data2NoCChanel1_51",
-          "i_freeFNoCChanel1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:CPU2NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_inputs"
-          },
-          {
-            "source": "interface.data_inputs"
-          },
-          {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "event_payload_contracts"
-          }
-        ],
-        "supporting_claims": []
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer description is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:CPU2NoC:interface",
@@ -838,8 +808,8 @@
         }
       ],
       "manual_description": {
-        "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-        "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
+        "value": "该接口采用事件驱动、数据伴随、下游释放的三相信号集，CPU 通过 i_drvFCPU 发起写事务，i_dataFCPU_51 携带地址/数据，模块通过 i_freeFCPU 接收 CPU 的释放（但 free 信号指向 cfifoOut，可能用于响应路径的释放），实际反映 CPU 与模块间基于 FIFO 通道的高吞吐握手机制。",
+        "explanation": "i_drvFCPU 连接模块内部 cfifo0 的事件驱动，表明写事务进入 FIFO 缓冲；i_dataFCPU_51 为 [50:0] 宽度，作为 payload 与驱动事件配对；free 信号 i_freeFCPU 却连接 cfifoOut.i_freeNext，即 CPU 的释放作用到了读响应输出 FIFO 的释放端，说明 CPU 的 free 用于流控从模块到 CPU 的响应路径，而非写路径。这揭示 CPU 接口的“接收就绪”信号是共享或复用的，写路径可能依赖内部 FIFO 反压逻辑（未见直接 free 连接），需要进一步查看 RTL 源确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -850,39 +820,102 @@
         "signals": [
           "i_drvFCPU",
           "i_dataFCPU_51",
-          "o_drv2NoCChanel0",
-          "o_data2NoCChanel0_51",
-          "i_freeFNoCChanel0",
-          "o_drv2NoCChanel1",
-          "o_data2NoCChanel1_51",
-          "i_freeFNoCChanel1"
+          "i_freeFCPU"
         ],
         "instances": [],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:CPU2NoC:semantic_module"
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_inputs"
+            "source": "event_payload_contracts",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
           },
           {
-            "source": "interface.data_inputs"
-          },
-          {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "event_payload_contracts"
+            "source": "key_component_connections",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
           }
         ],
-        "supporting_claims": []
+        "supporting_claims": [
+          {
+            "value": "每个 NoC 通道接口遵循事件-数据-自由报文协议，其中 i_drvFNoCChannelX 为 NoC 返回的读响应事件，i_dataFNoCChannelX_51 为相应数据，i_freeFNoCChanelX 由模块输出给 NoC，表示模块可接收新响应。",
+            "explanation": "读路径上，i_drvFNoCChannelX 进入 mutexRead，i_dataFNoCChannelX_51 直接连接 mutexRead 数据输入；free 方面，模块产生的 o_free2NocChannelX 来自 mutexRead 的 free 输出，形成了完整的握手闭环。而在写路径上，模块通过 splitterChannelX 的 i_freeNextX 接收 i_freeFNoCChanelX 信号，用于流控写入 NoC 的速率，表明 NoC 下游是否就绪。接口定义清晰，无歧义。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:002",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvFNoCChannel0",
+              "i_dataFNoCChannel0_51",
+              "i_freeFNoCChanel0",
+              "i_drvFNoCChannel1",
+              "i_dataFNoCChannel1_51",
+              "i_freeFNoCChanel1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:CPU2NoC:semantic_module"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "event_payload_contracts",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
+              },
+              {
+                "source": "key_component_connections",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
+              }
+            ]
+          },
+          {
+            "value": "每个 NoC 通道接口遵循事件-数据-自由报文协议，其中 i_drvFNoCChannelX 为 NoC 返回的读响应事件，i_dataFNoCChannelX_51 为相应数据，i_freeFNoCChanelX 由模块输出给 NoC，表示模块可接收新响应。",
+            "explanation": "读路径上，i_drvFNoCChannelX 进入 mutexRead，i_dataFNoCChannelX_51 直接连接 mutexRead 数据输入；free 方面，模块产生的 o_free2NocChannelX 来自 mutexRead 的 free 输出，形成了完整的握手闭环。而在写路径上，模块通过 splitterChannelX 的 i_freeNextX 接收 i_freeFNoCChanelX 信号，用于流控写入 NoC 的速率，表明 NoC 下游是否就绪。接口定义清晰，无歧义。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:002",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvFNoCChannel0",
+              "i_dataFNoCChannel0_51",
+              "i_freeFNoCChanel0",
+              "i_drvFNoCChannel1",
+              "i_dataFNoCChannel1_51",
+              "i_freeFNoCChanel1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:CPU2NoC:semantic_module"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "event_payload_contracts",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
+              },
+              {
+                "source": "key_component_connections",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
+              }
+            ]
+          }
+        ]
       },
       "evidence_refs": [
         "ev:CPU2NoC:interface"
@@ -992,98 +1025,13 @@
         }
       ],
       "manual_description": {
-        "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-        "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFCPU",
-          "i_dataFCPU_51",
-          "o_drv2NoCChanel0",
-          "o_data2NoCChanel0_51",
-          "i_freeFNoCChanel0",
-          "o_drv2NoCChanel1",
-          "o_data2NoCChanel1_51",
-          "i_freeFNoCChanel1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:CPU2NoC:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_inputs"
-          },
-          {
-            "source": "interface.data_inputs"
-          },
-          {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "event_payload_contracts"
-          }
-        ],
-        "supporting_claims": [
-          {
-            "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-            "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
-            "certainty": "ai_inferred",
-            "confidence": "medium",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:001",
-            "doc_priority": "primary",
-            "signals": [
-              "i_drvFCPU",
-              "i_dataFCPU_51",
-              "o_drv2NoCChanel0",
-              "o_data2NoCChanel0_51",
-              "i_freeFNoCChanel0",
-              "o_drv2NoCChanel1",
-              "o_data2NoCChanel1_51",
-              "i_freeFNoCChanel1"
-            ],
-            "instances": [],
-            "related_flows": [],
-            "related_assignments": [],
-            "requires_rtl_source_review": false,
-            "review_status": "ready",
-            "evidence_refs": [
-              "ev:CPU2NoC:semantic_module"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "interface.event_inputs"
-              },
-              {
-                "source": "interface.data_inputs"
-              },
-              {
-                "source": "interface.free_inputs"
-              },
-              {
-                "source": "interface.free_outputs"
-              },
-              {
-                "source": "event_payload_contracts"
-              }
-            ]
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer description is available.",
+        "review_status": "needs_review"
       },
       "evidence_refs": [
         "ev:CPU2NoC:interface"
@@ -1193,8 +1141,8 @@
         }
       ],
       "manual_description": {
-        "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-        "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
+        "value": "该接口采用事件驱动、数据伴随、下游释放的三相信号集，CPU 通过 i_drvFCPU 发起写事务，i_dataFCPU_51 携带地址/数据，模块通过 i_freeFCPU 接收 CPU 的释放（但 free 信号指向 cfifoOut，可能用于响应路径的释放），实际反映 CPU 与模块间基于 FIFO 通道的高吞吐握手机制。",
+        "explanation": "i_drvFCPU 连接模块内部 cfifo0 的事件驱动，表明写事务进入 FIFO 缓冲；i_dataFCPU_51 为 [50:0] 宽度，作为 payload 与驱动事件配对；free 信号 i_freeFCPU 却连接 cfifoOut.i_freeNext，即 CPU 的释放作用到了读响应输出 FIFO 的释放端，说明 CPU 的 free 用于流控从模块到 CPU 的响应路径，而非写路径。这揭示 CPU 接口的“接收就绪”信号是共享或复用的，写路径可能依赖内部 FIFO 反压逻辑（未见直接 free 连接），需要进一步查看 RTL 源确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -1205,57 +1153,43 @@
         "signals": [
           "i_drvFCPU",
           "i_dataFCPU_51",
-          "o_drv2NoCChanel0",
-          "o_data2NoCChanel0_51",
-          "i_freeFNoCChanel0",
-          "o_drv2NoCChanel1",
-          "o_data2NoCChanel1_51",
-          "i_freeFNoCChanel1"
+          "i_freeFCPU"
         ],
         "instances": [],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:CPU2NoC:semantic_module"
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_inputs"
+            "source": "event_payload_contracts",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
           },
           {
-            "source": "interface.data_inputs"
-          },
-          {
-            "source": "interface.free_inputs"
-          },
-          {
-            "source": "interface.free_outputs"
-          },
-          {
-            "source": "event_payload_contracts"
+            "source": "key_component_connections",
+            "path": "knowledge_ir/modules/CPU2NoC.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "模块的每个事件驱动信号都关联一个 51 位数据负载和一个释放信号，构成完整的三元组握手协议。",
-            "explanation": "输入事件 i_drvFCPU 关联数据 i_dataFCPU_51，输出事件 o_drv2NoCChanel0 关联数据 o_data2NoCChanel0_51 和释放信号 i_freeFNoCChanel0。这种模式表明模块使用事件-数据-释放的协议进行通信，其中释放信号用于指示接收方已处理完数据。",
+            "value": "每个 NoC 通道接口遵循事件-数据-自由报文协议，其中 i_drvFNoCChannelX 为 NoC 返回的读响应事件，i_dataFNoCChannelX_51 为相应数据，i_freeFNoCChanelX 由模块输出给 NoC，表示模块可接收新响应。",
+            "explanation": "读路径上，i_drvFNoCChannelX 进入 mutexRead，i_dataFNoCChannelX_51 直接连接 mutexRead 数据输入；free 方面，模块产生的 o_free2NocChannelX 来自 mutexRead 的 free 输出，形成了完整的握手闭环。而在写路径上，模块通过 splitterChannelX 的 i_freeNextX 接收 i_freeFNoCChanelX 信号，用于流控写入 NoC 的速率，表明 NoC 下游是否就绪。接口定义清晰，无歧义。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "high",
             "source_layers": [
               "semantic_layer"
             ],
-            "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:001",
+            "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:002",
             "doc_priority": "primary",
             "signals": [
-              "i_drvFCPU",
-              "i_dataFCPU_51",
-              "o_drv2NoCChanel0",
-              "o_data2NoCChanel0_51",
+              "i_drvFNoCChannel0",
+              "i_dataFNoCChannel0_51",
               "i_freeFNoCChanel0",
-              "o_drv2NoCChanel1",
-              "o_data2NoCChanel1_51",
+              "i_drvFNoCChannel1",
+              "i_dataFNoCChannel1_51",
               "i_freeFNoCChanel1"
             ],
             "instances": [],
@@ -1268,19 +1202,49 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_inputs"
+                "source": "event_payload_contracts",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
               },
               {
-                "source": "interface.data_inputs"
+                "source": "key_component_connections",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
+              }
+            ]
+          },
+          {
+            "value": "每个 NoC 通道接口遵循事件-数据-自由报文协议，其中 i_drvFNoCChannelX 为 NoC 返回的读响应事件，i_dataFNoCChannelX_51 为相应数据，i_freeFNoCChanelX 由模块输出给 NoC，表示模块可接收新响应。",
+            "explanation": "读路径上，i_drvFNoCChannelX 进入 mutexRead，i_dataFNoCChannelX_51 直接连接 mutexRead 数据输入；free 方面，模块产生的 o_free2NocChannelX 来自 mutexRead 的 free 输出，形成了完整的握手闭环。而在写路径上，模块通过 splitterChannelX 的 i_freeNextX 接收 i_freeFNoCChanelX 信号，用于流控写入 NoC 的速率，表明 NoC 下游是否就绪。接口定义清晰，无歧义。",
+            "certainty": "ai_inferred",
+            "confidence": "high",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:module:CPU2NoC:interface_intent:002",
+            "doc_priority": "primary",
+            "signals": [
+              "i_drvFNoCChannel0",
+              "i_dataFNoCChannel0_51",
+              "i_freeFNoCChanel0",
+              "i_drvFNoCChannel1",
+              "i_dataFNoCChannel1_51",
+              "i_freeFNoCChanel1"
+            ],
+            "instances": [],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": false,
+            "review_status": "ready",
+            "evidence_refs": [
+              "ev:CPU2NoC:semantic_module"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "event_payload_contracts",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
               },
               {
-                "source": "interface.free_inputs"
-              },
-              {
-                "source": "interface.free_outputs"
-              },
-              {
-                "source": "event_payload_contracts"
+                "source": "key_component_connections",
+                "path": "knowledge_ir/modules/CPU2NoC.json"
               }
             ]
           }

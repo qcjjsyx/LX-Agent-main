@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "multiStoreDataUpate",
-  "input_hash": "4d125f2d5dfa4a29d03967cee1c91327fbd1f423d5864573bd6dc1c549dd1bbb",
+  "input_hash": "69d6a190af7ae5f8d4940a9dca235f58ac6a80138909ea45d7ec72c5353745b6",
   "source_context": "ai_context/modules/multiStoreDataUpate.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/Lsu/multiStoreDataUpate.v",
+      "source": "rtl\\rtl\\Lsu\\multiStoreDataUpate.v",
       "paths": [
         "module_source"
       ]
@@ -40,7 +40,7 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/Lsu/multiStoreDataUpate.v",
+        "rtl_file": "rtl\\rtl\\Lsu\\multiStoreDataUpate.v",
         "parser_module": "modules/multiStoreDataUpate.json"
       }
     }
@@ -48,12 +48,12 @@
   "claim_summary": {
     "count": 10,
     "by_type": {
-      "assignment_interpretation": 4,
+      "assignment_interpretation": 3,
       "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
       "source_review_request": 1,
-      "structural_responsibility": 1
+      "structural_responsibility": 2
     }
   },
   "claims": [
@@ -63,17 +63,18 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "summary": "该模块负责根据输入地址和寄存器列表，生成多存储操作所需的下一地址、下一寄存器列表、数据写入使能以及写回控制信号。",
+      "summary": "多笔存储数据更新的步进状态分解器，根据当前地址对齐与待更新寄存器列表生成下次操作的地址、列表及控制信号",
       "subject": "multiStoreDataUpate",
-      "explanation": "模块接收32位地址和16位寄存器列表，输出更新后的地址、寄存器列表、数据写入使能、写回使能以及结束标志。赋值依赖显示输出由内部寄存器驱动，且地址的低3位用于计算计数，表明模块在逐次处理存储操作。",
+      "explanation": "模块组合逻辑驱动输出，其中 o_nextAddress_32 与 o_nextRegisterList_16 直接传递内部寄存器，o_endFlag_1 在寄存器列表全零时置位，w_count_2 基于地址低三位计算本次可处理的数据项数，o_dataRoutWen_8 与 o_wbackWen_2 则根据操作数量生成字节使能与写回宽度，表明本模块负责将一次多笔存储请求拆分为多次对齐的数据路由控制",
       "signals": [
         "i_address_32",
         "i_registerList_16",
         "o_nextAddress_32",
         "o_nextRegisterList_16",
+        "o_endFlag_1",
         "o_dataRoutWen_8",
         "o_wbackWen_2",
-        "o_endFlag_1"
+        "w_count_2"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
@@ -84,7 +85,7 @@
           "path": "knowledge_ir/modules/multiStoreDataUpate.json"
         },
         {
-          "source": "parser_module",
+          "source": "assign_dependencies",
           "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
         }
       ],
@@ -96,32 +97,50 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "summary": "模块根据当前地址和寄存器列表，计算并输出下一次存储操作的地址、寄存器列表、数据写入使能掩码和写回使能。",
-      "subject": "多存储数据更新",
-      "explanation": "输入地址的低3位用于生成计数w_count_2，该计数影响数据写入使能o_dataRoutWen_8的生成。输出o_nextAddress_32和o_nextRegisterList_16由内部寄存器直接驱动，表明模块内部维护了状态。o_endFlag_1在寄存器列表为空时置位，指示操作结束。",
+      "summary": "根据 i_address_32[2:0] 计算 w_count_2，决定本次操作可处理的数据项数量（2’b10 为两项，2’b01 为一项，2’b00 为无）",
+      "subject": "地址对齐感知的数据项计数",
+      "explanation": "组合逻辑将地址低三位映射为计数，随后通过寄存器版本（r_count_2 及猜测的 num 信号）参与 o_dataRoutWen_8 和 o_wbackWen_2 的生成，赋予模块对齐限制下的传输宽度自适应能力",
       "signals": [
         "i_address_32",
-        "i_registerList_16",
-        "o_nextAddress_32",
-        "o_nextRegisterList_16",
+        "w_count_2",
         "o_dataRoutWen_8",
-        "o_wbackWen_2",
-        "o_endFlag_1"
+        "o_wbackWen_2"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "module_facts",
-          "path": "knowledge_ir/modules/multiStoreDataUpate.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json (index 0)"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:structural_responsibility:001"
+    },
+    {
+      "claim_type": "structural_responsibility",
+      "scope": {
+        "type": "module",
+        "module": "multiStoreDataUpate"
+      },
+      "summary": "输出 o_endFlag_1 当内部寄存器列表 r_registerList_16 所有位均为零时置‘1’，标志更新序列结束",
+      "subject": "寄存器列表耗尽检测",
+      "explanation": "使用缩减或运算检测列表归零，drives 控制输出，通知上游本次多笔存储已全部结束，可能需要清除总线请求或进行回写收尾",
+      "signals": [
+        "o_endFlag_1",
+        "r_registerList_16",
+        "i_registerList_16"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json (index 4)"
+        }
+      ],
+      "id": "semantic:module:multiStoreDataUpate:structural_responsibility:002"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -129,25 +148,24 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "subject": "w_count_2",
-      "summary": "根据输入地址的低3位，生成一个2位计数，用于控制数据写入使能掩码的生成。",
-      "explanation": "赋值显示w_count_2由i_address_32[2:0]决定，当地址低3位为0时计数为2，为4时计数为1，否则为0。该计数影响o_dataRoutWen_8的生成，表明模块根据地址对齐情况调整写入粒度。",
+      "subject": "assign o_dataRoutWen_8",
+      "summary": "根据操作数量（num）和内部计数值生成字节写使能模式，控制数据路由写通路的粒度",
+      "explanation": "当 num=2’b10 时输出全 1（8 字节有效），num=2’b01 时根据 r_count_2 决定高 4 字节或低 4 字节有效，其他情况输出 0，表明该信号用于在最后一次部分写入时关闭另一半数据通路，避免覆盖无效数据",
       "signals": [
-        "w_count_2",
-        "i_address_32",
-        "o_dataRoutWen_8"
+        "o_dataRoutWen_8",
+        "num",
+        "r_count_2"
       ],
       "related_assignments": [
-        "0",
-        "6"
+        "index 6"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json (index 6)"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:assignment_interpretation:001"
@@ -158,24 +176,23 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "subject": "o_dataRoutWen_8",
-      "summary": "根据存储数量num和计数r_count_2，生成8位数据写入使能掩码，控制数据写入的字节范围。",
-      "explanation": "当num为2时，使能所有8字节；当num为1时，根据r_count_2的值使能高4位或低4位；否则使能全0。这表明模块支持不同宽度的存储操作，并处理地址对齐。",
+      "subject": "assign o_wbackWen_2",
+      "summary": "生成写回使能宽度指示（2’b01 表示 1 项，2’b11 表示 2 项），用于写回存储数据的字节标记",
+      "explanation": "根据 num 的值产生 2 位宽使能，num=2’b01 时仅低位使能，num=2’b10 时双位使能，反映本次操作实际写回的数据项数，可直接用于字节写掩码或写回缓冲控制",
       "signals": [
-        "o_dataRoutWen_8",
-        "num",
-        "r_count_2"
+        "o_wbackWen_2",
+        "num"
       ],
       "related_assignments": [
-        "6"
+        "index 3"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json (index 3)"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:assignment_interpretation:002"
@@ -186,53 +203,32 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "subject": "o_wbackWen_2",
-      "summary": "根据存储数量num，生成写回使能信号，指示需要写回的寄存器数量。",
-      "explanation": "当num为1时，写回使能为2'b01；当num为2时，写回使能为2'b11；否则为0。这表明模块根据存储操作的数量，决定写回操作的寄存器个数。",
+      "subject": "assign o_dHi_4 与 o_dLo_4",
+      "summary": "直接转发内部寄存器 r_k_4 与 r_j_4，可能为数据高/低半字的片段选择或对应的寄存器索引",
+      "explanation": "这两个输出完全由寄存器驱动，无组合变换，暗示它们是来自存储缓冲的数据片段或目标寄存器号，需要结合模块外连接理解其语义",
       "signals": [
-        "o_wbackWen_2",
-        "num"
+        "o_dHi_4",
+        "r_k_4",
+        "o_dLo_4",
+        "r_j_4"
       ],
       "related_assignments": [
-        "3"
+        "index 1",
+        "index 2"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json (index 1"
+        },
+        {
+          "source": "2)"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:assignment_interpretation:003"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "multiStoreDataUpate"
-      },
-      "subject": "o_endFlag_1",
-      "summary": "当内部寄存器列表r_registerList_16为空时，输出结束标志，指示多存储操作完成。",
-      "explanation": "赋值显示o_endFlag_1在r_registerList_16的所有位为0时置1。这表明模块通过检查寄存器列表是否为空来判断操作是否结束。",
-      "signals": [
-        "o_endFlag_1",
-        "r_registerList_16"
-      ],
-      "related_assignments": [
-        "4"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
-        }
-      ],
-      "id": "semantic:module:multiStoreDataUpate:assignment_interpretation:004"
     },
     {
       "claim_type": "interface_intent",
@@ -240,20 +236,20 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "summary": "输入接口提供当前存储操作的起始地址和待处理的寄存器列表，模块据此生成下一次操作所需的信息。",
-      "subject": "地址与寄存器列表输入",
-      "explanation": "i_address_32提供地址，其低3位用于对齐判断；i_registerList_16提供寄存器列表，模块内部维护其状态并输出更新后的列表。这表明输入接口是模块状态更新的驱动源。",
+      "summary": "i_address_32 为当前起始地址，i_registerList_16 为待更新寄存器的位图（1 表示仍需要存），二者共同定义本次操作前的状态",
+      "subject": "数据输入载荷",
+      "explanation": "地址的低三位用于计算对齐偏移和本次可处理数量，寄存器列表的剩余位则最终驱动结束标志和下次列表，体现“消耗”语义",
       "signals": [
         "i_address_32",
-        "i_registerList_32"
+        "i_registerList_16"
       ],
       "related_payload": [
         "o_nextAddress_32",
         "o_nextRegisterList_16"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "module_facts",
@@ -268,24 +264,25 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "summary": "输出接口提供数据写入使能掩码和写回使能信号，用于控制存储和写回操作的粒度。",
-      "subject": "数据写入使能与写回控制输出",
-      "explanation": "o_dataRoutWen_8控制数据写入的字节范围，o_wbackWen_2控制写回操作的寄存器数量。这两个信号共同决定了多存储操作中数据写入和写回的具体行为。",
+      "summary": "o_endFlag_1 作为序列终止条件，o_wbackWen_2 与 o_dataRoutWen_8 作为存储/写回宽度和字节使能，由组合逻辑产生且完全同步于当前输入状态",
+      "subject": "控制输出边界",
+      "explanation": "这些控制输出不含事件握手，故模块为纯组合输出状态机，需要外部在时钟沿时采样并使用它们来触发下一拍操作",
       "signals": [
-        "o_dataRoutWen_8",
-        "o_wbackWen_2"
-      ],
-      "related_payload": [
-        "o_dHi_4",
-        "o_dLo_4"
+        "o_endFlag_1",
+        "o_wbackWen_2",
+        "o_dataRoutWen_8"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
           "source": "module_facts",
           "path": "knowledge_ir/modules/multiStoreDataUpate.json"
+        },
+        {
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:interface_intent:002"
@@ -296,27 +293,25 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "summary": "文档应重点描述模块内部状态（如r_registerList_16、r_nextAddress_32）的更新逻辑，以及如何根据输入地址和寄存器列表生成输出。",
-      "subject": "多存储操作状态机",
-      "explanation": "当前上下文显示模块内部维护了寄存器列表和下一地址的状态，但缺乏状态更新逻辑的细节。需要RTL源码来明确状态机的行为。",
+      "summary": "最终手册应重点说明地址对齐带来的操作计数变化、寄存器列表消耗方式以及输出使能与数据路由信号之间的配合关系，避免直接抄写端口列表或 assign 表达式",
+      "subject": "多笔存储更新的状态转换逻辑",
+      "explanation": "模块的核心价值在于将一条多寄存器存储指令拆解为多个对齐的内存写入，手册需揭示这一拆分策略与信号生成的关联",
       "signals": [
-        "r_registerList_16",
-        "r_nextAddress_32",
-        "r_count_2",
-        "r_k_4",
-        "r_j_4"
+        "i_address_32",
+        "i_registerList_16",
+        "o_nextAddress_32",
+        "o_nextRegisterList_16",
+        "o_dataRoutWen_8",
+        "o_wbackWen_2",
+        "o_endFlag_1"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
           "source": "module_facts",
           "path": "knowledge_ir/modules/multiStoreDataUpate.json"
-        },
-        {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:documentation_focus:001"
@@ -327,23 +322,24 @@
         "type": "module",
         "module": "multiStoreDataUpate"
       },
-      "reason": "当前上下文仅提供了输出赋值，但缺乏内部寄存器（如r_registerList_16、r_nextAddress_32、r_count_2、r_k_4、r_j_4）的更新逻辑，无法完整描述模块行为。",
-      "subject": "内部状态更新逻辑",
-      "needed_source_slice": "always block",
+      "reason": "紧凑上下文中缺少 r_count_2, r_k_4, r_j_4, r_nextAddress_32, r_registerList_16 等寄存器的声明和赋值，以及 num 信号的定义，无法确定这些状态如何在时钟边沿更新及其与输入的关系",
+      "subject": "内部寄存器更新逻辑及 num 信号来源",
+      "needed_source_slice": "always 块或 assign 块中涉及 w_count_2、num、r_* 的信号产生和更新",
       "signals": [
-        "r_registerList_16",
-        "r_nextAddress_32",
+        "num",
         "r_count_2",
         "r_k_4",
-        "r_j_4"
+        "r_j_4",
+        "r_nextAddress_32",
+        "r_registerList_16"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "parser_module",
-          "path": "parser_pipeline_rtl/modules/multiStoreDataUpate.json"
+          "source": "rtl_source",
+          "path": "rtl\\rtl\\Lsu\\multiStoreDataUpate.v"
         }
       ],
       "id": "semantic:module:multiStoreDataUpate:source_review_request:001"
@@ -351,16 +347,8 @@
   ],
   "evidence_gaps": [
     {
-      "field": "内部状态更新逻辑",
-      "reason": "缺少内部寄存器（r_registerList_16, r_nextAddress_32, r_count_2, r_k_4, r_j_4）的更新逻辑，无法确定模块的状态机行为。"
-    },
-    {
-      "field": "输入事件或控制信号",
-      "reason": "缺少事件输入或控制输入，无法确定模块的触发条件或启动信号。"
-    },
-    {
-      "field": "内部组件连接",
-      "reason": "缺少关键组件实例和连接信息，无法了解模块的内部结构。"
+      "field": "internal_registers_and_num_signal",
+      "reason": "仅从 assign 依赖无法得知 num 是否等于 w_count_2 或其寄存器版本，也无法推断 r_nextAddress_32 与 r_registerList_16 如何递减或更新，需要完整 RTL 源代码才能准确描述状态转移"
     }
   ]
 }

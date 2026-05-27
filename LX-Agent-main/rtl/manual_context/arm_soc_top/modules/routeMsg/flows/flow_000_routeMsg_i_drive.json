@@ -337,10 +337,10 @@
         "w_driveFork"
       ],
       "role_in_flow": {
-        "value": "事件流的入口缓冲级，用于接收并暂存来自 i_drive 的事件。",
-        "explanation": "作为第一个FIFO级，它负责在事件进入内部分发网络前进行缓冲，可能实现背压或同步。其输出驱动后续的延迟单元。",
+        "value": "输入驱动事件的先进先出缓冲器，用于流量隔离或反压管理。",
+        "explanation": "作为第一个 fifo_stage，接收 i_drive 并可能在其满时阻止上游继续发送，从而引入反压控制。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -354,9 +354,7 @@
           "receiveFifo"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -364,7 +362,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "knowledge_ir/modules/routeMsg.json",
+            "path": "internal_event_flow"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json",
+            "path": "instances"
           }
         ]
       },
@@ -387,13 +390,35 @@
         "w_driveFork_delay"
       ],
       "role_in_flow": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer component role is available for this flow.",
-        "review_status": "needs_review"
+        "value": "透明延迟单元，为所有方向共享的路径插入固定或相位延迟。",
+        "explanation": "位于分叉前，确保所有方向事件在时间上对齐或匹配 UART 时序要求。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:component_role:002",
+        "doc_priority": "secondary",
+        "signals": [
+          "w_driveFork",
+          "w_driveFork_delay"
+        ],
+        "instances": [
+          "delayUart0"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/routeMsg.json",
+            "path": "connection_graph"
+          }
+        ]
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -418,14 +443,14 @@
         "w_driveWFifo_t"
       ],
       "role_in_flow": {
-        "value": "事件流的核心方向分叉器，根据事件目标方向将事件分发到五个方向路径。",
-        "explanation": "这是一个条件分叉器，接收来自延迟单元的事件，并根据内部逻辑（可能基于事件负载中的方向信息）将事件导向五个输出通道之一。这是流中唯一的扇出点。",
+        "value": "条件分叉器，根据方向选择信号将单一输入驱动事件分发到五个方向之一或全部。",
+        "explanation": "cCondFork5 为 SelSplit 家族，暗示存在方向选择条件，决定事件路由到哪个方向路径；如果没有条件则可能为广播，但具体行为需 RTL 确认。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:component_role:002",
+        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:component_role:003",
         "doc_priority": "primary",
         "signals": [
           "w_driveFork_delay",
@@ -439,9 +464,7 @@
           "dirFork"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -449,10 +472,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "knowledge_ir/modules/routeMsg.json",
+            "path": "internal_event_flow"
           },
           {
-            "source": "transparent_flows"
+            "source": "pipeline_rtl/modules/routeMsg.json",
+            "path": "instances"
           }
         ]
       },
@@ -837,18 +862,29 @@
     }
   ],
   "semantic_meaning": {
-    "value": "手册应重点描述事件从输入到五个方向输出的完整路径，以及 dirFork 的方向选择机制。",
-    "explanation": "该流的核心功能是事件分发。手册需要清晰地说明事件如何通过 receiveFifo、delayUart0、dirFork 以及五个并行的延迟和FIFO路径，最终到达不同的输出端口。特别需要解释 dirFork 如何决定事件的目标方向，这很可能依赖于输入负载 i_msg_51 中的字段。",
+    "value": "将输入驱动事件 i_drive 经过缓冲、延迟和方向分叉后分发至五个方向（东/本地/北/南/西）的输出仲裁器。",
+    "explanation": "输入事件先通过 receiveFifo 缓冲，再由 delayUart0 引入统一延迟，然后进入 dirFork 基于方向条件分叉到五条独立路径；每条路径在进入对应的发送 FIFO 前再经过一个方向延迟，最终生成各方向的输出驱动事件。整个流程实现了一对多的驱动事件路由。",
     "certainty": "ai_inferred",
-    "confidence": "medium",
+    "confidence": "high",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:documentation_focus:001",
+    "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:flow_intent:001",
     "doc_priority": "primary",
     "signals": [
       "i_drive",
-      "i_msg_51",
+      "w_driveFork",
+      "w_driveFork_delay",
+      "w_driveEFifo_t",
+      "w_driveLFifo_t",
+      "w_driveNFifo_t",
+      "w_driveSFifo_t",
+      "w_driveWFifo_t",
+      "w_driveEFifo",
+      "w_driveLFifo",
+      "w_driveNFifo",
+      "w_driveSFifo",
+      "w_driveWFifo",
       "o_driveEArb",
       "o_driveLArb",
       "o_driveNArb",
@@ -857,7 +893,13 @@
     ],
     "instances": [
       "receiveFifo",
+      "delayUart0",
       "dirFork",
+      "delayE",
+      "delayL",
+      "delayN",
+      "delayS",
+      "delayW",
       "eastSendFifo",
       "localSendFifo",
       "northSendFifo",
@@ -865,9 +907,7 @@
       "westSendFifo"
     ],
     "related_flows": [],
-    "related_assignments": [
-      "(none)"
-    ],
+    "related_assignments": [],
     "requires_rtl_source_review": true,
     "review_status": "needs_review",
     "evidence_refs": [
@@ -876,121 +916,25 @@
     ],
     "semantic_evidence": [
       {
-        "source": "instances.connections"
+        "source": "knowledge_ir/modules/routeMsg.json",
+        "path": "internal_event_flow"
       },
       {
-        "source": "transparent_flows"
+        "source": "parser_pipeline_rtl/modules/routeMsg.json",
+        "path": "connection_graph"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从输入端口 i_drive 接收事件，经过缓冲、延迟和方向分叉后，分发到五个方向输出端口的单驱动内部事件流。",
-        "explanation": "该流描述了事件从模块输入端口 i_drive 进入，经过一个接收FIFO缓冲，一个UART延迟，然后通过一个条件分叉器根据方向选择，分别经过五个独立的延迟和发送FIFO，最终输出到五个方向仲裁器的过程。这是一个典型的单输入、多输出的扇出事件分发流。",
+        "value": "流中存在两级 FIFO 及输出 free 信号，整体为背压式驱动传输；输入无显式 free，可能由接收 FIFO 满信号隐式反压上游。",
+        "explanation": "receiveFifo 满时会阻止 i_drive 被接受；各输出 SendFifo 受到对应 i_freeEArb 等信号控制，仅在仲裁器就绪时才允许输出驱动信号。因此整个流在两级 FIFO 都可能暂停，需关注反压特性。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:flow_intent:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drive",
-          "w_driveFork",
-          "w_driveFork_delay",
-          "w_driveEFifo_t",
-          "w_driveLFifo_t",
-          "w_driveNFifo_t",
-          "w_driveSFifo_t",
-          "w_driveWFifo_t",
-          "w_driveEFifo",
-          "w_driveLFifo",
-          "w_driveNFifo",
-          "w_driveSFifo",
-          "w_driveWFifo",
-          "o_driveEArb",
-          "o_driveLArb",
-          "o_driveNArb",
-          "o_driveSArb",
-          "o_driveWArb"
-        ],
-        "instances": [
-          "receiveFifo",
-          "delayUart0",
-          "dirFork",
-          "delayE",
-          "delayL",
-          "delayN",
-          "delayS",
-          "delayW",
-          "eastSendFifo",
-          "localSendFifo",
-          "northSendFifo",
-          "southSendFifo",
-          "westSendFifo"
-        ],
-        "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
-          "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections"
-          },
-          {
-            "source": "transparent_flows"
-          }
-        ]
-      },
-      {
-        "value": "输入事件携带的 51 位消息负载 i_msg_51 可能包含目标方向信息，用于控制 dirFork 的分叉选择。",
-        "explanation": "接口负载合约显示 i_drive 事件携带一个 51 位宽的负载 i_msg_51。dirFork 作为一个条件分叉器，其分叉逻辑很可能依赖于该负载中的某些位（例如，方向编码字段）。然而，当前上下文未提供具体的分配逻辑来证实这一点。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_msg_51",
-          "i_drive"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "(none)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
-          "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports"
-          },
-          {
-            "source": "interface.data_ports"
-          }
-        ]
-      },
-      {
-        "value": "每个输出端口关联一个输入 free 信号，用于实现背压或握手，但当前流未描述其内部连接。",
-        "explanation": "接口合约显示每个输出事件端口（如 o_driveEArb）都有一个对应的输入 free 信号（如 i_freeEArb）。这表明模块与下游仲裁器之间存在某种握手或背压机制。然而，当前流上下文仅描述了事件的前向传播路径，未包含这些 free 信号在模块内部的连接或使用方式。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
         "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:completion_backpressure:001",
-        "doc_priority": "secondary",
+        "doc_priority": "primary",
         "signals": [
           "i_freeEArb",
           "i_freeLArb",
@@ -999,7 +943,58 @@
           "i_freeWArb"
         ],
         "instances": [
-          "(none)"
+          "receiveFifo",
+          "eastSendFifo",
+          "localSendFifo",
+          "northSendFifo",
+          "southSendFifo",
+          "westSendFifo"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
+          "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/routeMsg.json",
+            "path": "interface_data_contract"
+          },
+          {
+            "source": "pipeline_rtl/modules/routeMsg.json",
+            "path": "connection_graph"
+          }
+        ]
+      },
+      {
+        "value": "应强调事件路由的拓扑结构、两级 FIFO 反压机制、方向分叉的抽象行为，并明确指出数据路径未包含在事件流中。",
+        "explanation": "由于缺少条件选择细节和输出数据关联，最终手册应侧重于控制事件的分发过程及反压影响，避免对数据路径做不准确的猜测。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:documentation_focus:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drive",
+          "o_driveEArb",
+          "o_driveLArb",
+          "o_driveNArb",
+          "o_driveSArb",
+          "o_driveWArb"
+        ],
+        "instances": [
+          "dirFork",
+          "receiveFifo",
+          "eastSendFifo",
+          "localSendFifo",
+          "northSendFifo",
+          "southSendFifo",
+          "westSendFifo"
         ],
         "related_flows": [],
         "related_assignments": [],
@@ -1011,10 +1006,43 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports"
-          },
+            "source": "knowledge_ir/modules/routeMsg.json",
+            "path": "internal_event_flow"
+          }
+        ]
+      },
+      {
+        "value": "输入驱动 i_drive 伴随 51 位消息数据 i_msg_51，但输出事件不直接携带数据；方向分叉可能由消息中的字段控制。",
+        "explanation": "接口合约显示输出仅有 free 信号而无 payload，表明数据可能通过其他通道传输，事件仅作为控制信号。dirFork 的条件选择逻辑很可能依赖于 i_msg_51 的某些位，但证据不足，需查看 RTL 确认。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:routeMsg:flow_000_routeMsg_i_drive:data_control_effect:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_drive",
+          "i_msg_51",
+          "o_driveEArb",
+          "o_driveLArb",
+          "o_driveNArb",
+          "o_driveSArb",
+          "o_driveWArb"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:routeMsg:flow:flow_000_routeMsg_i_drive",
+          "ev:routeMsg:semantic_flow:flow_000_routeMsg_i_drive"
+        ],
+        "semantic_evidence": [
           {
-            "source": "interface.data_ports"
+            "source": "knowledge_ir/modules/routeMsg.json",
+            "path": "interface_data_contract"
           }
         ]
       }

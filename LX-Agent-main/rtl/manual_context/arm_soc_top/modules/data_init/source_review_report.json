@@ -3,14 +3,14 @@
   "schema_version": "0.1",
   "module": "data_init",
   "status": "reviewed",
-  "source_file": "rtl/rtl/memory/data_init.v",
+  "source_file": "rtl\\rtl\\memory\\data_init.v",
   "targets": [
     {
       "kind": "module_responsibility",
       "module": "data_init",
       "subject": "semantic:module:data_init:module_role:001",
-      "summary": "数据初始化模块，通过UART接口接收配置数据并驱动指令总线(ibus)和数据总线(dbus)进行初始化写入。",
-      "explanation": "模块无事件输入，仅有数据输出到ibus和dbus，且内部实例化uart_rx和uart_tx，表明其通过UART串口接收外部初始化数据，然后转换为总线写操作。assign依赖显示ibus_we、dbus_we等写使能信号由内部寄存器驱动，且数据输出有字节交换（{r_ibus_data_o[31:0], r_ibus_data_o[63:32]}），暗示了端序或数据对齐处理。",
+      "summary": "通过UART接收外部配置命令/数据并驱动指令总线和数据总线的初始化接口模块，可能用于系统启动时将固件或参数加载到存储器。",
+      "explanation": "模块名为data_init，内含uart_rx_inst和uart_tx_inst两个子模块，且输出dbus_addr_o、dbus_data_o、ibus_addr_o、ibus_data_o等总线信号，无事件接口，表明其作为第一代流控制的责任是将串口接收的数据转换为并行总线访问，典型用于初始数据写入。assign依赖中的ibus_we、dbus_we等进一步显示其控制写使能的能力。",
       "reason": "",
       "signals": [
         "ibus_addr_o",
@@ -19,35 +19,8 @@
         "dbus_data_o",
         "ibus_we",
         "dbus_we",
-        "uart_rx",
-        "uart_tx"
-      ],
-      "instances": [
-        "uart_rx_inst",
-        "uart_tx_inst"
-      ],
-      "evidence_refs": [
-        "ev:data_init:semantic_module"
-      ],
-      "requires_rtl_source_review": true,
-      "review_status": "needs_review"
-    },
-    {
-      "kind": "responsibility_claim",
-      "module": "data_init",
-      "subject": "semantic:module:data_init:module_role:001",
-      "summary": "数据初始化模块，通过UART接口接收配置数据并驱动指令总线(ibus)和数据总线(dbus)进行初始化写入。",
-      "explanation": "模块无事件输入，仅有数据输出到ibus和dbus，且内部实例化uart_rx和uart_tx，表明其通过UART串口接收外部初始化数据，然后转换为总线写操作。assign依赖显示ibus_we、dbus_we等写使能信号由内部寄存器驱动，且数据输出有字节交换（{r_ibus_data_o[31:0], r_ibus_data_o[63:32]}），暗示了端序或数据对齐处理。",
-      "reason": "",
-      "signals": [
-        "ibus_addr_o",
-        "ibus_data_o",
-        "dbus_addr_o",
-        "dbus_data_o",
-        "ibus_we",
-        "dbus_we",
-        "uart_rx",
-        "uart_tx"
+        "init_sig",
+        "d_finish"
       ],
       "instances": [
         "uart_rx_inst",
@@ -63,19 +36,43 @@
       "kind": "responsibility_claim",
       "module": "data_init",
       "subject": "semantic:module:data_init:structural_responsibility:001",
-      "summary": "模块将UART接收的串行数据解析后，生成指令总线和数据总线的地址、数据及写使能信号，完成初始化写入序列。",
-      "explanation": "uart_rx_inst接收外部串行数据（rx_data），uart_tx_inst可能用于握手或状态反馈（tx_data_ready）。assign依赖中d_finish信号由first、size、number、c_state和tx_data_ready组合产生，表明存在有限状态机控制初始化完成条件。ibus和dbus的输出数据均来自内部寄存器r_ibus_data_o和r_dbus_data_o，且进行了32位字交换，暗示数据在内部以特定格式存储。",
+      "summary": "模块内部通过寄存器将UART接收的数据寄存并映射到指令/数据总线的地址、数据和写使能输出。",
+      "explanation": "assign 0~5显示ibus_we、ibus_addr_o、ibus_data_o、dbus_we、dbus_addr_o、dbus_data_o均直接由对应寄存器r_*驱动，其中数据输出还进行了32bit字序交换。这揭示了模块的核心结构：由UART接收解析得到的参数填充到影子寄存器，然后直接驱动总线接口，实现主控写操作。",
       "reason": "",
       "signals": [
-        "d_finish",
-        "init_sig",
-        "first",
-        "size",
-        "number",
-        "c_state",
-        "tx_data_ready",
+        "r_ibus_we",
+        "r_ibus_addr_o",
+        "r_ibus_data_o",
+        "r_dbus_we",
+        "r_dbus_addr_o",
+        "r_dbus_data_o"
+      ],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
+      ],
+      "evidence_refs": [
+        "ev:data_init:semantic_module"
+      ],
+      "requires_rtl_source_review": true,
+      "review_status": "needs_review"
+    },
+    {
+      "kind": "responsibility_claim",
+      "module": "data_init",
+      "subject": "semantic:module:data_init:module_role:001",
+      "summary": "通过UART接收外部配置命令/数据并驱动指令总线和数据总线的初始化接口模块，可能用于系统启动时将固件或参数加载到存储器。",
+      "explanation": "模块名为data_init，内含uart_rx_inst和uart_tx_inst两个子模块，且输出dbus_addr_o、dbus_data_o、ibus_addr_o、ibus_data_o等总线信号，无事件接口，表明其作为第一代流控制的责任是将串口接收的数据转换为并行总线访问，典型用于初始数据写入。assign依赖中的ibus_we、dbus_we等进一步显示其控制写使能的能力。",
+      "reason": "",
+      "signals": [
+        "ibus_addr_o",
+        "ibus_data_o",
+        "dbus_addr_o",
+        "dbus_data_o",
         "ibus_we",
-        "dbus_we"
+        "dbus_we",
+        "init_sig",
+        "d_finish"
       ],
       "instances": [
         "uart_rx_inst",
@@ -90,10 +87,10 @@
     {
       "kind": "evidence_gap",
       "module": "data_init",
-      "subject": "状态机定义与UART协议格式",
+      "subject": "ibus_we, dbus_we 接口方向",
       "summary": "",
       "explanation": "",
-      "reason": "当前上下文缺少状态机状态定义（如WAITSEND）、UART数据帧格式（如number字段含义）以及first/size计数器的具体行为，无法完整描述初始化序列。",
+      "reason": "紧凑接口摘要中仅列出4个data_outputs而未包含ibus_we、dbus_we，但在assign依赖中两者作为lhs出现，暗示它们也是输出。需要源文件确认是否缺失或有意省略。",
       "signals": [],
       "instances": [],
       "evidence_refs": [
@@ -105,10 +102,10 @@
     {
       "kind": "review_question",
       "module": "data_init",
-      "subject": "状态机定义与UART协议格式",
-      "summary": "当前上下文缺少状态机状态定义（如WAITSEND）、UART数据帧格式（如number字段含义）以及first/size计数器的具体行为，无法完整描述初始化序列。",
+      "subject": "ibus_we, dbus_we 接口方向",
+      "summary": "紧凑接口摘要中仅列出4个data_outputs而未包含ibus_we、dbus_we，但在assign依赖中两者作为lhs出现，暗示它们也是输出。需要源文件确认是否缺失或有意省略。",
       "explanation": "",
-      "reason": "当前上下文缺少状态机状态定义（如WAITSEND）、UART数据帧格式（如number字段含义）以及first/size计数器的具体行为，无法完整描述初始化序列。",
+      "reason": "紧凑接口摘要中仅列出4个data_outputs而未包含ibus_we、dbus_we，但在assign依赖中两者作为lhs出现，暗示它们也是输出。需要源文件确认是否缺失或有意省略。",
       "signals": [],
       "instances": [],
       "evidence_refs": [
@@ -120,66 +117,106 @@
   ],
   "source_refs": [
     {
-      "file": "rtl/rtl/memory/data_init.v",
+      "file": "rtl\\rtl\\memory\\data_init.v",
       "line_start": 1,
       "line_end": 4
     },
     {
-      "file": "rtl/rtl/memory/data_init.v",
+      "file": "rtl\\rtl\\memory\\data_init.v",
       "line_start": 15,
       "line_end": 32
     },
     {
-      "file": "rtl/rtl/memory/data_init.v",
+      "file": "rtl\\rtl\\memory\\data_init.v",
       "line_start": 37,
       "line_end": 41
     },
     {
-      "file": "rtl/rtl/memory/data_init.v",
+      "file": "rtl\\rtl\\memory\\data_init.v",
       "line_start": 58,
+      "line_end": 67
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 75,
       "line_end": 81
     },
     {
-      "file": "rtl/rtl/memory/data_init.v",
-      "line_start": 85,
-      "line_end": 95
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 213,
+      "line_end": 217
     },
     {
-      "file": "rtl/rtl/memory/data_init.v",
-      "line_start": 106,
-      "line_end": 180
-    },
-    {
-      "file": "rtl/rtl/memory/data_init.v",
-      "line_start": 188,
-      "line_end": 198
-    },
-    {
-      "file": "rtl/rtl/memory/data_init.v",
-      "line_start": 212,
-      "line_end": 219
-    },
-    {
-      "file": "rtl/rtl/memory/data_init.v",
-      "line_start": 223,
-      "line_end": 227
-    },
-    {
-      "file": "rtl/rtl/memory/data_init.v",
+      "file": "rtl\\rtl\\memory\\data_init.v",
       "line_start": 242,
       "line_end": 251
     },
     {
-      "file": "rtl/rtl/memory/data_init.v",
-      "line_start": 257,
-      "line_end": 366
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 267,
+      "line_end": 272
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 285,
+      "line_end": 290
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 300,
+      "line_end": 305
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 310,
+      "line_end": 315
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 318,
+      "line_end": 323
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 326,
+      "line_end": 331
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 334,
+      "line_end": 339
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 342,
+      "line_end": 347
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 350,
+      "line_end": 355
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 358,
+      "line_end": 363
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 380,
+      "line_end": 413
+    },
+    {
+      "file": "rtl\\rtl\\memory\\data_init.v",
+      "line_start": 419,
+      "line_end": 449
     }
   ],
   "claims": [
     {
       "subject": "semantic:module:data_init:module_role:001",
-      "summary": "数据初始化模块通过UART接口接收配置数据并驱动指令总线和数据总线进行初始化写入。",
-      "explanation": "模块端口包含uart_rx和uart_tx串行接口（[slice 2]），以及ibus_we、ibus_addr_o、ibus_data_o、dbus_we、dbus_addr_o、dbus_data_o等总线输出信号，内部寄存器r_ibus_we、r_ibus_addr_o等用于驱动这些总线输出（[slice 4]）。",
+      "summary": "模块通过UART接收配置命令和数据，驱动指令总线与数据总线，承担初始化接口角色。",
+      "explanation": "切片2显示uart_rx输入、uart_tx输出以及ibus_we、ibus_addr_o、ibus_data_o、dbus_we、dbus_addr_o、dbus_data_o等输出信号，另有init_sig标志。切片18表明在特定状态下根据接收的number字段将data、addr_i等赋值给ibus/dbus的地址、数据和写使能，符合“将串口接收的数据转换为并行总线访问”的初始化职责。",
       "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
@@ -193,15 +230,22 @@
         "dbus_data_o",
         "ibus_we",
         "dbus_we",
-        "uart_rx",
-        "uart_tx"
+        "init_sig"
       ],
-      "instances": [],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
+      ],
       "source_refs": [
         {
           "file": "rtl/rtl/memory/data_init.v",
-          "line_start": 17,
+          "line_start": 15,
           "line_end": 32
+        },
+        {
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 380,
+          "line_end": 413
         }
       ],
       "evidence_refs": [
@@ -211,8 +255,8 @@
     },
     {
       "subject": "semantic:module:data_init:structural_responsibility:001",
-      "summary": "模块将UART接收的串行数据解析后，生成指令总线和数据总线的地址、数据及写使能信号，完成初始化写入序列。",
-      "explanation": "状态机从IDLE开始，通过NUM0、NUM1接收数据包序号（number和first），然后接收8字节数据（DATA0~DATA7），再经SEND、CRC等状态，最后进入WAITSEND和STACK控制写入序列（[slice 6]~[slice 9]）。数据字节依次存入data[63:56]到data[7:0]（[slice 11]）。d_finish和tx_data_ready在WAITSEND中控制状态转移（[slice 8]）。",
+      "summary": "模块内部使用寄存器r_ibus_we、r_ibus_addr_o、r_ibus_data_o、r_dbus_we、r_dbus_addr_o、r_dbus_data_o将UART接收的数据寄存并映射到总线输出。",
+      "explanation": "切片4声明了上述六个寄存器。切片18展示在解析数据有效时根据number字段将data（UART接收数据）和地址值写入这些寄存器，从而驱动总线输出。切片7的复位初始化进一步体现了寄存器到输出的直接映射关系。",
       "certainty": "ai_inferred",
       "source_layers": [
         "source_review",
@@ -220,28 +264,121 @@
         "manual_context"
       ],
       "signals": [
-        "d_finish",
-        "init_sig",
-        "first",
-        "size",
-        "number",
-        "c_state",
-        "tx_data_ready",
+        "r_ibus_we",
+        "r_ibus_addr_o",
+        "r_ibus_data_o",
+        "r_dbus_we",
+        "r_dbus_addr_o",
+        "r_dbus_data_o"
+      ],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 60,
+          "line_end": 65
+        },
+        {
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 380,
+          "line_end": 413
+        },
+        {
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 244,
+          "line_end": 249
+        }
+      ],
+      "evidence_refs": [
+        "ev:data_init:semantic_module"
+      ],
+      "review_status": "ready"
+    },
+    {
+      "subject": "semantic:module:data_init:module_role:001",
+      "summary": "模块通过UART接收配置命令和数据，驱动指令总线与数据总线，承担初始化接口角色（重复声明确认）。",
+      "explanation": "与第一条相同，切片2和切片18足以确认模块的角色。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "ibus_addr_o",
+        "ibus_data_o",
+        "dbus_addr_o",
+        "dbus_data_o",
         "ibus_we",
         "dbus_we",
-        "data"
+        "init_sig"
+      ],
+      "instances": [
+        "uart_rx_inst",
+        "uart_tx_inst"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl/rtl/memory/data_init.v",
+          "line_start": 15,
+          "line_end": 32
+        }
+      ],
+      "evidence_refs": [
+        "ev:data_init:semantic_module"
+      ],
+      "review_status": "ready"
+    },
+    {
+      "subject": "ibus_we, dbus_we 接口方向",
+      "summary": "ibus_we和dbus_we在RTL源码中明确声明为输出端口，紧凑接口摘要中未列出属于有意省略，但源码无缺失。",
+      "explanation": "切片2第25行和28行显示output wire ibus_we与output wire dbus_we，两个信号确实是输出。因此不存在方向缺失的问题。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "ibus_we",
+        "dbus_we"
       ],
       "instances": [],
       "source_refs": [
         {
           "file": "rtl/rtl/memory/data_init.v",
-          "line_start": 106,
-          "line_end": 227
-        },
+          "line_start": 25,
+          "line_end": 30
+        }
+      ],
+      "evidence_refs": [
+        "ev:data_init:semantic_module"
+      ],
+      "review_status": "ready"
+    },
+    {
+      "subject": "ibus_we, dbus_we 接口方向",
+      "summary": "同上，ibus_we和dbus_we为输出端口，源码确认。",
+      "explanation": "重复确认，切片2明确声明了这两个输出。",
+      "certainty": "ai_inferred",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "ibus_we",
+        "dbus_we"
+      ],
+      "instances": [],
+      "source_refs": [
         {
           "file": "rtl/rtl/memory/data_init.v",
-          "line_start": 301,
-          "line_end": 366
+          "line_start": 25,
+          "line_end": 30
         }
       ],
       "evidence_refs": [
@@ -250,26 +387,6 @@
       "review_status": "ready"
     }
   ],
-  "open_questions": [
-    {
-      "subject": "状态机定义与UART协议格式",
-      "question": "需要确认状态机剩余状态（如SEND、CRC相关状态）的具体行为，以及UART数据帧格式中number字段如何区分输出给Icache还是Dcache？first和size计数器的具体清零和递增逻辑需要验证。",
-      "source_refs": [
-        {
-          "file": "rtl/rtl/memory/data_init.v",
-          "line_start": 39,
-          "line_end": 41
-        },
-        {
-          "file": "rtl/rtl/memory/data_init.v",
-          "line_start": 85,
-          "line_end": 93
-        }
-      ],
-      "evidence_refs": [
-        "ev:data_init:semantic_module"
-      ]
-    }
-  ],
-  "raw_model_chars": 1812
+  "open_questions": [],
+  "raw_model_chars": 3553
 }

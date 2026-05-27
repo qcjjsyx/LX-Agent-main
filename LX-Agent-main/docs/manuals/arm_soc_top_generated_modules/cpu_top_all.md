@@ -1,16 +1,16 @@
 # 模块 `cpu_top_all`
 
-- 源文件：`rtl/rtl/cpu_top_1and2/cpu_top_all.v`。
-- 职责：AI 推断：顶层CPU流水线集成模块，负责指令获取、译码、执行、访存、写回及异常/中断处理的完整流水线控制与数据通路汇聚。。
-- 说明：该模块集成了fetch、decoder、execute、lsu、wb、grf、prf、intAndExc等核心流水线阶段模块，并通过大量SelSplit、MutexMerge、Fifo1、PmtFifo1等控制组件进行事件驱动的流水线阶段间同步与数据路由。外部事件输入（i_dataRoutDriveToLsu_1、i_driveFromStart_1、i_drvFICache）驱动内部流水线启动，输出事件（o_drv2ICache、o_lsuDriveToDataRout_1）驱动外部缓存和路由模块。
+- 源文件：`rtl\rtl\cpu_top_1and2\cpu_top_all.v`
+- 职责：AI 推断：`i_dataRoutDriveToLsu_1` 通过 `DRSelector` 将数据路由回复分发为 LSU 驱动与内部驱动两条路径。
+- 说明：端口 `i_dataRoutDriveToLsu_1`（源文件中 slice1，line21）连接至 `DRSelector`（slice13，line1388）的 `.i_drive`，接收外部数据路由回复事件。`DRSelector` 的两个输出：`o_driveNext1` 驱动信号 `w_dataRoutDriveToLsu_1` 并送至 LSU，实现 LSU 对数据路由回复的接收；`o_driveNext0` 驱动 `w_intDriveFromDR`，供内部其他逻辑使用。后续经过延迟单元驱动顶层输出 `o_lsuDriveToDataRout_1`。
 
 ## 1. 层级位置
 
-- Parents：`cpu_slot`。
-- Children：`contTap`, `decoder`, `execute`, `fetch`, `grf`, `intAndExc`, `launch`, `lsu`, `prf`, `wb`。
-- Component children：`cArbMerge2_105b_cpu`, `cFifo1`, `cMutexMerge2_105b_cpu`, `cMutexMerge2_1b`, `cMutexMerge2_36b_xyp`, `cMutexMerge4_32b`, `cPmtFifo1`, `cSelector2_1b`, `cSelector2_1b_xyp`, `cSelector2_65b_cpu`, `cSelector3_2b`, `cSplitter2_1b`, `cSplitter3_NoData_xyp`, `cWaitMerge2_1b`。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`cpu_slot`
+- Children：`contTap`, `decoder`, `execute`, `fetch`, `grf`, `intAndExc`, `launch`, `lsu`, `prf`, `wb`
+- Component children：`cArbMerge2_105b_cpu`, `cFifo1`, `cMutexMerge2_105b_cpu`, `cMutexMerge2_1b`, `cMutexMerge2_36b_xyp`, `cMutexMerge4_32b`, `cPmtFifo1`, `cSelector2_1b`, `cSelector2_1b_xyp`, `cSelector2_65b_cpu`, `cSelector3_2b`, `cSplitter2_1b`, `cSplitter3_NoData_xyp`, `cWaitMerge2_1b`
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -73,8 +73,17 @@ cpu_top_all
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_dataRoutDriveToLsu_1`, `i_driveFromStart_1`, `i_drvFICache`；数据输入：`i_IntSig`, `i_inst_65`, `i_memData_65`, `i_startPc_32`；free 输入：`i_freeFICache`, `i_lsuFreeFromDataRout_1`。
-- 输出：drive 输出：`o_drv2ICache`, `o_lsuDriveToDataRout_1`；数据输出：`o_cpuToIcache_105`, `o_lsuToDataRoutData_105`；free 输出：`o_free2ICache`, `o_freeToStart_1`, `o_lsuFreeToDataRout_1`。
+**输入端口**
+
+- Drive 输入：`i_dataRoutDriveToLsu_1`, `i_driveFromStart_1`, `i_drvFICache`
+- 数据输入：`i_IntSig`, `i_inst_65`, `i_memData_65`, `i_startPc_32`
+- Free 输入：`i_freeFICache`, `i_lsuFreeFromDataRout_1`
+
+**输出端口**
+
+- Drive 输出：`o_drv2ICache`, `o_lsuDriveToDataRout_1`
+- 数据输出：`o_cpuToIcache_105`, `o_lsuToDataRoutData_105`
+- Free 输出：`o_free2ICache`, `o_freeToStart_1`, `o_lsuFreeToDataRout_1`
 
 ### 2.1 端口分组
 
@@ -98,28 +107,27 @@ cpu_top_all
 
 ### `i_dataRoutDriveToLsu_1`
 
-- 确定性事实：`i_dataRoutDriveToLsu_1 to o_drv2ICache, o_lsuDriveToDataRout_1`；flow_id=`flow_000_cpu_top_all_i_dataRoutDriveToLsu_1`。
-- Payload：`o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`。
-- 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`。
-- 结构复杂度：branch=25，join=25，blocking=21。
-- AI 推断：LSU到DataRout的105位数据载荷，与驱动信号o_lsuDriveToDataRout_1并行输出。
+- 确定性事实：`i_dataRoutDriveToLsu_1` 到 `o_drv2ICache`, `o_lsuDriveToDataRout_1`；flow_id=`flow_000_cpu_top_all_i_dataRoutDriveToLsu_1`
+- Payload：`o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`
+- 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`
+- 结构复杂度：branch=25，join=25，blocking=21
+- AI 推断：该 flow 应重点体现数据路由回复和指令 Cache 驱动两条输出路径，中间延迟链细节可简化，强调 `DRSelector` 的分发作用及后续仲裁合并。
 
 ### `i_driveFromStart_1`
 
-- 确定性事实：`i_driveFromStart_1 to o_drv2ICache, o_lsuDriveToDataRout_1`；flow_id=`flow_002_cpu_top_all_i_driveFromStart_1`。
-- Payload：`i_driveFromStart_1` -> `i_startPc_32 [31:0]`, `o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`。
-- 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`。
-- 结构复杂度：branch=24，join=25，blocking=21。
-- AI 推断：文档应重点描述该流从启动到两个外部端点的完整路径，特别是fetch_inst和intAndExc_inst等关键分叉点以及BranchMerge和icachecArbMerge等汇聚点的作用。
+- 确定性事实：`i_driveFromStart_1` 到 `o_drv2ICache`, `o_lsuDriveToDataRout_1`；flow_id=`flow_002_cpu_top_all_i_driveFromStart_1`
+- Payload：`i_driveFromStart_1` -> `i_startPc_32 [31:0]`, `o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`
+- 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`
+- 结构复杂度：branch=24，join=25，blocking=21
+- AI 推断：起始驱动携带 32 位起始 PC 载荷，驱动流主要传播控制令牌，载荷沿流水线经各模块可能被更新，并在数据路由输出端附带 105 位数据；内部分支驱动（如 `w_branchDri3` 等）构成控制反馈环，影响前端的取指合并。
 
 ### `i_drvFICache`
 
-- 确定性事实：`i_drvFICache to o_drv2ICache, o_lsuDriveToDataRout_1`；flow_id=`flow_001_cpu_top_all_i_drvFICache`。
-- Payload：`o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`。
-- 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`。
-- 结构复杂度：branch=25，join=25，blocking=21。
-- AI 推断：文档应重点描述 i_drvFICache 事件如何通过 icacheSelector 分叉，以及如何通过 icachecArbMerge 和 DRMutexMerge 等合并点汇聚到最终输出。
-
+- 确定性事实：`i_drvFICache` 到 `o_drv2ICache`, `o_lsuDriveToDataRout_1`；flow_id=`flow_001_cpu_top_all_i_drvFICache`
+- Payload：`o_lsuDriveToDataRout_1` -> `o_lsuToDataRoutData_105 [104:0]`
+- 输出/影响：`o_drv2ICache`, `o_lsuDriveToDataRout_1`
+- 结构复杂度：branch=25，join=25，blocking=21
+- AI 推断：应强调 `icacheSelector` 的扇出和 `icachecArbMerge` 的仲裁合并，众多内部延迟可简化描述。
 
 ## 5. 内部组件与 assign 影响
 

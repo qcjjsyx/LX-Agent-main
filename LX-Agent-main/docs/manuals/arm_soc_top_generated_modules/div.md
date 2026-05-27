@@ -1,16 +1,16 @@
 # 模块 `div`
 
-- 源文件：`rtl/rtl/Execute/div.v`。
-- 职责：AI 推断：该模块执行32位有符号或无符号整数除法运算，根据symbolFlag信号选择运算模式。。
-- 说明：模块具有两个32位数据输入oprand1和oprand2，一个32位数据输出result，以及一个1位控制输入symbolFlag用于指示有符号除法。没有事件接口，表明其为组合逻辑或有限状态机驱动的纯数据通路模块。
+- 源文件：`rtl\rtl\Execute\div.v`
+- 职责：AI 推断：模块 `div` 是一个组合逻辑或时序除法器，根据有符号/无符号标志计算 32 位整数除法结果。
+- 说明：模块名称 `div` 明确指向除法操作；接口包含两个 32 位数据输入 `oprand1` 和 `oprand2`，一个 32 位结果输出 `result`，以及 1 位控制输入 `symbolFlag`，该标志极有可能控制有符号除法模式。未提供内部实现，但上述端口契约足以推断其基本功能。
 
 ## 1. 层级位置
 
-- Parents：`execute`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- 父模块：`execute`
+- 子模块：无
+- 组件子项：无
+- 上游模块：无
+- 下游模块：无
 
 ### 1.1 本模块结构图
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`oprand1`, `oprand2`；控制输入：`symbolFlag`。
-- 输出：数据输出：`result`。
+- 接收：数据输入 `oprand1`, `oprand2`；控制输入 `symbolFlag`
+- 输出：数据输出 `result`
 
 ### 2.1 端口分组
 

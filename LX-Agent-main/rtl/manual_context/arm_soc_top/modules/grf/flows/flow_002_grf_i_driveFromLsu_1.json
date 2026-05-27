@@ -125,10 +125,10 @@
         "w_fire_6[2]"
       ],
       "role_in_flow": {
-        "value": "作为 FIFO 级，缓冲来自 LSU 的驱动事件，并可能因 FIFO 满而阻塞事件传播",
-        "explanation": "cFifo1_3 是一个 cFifo1_grf 类型的 FIFO 实例，其输入由 i_driveFromLsu_1 驱动，输出驱动 w_fire_6[2]。它在流程中扮演缓冲和同步的角色，是流程中唯一的潜在阻塞点，当 FIFO 满时，它会阻止事件继续向后传播。",
+        "value": "作为单深度FIFO，暂存输入事件并在下游可接受时将其释放，引入可控的阻塞点。",
+        "explanation": "cFifo1_3例化为cFifo1_grf，其i_drive接收i_driveFromLsu_1，o_driveNext输出w_fire_6[2]。满/空逻辑可能关联o_grfFreeToLsu_1等信号，使该级成为流中的阻塞点。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -150,8 +150,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json"
+          },
+          {
+            "source": "knowledge_ir/modules/grf.json"
           }
         ]
       },
@@ -174,15 +176,15 @@
         "o_grfDriveToLsu_1"
       ],
       "role_in_flow": {
-        "value": "作为透明延迟单元，为驱动事件提供固定周期的延迟，不改变事件语义",
-        "explanation": "cFifo1_3Delay0 是一个 delay8U 类型的实例，其输入来自 cFifo1_3 的输出 w_fire_6[2]，输出直接驱动 o_grfDriveToLsu_1。它在流程中提供透明的、固定周期的延迟，不引入任何数据或控制逻辑的修改。",
+        "value": "固定延迟线，将FIFO输出事件延迟8个周期后驱动至模块输出，可能用于匹配向量寄存器文件的读取延迟。",
+        "explanation": "cFifo1_3Delay0为delay8U实例，输入w_fire_6[2]，输出o_grfDriveToLsu_1。透明延迟确保输出事件与GRF内部读出的数据在时序上对齐。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_002_grf_i_driveFromLsu_1:component_role:002",
-        "doc_priority": "secondary",
+        "doc_priority": "primary",
         "signals": [
           "w_fire_6[2]",
           "o_grfDriveToLsu_1"
@@ -199,8 +201,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json"
+          },
+          {
+            "source": "knowledge_ir/modules/grf.json"
           }
         ]
       },
@@ -271,10 +275,10 @@
     }
   ],
   "semantic_meaning": {
-    "value": "最终手册应强调驱动事件流路径与数据载荷路径在结构上是分离的，但通过接口契约相关联",
-    "explanation": "从提供的上下文看，驱动事件流 (i_driveFromLsu_1 -> cFifo1_3 -> cFifo1_3Delay0 -> o_grfDriveToLsu_1) 与数据载荷 (i_lsuDataToGrf_64, o_grfDataToLsu_64) 的路径是独立的。手册应清晰说明这种分离，并指出数据载荷通过其他组件 (如 cMutexMerge3_end_74b) 或赋值 (如 assign 8) 与事件流间接耦合。",
+    "value": "最终手册应着重解释控制事件经由FIFO和延迟级传播的时序，明确该流不直接处理载荷数据，并提示数据通路存在于并行流中。",
+    "explanation": "由于流专注于驱动传播，文档重点应放在i_driveFromLsu_1 → cFifo1_3 (FIFO阻塞点) → 8周期延迟 → o_grfDriveToLsu_1这一链条上，并标注可能的背压行为和延迟目的。输出数据o_grfDataToLsu_64的来源应作为相关流描述，避免混淆。",
     "certainty": "ai_inferred",
-    "confidence": "medium",
+    "confidence": "high",
     "source_layers": [
       "semantic_layer"
     ],
@@ -283,18 +287,14 @@
     "signals": [
       "i_driveFromLsu_1",
       "o_grfDriveToLsu_1",
-      "i_lsuDataToGrf_64",
       "o_grfDataToLsu_64"
     ],
     "instances": [
       "cFifo1_3",
-      "cFifo1_3Delay0",
-      "cMutexMerge3_end_74b"
+      "cFifo1_3Delay0"
     ],
     "related_flows": [],
-    "related_assignments": [
-      "8"
-    ],
+    "related_assignments": [],
     "requires_rtl_source_review": false,
     "review_status": "ready",
     "evidence_refs": [
@@ -303,20 +303,18 @@
     ],
     "semantic_evidence": [
       {
-        "source": "internal_event_flow",
-        "path": "modules/grf.json"
+        "source": "knowledge_ir/modules/grf.json"
       },
       {
-        "source": "interface_data_contract",
-        "path": "modules/grf.json"
+        "source": "parser_pipeline_rtl/modules/grf.json"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从 LSU 输入的驱动事件经过 FIFO 和延迟单元后，作为输出驱动事件返回 LSU",
-        "explanation": "该流程描述了从 LSU 发起的驱动事件 i_driveFromLsu_1 如何通过一个 FIFO 级 (cFifo1_3) 和一个透明延迟单元 (cFifo1_3Delay0) 进行缓冲和延迟，最终生成输出驱动事件 o_grfDriveToLsu_1 返回给 LSU。FIFO 级是流程中的潜在阻塞点，而延迟单元则提供固定的时序延迟。",
+        "value": "该流将来自LS的单次驱动事件经FIFO暂存和固定延迟转发至o_grfDriveToLsu_1，用于控制GRF至LS的读响应时序。",
+        "explanation": "事件从模块输入i_driveFromLsu_1开始，先进入cFifo1_3进行可能受背压影响的缓冲，随后经cFifo1_3Delay0的8周期透明延迟输出为o_grfDriveToLsu_1。流中仅承载控制事件的传播，不直接包含地址或数据有效载荷。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -341,30 +339,64 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "knowledge_ir/modules/grf.json"
           },
           {
-            "source": "transparent_flows",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json"
           }
         ]
       },
       {
-        "value": "流程中存在与输入和输出事件关联的 free/backpressure 信号，但其在此流程中的具体作用不明确",
-        "explanation": "接口载荷契约列出了输入事件 i_driveFromLsu_1 的 free 信号 o_grfFreeToLsu_1 和输出事件 o_grfDriveToLsu_1 的 free 信号 i_grfFreeFromLsu_1。这些信号通常用于流控或握手，但在此流程的步骤和连接中并未体现它们与 cFifo1_3 或 cFifo1_3Delay0 的直接交互。它们可能由模块顶层或其他逻辑处理。",
+        "value": "输入事件的载荷i_lsuAddr_8和i_lsuDataToGrf_64未直接出现在控制流中，而是路由至合并器cMutexMerge3_end_74b，数据路径与控制流可能通过独立通路对齐。",
+        "explanation": "接口契约表明i_driveFromLsu_1伴随地址和数据，但在流步骤中仅传递控制事件。相关连接显示这些载荷去了cMutexMerge3_end_74b，而该实例未包含在当前流中。输出数据由assign 8从GRF内部寄存器读取，这意味着数据路径可能是另一个流，或通过隐含的触发机制使合并器输出最终在事件到达时有效。缺乏直接依赖证据，需源码确认。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:grf:flow_002_grf_i_driveFromLsu_1:data_control_effect:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_driveFromLsu_1",
+          "i_lsuAddr_8",
+          "i_lsuDataToGrf_64",
+          "o_grfDataToLsu_64"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:grf:flow:flow_002_grf_i_driveFromLsu_1",
+          "ev:grf:semantic_flow:flow_002_grf_i_driveFromLsu_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "knowledge_ir/modules/grf.json"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/grf.json"
+          }
+        ]
+      },
+      {
+        "value": "输入事件的反压信号o_grfFreeToLsu_1可能连接至cFifo1_3的满指示，输出侧的i_grfFreeFromLsu_1可能控制FIFO的弹出使能，但具体连线未在上下文中呈现。",
+        "explanation": "负载契约指出存在o_grfFreeToLsu_1和i_grfFreeFromLsu_1这两个同步握手信号。流中的FIFO实例cFifo1_3很可能利用这些信号实现反压，但证据仅限接口级，无法断言完整握手关系。文档应说明背压由FIFO状态控制，详见RTL连接。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_002_grf_i_driveFromLsu_1:completion_backpressure:001",
-        "doc_priority": "reference",
+        "doc_priority": "secondary",
         "signals": [
           "o_grfFreeToLsu_1",
           "i_grfFreeFromLsu_1"
         ],
-        "instances": [],
+        "instances": [
+          "cFifo1_3"
+        ],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -375,42 +407,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface_data_contract",
-            "path": "modules/grf.json"
-          }
-        ]
-      },
-      {
-        "value": "输入数据载荷 i_lsuDataToGrf_64 与输入驱动事件 i_driveFromLsu_1 相关联，但在此流程中未直接使用",
-        "explanation": "接口载荷契约表明 i_lsuDataToGrf_64 是输入事件 i_driveFromLsu_1 的伴随数据。然而，在此流程的步骤中，该数据信号被连接到 cMutexMerge3_end_74b 实例，并未直接参与从 i_driveFromLsu_1 到 o_grfDriveToLsu_1 的驱动事件传播路径。这表明数据载荷可能在流程的后续阶段或另一个并行路径中被处理。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:grf:flow_002_grf_i_driveFromLsu_1:data_control_effect:001",
-        "doc_priority": "reference",
-        "signals": [
-          "i_lsuDataToGrf_64",
-          "i_driveFromLsu_1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:grf:flow:flow_002_grf_i_driveFromLsu_1",
-          "ev:grf:semantic_flow:flow_002_grf_i_driveFromLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface_data_contract",
-            "path": "modules/grf.json"
+            "source": "knowledge_ir/modules/grf.json"
           },
           {
-            "source": "component_connection",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json"
           }
         ]
       }

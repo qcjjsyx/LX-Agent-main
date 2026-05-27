@@ -374,6 +374,56 @@ python -m backend.manual_cli `
 
 如果同时使用 `--manual-generation-mode llm_polish --no-llm`，CLI 不会报错；manual 阶段会回退到 deterministic draft，并输出 LLM polish skipped / fallback 状态。如果使用 `--manual-generation-mode llm_polish --require-llm` 且模型客户端不可用，会沿用现有 fail-fast 行为。
 
+如果需要让 LLM 生成主手册章节，并额外润色模块页，可以使用 `llm_section_generate_with_page_polish`：
+
+```powershell
+python -m backend.manual_cli `
+  --project-root . `
+  --rtl-inputs rtl `
+  --top-module arm_soc_top `
+  --manual-generation-mode llm_section_generate_with_page_polish `
+  --llm-module-page-scope top_and_direct `
+  --llm-module-page-limit 20 `
+  --force `
+  --knowledge-timeout 10800 `
+  --log-events
+```
+
+模块页润色由下面三个参数控制：
+
+```text
+--llm-module-page-scope <scope>
+                            仅在 manual_generation_mode=llm_section_generate_with_page_polish 时生效。
+                            none：不润色模块页。
+                            top_only：只润色顶层模块页。
+                            top_and_direct：润色顶层模块页和顶层直接子模块页，默认值。
+                            all：按模块列表顺序润色所有模块页，仍受 limit 限制。
+                            allowlist：只润色 allowlist 指定的模块页。
+--llm-module-page-limit <n>
+                            最多润色多少个模块页，默认 20；设为 0 等同于不润色模块页。
+--llm-module-page-allowlist <list>
+                            当 scope=allowlist 时使用，逗号分隔模块名，例如 arm_soc_top,IONet_slot,cpu_slot。
+```
+
+注意：`llm_section_generate_with_page_polish` 不表示默认润色所有模块页。默认 `top_and_direct` 只会润色顶层模块和顶层直接子模块；其他模块页仍会由确定性 renderer 正常生成。日志里的 `manual_module_pages` 计数表示写出了多少个模块页，`page_llm_success_count` 才表示其中多少页实际经过 LLM 润色。
+
+如果确实要全量润色所有模块页，需要显式使用 `all`，并把 limit 调到不小于模块数：
+
+```powershell
+python -m backend.manual_cli `
+  --project-root . `
+  --rtl-inputs rtl `
+  --top-module arm_soc_top `
+  --manual-generation-mode llm_section_generate_with_page_polish `
+  --llm-module-page-scope all `
+  --llm-module-page-limit 200 `
+  --force `
+  --knowledge-timeout 10800 `
+  --log-events
+```
+
+全量模块页润色会对每个选中模块页调用一次 LLM，耗时和费用会随模块数增加。
+
 常用参数：
 
 ```text
@@ -384,8 +434,14 @@ python -m backend.manual_cli `
 --evidence-mode project     主证据模式。
 --enrich-modules <list>     Semantic Layer 模块白名单，逗号分隔；空值表示全部模块。
 --manual-generation-mode <mode>
-                            deterministic | llm_polish | llm_section_generate。
+                            deterministic | llm_polish | llm_section_generate | llm_section_generate_with_page_polish。
                             默认 deterministic；llm_polish 会先确定性生成 draft，再让 LLM 润色主手册。
+--llm-module-page-scope <scope>
+                            none | top_only | top_and_direct | all | allowlist，默认 top_and_direct。
+--llm-module-page-limit <n>
+                            模块页 LLM 润色数量上限，默认 20。
+--llm-module-page-allowlist <list>
+                            scope=allowlist 时的模块白名单，逗号分隔。
 --output <path>             自定义 Markdown 输出路径。
 --force                     强制重新生成，不复用已有产物。
 --no-llm                    跳过 source_review 模型调用。

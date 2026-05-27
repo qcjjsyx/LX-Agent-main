@@ -327,8 +327,8 @@
         "w_drv2NoCChanel1"
       ],
       "role_in_flow": {
-        "value": "该组件是流的核心路由节点，负责将 CPU 发起的事件分发至 NoC 通道，并汇聚外设返回的事件回传给 CPU。",
-        "explanation": "cpu2noc_instance 接收来自 i_drvFCPU 的驱动事件，将其路由至两条 NoC 通道 (w_drv2NoCChanel0 和 w_drv2NoCChanel1)。同时，它接收来自 uut 网格返回的通道事件 (w_drvFNoCChannel0 和 w_drvFNoCChannel1)，并合并输出至 o_drv2CPU。该组件扮演了 CPU 与 NoC 之间的桥接和仲裁角色。",
+        "value": "充当CPU与NoC之间的协议转换、通道分发与返回汇聚枢纽",
+        "explanation": "cpu2noc_instance接收i_drvFCPU驱动，内部逻辑将其分解为两个NoC通道输出w_drv2NoCChanel0/1，并同时监听从NoC返回的w_drvFNoCChannel0/1，最终合并生成o_drv2CPU。它可能实现了仲裁、优先级、超时或事件编码/解码，是流的中枢调度点。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -348,9 +348,7 @@
           "cpu2noc_instance"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -358,8 +356,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/IONet_slot.json"
+            "source": "instances.connections"
+          },
+          {
+            "source": "event_flow"
+          },
+          {
+            "source": "flow steps order 1"
           }
         ]
       },
@@ -382,14 +385,14 @@
         "w_drv2NoCChanel0_delay"
       ],
       "role_in_flow": {
-        "value": "该组件在 w_drv2NoCChanel0 路径上引入一个透明延迟，可能用于时序对齐或同步。",
-        "explanation": "delayUart0 实例化 delay8U 模块，其输入为 w_drv2NoCChanel0，输出为 w_drv2NoCChanel0_delay。该延迟仅作用于通道0，通道1 (w_drv2NoCChanel1) 则直接进入 uut。这表明两条通道可能存在时序差异，需要延迟来对齐。",
+        "value": "对通道0驱动插入固定延迟，可能用于满足UART外设时序对齐需求",
+        "explanation": "delayUart0是一个透明的延迟模块，仅将w_drv2NoCChanel0延迟后输出为w_drv2NoCChanel0_delay送入uut，它不改变驱动事件的语义，但影响事件到达uut的时间，从而影响后续UART0等外设的响应时机。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:component_role:003",
+        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:component_role:002",
         "doc_priority": "secondary",
         "signals": [
           "w_drv2NoCChanel0",
@@ -399,18 +402,18 @@
           "delayUart0"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/IONet_slot.json"
+            "source": "component_connection"
+          },
+          {
+            "source": "step order 2"
           }
         ]
       },
@@ -455,13 +458,49 @@
         "w_drvWDFNoc"
       ],
       "role_in_flow": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer component role is available for this flow.",
-        "review_status": "needs_review"
+        "value": "片上网络网格实例，负责驱动事件的定向分发与外设响应的聚合",
+        "explanation": "uut实例化IONetwork，包含多个方向端口(Local, North, South等)，它接收来自cpu2noc_instance的两条通道驱动以及所有外设的返回驱动，根据内部路由表将驱动发送至目标外设端口（如w_drvUART0FNoc到UART0），并将外设驱动收集后转发回cpu2noc_instance的通道输入。它是流的物理路径核心，决定了事件的并发与顺序。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:component_role:003",
+        "doc_priority": "primary",
+        "signals": [
+          "w_drv2NoCChanel0_delay",
+          "w_drv2NoCChanel1",
+          "w_drvFNoCChannel0",
+          "w_drvFNoCChannel1",
+          "w_drvGPIO2NoC",
+          "w_drvNocFIIC0",
+          "w_drvNocFPWM0",
+          "w_drvNocFPWM1",
+          "w_drvNocFSPI0",
+          "w_drvNocFSPI1",
+          "w_drvNocFUART0",
+          "w_drvNocFUART1",
+          "w_drvNocFWD",
+          "w_drvTimer2NoC"
+        ],
+        "instances": [
+          "uut"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "instances.connections"
+          },
+          {
+            "source": "step order 3"
+          }
+        ]
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -788,89 +827,46 @@
     }
   ],
   "semantic_meaning": {
-    "value": "i_drvFCPU 事件携带一个 51 位的数据载荷 i_dataFCPU_51，该载荷可能包含目标外设地址、命令或数据。",
-    "explanation": "接口载荷契约显示 i_drvFCPU 事件关联一个 51 位宽的输入数据信号 i_dataFCPU_51。这表明该驱动流不仅仅是事件通知，还携带了用于控制外设或传输数据的有效载荷。该载荷在流经 cpu2noc_instance 和 uut 时，可能被用于路由决策或外设操作。",
+    "value": "应突出CPU驱动是如何通过CPU2NoC分解为两个NoC通道并在IONetwork网格中完成外设访问与响应回收的闭环路径，强调延迟路径(delayUart0)以及可能的多外设并发响应。",
+    "explanation": "由于流涉及多条并行分支并在cpu2noc_instance处汇聚，手册需解释i_drvFCPU如何触发一系列外设交互，以及o_drv2CPU何时产生。应弱化未确认的内部仲裁细节，转而强调连接结构与整体时序特征。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:data_control_effect:001",
+    "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:documentation_focus:001",
     "doc_priority": "primary",
     "signals": [
       "i_drvFCPU",
-      "i_dataFCPU_51"
+      "o_drv2CPU",
+      "w_drv2NoCChanel0",
+      "w_drv2NoCChanel1"
     ],
-    "instances": [],
+    "instances": [
+      "cpu2noc_instance",
+      "uut",
+      "delayUart0"
+    ],
     "related_flows": [],
-    "related_assignments": [
-      "(无)"
-    ],
-    "requires_rtl_source_review": true,
-    "review_status": "needs_review",
+    "related_assignments": [],
+    "requires_rtl_source_review": false,
+    "review_status": "ready",
     "evidence_refs": [
       "ev:IONet_slot:flow:flow_000_IONet_slot_i_drvFCPU",
       "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_ports",
-        "path": "knowledge_ir/modules/IONet_slot.json"
+        "source": "flow steps"
       },
       {
-        "source": "interface.data_ports",
-        "path": "knowledge_ir/modules/IONet_slot.json"
+        "source": "component_connections"
       }
     ],
     "supporting_claims": [
       {
-        "value": "手册应重点描述 CPU 发起事件到外设的请求-响应路径，以及 NoC 网格的路由和汇聚机制。",
-        "explanation": "该流的核心是 CPU 通过 NoC 网格访问多个外设。手册应清晰说明 i_drvFCPU 事件如何通过 cpu2noc_instance 分发至两条 NoC 通道，以及 uut 网格如何将事件路由至特定外设并汇聚响应。同时，应强调 i_dataFCPU_51 数据载荷的作用，并指出 o_drv2CPU 输出数据载荷的缺失。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:documentation_focus:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_drvFCPU",
-          "o_drv2CPU",
-          "i_dataFCPU_51",
-          "w_drv2NoCChanel0",
-          "w_drv2NoCChanel1",
-          "w_drvFNoCChannel0",
-          "w_drvFNoCChannel1"
-        ],
-        "instances": [
-          "cpu2noc_instance",
-          "uut",
-          "delayUart0"
-        ],
-        "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:IONet_slot:flow:flow_000_IONet_slot_i_drvFCPU",
-          "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/IONet_slot.json"
-          },
-          {
-            "source": "interface.data_ports",
-            "path": "knowledge_ir/modules/IONet_slot.json"
-          }
-        ]
-      },
-      {
-        "value": "该驱动流从外部输入 i_drvFCPU 进入，经 cpu2noc_instance 处理后，通过 NoC 网格与多个外设模块交互，最终返回至 o_drv2CPU 输出，构成一个完整的 CPU 发起、外设响应的闭环事件路径。",
-        "explanation": "流起点为 i_drvFCPU，终点为 o_drv2CPU。中间路径经过 cpu2noc_instance 的转发，通过 w_drv2NoCChanel0 和 w_drv2NoCChanel1 两条通道进入 uut (IONetwork) 网格。网格将事件分发至 IIC、GPIO、TIMER、PWM、SPI、UART、WatchDog 等外设，外设的响应事件再通过网格汇聚回 cpu2noc_instance，最终输出。该流体现了 CPU 与片内外设之间的请求-响应通信模式。",
+        "value": "从CPU驱动事件(i_drvFCPU)注入CPU2NoC适配器，经两个通道进入片上网络(IONetwork)网格，网格将事件分发至各外设并收集外设的驱动返回，最终汇聚回CPU2NoC适配器并生成向CPU的输出驱动(o_drv2CPU)，构成一条完整的请求-响应闭环驱动流。",
+        "explanation": "该流的步骤显示i_drvFCPU是唯一的外部起始驱动，经cpu2noc_instance后被分流为w_drv2NoCChanel0和w_drv2NoCChanel1，其中通道0通过delayUart0延迟后进入uut，通道1直接进入uut。uut内部路由将驱动送到各外设（IIC、GPIO、TIMER、PWM0/1、SPI0/1、UART0/1、WatchDog），外设的返回驱动再经uut汇聚，最终以w_drvFNoCChannel0和w_drvFNoCChannel1送回cpu2noc_instance，由cpu2noc_instance合并后输出o_drv2CPU。所有路径均可见于连接图中，表明此流具有闭环控制特性。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -889,85 +885,7 @@
         "instances": [
           "cpu2noc_instance",
           "uut",
-          "delayUart0",
-          "IIC",
-          "gpio_slot",
-          "TIMER",
-          "PWM0",
-          "PWM1",
-          "spi0",
-          "spi1",
-          "UART0",
-          "UART1",
-          "WatchDog"
-        ],
-        "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:IONet_slot:flow:flow_000_IONet_slot_i_drvFCPU",
-          "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/IONet_slot.json"
-          },
-          {
-            "source": "transparent_flows",
-            "path": "knowledge_ir/modules/IONet_slot.json"
-          }
-        ]
-      },
-      {
-        "value": "o_drv2CPU 输出事件可能携带外设的响应数据，但当前上下文未明确其数据载荷。",
-        "explanation": "接口载荷契约显示 o_drv2CPU 输出事件未关联任何数据信号。这可能意味着该输出事件本身是纯事件，或者其数据载荷在 RTL 源中定义但未被当前上下文捕获。需要审查 RTL 源以确认是否存在关联的输出数据信号。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:data_control_effect:002",
-        "doc_priority": "secondary",
-        "signals": [
-          "o_drv2CPU"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "(无)"
-        ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:IONet_slot:flow:flow_000_IONet_slot_i_drvFCPU",
-          "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/IONet_slot.json"
-          }
-        ]
-      },
-      {
-        "value": "当前上下文未提供任何关于流完成信号或反压机制的信息，无法做出有效推断。",
-        "explanation": "提供的流步骤和连接信息仅描述了事件路径，未包含任何握手信号 (如 valid/ready) 或完成指示。这表明该流可能是一个简单的单次事件驱动，或者其握手逻辑在子模块内部实现。在最终手册中，应明确指出反压和完成机制未在当前上下文中体现，需要进一步审查 RTL 源。",
-        "certainty": "ai_inferred",
-        "confidence": "low",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:completion_backpressure:001",
-        "doc_priority": "reference",
-        "signals": [
-          "(无)"
-        ],
-        "instances": [
-          "(无)"
+          "delayUart0"
         ],
         "related_flows": [],
         "related_assignments": [],
@@ -979,7 +897,72 @@
         ],
         "semantic_evidence": [
           {
-            "source": "(无)"
+            "source": "instances.connections"
+          },
+          {
+            "source": "transparent_flows"
+          },
+          {
+            "source": "interface.event_ports"
+          }
+        ]
+      },
+      {
+        "value": "51位数据负载i_dataFCPU_51携带命令或目标信息，可能被CPU2NoC解析以决定NoC通道选择或外设寻址，但o_drv2CPU缺少显式载荷，暗示仅返回事件通知。",
+        "explanation": "接口契约显示i_drvFCPU伴随51位数据i_dataFCPU_51，该数据很可能由cpu2noc_instance解码为外设地址或操作码，进而影响w_drv2NoCChanel0/1生成及uut的路由。然而o_drv2CPU无公开载荷，表明返回CPU的驱动可能仅用于中断或状态指示。缺乏assign依赖使得数据与控制的具体耦合方式无法确认，需审阅RTL。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:data_control_effect:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_dataFCPU_51",
+          "i_drvFCPU",
+          "o_drv2CPU"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:IONet_slot:flow:flow_000_IONet_slot_i_drvFCPU",
+          "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface_payload_contracts"
+          }
+        ]
+      },
+      {
+        "value": "提供的上下文未揭示任何流控信号（如ready/valid），无法断定驱动流是否支持背压或就绪握手，建议手册中明确标注为“待确认”。",
+        "explanation": "流步骤和连接仅展示事件驱动信号，free_signal字段均为空，因此整个流可能采用fire-and-forget模式，或依赖于CPU2NoC及NoC内部隐含的握手机制。缺少此信息使得时序和阻塞分析无法进行。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:IONet_slot:flow_000_IONet_slot_i_drvFCPU:completion_backpressure:001",
+        "doc_priority": "secondary",
+        "signals": [],
+        "instances": [
+          "cpu2noc_instance",
+          "uut"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:IONet_slot:flow:flow_000_IONet_slot_i_drvFCPU",
+          "ev:IONet_slot:semantic_flow:flow_000_IONet_slot_i_drvFCPU"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "interface_payload_contracts (free_signal empty)"
           }
         ]
       }

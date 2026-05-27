@@ -1,16 +1,16 @@
 # 模块 `nodeTop`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/nodeTop.v`。
-- 职责：AI 推断：五端口网络节点，负责将来自五个方向（东、本地、北、南、西）的输入消息路由并仲裁到对应的输出方向。。
-- 说明：模块接收五个方向的驱动事件和消息负载，通过 routeMsg 实例进行路由决策，再通过 arbMsg 实例进行输出仲裁，最终产生五个方向的输出驱动事件和消息负载。每个方向都有独立的 free 信号用于流控。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\nodeTop.v`
+- 职责：AI 推断：五方向（东、南、西、北、本地）片上网络路由节点，基于事件驱动‑消息载荷握手协议接收来自任一方向的输入包，通过 Route‑Arb 内部流水线将包转发至一个或多个输出方向。
+- 说明：接口提供每个方向的驱动事件、51‑bit 消息数据以及释放反馈。内部实例为五个方向的 `routeMsg`（路由端）与 `arbMsg`（仲裁端），形成一个全连接矩阵。每个输入驱动事件在内部流程中均扇出到全部五个输出驱动端点，表明节点具备多播或全连接转发能力，最终由仲裁模块竞争输出。
 
 ## 1. 层级位置
 
-- Parents：`IONetwork`。
-- Children：`arbMsg`, `routeMsg`。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`IONetwork`
+- Children：`arbMsg`, `routeMsg`
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -48,8 +48,14 @@ nodeTop
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_driveEast`, `i_driveLocal`, `i_driveNorth`, `i_driveSouth`, `... +1`；数据输入：`i_eastInMsg_51`, `i_localInMsg_51`, `i_northInMsg_51`, `i_southInMsg_51`, `... +1`；free 输入：`i_freeEast`, `i_freeLocal`, `i_freeNorth`, `i_freeSouth`, `... +1`。
-- 输出：drive 输出：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `... +1`；数据输出：`o_eastMsg_51`, `o_localMsg_51`, `o_northMsg_51`, `o_southMsg_51`, `... +1`；free 输出：`o_freeEast`, `o_freeLocal`, `o_freeNorth`, `o_freeSouth`, `... +1`。
+- 接收  
+  - drive 输入：`i_driveEast`, `i_driveLocal`, `i_driveNorth`, `i_driveSouth`, `i_driveWest`  
+  - 数据输入：`i_eastInMsg_51`, `i_localInMsg_51`, `i_northInMsg_51`, `i_southInMsg_51`, `i_westInMsg_51`  
+  - free 输入：`i_freeEast`, `i_freeLocal`, `i_freeNorth`, `i_freeSouth`, `i_freeWest`
+- 输出  
+  - drive 输出：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`  
+  - 数据输出：`o_eastMsg_51`, `o_localMsg_51`, `o_northMsg_51`, `o_southMsg_51`, `o_westMsg_51`  
+  - free 输出：`o_freeEast`, `o_freeLocal`, `o_freeNorth`, `o_freeSouth`, `o_freeWest`
 
 ### 2.1 端口分组
 
@@ -78,44 +84,53 @@ nodeTop
 
 ### `i_driveEast`
 
-- 确定性事实：`i_driveEast to o_driveEast, o_driveLocal, o_driveNorth`；flow_id=`flow_000_nodeTop_i_driveEast`。
-- Payload：`i_driveEast` -> `i_eastInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
-- 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
-- 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：手册应重点描述从东向输入事件到五个方向输出事件驱动的完整路径，以及 eastRouteMsg 的路由分发作用和 arbMsg 的仲裁作用。
+- **确定性事实**：`i_driveEast` 流向 `o_driveEast`, `o_driveLocal`, `o_driveNorth`（flow_id：`flow_000_nodeTop_i_driveEast`）。
+- **Payload**：  
+  - 输入：`i_driveEast` → `i_eastInMsg_51 [50:0]`  
+  - 输出：`o_driveEast` → `o_eastMsg_51 [50:0]`，`o_driveLocal` → `o_localMsg_51 [50:0]`，`o_driveNorth` → `o_northMsg_51 [50:0]`，`o_driveSouth` → `o_southMsg_51 [50:0]`，`o_driveWest` → `o_westMsg_51 [50:0]`
+- **输出/影响**：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`
+- **结构复杂度**：branch=1，join=5，blocking=0
+- **AI 推断**：手册应突出该流展现的东向输入到多方向仲裁的拓扑结构，弱化具体路由算法和仲裁优先级，因为缺少内部逻辑证据。
 
 ### `i_driveLocal`
 
-- 确定性事实：`i_driveLocal to o_driveEast, o_driveLocal, o_driveNorth`；flow_id=`flow_001_nodeTop_i_driveLocal`。
-- Payload：`i_driveLocal` -> `i_localInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
-- 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
-- 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：强调本地事件的路由扇出与仲裁合并过程
+- **确定性事实**：`i_driveLocal` 流向 `o_driveEast`, `o_driveLocal`, `o_driveNorth`（flow_id：`flow_001_nodeTop_i_driveLocal`）。
+- **Payload**：  
+  - 输入：`i_driveLocal` → `i_localInMsg_51 [50:0]`  
+  - 输出：`o_driveEast` → `o_eastMsg_51 [50:0]`，`o_driveLocal` → `o_localMsg_51 [50:0]`，`o_driveNorth` → `o_northMsg_51 [50:0]`，`o_driveSouth` → `o_southMsg_51 [50:0]`，`o_driveWest` → `o_westMsg_51 [50:0]`
+- **输出/影响**：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`
+- **结构复杂度**：branch=1，join=5，blocking=0
+- **AI 推断**：重点描述 i_driveLocal 通过 localRouteMsg 复制到各方向仲裁器，并驱动对应 o_drive* 输出，同时强调伴随的消息 payload 和就绪信号。应弱化仲裁器内部多路选择及与其他方向请求冲突的细节，因缺乏内部实现信息。
 
 ### `i_driveNorth`
 
-- 确定性事实：`i_driveNorth to o_driveEast, o_driveLocal, o_driveNorth`；flow_id=`flow_002_nodeTop_i_driveNorth`。
-- Payload：`i_driveNorth` -> `i_northInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
-- 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
-- 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：应强调该流是单输入五扇出的路由-仲裁流水线，并说明路由与仲裁的分离结构
+- **确定性事实**：`i_driveNorth` 流向 `o_driveEast`, `o_driveLocal`, `o_driveNorth`（flow_id：`flow_002_nodeTop_i_driveNorth`）。
+- **Payload**：  
+  - 输入：`i_driveNorth` → `i_northInMsg_51 [50:0]`  
+  - 输出：`o_driveEast` → `o_eastMsg_51 [50:0]`，`o_driveLocal` → `o_localMsg_51 [50:0]`，`o_driveNorth` → `o_northMsg_51 [50:0]`，`o_driveSouth` → `o_southMsg_51 [50:0]`，`o_driveWest` → `o_westMsg_51 [50:0]`
+- **输出/影响**：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`
+- **结构复杂度**：branch=1，join=5，blocking=0
+- **AI 推断**：应强调从北向输入到五种输出的全连接拓扑与角色映射，弱化内部仲裁算法与路由选择的细节。
 
 ### `i_driveSouth`
 
-- 确定性事实：`i_driveSouth to o_driveEast, o_driveLocal, o_driveNorth`；flow_id=`flow_003_nodeTop_i_driveSouth`。
-- Payload：`i_driveSouth` -> `i_southInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
-- 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
-- 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：手册应强调从南向输入到五方向输出的扇出结构，以及 southRouteMsg 作为唯一分支点的角色。
+- **确定性事实**：`i_driveSouth` 流向 `o_driveEast`, `o_driveLocal`, `o_driveNorth`（flow_id：`flow_003_nodeTop_i_driveSouth`）。
+- **Payload**：  
+  - 输入：`i_driveSouth` → `i_southInMsg_51 [50:0]`  
+  - 输出：`o_driveEast` → `o_eastMsg_51 [50:0]`，`o_driveLocal` → `o_localMsg_51 [50:0]`，`o_driveNorth` → `o_northMsg_51 [50:0]`，`o_driveSouth` → `o_southMsg_51 [50:0]`，`o_driveWest` → `o_westMsg_51 [50:0]`
+- **输出/影响**：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`
+- **结构复杂度**：branch=1，join=5，blocking=0
+- **AI 推断**：最终手册应突出南向驱动通过 southRouteMsg 扇出并进入各方向仲裁器的整体架构，弱化内部仲裁细节以防过度推断。
 
 ### `i_driveWest`
 
-- 确定性事实：`i_driveWest to o_driveEast, o_driveLocal, o_driveNorth`；flow_id=`flow_004_nodeTop_i_driveWest`。
-- Payload：`i_driveWest` -> `i_westInMsg_51 [50:0]`, `o_driveEast` -> `o_eastMsg_51 [50:0]`, `o_driveLocal` -> `o_localMsg_51 [50:0]`, `o_driveNorth` -> `o_northMsg_51 [50:0]`, `o_driveSouth` -> `o_southMsg_51 [50:0]`, `o_driveWest` -> `o_westMsg_51 [50:0]`。
-- 输出/影响：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`。
-- 结构复杂度：branch=1，join=5，blocking=0。
-- AI 推断：手册应重点描述从西侧输入到五个方向输出的路由分发路径，并强调 westRouteMsg 的分支角色。
-
+- **确定性事实**：`i_driveWest` 流向 `o_driveEast`, `o_driveLocal`, `o_driveNorth`（flow_id：`flow_004_nodeTop_i_driveWest`）。
+- **Payload**：  
+  - 输入：`i_driveWest` → `i_westInMsg_51 [50:0]`  
+  - 输出：`o_driveEast` → `o_eastMsg_51 [50:0]`，`o_driveLocal` → `o_localMsg_51 [50:0]`，`o_driveNorth` → `o_northMsg_51 [50:0]`，`o_driveSouth` → `o_southMsg_51 [50:0]`，`o_driveWest` → `o_westMsg_51 [50:0]`
+- **输出/影响**：`o_driveEast`, `o_driveLocal`, `o_driveNorth`, `o_driveSouth`, `o_driveWest`
+- **结构复杂度**：branch=1，join=5，blocking=0
+- **AI 推断**：手册应突出 i_driveWest 是 westRouteMsg 的唯一驱动源，westRouteMsg 执行扇出复制，五个 arbMsg 执行汇聚仲裁，以及 free 信号的流控作用。避免过度解释路由决策和仲裁算法。
 
 ## 5. 内部组件与 assign 影响
 

@@ -1,16 +1,16 @@
 # 模块 `arbMsg`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/arbMsg.v`。
-- 职责：AI 推断：五路输入消息仲裁与合并模块，将来自东、本地、北、南、西五个方向的消息请求合并为单一输出。。
-- 说明：模块接收五个方向的事件驱动信号（i_driveEast等）及其对应的51位消息负载，通过内部实例arbMerge（cArbMerge5_51b）进行仲裁合并，输出一个合并后的消息o_msg_51和驱动事件o_driveNext。同时，模块接收一个释放信号i_freeNext，并产生五个方向的释放输出（o_freeEast等），表明arbMerge内部实现了释放信号的扇出。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\arbMsg.v`
+- 职责：**AI 推断**：`i_driveEast` 信号直接连接至 `arbMerge` 输入，模块内无其他逻辑。  
+  说明：从切片可见，`i_driveEast` 端口参与拼接信号并连接到 `arbMerge` 的 `i_drive_5` 输入端，该模块内未进行任何额外处理。
 
 ## 1. 层级位置
 
-- Parents：`nodeTop`。
-- Children：无。
-- Component children：`cArbMerge5_51b`。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`nodeTop`
+- Children：无
+- Component children：`cArbMerge5_51b`
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -28,8 +28,14 @@ arbMsg
 
 ## 2. 输入/输出接口摘要
 
-- 接收：drive 输入：`i_driveEast`, `i_driveLocal`, `i_driveNorth`, `i_driveSouth`, `... +1`；数据输入：`i_eastMsg_51`, `i_localMsg_51`, `i_northMsg_51`, `i_southMsg_51`, `... +1`；free 输入：`i_freeNext`。
-- 输出：drive 输出：`o_driveNext`；数据输出：`o_msg_51`；free 输出：`o_freeEast`, `o_freeLocal`, `o_freeNorth`, `o_freeSouth`, `... +1`。
+- 接收：  
+  drive 输入（5个方向）：`i_driveEast`, `i_driveLocal`, `i_driveNorth`, `i_driveSouth`, `i_driveWest`  
+  数据输入（5个方向）：`i_eastMsg_51`, `i_localMsg_51`, `i_northMsg_51`, `i_southMsg_51`, `i_westMsg_51`  
+  free 输入：`i_freeNext`
+- 输出：  
+  drive 输出：`o_driveNext`  
+  数据输出：`o_msg_51`  
+  free 输出（5个方向）：`o_freeEast`, `o_freeLocal`, `o_freeNorth`, `o_freeSouth`, `o_freeWest`
 
 ### 2.1 端口分组
 
@@ -50,48 +56,47 @@ arbMsg
 | `i_driveWest` | input | `i_driveWest` | `i_westMsg_51 [50:0]` | `o_freeWest` |
 | `o_driveNext` | output | `o_driveNext` | `o_msg_51 [50:0]` | 未记录 |
 
-## 4. 主要 Drive-centered Flow
+## 4. 主要 Drive‑centered Flow
 
 ### `i_driveEast`
 
-- 确定性事实：`i_driveEast to o_driveNext`；flow_id=`flow_000_arbMsg_i_driveEast`。
-- Payload：`i_driveEast` -> `i_eastMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
+- 确定性事实：`i_driveEast to o_driveNext`；flow_id = `flow_000_arbMsg_i_driveEast`。
+- Payload：`i_driveEast` → `i_eastMsg_51 [50:0]`，`o_driveNext` → `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
-- 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：文档应强调 i_driveEast 如何通过 arbMerge 与其他方向事件合并，并说明仲裁/合并策略
+- 结构复杂度：branch = 0，join = 1，blocking = 1。
+- **AI 推断**：最终手册应强调该流是 `arbMsg` 模块多输入仲裁合并的一个分支，重点说明控制与数据的配合，并指出背压仅作用于输入侧，输出侧的流控依赖下游。
 
 ### `i_driveLocal`
 
-- 确定性事实：`i_driveLocal to o_driveNext`；flow_id=`flow_001_arbMsg_i_driveLocal`。
-- Payload：`i_driveLocal` -> `i_localMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
+- 确定性事实：`i_driveLocal to o_driveNext`；flow_id = `flow_001_arbMsg_i_driveLocal`。
+- Payload：`i_driveLocal` → `i_localMsg_51 [50:0]`，`o_driveNext` → `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
-- 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：本地驱动事件 i_driveLocal 携带 51 位数据负载 i_localMsg_51，两者在模块接口层面耦合
+- 结构复杂度：branch = 0，join = 1，blocking = 1。
+- **AI 推断**：本地输入事件驱动（`i_driveLocal`）经多路仲裁合并器 `arbMerge` 选通后，输出到下游下一个事件驱动（`o_driveNext`）。
 
 ### `i_driveNorth`
 
-- 确定性事实：`i_driveNorth to o_driveNext`；flow_id=`flow_002_arbMsg_i_driveNorth`。
-- Payload：`i_driveNorth` -> `i_northMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
+- 确定性事实：`i_driveNorth to o_driveNext`；flow_id = `flow_002_arbMsg_i_driveNorth`。
+- Payload：`i_driveNorth` → `i_northMsg_51 [50:0]`，`o_driveNext` → `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
-- 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：北向事件驱动信号与 51 位数据载荷相关联
+- 结构复杂度：branch = 0，join = 1，blocking = 1。
+- **AI 推断**：当 `i_driveNorth` 事件触发并最终导致 `o_driveNext` 时，北向负载 `i_northMsg_51` 通过 `arbMerge` 的数据通道被传送到 `o_msg_51`。
 
 ### `i_driveSouth`
 
-- 确定性事实：`i_driveSouth to o_driveNext`；flow_id=`flow_003_arbMsg_i_driveSouth`。
-- Payload：`i_driveSouth` -> `i_southMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
+- 确定性事实：`i_driveSouth to o_driveNext`；flow_id = `flow_003_arbMsg_i_driveSouth`。
+- Payload：`i_driveSouth` → `i_southMsg_51 [50:0]`，`o_driveNext` → `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
-- 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：事件驱动信号 i_driveSouth 与南向消息负载 i_southMsg_51 相关联，两者共同通过 arbMerge 处理后输出为 o_driveNext 和 o_msg_51。
+- 结构复杂度：branch = 0，join = 1，blocking = 1。
+- **AI 推断**：手册应突出南向事件参与五路仲裁的角色、负载 `i_southMsg_51` 至 `o_msg_51` 的路径以及 `o_freeSouth` 流控，避免臆测内部仲裁算法。
 
 ### `i_driveWest`
 
-- 确定性事实：`i_driveWest to o_driveNext`；flow_id=`flow_004_arbMsg_i_driveWest`。
-- Payload：`i_driveWest` -> `i_westMsg_51 [50:0]`, `o_driveNext` -> `o_msg_51 [50:0]`。
+- 确定性事实：`i_driveWest to o_driveNext`；flow_id = `flow_004_arbMsg_i_driveWest`。
+- Payload：`i_driveWest` → `i_westMsg_51 [50:0]`，`o_driveNext` → `o_msg_51 [50:0]`。
 - 输出/影响：`o_driveNext`。
-- 结构复杂度：branch=0，join=1，blocking=1。
-- AI 推断：西侧消息数据与驱动事件同步传输，但数据路径独立于事件控制
-
+- 结构复杂度：branch = 0，join = 1，blocking = 1。
+- **AI 推断**：应强调 `arbMerge` 作为中心仲裁节点的作用，描述多路驱动竞争、西向驱动的可能路径，以及有效载荷跟随事件的选择性传递。避免断言固定的仲裁优先级或时序细节。
 
 ## 5. 内部组件与 assign 影响
 

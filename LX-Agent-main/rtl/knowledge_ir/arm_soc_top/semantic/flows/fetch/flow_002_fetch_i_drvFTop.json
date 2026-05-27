@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "fetch",
   "flow_id": "flow_002_fetch_i_drvFTop",
-  "input_hash": "2f5ab636fcd0b79c16f141e139468acf07592c18ed319cc1234654540b833dd8",
+  "input_hash": "69e073252f6129f8527bcea6daa1a4711ef9400406ee956c6d43f5c1579e6dc0",
   "source_context": "ai_context/modules/fetch/flows/flow_002_fetch_i_drvFTop.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/IF/fetch.v",
+      "source": "rtl\\rtl\\IF\\fetch.v",
       "paths": [
         "module_source"
       ]
@@ -41,20 +41,21 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/IF/fetch.v",
+        "rtl_file": "rtl\\rtl\\IF\\fetch.v",
         "parser_module": "modules/fetch.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 14,
+    "count": 10,
     "by_type": {
       "assignment_interpretation": 1,
-      "component_role": 6,
+      "completion_backpressure": 1,
+      "component_role": 4,
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 4
+      "source_review_request": 1
     }
   },
   "claims": [
@@ -65,9 +66,9 @@
         "module": "fetch",
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
-      "summary": "从外部输入 i_drvFTop 出发，经过锁存、分叉、合并和延迟后，最终驱动两个内部目标 o_drv2Int 和 o_drv2ICache 的单一驱动事件流。",
+      "summary": "将来自顶层的事件驱动 i_drvFTop 经优先级锁定、FIFO 缓冲、分叉、多路仲裁合并与选择器后，分发至指令接口 o_drv2Int 与指令缓存 o_drv2ICache 的双终点事件分发路径。",
       "subject": "flow_002_fetch_i_drvFTop",
-      "explanation": "该流由单一驱动源 i_drvFTop 启动，通过 pmtLock_top 和 cfifo7 两级 FIFO 缓冲后，在 spliter5 处分为两路：一路经 mergeInt 合并后输出至 o_drv2Int；另一路经 merge1 合并、两级延迟和两级 FIFO 后，在 select5 处再次分叉，其中一路经 cfifo_lock 输出至 o_drv2ICache。流中存在多个阻塞点（FIFO 和合并器），表明事件传播可能受反压或仲裁影响。",
+      "explanation": "流经 pmtLock_top 提供入口互斥与锁定，后经 cfifo7 缓冲后由 spliter5 分叉为两路；一路通过 mergeInt 与其他源（如 spliter2）事件仲裁后输出到 o_drv2Int，另一路通过 merge1 与其他两路互斥合并，经延迟匹配和两级 FIFO 后由 select5 依据 1 位选择再分叉，最终一路经 cfifo_lock 输出到 o_drv2ICache。该结构支持事件的多路汇聚与有条件分发。",
       "signals": [
         "i_drvFTop",
         "o_drv2Int",
@@ -90,17 +91,16 @@
         "3"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "module_facts",
+          "path": "knowledge_ir/modules/fetch.json"
         },
         {
-          "source": "transparent_flows"
-        },
-        {
-          "source": "interface.event_ports"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/fetch.json"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:flow_intent:001"
@@ -113,8 +113,8 @@
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
       "subject": "pmtLock_top",
-      "summary": "作为流入口的第一级 FIFO 缓冲，可能实现锁存或反压功能。",
-      "explanation": "该实例为 cPmtFifo1 类型，位于流的最前端，直接接收 i_drvFTop 输入。其角色是缓冲传入事件，并可能根据内部状态（如满标志）对上游产生反压。",
+      "summary": "输入级优先级/互斥锁定 FIFO，保证来自 i_drvFTop 的事件按顺序并且可能在锁定条件下延迟通过。",
+      "explanation": "实例类型为 cPmtFifo1，名称含“Lock”，推断它提供互斥或优先级锁定，防止多个请求同时进入后续流水线。在流程中作为第一个 FIFO 阻挡点，可以背压上游并保证进入的事件独占处理权。",
       "signals": [
         "i_drvFTop",
         "w_drvFTop"
@@ -123,14 +123,16 @@
         "pmtLock_top"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.steps",
+          "path": "compact_context"
         },
         {
-          "source": "transparent_flows"
+          "source": "component_connections",
+          "path": "compact_context"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:001"
@@ -143,8 +145,8 @@
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
       "subject": "spliter5",
-      "summary": "将单一事件流分叉为两条路径的分流器。",
-      "explanation": "该实例为 cSplitter2_65b_fetch 类型，接收来自 cfifo7 的事件，并根据内部逻辑将其导向 mergeInt 路径（w_drv2MergeInt）或 merge1 路径（w_drvfifo32merge1）。这是流中第一个分支点。",
+      "summary": "65 位事件分裂器，将来自 cfifo7 的事件复制并分叉为两路：一路直奔向 Int 的合并器，另一路走向用于锁存/缓存的路径。",
+      "explanation": "基于模块类型 cSplitter2_65b_fetch，该分裂器将输入事件同时驱动到两个输出，为后续合并和选择提供并行路径。分裂是广播或选择性复制，具体依赖于内部实现，但逻辑上实现了路径分叉。",
       "signals": [
         "w_cFifo7Drv2Spliter5",
         "w_drv2MergeInt",
@@ -158,10 +160,12 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.branch_points",
+          "path": "compact_context"
         },
         {
-          "source": "transparent_flows"
+          "source": "component_connections",
+          "path": "compact_context"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:002"
@@ -174,8 +178,8 @@
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
       "subject": "mergeInt",
-      "summary": "合并来自 spliter5 和 spliter2 的事件，并输出至 o_drv2Int 的仲裁合并器。",
-      "explanation": "该实例为 cArbMerge2_105b_cpu 类型，接收两路输入：w_drv2MergeInt（来自本流）和 w_spliter2Drv2MergeInt（来自另一流）。它通过仲裁机制选择一路输出至 o_drv2Int，是流中第一个合并点。",
+      "summary": "仲裁合并器，将来自 spliter5 的一路事件与另外一路（来自 spliter2）仲裁后输出到 o_drv2Int，形成对外部指令接口的事件驱动。",
+      "explanation": "类型为 cArbMerge2_105b_cpu，可能基于优先级或轮询仲裁，合并两路驱动流。它是向 o_drv2Int 输出的唯一驱动点，并可能产生 w_intFire_1 内部触发信号（见 assign 3）。",
       "signals": [
         "w_drv2MergeInt",
         "w_spliter2Drv2MergeInt",
@@ -192,10 +196,16 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.join_points",
+          "path": "compact_context"
         },
         {
-          "source": "transparent_flows"
+          "source": "component_connections",
+          "path": "compact_context"
+        },
+        {
+          "source": "related_assign_dependencies",
+          "path": "compact_context"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:003"
@@ -207,73 +217,9 @@
         "module": "fetch",
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
-      "subject": "merge1",
-      "summary": "合并来自三个源的事件，并驱动后续延迟链的互斥合并器。",
-      "explanation": "该实例为 cMutexMerge3_32b_launch 类型，接收来自 spliter5（w_drvfifo32merge1）、merge0（w_drvMerge02Merge1）和 cfifo9（w_drvCfifo92merge1）的事件。其输出 w_drvMerge12cfifo8 进入延迟链，是流中第二个合并点。",
-      "signals": [
-        "w_drvfifo32merge1",
-        "w_drvMerge02Merge1",
-        "w_drvCfifo92merge1",
-        "w_drvMerge12cfifo8"
-      ],
-      "instances": [
-        "merge1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
-        }
-      ],
-      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:004"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "fetch",
-        "flow_id": "flow_002_fetch_i_drvFTop"
-      },
-      "subject": "delayfifo8, delayfifo8_2",
-      "summary": "提供固定周期延迟的透明延迟单元。",
-      "explanation": "delayfifo8 为 delay4U 类型，delayfifo8_2 为 delay6U 类型，它们串联在 merge1 输出之后，对事件进行固定周期的延迟，不改变数据内容。延迟后的信号 w_drvMerge12cfifo8_delay_2 进入 cfifo8_saveMerge1Data。",
-      "signals": [
-        "w_drvMerge12cfifo8",
-        "w_drvMerge12cfifo8_delay",
-        "w_drvMerge12cfifo8_delay_2"
-      ],
-      "instances": [
-        "delayfifo8",
-        "delayfifo8_2"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
-        }
-      ],
-      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:005"
-    },
-    {
-      "claim_type": "component_role",
-      "scope": {
-        "type": "flow",
-        "module": "fetch",
-        "flow_id": "flow_002_fetch_i_drvFTop"
-      },
       "subject": "select5",
-      "summary": "将事件流分叉为输出至 ICache 和另一内部路径的分流器。",
-      "explanation": "该实例为 cSelector2_1b 类型，接收来自 cfifo8 的事件，并根据选择信号将其导向 cfifo_lock（w_drv2ICache）或另一内部路径（w_drvSelect52Merge3）。这是流中第二个分支点。",
+      "summary": "1 位选择器，根据控制信号从 cfifo8 的输出中选出两路之一，将事件导向到 ICache 路径或后续其他逻辑。",
+      "explanation": "类型 cSelector2_1b，表明它依据 1 位选择输入，将事件驱动到两个输出之一。其中输出 0 是通向 cfifo_lock 和 o_drv2ICache 的主路径，输出 1 去往其他延迟/合并器。选择位可能来自流水线状态或锁存信息，决定了事件的最终目的地。",
       "signals": [
         "w_drvCfifo82Select5",
         "w_drv2ICache",
@@ -287,13 +233,15 @@
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
+          "source": "flow.branch_points",
+          "path": "compact_context"
         },
         {
-          "source": "transparent_flows"
+          "source": "component_connections",
+          "path": "compact_context"
         }
       ],
-      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:006"
+      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:component_role:004"
     },
     {
       "claim_type": "assignment_interpretation",
@@ -302,9 +250,9 @@
         "module": "fetch",
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
-      "subject": "w_intFire_1",
-      "summary": "指示 mergeInt 输出事件有效的组合逻辑信号。",
-      "explanation": "赋值 3 将 w_intFire_1 定义为 w_drv2MergeInt 和 w_spliter2Drv2MergeInt 的或逻辑。这表明当任一输入有效时，mergeInt 的输出事件有效，用于驱动下游逻辑或作为握手信号。",
+      "subject": "assign index 3 (w_intFire_1)",
+      "summary": "内部组合触发信号，将 spliter5 通向 Int 的事件与来自 spliter2 的事件进行逻辑或，生成 w_intFire_1，可能用作中断或触发指示。",
+      "explanation": "赋值 w_intFire_1 = w_drv2MergeInt | w_spliter2Drv2MergeInt 说明这两个事件任意一个有效时都会置位该信号，并非数据流的一部分，而可能是控制或状态指示，例如向外部报告指令相关触发。",
       "signals": [
         "w_intFire_1",
         "w_drv2MergeInt",
@@ -314,11 +262,16 @@
         "3"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_module.flow_graph.assignment_dependencies"
+          "source": "related_assign_dependencies",
+          "path": "compact_context"
+        },
+        {
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/fetch.json"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:assignment_interpretation:001"
@@ -330,28 +283,61 @@
         "module": "fetch",
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
-      "summary": "输入事件 i_drvFTop 携带一个 32 位 PC 值作为有效载荷。",
-      "subject": "i_drvFTop 与 i_pcFTop_32",
-      "explanation": "接口有效载荷合约显示，i_drvFTop 事件伴随一个 32 位信号 i_pcFTop_32。该 PC 值可能在整个流中作为数据被传递，最终用于指令缓存或中断处理。",
+      "summary": "输入事件 i_drvFTop 携带 32 位 PC 值，经过 FIFO 和分裂合并链路传递，但最终输出事件 o_drv2Int 和 o_drv2ICache 未见关联 payload，推测数据可能在内部用于选择或丢弃。",
+      "subject": "i_drvFTop payload (i_pcFTop_32)",
+      "explanation": "输入 payload 契约显示 i_pcFTop_32 与事件关联，路径中 spliter5 为 65 位宽，可能包含 PC 及其他控制位。后续选择器 select5 仅 1 位选择，暗示数据可能仅用于决定分支，或最终输出仅需纯事件通知，payload 被内部使用或忽略。这有待核实。",
       "signals": [
-        "i_drvFTop",
         "i_pcFTop_32"
       ],
       "related_payload": [
         "i_pcFTop_32"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "low",
       "evidence": [
         {
-          "source": "interface.event_ports"
+          "source": "interface_payload_contracts",
+          "path": "compact_context"
         },
         {
-          "source": "interface.data_ports"
+          "source": "component_connections",
+          "path": "compact_context"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:data_control_effect:001"
+    },
+    {
+      "claim_type": "completion_backpressure",
+      "scope": {
+        "type": "flow",
+        "module": "fetch",
+        "flow_id": "flow_002_fetch_i_drvFTop"
+      },
+      "summary": "流路径上包含多个 FIFO 和合并器，天然具备背压握手能力，但未发现显式 free/backpressure 信号与输出端点关联，背压可能限于模块内部流水线控制。",
+      "subject": "flow backpressure",
+      "explanation": "pmtLock_top、cfifo7、cfifo8_saveMerge1Data、cfifo8、cfifo_lock 均为 FIFO 类组件，通常有满/空握手；合并器也可能阻塞输入。但最后的输出 o_drv2Int 和 o_drv2ICache 没有收集到对应的 free 信号，意味着背压可能由上级处理，不应在文档中声称有外部反压接口。",
+      "instances": [
+        "pmtLock_top",
+        "cfifo7",
+        "cfifo8_saveMerge1Data",
+        "cfifo8",
+        "cfifo_lock"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "component_connections",
+          "path": "compact_context"
+        },
+        {
+          "source": "interface_payload_contracts",
+          "path": "compact_context"
+        }
+      ],
+      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:completion_backpressure:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -360,38 +346,29 @@
         "module": "fetch",
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
-      "summary": "最终手册应重点描述事件从 i_drvFTop 到 o_drv2Int 和 o_drv2ICache 的两条路径，包括 spliter5 和 select5 的分叉条件、mergeInt 和 merge1 的仲裁逻辑，以及 delayfifo8 和 delayfifo8_2 的延迟周期。",
-      "subject": "流的分叉、合并和延迟路径",
-      "explanation": "该流的核心结构是单一输入经过分叉、合并和延迟后驱动两个输出。理解分叉和合并点的行为对于正确描述事件路由至关重要。延迟单元的存在表明时序要求，需明确其延迟周期。",
+      "summary": "文档应重点描述该事件流的双输出分发拓扑、分支与合并点，以及关键控制条件（select5 的选择源、合并器的仲裁规则），弱化输出 payload 和数据宽度细节，除非从 RTL 获得明确信息。",
+      "subject": "手工文档重点",
+      "explanation": "该流的核心价值在于从单一顶层驱动到两个不同消费者的灵活路由，含有优先级锁、互斥合并和条件选择。由于 payload 信息不完整，过多描述数据可能引入错误，应将注意力放在事件控制流上。",
       "signals": [
         "i_drvFTop",
         "o_drv2Int",
-        "o_drv2ICache",
-        "w_drv2MergeInt",
-        "w_drvfifo32merge1",
-        "w_drvMerge12cfifo8",
-        "w_drv2ICache"
+        "o_drv2ICache"
       ],
       "instances": [
         "spliter5",
         "mergeInt",
         "merge1",
-        "delayfifo8",
-        "delayfifo8_2",
         "select5"
       ],
       "related_assignments": [
         "3"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
+      "requires_rtl_source_review": false,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
+          "source": "all sections"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:documentation_focus:001"
@@ -403,163 +380,33 @@
         "module": "fetch",
         "flow_id": "flow_002_fetch_i_drvFTop"
       },
-      "reason": "当前上下文未提供分叉的选择信号或条件，需要 RTL 源代码来确定事件如何被路由到不同路径。",
-      "subject": "spliter5 和 select5 的分叉条件",
-      "needed_source_slice": "always block 或 assign 块中定义 spliter5 和 select5 选择逻辑的部分",
+      "reason": "select5 的 1 位选择信号来源未知，它决定了事件是否送往 o_drv2ICache；merge1 为互斥合并，需确认其优先权或多路仲裁规则，这些直接影响流的功能语义，而当前 AI 上下文缺乏相关 RTL 代码。",
+      "subject": "select5 选择逻辑与 merge1 仲裁策略",
+      "needed_source_slice": "assign block driving select5 sel signal; always block or instance parameters for merge1 priority",
       "signals": [
-        "w_cFifo7Drv2Spliter5",
-        "w_drv2MergeInt",
-        "w_drvfifo32merge1",
         "w_drvCfifo82Select5",
-        "w_drv2ICache",
-        "w_drvSelect52Merge3"
+        "w_drv2ICache"
       ],
       "instances": [
-        "spliter5",
-        "select5"
+        "select5",
+        "merge1"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
+          "source": "rtl_source",
+          "path": "rtl\\rtl\\IF\\fetch.v"
         }
       ],
       "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "fetch",
-        "flow_id": "flow_002_fetch_i_drvFTop"
-      },
-      "reason": "当前上下文未提供合并器的仲裁策略（如优先级、轮询），需要 RTL 源代码来确定事件如何被选择输出。",
-      "subject": "mergeInt 和 merge1 的仲裁逻辑",
-      "needed_source_slice": "always block 或 assign 块中定义 mergeInt 和 merge1 仲裁逻辑的部分",
-      "signals": [
-        "w_drv2MergeInt",
-        "w_spliter2Drv2MergeInt",
-        "o_drv2Int",
-        "w_drvfifo32merge1",
-        "w_drvMerge02Merge1",
-        "w_drvCfifo92merge1",
-        "w_drvMerge12cfifo8"
-      ],
-      "instances": [
-        "mergeInt",
-        "merge1"
-      ],
-      "related_assignments": [
-        "3"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
-        }
-      ],
-      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:source_review_request:002"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "fetch",
-        "flow_id": "flow_002_fetch_i_drvFTop"
-      },
-      "reason": "当前上下文仅提供了模块类型（delay4U, delay6U），但未明确延迟的具体时钟周期数，需要 RTL 源代码或参数定义来确认。",
-      "subject": "delayfifo8 和 delayfifo8_2 的延迟周期",
-      "needed_source_slice": "delayfifo8 和 delayfifo8_2 的实例化参数或内部逻辑",
-      "signals": [
-        "w_drvMerge12cfifo8",
-        "w_drvMerge12cfifo8_delay",
-        "w_drvMerge12cfifo8_delay_2"
-      ],
-      "instances": [
-        "delayfifo8",
-        "delayfifo8_2"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
-        }
-      ],
-      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:source_review_request:003"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "flow",
-        "module": "fetch",
-        "flow_id": "flow_002_fetch_i_drvFTop"
-      },
-      "reason": "当前上下文未提供任何 free/backpressure 信号，需要 RTL 源代码来确定 FIFO 和合并器如何与上下游进行握手（如 valid/ready 或 push/pop 协议）。",
-      "subject": "FIFO 和合并器的反压/握手信号",
-      "needed_source_slice": "FIFO 和合并器实例的接口信号连接，以及相关的握手逻辑",
-      "signals": [
-        "i_drvFTop",
-        "o_drv2Int",
-        "o_drv2ICache"
-      ],
-      "instances": [
-        "pmtLock_top",
-        "cfifo7",
-        "cfifo8_saveMerge1Data",
-        "cfifo8",
-        "cfifo_lock",
-        "mergeInt",
-        "merge1"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
-      "evidence": [
-        {
-          "source": "instances.connections"
-        },
-        {
-          "source": "transparent_flows"
-        }
-      ],
-      "id": "semantic:flow:fetch:flow_002_fetch_i_drvFTop:source_review_request:004"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "分叉条件",
-      "reason": "未提供 spliter5 和 select5 的选择信号或条件。"
-    },
-    {
-      "field": "仲裁策略",
-      "reason": "未提供 mergeInt 和 merge1 的仲裁逻辑。"
-    },
-    {
-      "field": "延迟周期",
-      "reason": "未明确 delayfifo8 和 delayfifo8_2 的具体延迟时钟周期数。"
-    },
-    {
-      "field": "反压/握手信号",
-      "reason": "未提供任何 free/backpressure 信号或握手协议信息。"
-    },
-    {
-      "field": "输出有效载荷",
-      "reason": "未提供 o_drv2Int 和 o_drv2ICache 的有效载荷信号。"
+      "field": "output payload for o_drv2Int and o_drv2ICache; free/backpressure signals for output drives",
+      "reason": "接口契约中仅列出了方向与事件驱动，但 payload 信号未明确，无法确定下游是否需要数据，也不能确认数据在流中是否被完全传递或丢弃。; 缺少 o_drv2Int 和 o_drv2ICache 对应的 free 信号，无法判断模块是否具备外部反压。"
     }
   ]
 }

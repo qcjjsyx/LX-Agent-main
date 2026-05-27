@@ -1,16 +1,16 @@
 # 模块 `pwm`
 
-- 源文件：`rtl/rtl/IONet/PWM/pwm.v`。
-- 职责：AI 推断：脉宽调制（PWM）信号生成器，根据输入的占空比和频率参数产生PWM输出。。
-- 说明：模块接收16位duty（占空比）和16位frequency（频率）作为数据输入，无事件输入或输出，表明其核心功能是基于这两个参数生成PWM波形。无其他控制或数据输出，暗示PWM输出可能通过内部寄存器或直接驱动外部引脚实现。
+- **源文件**：`rtl\rtl\IONet\PWM\pwm.v`
+- **职责**：AI 推断：推测为基于输入的占空比和频率生成脉宽调制波形的核心模块，但当前上下文未提供输出端口与内部驱动逻辑，实际功能待确认。
+- **说明**：compact_context 仅捕获两个数据输入 duty 和 frequency，无任何事件输入输出、数据输出、关键实例或内部事件流，无法建立从输入到外部驱动行为的完整语义路径。
 
 ## 1. 层级位置
 
-- Parents：`pwm0_top`, `pwm1_top`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`pwm0_top`、`pwm1_top`
+- Children：无
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`duty`, `frequency`；其他输入：`clk`, `en`。
-- 输出：其他输出：`pwm_out`。
+- 接收：数据输入：`duty`、`frequency`；其他输入：`clk`、`en`
+- 输出：其他输出：`pwm_out`
 
 ### 2.1 端口分组
 

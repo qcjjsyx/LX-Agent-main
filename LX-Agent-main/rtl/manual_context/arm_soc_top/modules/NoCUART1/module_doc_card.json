@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "NoCUART1",
-  "source_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+  "source_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "该模块是UART实例与片上网络(NoC)之间的驱动事件与数据转发桥接层，负责将NoC侧的驱动事件经FIFO和确认管道转发至UART，并将UART的响应数据打包回NoC。",
-    "explanation": "模块通过cfifo0接收NoC驱动事件i_drvFNoc，经pmtAck确认后送入cfifo1，再经三级延迟链(delay8/9/10)输出o_drv2Noc；同时将内部寄存器r_dataFNoc_51、r_dataHigh、ReceiveData等拼接为o_data2Noc_51返回NoC。uart_instance作为纯数据终端，其BAUD/IRQ/SIN/SOUT等信号直通模块边界。",
+    "value": "作为 UART 外设与 NoC 之间的事件驱动数据桥接，将 UART 接收数据转化为 NoC 格式的输出数据包。",
+    "explanation": "模块接收 NoC 事件 i_drvFNoc 触发数据输入 i_dataFNoc_51（可能为 NoC 发送的数据），但主要流向是输出 o_drv2Noc 事件和 o_data2Noc_51 数据。内部包含 UART 实例 m16550s，其接收数据经处理后构成输出数据包。自由信号 i_freeFNoc 和 o_free2Noc 分别控制输入流和输出缓冲空间，表明存在背压流控。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -31,11 +31,27 @@
     "doc_priority": "primary",
     "signals": [
       "i_drvFNoc",
-      "o_drv2Noc",
       "i_dataFNoc_51",
+      "o_drv2Noc",
       "o_data2Noc_51",
       "i_freeFNoc",
-      "o_free2Noc"
+      "o_free2Noc",
+      "BAUD",
+      "BRGE",
+      "CLOCK",
+      "IRQ",
+      "NCTS",
+      "NDCD",
+      "NDSR",
+      "NDTR",
+      "NOUT1",
+      "NOUT2",
+      "NRI",
+      "NRTS",
+      "RCLK",
+      "RCLK_BAUD",
+      "SIN",
+      "SOUT"
     ],
     "instances": [
       "cfifo0",
@@ -54,10 +70,23 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/NoCUART1.json"
+        "source": "knowledge_ir/modules/NoCUART1.json",
+        "path": "interface"
       },
       {
-        "source": "parser_pipeline_rtl/modules/NoCUART1.json"
+        "source": "knowledge_ir/modules/NoCUART1.json",
+        "path": "interface_data_contract"
+      },
+      {
+        "source": "knowledge_ir/modules/NoCUART1.json",
+        "path": "internal_event_flow"
+      },
+      {
+        "source": "ai_context/modules/NoCUART1/flows/flow_000_NoCUART1_i_drvFNoc.json",
+        "path": "internal_event_flow_refs"
+      },
+      {
+        "source": "ai_context/modules/NoCUART1/key_component_connections"
       }
     ]
   },
@@ -463,7 +492,7 @@
         ],
         "summary": "clock_reset_init ports, count=3, directions=input:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -498,7 +527,7 @@
         ],
         "summary": "drive_event ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -533,7 +562,7 @@
         ],
         "summary": "free_backpressure ports, count=2, directions=input:1, output:1",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -652,7 +681,7 @@
         ],
         "summary": "other_ports ports, count=16, directions=input:8, output:8",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+          "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -669,10 +698,10 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_NoCUART1_i_drvFNoc.json",
       "reader_takeaway": {
-        "value": "最终手册应重点描述事件流如何从输入驱动传播到输出驱动，以及数据负载在传播过程中如何被整形。",
-        "explanation": "该流的核心是串行事件传播，但 assign 0 显示输出数据由多个内部寄存器拼接而成。手册应解释这些寄存器的来源（如是否来自输入数据、内部状态或控制逻辑），以及它们与事件传播的时序关系。同时，应说明 FIFO 和延迟链的作用，但避免过度推测背压细节。",
+        "value": "手册应强调该流为同步驱动事件的重定时路径，包含三级FIFO缓冲和固定延迟，并指出反压依赖FIFO实例的未暴露控制信号。",
+        "explanation": "因为缺少自由信号和延迟单元的具体实现细节，生成的文档应侧向于描述事件流程、数据打包以及可能的阻塞条件，提示读者该流不能无限背压，需查阅详细RTL。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -680,18 +709,12 @@
         "doc_priority": "primary",
         "signals": [
           "i_drvFNoc",
-          "o_drv2Noc",
-          "i_dataFNoc_51",
-          "o_data2Noc_51"
+          "o_drv2Noc"
         ],
         "instances": [
           "cfifo0",
           "pmtAck",
-          "delay11",
-          "cfifo1",
-          "delay8",
-          "delay9",
-          "delay10"
+          "cfifo1"
         ],
         "related_flows": [],
         "related_assignments": [
@@ -705,20 +728,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "knowledge_ir/modules/NoCUART1.json"
+            "source": "flow.summary",
+            "path": "context"
           },
           {
-            "source": "assignment_facts",
-            "path": "knowledge_ir/modules/NoCUART1.json"
+            "source": "flow.blocking_points",
+            "path": "NoCUART1.json"
           }
         ],
         "supporting_claims": [
           {
-            "value": "从输入事件驱动 i_drvFNoc 到输出事件驱动 o_drv2Noc 的串行流水线，经过 FIFO 缓冲、确认握手和延迟链，最终将数据整形后发送至片上网络。",
-            "explanation": "该流由单个输入事件 i_drvFNoc 触发，经过 cfifo0 缓冲、pmtAck 确认、delay11 延迟、cfifo1 再次缓冲，再经 delay8/delay9/delay10 三级延迟后输出。流中无分支或合并点，是纯串行事件传播路径。assign 0 显示输出数据 o_data2Noc_51 由内部寄存器 r_dataFNoc_51、r_dataHigh、ReceiveData、r_X、r_Y 拼接而成，表明该流在传播过程中携带并整形了数据负载。",
+            "value": "将来自NoC的驱动事件（i_drvFNoc）经过FIFO缓冲和固定延迟后，转换为输出驱动事件（o_drv2Noc），构成一条从NoC输入到NoC输出的重定时驱动传播路径。",
+            "explanation": "该流包含三个FIFO级（cfifo0, pmtAck, cfifo1）作为事件阻塞点，以及多个透明延迟单元，暗示该路径可能跨越时钟域或需要同步。步骤顺序与连接关系表明该流为单向事件传播，无分支或合并。",
             "certainty": "ai_inferred",
-            "confidence": "high",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
@@ -726,6 +749,12 @@
             "doc_priority": "primary",
             "signals": [
               "i_drvFNoc",
+              "w_drv2Pmt",
+              "w_drv2fifo1",
+              "w_drv2fifo1_delay",
+              "w_drv2Noc_delay",
+              "w_drv2Noc_delay1",
+              "w_drv2Noc_delay2",
               "o_drv2Noc"
             ],
             "instances": [
@@ -749,20 +778,20 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "knowledge_ir/modules/NoCUART1.json"
+                "source": "flow.steps",
+                "path": "NoCUART1.json"
               },
               {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/NoCUART1.json"
+                "source": "related_component_connections",
+                "path": "NoCUART1.json"
               }
             ]
           },
           {
-            "value": "事件流 i_drvFNoc 到 o_drv2Noc 的传播伴随着数据负载的整形，但数据负载的更新时机与事件传播的精确关系未在上下文中明确。",
-            "explanation": "输入事件 i_drvFNoc 携带数据 i_dataFNoc_51，输出事件 o_drv2Noc 携带数据 o_data2Noc_51。assign 0 显示输出数据由多个内部寄存器拼接而成，但这些寄存器（如 r_dataFNoc_51、ReceiveData）的更新是否与事件流同步，或由其他独立逻辑控制，当前上下文未提供证据。因此，数据负载的更新与事件传播的耦合程度需进一步确认。",
+            "value": "输出事件o_drv2Noc与数据o_data2Noc_51绑定，但数据来源于寄存器而非流路径上的中间事件，表明数据路径独立于事件路径。",
+            "explanation": "协议显示i_drvFNoc伴随i_dataFNoc_51，但输出数据通过assign组合而成，未使用瞬态连线直接串联。这暗示输入数据被采样至r_dataFNoc_51等寄存器，随后由组合逻辑生成输出数据。事件路径与数据路径可能异步，输出事件有效时数据必须稳定。",
             "certainty": "ai_inferred",
-            "confidence": "medium",
+            "confidence": "low",
             "source_layers": [
               "semantic_layer"
             ],
@@ -787,18 +816,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/NoCUART1.json"
+                "source": "interface_payload_contracts",
+                "path": "NoCUART1.json"
               },
               {
                 "source": "assignment_facts",
-                "path": "knowledge_ir/modules/NoCUART1.json"
+                "path": "NoCUART1.json"
               }
             ]
           },
           {
-            "value": "流中存在三个 FIFO 级（cfifo0、pmtAck、cfifo1），它们可能因满状态而阻塞事件传播，但背压信号未在上下文中明确。",
-            "explanation": "上下文将 cfifo0、pmtAck、cfifo1 标记为阻塞点，但未提供它们的满/空状态信号或背压路径。因此，背压机制的存在是合理的推断，但具体实现（如是否使用 ready/valid 握手）无法从当前证据确认。",
+            "value": "流中存在三个FIFO阻塞点，暗示可能受背压影响，但自由/完成信号未明确，无法确认是否采用有效-等待握手。",
+            "explanation": "cfifo0, pmtAck, cfifo1被标识为fifo_stage阻塞点，通常需要下游自由信号来释放事件。然而提供的接口协议和连接中未发现类似o_free/i_free的信号，需从RTL源码中确认FIFO的控制端口。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -806,7 +835,9 @@
             ],
             "semantic_claim_id": "semantic:flow:NoCUART1:flow_000_NoCUART1_i_drvFNoc:completion_backpressure:001",
             "doc_priority": "secondary",
-            "signals": [],
+            "signals": [
+              "none direct"
+            ],
             "instances": [
               "cfifo0",
               "pmtAck",
@@ -822,8 +853,11 @@
             ],
             "semantic_evidence": [
               {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/NoCUART1.json"
+                "source": "flow.blocking_points",
+                "path": "NoCUART1.json"
+              },
+              {
+                "source": "no_free_signal in interface contracts"
               }
             ]
           }
@@ -841,11 +875,11 @@
     "components": 3,
     "assignments": 1,
     "evidence_gaps": 0,
-    "review_questions": 2
+    "review_questions": 1
   },
   "source_review_context": {
     "module": "NoCUART1",
-    "rtl_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+    "rtl_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -870,9 +904,9 @@
   ],
   "source_review_claims": [
     {
-      "subject": "uart_instance内部状态与数据路径",
-      "summary": "内部寄存器r_dataFNoc_51、r_dataHigh、r_X、r_Y在时钟沿无条件更新为固定值，未体现UART接收数据的动态写入。",
-      "explanation": "切片3显示：在非复位条件下，r_dataFNoc_51被直接赋值为输入i_dataFNoc_51，r_X固定为5'b10001，r_Y固定为5'b00000，且无其他写入通路。切片5显示输出o_data2Noc_51由上述寄存器拼接而成，但r_dataHigh、ReceiveData的来源未在当前切片中体现。",
+      "subject": "o_data2Noc_51 赋值中使用的寄存器 (r_dataFNoc_51, ReceiveData, r_dataHigh, r_X, r_Y)",
+      "summary": "部分寄存器驱动未在给定 RTL 切片中完整展示，存在证据缺口。",
+      "explanation": "根据切片，r_dataFNoc_51、r_X、r_Y 由 w_firefifo0[0] 触发的 always 块赋值（切片5），但 r_dataHigh 仅定义了复位值，未见正常工作赋值；ReceiveData 由 w_rdata 驱动（切片6），但 w_rdata 的来源未提供；因此 o_data2Noc_51 的完整形成路径不明。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -881,6 +915,7 @@
       ],
       "signals": [
         "r_dataFNoc_51",
+        "ReceiveData",
         "r_dataHigh",
         "r_X",
         "r_Y",
@@ -889,12 +924,17 @@
       "instances": [],
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 86,
-          "line_end": 96
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
+          "line_start": 85,
+          "line_end": 97
         },
         {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
+          "line_start": 118,
+          "line_end": 127
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
           "line_start": 169,
           "line_end": 169
         }
@@ -907,44 +947,9 @@
       "review_status": "needs_review"
     },
     {
-      "subject": "延迟链组件（delay8/9/10/11）的实现细节",
-      "summary": "延迟链由delay64U、delay32U、delay8U三级串联组成，仅知输入输出关系，无周期数与触发条件细节。",
-      "explanation": "切片4明确例化了delay64U、delay32U、delay8U三个延迟单元，连接顺序为w_drv2Noc_delay -> delay8 -> w_drv2Noc_delay1 -> delay9 -> w_drv2Noc_delay2 -> delay10 -> o_drv2Noc。但切片未给出内部延迟周期数（64/32/8的具体含义）或时钟触发条件（如是否为CLOCK上升沿）。",
-      "certainty": "evidence_gap",
-      "source_layers": [
-        "source_review",
-        "rtl_source",
-        "manual_context"
-      ],
-      "signals": [
-        "w_drv2Noc_delay",
-        "w_drv2Noc_delay1",
-        "w_drv2Noc_delay2",
-        "o_drv2Noc"
-      ],
-      "instances": [
-        "delay8",
-        "delay9",
-        "delay10"
-      ],
-      "source_refs": [
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 111,
-          "line_end": 113
-        }
-      ],
-      "evidence_refs": [
-        "ev:NoCUART1:semantic_module",
-        "ev:NoCUART1:semantic_flow:flow_000_NoCUART1_i_drvFNoc",
-        "ev:NoCUART1:flow:flow_000_NoCUART1_i_drvFNoc"
-      ],
-      "review_status": "needs_review"
-    },
-    {
-      "subject": "semantic_flow.i_drvFNoc",
-      "summary": "i_drvFNoc直连cfifo2的i_drive端口，经延迟链后产生o_drv2Noc，但途中数据通路与状态更新逻辑不完整。",
-      "explanation": "从切片2可知i_drvFNoc直接连接到cfifo0的i_drive；切片4显示从w_drv2Noc_delay经三级延迟得到o_drv2Noc。但中间无任何关于w_drv2Noc_delay与其他寄存器（如r_dataFNoc_51、r_X、r_Y）关联的代码，数据如何被捕获并打包到输出o_data2Noc_51的完整路径不明确。",
+      "subject": "semantic_flow.i_drvFNoc / flow_000_NoCUART1_i_drvFNoc",
+      "summary": "该流路径经过 cFifo2 实例，但 FIFO 内部实现未在切片中提供，无法确定延迟和背压行为，存在证据缺口。",
+      "explanation": "切片4展示了 i_drvFNoc 连接到 cFifo2 的 .i_drive，并通过 .o_free 输出，FIFO 产生 w_drv2Pmt 和 w_freeFPmt 等信号，但 FIFO 的具体模型和参数未知，导致无法准确描述流行为。",
       "certainty": "evidence_gap",
       "source_layers": [
         "source_review",
@@ -953,26 +958,18 @@
       ],
       "signals": [
         "i_drvFNoc",
-        "o_drv2Noc",
-        "w_drv2Noc_delay",
-        "o_data2Noc_51"
+        "o_free2Noc",
+        "w_freeFPmt",
+        "w_drv2Pmt"
       ],
       "instances": [
-        "cfifo0",
-        "delay8",
-        "delay9",
-        "delay10"
+        "cFifo2"
       ],
       "source_refs": [
         {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 68,
+          "file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
+          "line_start": 60,
           "line_end": 70
-        },
-        {
-          "file": "rtl/rtl/IONet/UART/NoCUART1.v",
-          "line_start": 111,
-          "line_end": 113
         }
       ],
       "evidence_refs": [
@@ -985,9 +982,9 @@
   ],
   "source_review_report": {
     "status": "reviewed",
-    "claim_count": 3,
-    "open_question_count": 3,
-    "source_file": "rtl/rtl/IONet/UART/NoCUART1.v",
+    "claim_count": 2,
+    "open_question_count": 4,
+    "source_file": "rtl\\rtl\\IONet\\UART\\NoCUART1.v",
     "report_file": "source_review_report.json"
   }
 }

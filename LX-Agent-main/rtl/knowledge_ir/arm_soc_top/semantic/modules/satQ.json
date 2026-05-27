@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "satQ",
-  "input_hash": "dc57cf96dcf30631f76d3a9fc428b7c89f5d779e8a6eeb5c920d7d2080fa9809",
+  "input_hash": "d2a245c7d19597d9011fc209f375d14daf0f954705ee12803b8a98b3c18ef023",
   "source_context": "ai_context/modules/satQ.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/Execute/satQ.v",
+      "source": "rtl\\rtl\\Execute\\satQ.v",
       "paths": [
         "module_source"
       ]
@@ -40,18 +40,19 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/Execute/satQ.v",
+        "rtl_file": "rtl\\rtl\\Execute\\satQ.v",
         "parser_module": "modules/satQ.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 13,
+    "count": 8,
     "by_type": {
-      "assignment_interpretation": 8,
+      "assignment_interpretation": 3,
       "documentation_focus": 1,
-      "interface_intent": 2,
+      "interface_intent": 1,
       "module_role": 1,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -62,27 +63,30 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "饱和量化单元，根据符号标志选择有符号或无符号饱和算法对操作数进行饱和处理。",
+      "summary": "组合逻辑饱和运算模块，根据位宽参数对输入数据进行有符号或无符号饱和处理。",
       "subject": "satQ",
-      "explanation": "模块接收两个32位操作数和一个符号标志，通过两条独立的饱和路径（有符号/无符号）计算饱和结果，最终由符号标志选择输出。",
+      "explanation": "接口仅包含两个数据输入和一个数据输出，外加一个1位控制输入，无时序逻辑或子模块实例。内部连续赋值链实现了对i_oprand1_32的钳位，将i_oprand2_32的低6位解释为位宽n，通过i_satQSymbolFlag_1选择有符号饱和（1）或无符号饱和（0），最终输出o_saQResult_32。因此模块承担“饱和单元”角色。",
       "signals": [
         "i_oprand1_32",
         "i_oprand2_32",
         "i_satQSymbolFlag_1",
         "o_saQResult_32"
       ],
+      "instances": [
+        "无"
+      ],
+      "related_flows": [
+        "无"
+      ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
+          "source": "parser_module/interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "parser_module/assignments"
         }
       ],
       "id": "semantic:module:satQ:module_role:001"
@@ -93,28 +97,33 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "根据i_satQSymbolFlag_1选择有符号或无符号饱和路径，对i_oprand1_32进行饱和处理，输出饱和结果和饱和标志。",
-      "subject": "饱和路径选择与计算",
-      "explanation": "模块内部并行计算有符号饱和结果w_saturated1_32和饱和标志w_sat1_1，以及无符号饱和结果w_satuarted2_32和饱和标志w_sat2_1。最终输出由i_satQSymbolFlag_1选择。",
+      "summary": "模块内部由两组并行组合逻辑构成：有符号饱和通路与无符号饱和通路，最后由选择器合并输出。",
+      "subject": "组合饱和通路",
+      "explanation": "有符号通路通过w_maxOprand1_32计算下限钳位、w_saturated1_32计算上限钳位，w_sat1_1生成越限标志；无符号通路通过w_maxOprand2_32钳位至非负、w_satuarted2_32钳位至上界，w_sat2_1生成越限标志。两条通路共享输入i_oprand1_32和i_oprand2_32，并由i_satQSymbolFlag_1选择最终的饱和值和标志。",
       "signals": [
         "i_oprand1_32",
         "i_oprand2_32",
-        "i_satQSymbolFlag_1",
+        "w_maxOprand1_32",
+        "w_saturated1_32",
+        "w_sat1_1",
+        "w_maxOprand2_32",
+        "w_satuarted2_32",
+        "w_sat2_1",
         "o_saQResult_32",
         "sat"
+      ],
+      "instances": [
+        "无"
+      ],
+      "related_flows": [
+        "无"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "parser_module/assignments (index 0-7)"
         }
       ],
       "id": "semantic:module:satQ:structural_responsibility:001"
@@ -125,29 +134,36 @@
         "type": "module",
         "module": "satQ"
       },
-      "subject": "w_maxOprand1_32",
-      "summary": "有符号饱和下限钳位，将i_oprand1_32钳位到由i_oprand2_32[5:0]指定的位宽的有符号最小值。",
-      "explanation": "该赋值实现有符号饱和的下限保护，防止结果低于-(1<<(i_oprand2_32[5:0]-1))。",
+      "subject": "有符号饱和钳位组 (assign 0,1,2)",
+      "summary": "实现有符号饱和：将i_oprand1_32钳位在[-2^(n-1), 2^(n-1)-1]范围内，并产生超限标志w_sat1_1。",
+      "explanation": "assign 0将i_oprand1_32与负下限 –2^(n-1) 比较，取较大者得到w_maxOprand1_32，防止下溢；assign 1将w_maxOprand1_32与正上限 2^(n-1)-1 比较，取较小者得到饱和值w_saturated1_32；assign 2直接判断原始i_oprand1_32是否超出[-2^(n-1), 2^(n-1)-1]以生成w_sat1_1。",
       "signals": [
-        "w_maxOprand1_32",
         "i_oprand1_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "w_maxOprand1_32",
+        "w_saturated1_32",
+        "w_sat1_1"
       ],
       "related_assignments": [
-        "0"
+        "0",
+        "1",
+        "2"
+      ],
+      "related_flows": [
+        "无"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
+          "source": "parser_module/assignments (index 0"
         },
         {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
+          "source": "1"
         },
         {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "2)"
         }
       ],
       "id": "semantic:module:satQ:assignment_interpretation:001"
@@ -158,29 +174,36 @@
         "type": "module",
         "module": "satQ"
       },
-      "subject": "w_saturated1_32",
-      "summary": "有符号饱和上限钳位，将w_maxOprand1_32钳位到由i_oprand2_32[5:0]指定的位宽的有符号最大值。",
-      "explanation": "该赋值实现有符号饱和的上限保护，防止结果超过(1<<(i_oprand2_32[5:0]-1)-1)。",
+      "subject": "无符号饱和钳位组 (assign 3,4,5)",
+      "summary": "实现无符号饱和：将i_oprand1_32钳位在[0, 2^n-1]范围内，并产生超限标志w_sat2_1。",
+      "explanation": "assign 3计算与0的最大值，得到w_maxOprand2_32，确保非负；assign 4将w_maxOprand2_32与上限 2^n –1 比较，取较小者得到饱和值w_satuarted2_32（变量名疑似为w_saturated2_32笔误）；assign 5判断i_oprand1_32是否小于0或大于等于2^n以生成w_sat2_1。",
       "signals": [
-        "w_saturated1_32",
-        "w_maxOprand1_32",
-        "i_oprand2_32"
+        "i_oprand1_32",
+        "i_oprand2_32",
+        "w_maxOprand2_32",
+        "w_satuarted2_32",
+        "w_sat2_1"
       ],
       "related_assignments": [
-        "1"
+        "3",
+        "4",
+        "5"
+      ],
+      "related_flows": [
+        "无"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
+          "source": "parser_module/assignments (index 3"
         },
         {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
+          "source": "4"
         },
         {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "5)"
         }
       ],
       "id": "semantic:module:satQ:assignment_interpretation:002"
@@ -191,245 +214,51 @@
         "type": "module",
         "module": "satQ"
       },
-      "subject": "w_sat1_1",
-      "summary": "有符号饱和标志，指示i_oprand1_32是否超出有符号范围。",
-      "explanation": "当i_oprand1_32小于有符号最小值或大于等于有符号最大值时置位。",
+      "subject": "输出与标志选择 (assign 6,7)",
+      "summary": "根据i_satQSymbolFlag_1选择有符号或无符号饱和输出，并输出饱和标志。",
+      "explanation": "assign 6将选中的饱和值驱动到模块端口o_saQResult_32；assign 7将选中的饱和标志驱动到内部线网sat，该信号可能在模块外部未被使用或应为输出端口但未声明。",
       "signals": [
-        "w_sat1_1",
-        "i_oprand1_32",
-        "i_oprand2_32"
+        "i_satQSymbolFlag_1",
+        "o_saQResult_32",
+        "sat"
       ],
       "related_assignments": [
-        "2"
+        "6",
+        "7"
       ],
-      "doc_priority": "secondary",
+      "related_flows": [
+        "无"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
+          "source": "parser_module/assignments (index 6"
         },
         {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "7)"
         }
       ],
       "id": "semantic:module:satQ:assignment_interpretation:003"
     },
     {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "subject": "w_maxOprand2_32",
-      "summary": "无符号饱和下限钳位，将i_oprand1_32钳位到0。",
-      "explanation": "该赋值实现无符号饱和的下限保护，防止结果低于0。",
-      "signals": [
-        "w_maxOprand2_32",
-        "i_oprand1_32"
-      ],
-      "related_assignments": [
-        "3"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
-        }
-      ],
-      "id": "semantic:module:satQ:assignment_interpretation:004"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "subject": "w_satuarted2_32",
-      "summary": "无符号饱和上限钳位，将w_maxOprand2_32钳位到由i_oprand2_32[5:0]指定的位宽的无符号最大值。",
-      "explanation": "该赋值实现无符号饱和的上限保护，防止结果超过(1<<i_oprand2_32[5:0])-1。",
-      "signals": [
-        "w_satuarted2_32",
-        "w_maxOprand2_32",
-        "i_oprand2_32"
-      ],
-      "related_assignments": [
-        "4"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
-        }
-      ],
-      "id": "semantic:module:satQ:assignment_interpretation:005"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "subject": "w_sat2_1",
-      "summary": "无符号饱和标志，指示i_oprand1_32是否超出无符号范围。",
-      "explanation": "当i_oprand1_32小于0或大于等于无符号最大值时置位。",
-      "signals": [
-        "w_sat2_1",
-        "i_oprand1_32",
-        "i_oprand2_32"
-      ],
-      "related_assignments": [
-        "5"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
-        }
-      ],
-      "id": "semantic:module:satQ:assignment_interpretation:006"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "subject": "o_saQResult_32",
-      "summary": "最终饱和结果输出，由i_satQSymbolFlag_1选择有符号或无符号饱和路径的结果。",
-      "explanation": "该赋值是模块的核心输出选择逻辑，根据符号标志决定输出有符号饱和结果w_saturated1_32或无符号饱和结果w_satuarted2_32。",
-      "signals": [
-        "o_saQResult_32",
-        "i_satQSymbolFlag_1",
-        "w_saturated1_32",
-        "w_satuarted2_32"
-      ],
-      "related_assignments": [
-        "6"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
-        }
-      ],
-      "id": "semantic:module:satQ:assignment_interpretation:007"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "subject": "sat",
-      "summary": "饱和标志输出，由i_satQSymbolFlag_1选择有符号或无符号饱和标志。",
-      "explanation": "该赋值输出饱和标志，指示输入操作数是否发生了饱和。",
-      "signals": [
-        "sat",
-        "i_satQSymbolFlag_1",
-        "w_sat1_1",
-        "w_sat2_1"
-      ],
-      "related_assignments": [
-        "7"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
-        }
-      ],
-      "id": "semantic:module:satQ:assignment_interpretation:008"
-    },
-    {
       "claim_type": "interface_intent",
       "scope": {
         "type": "module",
         "module": "satQ"
       },
-      "summary": "i_satQSymbolFlag_1作为饱和模式选择信号，控制饱和算法类型（有符号/无符号）。",
-      "subject": "饱和控制接口",
-      "explanation": "该信号不是简单的使能或状态，而是决定整个饱和计算路径的选择，是模块的核心控制输入。",
-      "signals": [
-        "i_satQSymbolFlag_1"
-      ],
-      "related_payload": [
-        "o_saQResult_32",
-        "sat"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
-        }
-      ],
-      "id": "semantic:module:satQ:interface_intent:001"
-    },
-    {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "satQ"
-      },
-      "summary": "i_oprand1_32作为待饱和数据输入，i_oprand2_32的低6位作为饱和位宽参数。",
-      "subject": "操作数接口",
-      "explanation": "i_oprand2_32[5:0]用于计算饱和的上下限，其语义是饱和位宽减1（有符号）或饱和位宽（无符号）。",
+      "summary": "i_oprand1_32为待饱和处理的数据，i_oprand2_32[5:0]为位宽参数n，i_satQSymbolFlag_1为有符号/无符号模式选择，o_saQResult_32为饱和结果。",
+      "subject": "数据与控制接口",
+      "explanation": "位宽参数n决定了饱和范围：有符号模式下范围对称以2的补码表示，无符号模式下从0开始。i_satQSymbolFlag_1为高时选中符号模式，为低时选无符号模式。无独立的饱和标志输出端口，内部标志sat未暴露，可能需确认设计意图。",
       "signals": [
         "i_oprand1_32",
-        "i_oprand2_32"
+        "i_oprand2_32",
+        "i_satQSymbolFlag_1",
+        "o_saQResult_32"
       ],
       "related_payload": [
+        "i_oprand1_32",
         "o_saQResult_32"
       ],
       "doc_priority": "primary",
@@ -437,16 +266,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
-        },
-        {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "parser_module/interface"
         }
       ],
-      "id": "semantic:module:satQ:interface_intent:002"
+      "id": "semantic:module:satQ:interface_intent:001"
     },
     {
       "claim_type": "documentation_focus",
@@ -454,36 +277,74 @@
         "type": "module",
         "module": "satQ"
       },
-      "summary": "文档应重点描述有符号和无符号饱和算法的数学定义和边界条件。",
-      "subject": "饱和算法细节",
-      "explanation": "模块的核心逻辑是饱和计算，需要清晰说明饱和上下限的计算公式和饱和标志的判定条件。",
+      "summary": "文档应重点解释有符号与无符号两种饱和模式的钳位算法、位宽参数n的作用，以及饱和标志sat的输出状态。",
+      "subject": "饱和算法与位宽参数",
+      "explanation": "模块为纯组合逻辑，需明确输入到输出的组合路径和钳位边界计算公式。注意到内部线网sat被赋值但未出现在接口中，文档应说明该标志是否为有意停留内部，还是为缺失的输出端口，提醒集成者注意。",
       "signals": [
         "i_oprand1_32",
         "i_oprand2_32",
+        "i_satQSymbolFlag_1",
         "o_saQResult_32",
         "sat"
       ],
+      "instances": [
+        "无"
+      ],
+      "related_flows": [
+        "无"
+      ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/satQ.json"
+          "source": "parser_module/interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/satQ.json"
+          "source": "parser_module/assignments"
         },
         {
-          "source": "rtl/rtl/Execute/satQ.v"
+          "source": "evidence_index/rtl_source"
         }
       ],
       "id": "semantic:module:satQ:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "satQ"
+      },
+      "reason": "assign 7驱动了线网sat，但模块接口定义中未将其列为数据输出、自由输出或控制输出。无法从紧凑上下文判断sat是内部未使用的线网、模块缺少的输出端口，或是被省略的端口。需检查RTL源码以澄清。",
+      "subject": "信号sat的端口归属",
+      "needed_source_slice": "module declaration; assign block中sat的连接",
+      "signals": [
+        "sat"
+      ],
+      "instances": [
+        "无"
+      ],
+      "related_flows": [
+        "无"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_module/assignments (index 7)"
+        },
+        {
+          "source": "parser_module/interface"
+        }
+      ],
+      "id": "semantic:module:satQ:source_review_request:001"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "饱和标志输出端口",
-      "reason": "上下文未明确sat信号的端口声明，仅出现在assign中，可能为内部信号或未列出的输出端口。"
+      "field": "sat端口定义",
+      "reason": "模块接口中未列出sat信号，但连续赋值中对其赋值，缺少将其定义为输出或内部wire的明确证据。"
     }
   ]
 }

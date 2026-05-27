@@ -1,16 +1,16 @@
 # 模块 `uart_tx`
 
-- 源文件：`rtl/rtl/memory/uart_tx.v`。
-- 职责：AI 推断：该模块负责将并行数据转换为串行比特流，并通过单线 tx_pin 发送，实现 UART 发送功能。。
-- 说明：模块具有数据输入 tx_data[7:0] 和握手信号 tx_data_valid/tx_data_ready，表明其从系统总线接收并行数据。输出 tx_pin 由内部 tx_reg 驱动，表明串行化过程在内部完成。
+- 源文件：`rtl\rtl\memory\uart_tx.v`
+- 职责（AI 推断）：UART 串行发送器，将并行数据字节转换为串行比特流并通过 `tx_pin` 输出。
+- 说明：接口包含 8 位 `tx_data`、数据有效信号 `tx_data_valid` 以及反压信号 `tx_data_ready`，构成典型的推送握手协议；`assign tx_pin = tx_reg` 表明最终串行输出由内部寄存器直接驱动，符合 UART TX 的移位输出架构。
 
 ## 1. 层级位置
 
-- Parents：`data_init`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`data_init`
+- Children：无
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`tx_data`, `tx_data_valid`；其他输入：`clk`。
-- 输出：数据输出：`tx_data_ready`；其他输出：`tx_pin`。
+- 接收：数据输入 `tx_data`、`tx_data_valid`；其他输入 `clk`
+- 输出：数据输出 `tx_data_ready`；其他输出 `tx_pin`
 
 ### 2.1 端口分组
 
@@ -51,4 +51,4 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_0` | unknown | `tx_pin` | tx_reg | AI 推断：该赋值将内部串行化寄存器 tx_reg 的值直接驱动到输出引脚 tx_pin，是串行数据输出的关键路径。 |
+| `assign_0` | unknown | `tx_pin` | tx_reg | AI 推断：将内部移位数据位直连到输出引脚，完成串行比特驱动 |

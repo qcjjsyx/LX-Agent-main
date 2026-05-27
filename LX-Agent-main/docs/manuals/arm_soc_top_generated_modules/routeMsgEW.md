@@ -1,16 +1,16 @@
 # 模块 `routeMsgEW`
 
-- 源文件：`rtl/rtl/IONet/IONetwork_9.24/routeMsgEW.v`。
-- 职责：AI 推断：坐标有效性检测与消息有效信号生成模块。
-- 说明：该模块仅有一个数据输入i_coord_4和一个输出o_msgVld，通过组合逻辑对输入坐标进行按位或运算，判断坐标是否非零，从而生成消息有效标志。
+- 源文件：`rtl\rtl\IONet\IONetwork_9.24\routeMsgEW.v`
+- 职责：AI 推断：纯组合逻辑单元，根据 4-bit 坐标输入生成单比特的消息有效指示。
+- 说明：模块仅含一个数据输入 `i_coord_4[3:0]` 和一个由四输入或归约驱动的输出 `o_msgVld`，无任何时序实例或事件流，本质是一个坐标有效检测器。
 
 ## 1. 层级位置
 
-- Parents：`routeMsg`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`routeMsg`
+- Children：无
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`i_coord_4`。
-- 输出：其他输出：`o_msgVld`。
+- 接收：数据输入 `i_coord_4`
+- 输出：其他输出 `o_msgVld`
 
 ### 2.1 端口分组
 

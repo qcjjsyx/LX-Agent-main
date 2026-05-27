@@ -382,8 +382,8 @@
         "w_lsuFifoToExcSplitter_1"
       ],
       "role_in_flow": {
-        "value": "事件流的入口缓冲级，用于暂存执行单元驱动的事件，防止背压直接传递到执行单元。",
-        "explanation": "lsuFifo作为Fifo1类型的实例，接收i_exeDriveToLsu_1事件输入，输出w_lsuFifoToExcSplitter_1。其作用是解耦执行单元与后续流水线，允许事件在内部流水线阻塞时被缓冲。",
+        "value": "单入口FIFO缓冲，解耦执行单元与LSU内部，隔离时序并可能产生反压。",
+        "explanation": "该实例接收i_exeDriveToLsu_1及伴随数据，当内部下游就绪时输出w_lsuFifoToExcSplitter_1；当FIFO满时通过o_lsuFreeToExe_1反压执行单元。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -393,13 +393,17 @@
         "doc_priority": "primary",
         "signals": [
           "i_exeDriveToLsu_1",
-          "w_lsuFifoToExcSplitter_1"
+          "w_lsuFifoToExcSplitter_1",
+          "o_lsuFreeToExe_1",
+          "i_exeToLsuData_163"
         ],
         "instances": [
           "lsuFifo"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "无"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -409,6 +413,10 @@
           {
             "source": "parser_pipeline_rtl/modules/lsu.json",
             "path": "instances.connections"
+          },
+          {
+            "source": "knowledge_ir/modules/lsu.json",
+            "path": "interface_data_contract"
           }
         ]
       },
@@ -432,8 +440,8 @@
         "w_lsuFifoToWbackSplitter_1"
       ],
       "role_in_flow": {
-        "value": "事件流的第一个分支点，将事件分为异常路径和写回路径。",
-        "explanation": "excSplitter作为cSplitter2_1b类型的实例，接收来自lsuFifo的事件，输出o_lsuDriveToExcp_1（异常路径）和w_lsuFifoToWbackSplitter_1（写回路径）。其选择逻辑可能基于事件类型或异常条件。",
+        "value": "1位驱动的分裂器，将FIFO输出复制为两条独立通路：一条直接输出到异常端口，另一条进入回写处理。",
+        "explanation": "excSplitter的o_driveNext1提供o_lsuDriveToExcp_1驱动异常逻辑，o_driveNext0形成w_lsuFifoToWbackSplitter_1，从而允许同一事件同时触发异常和回写操作，体现LSU的“同步发出、独立完成”范式。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -450,7 +458,9 @@
           "excSplitter"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "无"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -459,7 +469,10 @@
         "semantic_evidence": [
           {
             "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
+            "path": "connection_graph"
+          },
+          {
+            "source": "internal_event_flow steps"
           }
         ]
       },
@@ -482,35 +495,13 @@
         "w_b_1"
       ],
       "role_in_flow": {
-        "value": "异常路径上的透明延迟单元，用于时序对齐或反馈控制。",
-        "explanation": "excSplitterDelay作为delay8U类型的实例，接收o_lsuDriveToExcp_1，输出w_b_1。w_b_1连接到excSplitter的i_freeNext1，表明该延迟单元可能用于生成异常路径的释放信号，控制excSplitter的背压。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:003",
-        "doc_priority": "secondary",
-        "signals": [
-          "o_lsuDriveToExcp_1",
-          "w_b_1"
-        ],
-        "instances": [
-          "excSplitterDelay"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -532,36 +523,13 @@
         "w_wbackSplitterToWbackSelector_1"
       ],
       "role_in_flow": {
-        "value": "写回路径的第二个分支点，将事件分为状态选择路径和写回选择路径。",
-        "explanation": "wbackSplitter作为cSplitter2_107_74_33b_lsu类型的实例，接收w_lsuFifoToWbackSplitter_1，输出w_wbackSplitterToStateSelector_1和w_wbackSplitterToWbackSelector_1。其拆分可能基于事件是否需要状态更新或直接写回。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:004",
-        "doc_priority": "primary",
-        "signals": [
-          "w_lsuFifoToWbackSplitter_1",
-          "w_wbackSplitterToStateSelector_1",
-          "w_wbackSplitterToWbackSelector_1"
-        ],
-        "instances": [
-          "wbackSplitter"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -586,30 +554,30 @@
         "w_stateSelectorToReadGrfSelector_1"
       ],
       "role_in_flow": {
-        "value": "状态选择器，根据事件状态将事件分发到五个不同的子路径。",
-        "explanation": "stateSelector作为cSelector5_5b_lsu类型的实例，接收w_wbackSplitterToStateSelector_1，输出到异常FIFO、多加载互斥合并、多存储互斥合并、无加载存储拆分器和读寄存器堆选择器。其选择逻辑基于事件的状态字段。",
+        "value": "基于输入数据的五位选择器，将写回通路拆分为多路，分别指向异常FIFO、多加载合并、多存储合并、无LS（NoLs）分裂器和读GRF选择器。",
+        "explanation": "stateSelector依据payload中的状态字段判别操作类型，将事件路由到对应的后续处理块。这是数据驱动路由的核心组件，决定了该流是否能最终到达o_lsuDriveToRGrf_1或o_lsuDriveToWGrf_1以外的路径。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:005",
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:003",
         "doc_priority": "primary",
         "signals": [
           "w_wbackSplitterToStateSelector_1",
-          "w_stateSelectorToExcpFifo_1",
           "w_stateSelectorToMultiLoadMutexMerge_1",
           "w_stateSelectorToMultiStoreMutexMerge_1",
-          "w_stateSelectorToNoLsSplitter_1",
           "w_stateSelectorToReadGrfSelector_1"
         ],
         "instances": [
           "stateSelector"
         ],
         "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "related_assignments": [
+          "无"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
         ],
@@ -617,6 +585,10 @@
           {
             "source": "parser_pipeline_rtl/modules/lsu.json",
             "path": "instances.connections"
+          },
+          {
+            "source": "knowledge_ir/modules/lsu.json",
+            "path": "interface_data_contract"
           }
         ]
       },
@@ -640,36 +612,13 @@
         "w_backSelectorOver_1"
       ],
       "role_in_flow": {
-        "value": "写回选择器，将事件输出到写回寄存器堆或反馈回自身。",
-        "explanation": "wbackSelector作为cSelector2_75b_lsu类型的实例，接收w_wbackSplitterToWbackSelector_1，输出o_lsuDriveToWGrf_1和w_backSelectorOver_1。w_backSelectorOver_1连接到wbackSelector的i_freeNext1，表明该选择器可能用于处理写回路径的背压或重试。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:006",
-        "doc_priority": "primary",
-        "signals": [
-          "w_wbackSplitterToWbackSelector_1",
-          "o_lsuDriveToWGrf_1",
-          "w_backSelectorOver_1"
-        ],
-        "instances": [
-          "wbackSelector"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -691,36 +640,13 @@
         "w_multiLoadMutexMergeToMultiLoadSelector_1"
       ],
       "role_in_flow": {
-        "value": "多加载路径的互斥合并器，用于仲裁来自状态选择器和多加载拆分器的事件。",
-        "explanation": "multiLoadMutexMerge作为cMutexMerge2_49b_lsu类型的实例，接收w_multiLoadSplitterToMultiLoadMutexMerge_1和w_stateSelectorToMultiLoadMutexMerge_1，输出w_multiLoadMutexMergeToMultiLoadSelector_1。其作用是确保多加载路径的事件不会冲突。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:008",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_multiLoadSplitterToMultiLoadMutexMerge_1",
-          "w_stateSelectorToMultiLoadMutexMerge_1",
-          "w_multiLoadMutexMergeToMultiLoadSelector_1"
-        ],
-        "instances": [
-          "multiLoadMutexMerge"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -742,36 +668,13 @@
         "w_multiStoreMutexMergeToMultiStoreFifo_1"
       ],
       "role_in_flow": {
-        "value": "多存储路径的互斥合并器，用于仲裁来自状态选择器和多存储选择器的事件。",
-        "explanation": "multiStoreMutexMerge作为cMutexMerge2_48b_lsu类型的实例，接收w_multiStoreSelectorToMultiStoreMutexMerge_1和w_stateSelectorToMultiStoreMutexMerge_1，输出w_multiStoreMutexMergeToMultiStoreFifo_1。其作用是确保多存储路径的事件不会冲突。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:009",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_multiStoreSelectorToMultiStoreMutexMerge_1",
-          "w_stateSelectorToMultiStoreMutexMerge_1",
-          "w_multiStoreMutexMergeToMultiStoreFifo_1"
-        ],
-        "instances": [
-          "multiStoreMutexMerge"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -793,36 +696,13 @@
         "w_readGrfSelectorToReadGrfMutexMerge_1"
       ],
       "role_in_flow": {
-        "value": "读寄存器堆选择器，将事件分发到加载地址存储（LAS）路径或读寄存器堆路径。",
-        "explanation": "readGrfSelector作为cSelector2_2b_lsu类型的实例，接收w_stateSelectorToReadGrfSelector_1，输出w_readGrfSelectorToLASMutexMerge_1和w_readGrfSelectorToReadGrfMutexMerge_1。其选择可能基于事件是否需要加载地址存储。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:007",
-        "doc_priority": "primary",
-        "signals": [
-          "w_stateSelectorToReadGrfSelector_1",
-          "w_readGrfSelectorToLASMutexMerge_1",
-          "w_readGrfSelectorToReadGrfMutexMerge_1"
-        ],
-        "instances": [
-          "readGrfSelector"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -844,36 +724,13 @@
         "w_LASMutexMergeToLsuMutexMerge_1"
       ],
       "role_in_flow": {
-        "value": "加载地址存储路径的互斥合并器，用于仲裁来自读寄存器堆选择器和通用寄存器选择器的事件。",
-        "explanation": "LASMutexMerge作为cMutexMerge2_64b_lsu类型的实例，接收w_grfSelectorToLASMutexMerge_1和w_readGrfSelectorToLASMutexMerge_1，输出w_LASMutexMergeToLsuMutexMerge_1。其作用是确保加载地址存储路径的事件不会冲突。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:010",
-        "doc_priority": "secondary",
-        "signals": [
-          "w_grfSelectorToLASMutexMerge_1",
-          "w_readGrfSelectorToLASMutexMerge_1",
-          "w_LASMutexMergeToLsuMutexMerge_1"
-        ],
-        "instances": [
-          "LASMutexMerge"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -895,25 +752,28 @@
         "o_lsuDriveToRGrf_1"
       ],
       "role_in_flow": {
-        "value": "读寄存器堆路径的最终互斥合并器，用于仲裁来自读寄存器堆选择器和多存储FIFO的事件。",
-        "explanation": "readGrfMutexMerge作为cMutexMerge2_8b_lsu类型的实例，接收w_multiStoreFifoToReadGrfMutexMerge_1和w_readGrfSelectorToReadGrfMutexMerge_1，输出o_lsuDriveToRGrf_1。其作用是确保读寄存器堆路径的事件不会冲突。",
+        "value": "合并来自读GRF选择器和多存储FIFO的两条通路，最终驱动o_lsuDriveToRGrf_1输出。",
+        "explanation": "该合并器确保多个可能源（直接读操作和多存储事务的读接口部分）不会同时驱动RGrf总线，实现仲裁或顺序化。其后挂接的payload数据o_lsuToRGrfData_8随之输出。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:011",
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:component_role:004",
         "doc_priority": "primary",
         "signals": [
-          "w_multiStoreFifoToReadGrfMutexMerge_1",
           "w_readGrfSelectorToReadGrfMutexMerge_1",
-          "o_lsuDriveToRGrf_1"
+          "w_multiStoreFifoToReadGrfMutexMerge_1",
+          "o_lsuDriveToRGrf_1",
+          "o_lsuToRGrfData_8"
         ],
         "instances": [
           "readGrfMutexMerge"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "无"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -922,7 +782,10 @@
         "semantic_evidence": [
           {
             "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "instances.connections"
+            "path": "connection_graph"
+          },
+          {
+            "source": "module_boundary connections"
           }
         ]
       },
@@ -1044,28 +907,23 @@
     }
   ],
   "semantic_meaning": {
-    "value": "文档应重点描述该流从输入到三个输出端点的完整路径，包括各分支点和合并点的作用。",
-    "explanation": "该流具有复杂的多级分支和合并结构，涉及多个拆分器和互斥合并器。文档应清晰描述每个分支点的选择逻辑和每个合并点的仲裁机制，以便读者理解事件如何被分发和处理。",
+    "value": "该流具备完整的反压链路，从输出端点经FIFO和各合并器反向传递就绪状态，阻止下游未就绪时的新事件进入。",
+    "explanation": "输入free信号o_lsuFreeToExe_1由lsuFifo产生；各输出端点均有对应的i_lsuFreeFrom*_1输入信号，会通过MutexMerge等组件回传。lsuFifo的容量为1产生节流效果，MutexMerge在内部仲裁时也可能引入等待，因此文档应强调整体流控由这些阻塞点保证。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:documentation_focus:001",
+    "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:001",
     "doc_priority": "primary",
     "signals": [
-      "i_exeDriveToLsu_1",
-      "o_lsuDriveToExcp_1",
-      "o_lsuDriveToWGrf_1",
-      "o_lsuDriveToRGrf_1"
+      "o_lsuFreeToExe_1",
+      "i_lsuFreeFromExcp_1",
+      "i_lsuFreeFromWGrf_1",
+      "i_lsuFreeFromRGrf_1"
     ],
     "instances": [
       "lsuFifo",
-      "excSplitter",
-      "wbackSplitter",
-      "stateSelector",
-      "wbackSelector",
-      "readGrfSelector",
       "multiLoadMutexMerge",
       "multiStoreMutexMerge",
       "LASMutexMerge",
@@ -1081,14 +939,17 @@
     ],
     "semantic_evidence": [
       {
-        "source": "parser_pipeline_rtl/modules/lsu.json",
-        "path": "flow_graph"
+        "source": "knowledge_ir/modules/lsu.json",
+        "path": "interface_data_contract"
+      },
+      {
+        "source": "internal_event_flow.branch_points"
       }
     ],
     "supporting_claims": [
       {
-        "value": "执行单元驱动的一条内部事件流，经过FIFO缓冲、多级选择/拆分和互斥合并后，分发至异常、写回和读寄存器堆三个输出端点。",
-        "explanation": "该流从执行单元输入事件i_exeDriveToLsu_1开始，首先进入lsuFifo进行缓冲，然后通过excSplitter将事件分为异常路径和写回路径。写回路径进一步通过wbackSplitter和stateSelector进行状态选择，最终通过wbackSelector输出到写回寄存器堆，或通过readGrfSelector和多个互斥合并器输出到读寄存器堆。异常路径则通过excSplitterDelay延迟后反馈回excSplitter。",
+        "value": "从执行单元接收加载/存储请求，经FIFO缓冲后将其分发至异常、写回通用寄存器（WGrf）和读通用寄存器（RGrf）三条终端路径。",
+        "explanation": "输入驱动i_exeDriveToLsu_1经过lsuFifo进入内部通路，由excSplitter分出异常分支和写回分支；写回分支经wbackSplitter进一步拆分为状态选择（stateSelector）和写回选择（wbackSelector）两条子通路，最终形成o_lsuDriveToExcp_1、o_lsuDriveToWGrf_1和经由多种合并器汇聚的o_lsuDriveToRGrf_1。该结构表明一次执行驱动事件可以同时触发异常响应、写回数据和读取寄存器地址的传递。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1109,13 +970,12 @@
           "stateSelector",
           "wbackSelector",
           "readGrfSelector",
-          "multiLoadMutexMerge",
-          "multiStoreMutexMerge",
-          "LASMutexMerge",
           "readGrfMutexMerge"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "无"
+        ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
         "evidence_refs": [
@@ -1129,29 +989,33 @@
           },
           {
             "source": "parser_pipeline_rtl/modules/lsu.json",
-            "path": "flow_graph"
+            "path": "connection_graph"
           }
         ]
       },
       {
-        "value": "输入事件i_exeDriveToLsu_1关联了释放信号o_lsuFreeToExe_1，用于执行单元的背压控制。",
-        "explanation": "接口载荷契约表明，i_exeDriveToLsu_1事件有对应的释放信号o_lsuFreeToExe_1。这表明执行单元通过该释放信号感知LSU是否准备好接收新事件，实现背压机制。",
+        "value": "163位输入数据负载在wbackSplitter和stateSelector处被解释，以选择驱动输出去往哪些合并器和输出端口。",
+        "explanation": "stateSelector的五路选择显然依赖于数据中的字段（可能为操作码或状态位），间接控制该流是否产生对RGrf的读取、是否进入多加载或多存储事务。wbackSplitter也可能根据数据字段决定是走状态选择还是直接走wbackSelector到达o_lsuDriveToWGrf_1。确切控制位需查阅RTL。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:001",
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:data_control_effect:001",
         "doc_priority": "primary",
         "signals": [
-          "i_exeDriveToLsu_1",
-          "o_lsuFreeToExe_1"
+          "i_exeToLsuData_163",
+          "w_wbackSplitterToStateSelector_1",
+          "o_lsuDriveToWGrf_1",
+          "o_lsuDriveToRGrf_1"
         ],
         "instances": [],
         "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "related_assignments": [
+          "无"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
           "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
@@ -1160,58 +1024,40 @@
           {
             "source": "knowledge_ir/modules/lsu.json",
             "path": "interface_data_contract"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/lsu.json",
+            "path": "connection_graph"
           }
         ]
       },
       {
-        "value": "异常输出端点o_lsuDriveToExcp_1关联了释放信号i_lsuFreeFromExcp_1，用于异常模块的背压控制。",
-        "explanation": "接口载荷契约表明，o_lsuDriveToExcp_1事件有对应的释放信号i_lsuFreeFromExcp_1。这表明异常模块通过该释放信号通知LSU是否准备好接收新事件。",
+        "value": "手册应将该流描述为“执行事件经过FIFO缓冲后根据操作类型并行触发异常、写回和读寄存器，其中读寄存器路径通过状态选择器和合并器汇聚”，弱化时序延迟元件解释。",
+        "explanation": "excSplitterDelay仅作为透明延迟存在，不应占据核心篇幅；重点应放在wbackSplitter、stateSelector和readGrfSelector的分发规则，以及readGrfMutexMerge等合并点如何避免冲突。应补充数据字段与选择映射表（若RTL允许）。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:002",
+        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
           "o_lsuDriveToExcp_1",
-          "i_lsuFreeFromExcp_1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "knowledge_ir/modules/lsu.json",
-            "path": "interface_data_contract"
-          }
-        ]
-      },
-      {
-        "value": "写回输出端点o_lsuDriveToWGrf_1关联了释放信号i_lsuFreeFromWGrf_1，用于写回模块的背压控制。",
-        "explanation": "接口载荷契约表明，o_lsuDriveToWGrf_1事件有对应的释放信号i_lsuFreeFromWGrf_1。这表明写回模块通过该释放信号通知LSU是否准备好接收新事件。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:003",
-        "doc_priority": "primary",
-        "signals": [
           "o_lsuDriveToWGrf_1",
-          "i_lsuFreeFromWGrf_1"
+          "o_lsuDriveToRGrf_1"
         ],
-        "instances": [],
+        "instances": [
+          "stateSelector",
+          "wbackSplitter",
+          "readGrfSelector",
+          "readGrfMutexMerge"
+        ],
         "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "related_assignments": [
+          "无"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
           "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
@@ -1219,37 +1065,10 @@
         "semantic_evidence": [
           {
             "source": "knowledge_ir/modules/lsu.json",
-            "path": "interface_data_contract"
-          }
-        ]
-      },
-      {
-        "value": "读寄存器堆输出端点o_lsuDriveToRGrf_1关联了释放信号i_lsuFreeFromRGrf_1，用于读寄存器堆模块的背压控制。",
-        "explanation": "接口载荷契约表明，o_lsuDriveToRGrf_1事件有对应的释放信号i_lsuFreeFromRGrf_1。这表明读寄存器堆模块通过该释放信号通知LSU是否准备好接收新事件。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:lsu:flow_000_lsu_i_exeDriveToLsu_1:completion_backpressure:004",
-        "doc_priority": "primary",
-        "signals": [
-          "o_lsuDriveToRGrf_1",
-          "i_lsuFreeFromRGrf_1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
-          "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
-        ],
-        "semantic_evidence": [
+            "path": "internal_event_flow"
+          },
           {
-            "source": "knowledge_ir/modules/lsu.json",
-            "path": "interface_data_contract"
+            "source": "compact_context.flow.steps"
           }
         ]
       }
@@ -1268,11 +1087,27 @@
     {
       "hint": "Call out merge/arbitration points because they affect event ordering.",
       "source": "manual_context_policy"
+    },
+    {
+      "hint": "Mark interpretation as review-needed; do not present it as confirmed design intent.",
+      "source": "manual_context_policy"
     }
   ],
   "evidence_refs": [
     "ev:lsu:flow:flow_000_lsu_i_exeDriveToLsu_1",
     "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
   ],
-  "gaps": []
+  "gaps": [
+    {
+      "field": "semantic_flow.i_exeDriveToLsu_1",
+      "reason": "Semantic Layer requested RTL source review for this flow.",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:lsu:semantic_flow:flow_000_lsu_i_exeDriveToLsu_1"
+      ]
+    }
+  ]
 }

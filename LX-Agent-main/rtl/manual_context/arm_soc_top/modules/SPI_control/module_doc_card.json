@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "SPI_control",
-  "source_file": "rtl/rtl/IONet/SPI/SPI1/SPI_control.v",
+  "source_file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,8 +20,8 @@
     "review_needed": false
   },
   "purpose": {
-    "value": "SPI 主从控制器，通过 APB 接口配置寄存器并驱动 SPI 协议引擎",
-    "explanation": "模块通过 reg_apb 实例接收 APB 总线配置，内部包含主模式引擎 spi_m_u、从模式引擎 spi_s_u、时钟分频器 clk_div_u、CRC 校验单元及错误状态单元，实现 SPI 协议控制",
+    "value": "SPI外设顶层集成模块，通过APB接口提供寄存器级配置，整合SPI主/从收发、时钟生成、CRC校验、错误检测和中断管理功能。",
+    "explanation": "上下文显示该模块拥有完整的APB从接口（PADDR、PWDATA、PRDATA等）并直接连接至寄存器实例reg_apb_u；同时将时钟和复位分发到clk_div_u、spi_m_u、spi_s_u、CRC_rx_u、CRC_tx_u、MODF_u、OVR_u等功能子模块，并将内部状态组合为SPI_interrupt输出，证明其承担SPI外设的顶层控制角色。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -33,16 +33,21 @@
       "PADDR",
       "PWDATA",
       "PRDATA",
+      "SPI_interrupt",
       "sclk_out",
       "mosi_out",
       "miso_out",
-      "nss_out"
+      "nss_out",
+      "io_ctl_sclk",
+      "io_ctl_miso",
+      "io_ctl_mosi",
+      "io_ctl_nss"
     ],
     "instances": [
       "reg_apb_u",
+      "clk_div_u",
       "spi_m_u",
       "spi_s_u",
-      "clk_div_u",
       "CRC_rx_u",
       "CRC_tx_u",
       "MODF_u",
@@ -57,10 +62,13 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/SPI_control.json"
+        "source": "knowledge_ir/modules/SPI_control.json interface"
       },
       {
-        "source": "parser_pipeline_rtl/modules/SPI_control.json"
+        "source": "key_component_connections"
+      },
+      {
+        "source": "assign_dependencies"
       }
     ]
   },
@@ -486,7 +494,7 @@
         ],
         "summary": "clock_reset_init ports, count=5, directions=input:3, output:2",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/SPI/SPI1/SPI_control.v",
+          "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -623,7 +631,7 @@
         ],
         "summary": "other_ports ports, count=19, directions=input:8, output:11",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/IONet/SPI/SPI1/SPI_control.v",
+          "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -638,11 +646,11 @@
     "components": 0,
     "assignments": 13,
     "evidence_gaps": 0,
-    "review_questions": 0
+    "review_questions": 3
   },
   "source_review_context": {
     "module": "SPI_control",
-    "rtl_file": "rtl/rtl/IONet/SPI/SPI1/SPI_control.v",
+    "rtl_file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",
@@ -664,5 +672,94 @@
   "evidence_refs": [
     "ev:SPI_control:knowledge_module",
     "ev:SPI_control:parser_module"
-  ]
+  ],
+  "source_review_claims": [
+    {
+      "subject": "sclk_out_div内部连接",
+      "summary": "提供的切片中未出现sclk_out_div信号，无法确认其驱动来源。",
+      "explanation": "模块端口列表中未出现sclk_out_div信号，也未看到clk_div_u实例化代码，因此不能确认sclk_out_div由哪个实例驱动或如何生成。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
+          "line_start": 23,
+          "line_end": 57
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI_control:semantic_module"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "busy_m和busy_s来源",
+      "summary": "busy_m和busy_s声明为wire，但切片未显示其驱动源。",
+      "explanation": "切片显示(*dont_touch*) wire busy_m与busy_s声明及.busy(busy_s)的连接，但缺乏spi_m_u和spi_s_u的实例化上下文，无法证明busy_m和busy_s由这些实例的状态输出驱动。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [
+        "busy_m",
+        "busy_s"
+      ],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
+          "line_start": 209,
+          "line_end": 214
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
+          "line_start": 272,
+          "line_end": 276
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI_control:semantic_module"
+      ],
+      "review_status": "needs_review"
+    },
+    {
+      "subject": "CRC_tx_u的功能与连接",
+      "summary": "切片中未出现CRC_tx_u实例及相关信号，无法确认其作用。",
+      "explanation": "所提供的切片未包含CRC_tx_u实例化代码或与spi_m_u的数据/控制信号连接，无法评估其在发送流程中的CRC插入功能。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [],
+      "instances": [],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
+          "line_start": 23,
+          "line_end": 57
+        }
+      ],
+      "evidence_refs": [
+        "ev:SPI_control:semantic_module"
+      ],
+      "review_status": "needs_review"
+    }
+  ],
+  "source_review_report": {
+    "status": "reviewed",
+    "claim_count": 3,
+    "open_question_count": 3,
+    "source_file": "rtl\\rtl\\IONet\\SPI\\SPI1\\SPI_control.v",
+    "report_file": "source_review_report.json"
+  }
 }

@@ -1,8 +1,8 @@
 # 模块 `uart_rx`
 
-- 源文件：`rtl/rtl/memory/uart_rx.v`。
-- 职责：AI 推断：UART接收模块，负责将串行输入数据转换为并行数据并输出。
-- 说明：模块接收rx_data_ready信号作为数据输入，输出8位并行数据rx_data和有效标志rx_data_valid，符合UART接收器的基本功能定义
+- 源文件：`rtl\rtl\memory\uart_rx.v`。
+- 职责：AI 推断：可能作为 UART 接收数据缓冲器，将内部收到的字节通过简单的就绪/有效握手接口提供给下游。
+- 说明：接口只有输入 `rx_data_ready` 以及输出 `rx_data` 和 `rx_data_valid`，没有事件或控制信号，符合同步读取 FIFO 的典型信号组。模块名又称 `uart_rx`，推测其内部负责从串行线接收字节并缓存。
 
 ## 1. 层级位置
 

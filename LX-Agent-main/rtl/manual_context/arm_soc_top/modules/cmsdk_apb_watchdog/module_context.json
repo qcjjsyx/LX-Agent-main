@@ -6,10 +6,10 @@
     "module_name": "cmsdk_apb_watchdog",
     "module_role": "submodule",
     "source_files": [
-      "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v"
+      "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v"
     ],
     "source": {
-      "rtl_file": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v",
+      "rtl_file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
       "parser_module": "modules/cmsdk_apb_watchdog.json"
     },
     "certainty": "deterministic_fact",
@@ -93,8 +93,8 @@
   },
   "module_responsibility": {
     "short_summary": {
-      "value": "该模块是APB总线从设备，负责看门狗定时器的寄存器接口与中断/复位输出控制。",
-      "explanation": "模块通过APB接口接收配置和命令，内部实例化cmsdk_apb_watchdog_frc作为核心定时器，并基于锁定机制和测试模式选择输出中断或复位信号。",
+      "value": "基于APB总线接口的看门狗外设控制器，负责寄存器访问、锁定保护、中断/复位输出的生成和路由。",
+      "explanation": "模块包含APB从设备地址解码、写使能生成、密钥解锁逻辑，并将核心定时功能委托给实例u_apb_watchdog_frc，同时根据内部控制位选择中断和复位信号的来源。上下文显示PADDR、PSEL、PWRITE等APB信号驱动多个使能信号，而WDOGINT和WDOGRES的输出选择逻辑表明模块充当中断复位控制节点。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -103,11 +103,14 @@
       "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:module_role:001",
       "doc_priority": "primary",
       "signals": [
+        "PSEL",
         "PADDR",
         "PWDATA",
         "PRDATA",
         "WDOGINT",
-        "WDOGRES"
+        "WDOGRES",
+        "wdog_lock",
+        "wdog_itcr"
       ],
       "instances": [
         "u_apb_watchdog_frc"
@@ -130,8 +133,8 @@
     },
     "responsibility_claims": [
       {
-        "value": "该模块是APB总线从设备，负责看门狗定时器的寄存器接口与中断/复位输出控制。",
-        "explanation": "模块通过APB接口接收配置和命令，内部实例化cmsdk_apb_watchdog_frc作为核心定时器，并基于锁定机制和测试模式选择输出中断或复位信号。",
+        "value": "基于APB总线接口的看门狗外设控制器，负责寄存器访问、锁定保护、中断/复位输出的生成和路由。",
+        "explanation": "模块包含APB从设备地址解码、写使能生成、密钥解锁逻辑，并将核心定时功能委托给实例u_apb_watchdog_frc，同时根据内部控制位选择中断和复位信号的来源。上下文显示PADDR、PSEL、PWRITE等APB信号驱动多个使能信号，而WDOGINT和WDOGRES的输出选择逻辑表明模块充当中断复位控制节点。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -140,11 +143,14 @@
         "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:module_role:001",
         "doc_priority": "primary",
         "signals": [
+          "PSEL",
           "PADDR",
           "PWDATA",
           "PRDATA",
           "WDOGINT",
-          "WDOGRES"
+          "WDOGRES",
+          "wdog_lock",
+          "wdog_itcr"
         ],
         "instances": [
           "u_apb_watchdog_frc"
@@ -166,8 +172,8 @@
         ]
       },
       {
-        "value": "模块解析APB地址和写数据，生成内部寄存器写使能信号，并实现锁定寄存器保护机制。",
-        "explanation": "通过assign依赖项，模块根据PADDR和PSEL/PWRITE/PENABLE生成wdog_lock_wr_en、wdog_itcr_wr_en等写使能信号，其中wdog_lock_wr_val通过比较PWDATA与0x1ACCE551决定锁定状态。",
+        "value": "根据地址映射生成子模块片选和各功能寄存器的写使能，同时实施基于0x1ACCE551密钥的锁定机制，阻止关键寄存器写入。",
+        "explanation": "多个assign语句使用PADDR与`ARM_WDOG1A等宏的比较产生frc_sel、wdog_lock_wr_en、wdog_itcr_wr_en、wdog_itop_wr_en。其中wdog_lock信号源自解锁密钥检查结果（wdog_lock_wr_val），该锁定状态抑制wdog_itcr_wr_en和wdog_itop_wr_en。读使能prdata_next_en在APB设置阶段有效，用于门控读数据。这些分配共同构建了APB从设备的寄存器访问控制逻辑。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -176,15 +182,17 @@
         "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:001",
         "doc_priority": "primary",
         "signals": [
-          "PADDR",
-          "PSEL",
-          "PWRITE",
-          "PENABLE",
-          "PWDATA",
+          "frc_sel",
           "wdog_lock_wr_en",
           "wdog_lock_wr_val",
           "wdog_itcr_wr_en",
-          "wdog_itop_wr_en"
+          "wdog_itop_wr_en",
+          "prdata_next_en",
+          "PSEL",
+          "PWRITE",
+          "PENABLE",
+          "PADDR",
+          "PWDATA"
         ],
         "instances": [],
         "related_flows": [],
@@ -196,47 +204,18 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-          }
-        ]
-      },
-      {
-        "value": "模块根据测试模式控制信号wdog_itcr，选择输出内部看门狗事件或测试激励。",
-        "explanation": "assign 7和8显示，当wdog_itcr为0时，WDOGINT和WDOGRES分别来自内部信号i_wdogint和i_wdogres；否则来自测试输入wdog_itop。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:structural_responsibility:002",
-        "doc_priority": "primary",
-        "signals": [
-          "WDOGINT",
-          "WDOGRES",
-          "wdog_itcr",
-          "i_wdogint",
-          "i_wdogres",
-          "wdog_itop"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cmsdk_apb_watchdog:semantic_module"
-        ],
-        "semantic_evidence": [
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments index 0~5"
+          },
           {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+            "source": "knowledge_ir/modules/cmsdk_apb_watchdog.json -> assignment_facts"
           }
         ]
       }
     ],
     "documentation_focus": [
       {
-        "value": "文档应详细描述锁定寄存器的写保护和解锁流程。",
-        "explanation": "通过wdog_lock_wr_en和wdog_lock_wr_val实现，解锁需要写入特定值0x1ACCE551，影响其他寄存器的写使能。",
+        "value": "最终手册应优先说明寄存器地址布局、解锁密钥操作、锁定保护对各寄存器的约束，以及中断/复位输出的测试模式配置。",
+        "explanation": "大量assign围绕地址解码和锁状态展开，wdog_lock_wr_val、wdog_itcr_wr_en等信号构成复杂的保护链，用户必须理解解锁序列。WDOGINT/WDOGRES选择逻辑引入wdog_itcr和wdog_itop寄存器的诊断功能，手册需澄清正常与测试模式下的输出行为。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -245,41 +224,15 @@
         "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "wdog_lock_wr_en",
-          "wdog_lock_wr_val",
-          "wdog_lock"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cmsdk_apb_watchdog:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-          }
-        ]
-      },
-      {
-        "value": "文档应说明测试模式如何覆盖中断和复位输出。",
-        "explanation": "当wdog_itcr为1时，WDOGINT和WDOGRES由wdog_itop控制，用于测试验证。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:documentation_focus:002",
-        "doc_priority": "secondary",
-        "signals": [
-          "WDOGINT",
-          "WDOGRES",
+          "wdog_lock",
           "wdog_itcr",
-          "wdog_itop"
+          "wdog_itop",
+          "WDOGINT",
+          "WDOGRES"
         ],
-        "instances": [],
+        "instances": [
+          "u_apb_watchdog_frc"
+        ],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": false,
@@ -289,7 +242,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments"
+          },
+          {
+            "source": "knowledge_ir/modules/cmsdk_apb_watchdog.json -> assignment_facts"
           }
         ]
       }
@@ -361,29 +317,29 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "实现锁定寄存器的写使能和锁定值判断。",
-        "explanation": "wdog_lock_wr_en在地址匹配且写周期有效时产生；wdog_lock_wr_val通过比较PWDATA与0x1ACCE551决定是否解锁（0表示解锁）。",
+        "value": "中断输出寄存器写使能，受锁定状态阻断。",
+        "explanation": "与wdog_itcr_wr_en类似，但针对中断输出测试寄存器的写访问，同样受wdog_lock保护。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:005",
         "doc_priority": "primary",
         "signals": [
-          "wdog_lock_wr_en",
-          "wdog_lock_wr_val",
+          "wdog_itop_wr_en",
           "PADDR",
-          "PWDATA",
           "PSEL",
           "PWRITE",
-          "PENABLE"
+          "PENABLE",
+          "wdog_lock"
         ],
         "instances": [],
         "related_flows": [],
         "related_assignments": [
           "1",
-          "2"
+          "2",
+          "3"
         ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
@@ -392,7 +348,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments index 4"
           }
         ]
       },
@@ -419,29 +375,29 @@
       "impact_area": "data_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "实现锁定寄存器的写使能和锁定值判断。",
-        "explanation": "wdog_lock_wr_en在地址匹配且写周期有效时产生；wdog_lock_wr_val通过比较PWDATA与0x1ACCE551决定是否解锁（0表示解锁）。",
+        "value": "中断输出寄存器写使能，受锁定状态阻断。",
+        "explanation": "与wdog_itcr_wr_en类似，但针对中断输出测试寄存器的写访问，同样受wdog_lock保护。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:002",
+        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:005",
         "doc_priority": "primary",
         "signals": [
-          "wdog_lock_wr_en",
-          "wdog_lock_wr_val",
+          "wdog_itop_wr_en",
           "PADDR",
-          "PWDATA",
           "PSEL",
           "PWRITE",
-          "PENABLE"
+          "PENABLE",
+          "wdog_lock"
         ],
         "instances": [],
         "related_flows": [],
         "related_assignments": [
           "1",
-          "2"
+          "2",
+          "3"
         ],
         "requires_rtl_source_review": false,
         "review_status": "ready",
@@ -450,7 +406,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments index 4"
           }
         ]
       },
@@ -483,17 +439,47 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "根据中断控制寄存器wdog_itcr决定中断与复位输出是来自功能单元实际状态还是软件测试覆盖值。",
+        "explanation": "当wdog_itcr（推测最低位）为0时，输出取自i_wdogint和i_wdogres（来自u_apb_watchdog_frc的功能信号）；为1时则取自wdog_itop[1]和wdog_itop[0]，可能是可写的测试寄存器位。该逻辑实现诊断模式下的中断/复位输出可控。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:007",
+        "doc_priority": "primary",
+        "signals": [
+          "WDOGINT",
+          "WDOGRES",
+          "wdog_itcr",
+          "i_wdogint",
+          "i_wdogres",
+          "wdog_itop"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [
+          "3",
+          "4"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:cmsdk_apb_watchdog:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments index 7"
+          },
+          {
+            "source": "8"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:cmsdk_apb_watchdog:assignments"
@@ -519,17 +505,47 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "根据中断控制寄存器wdog_itcr决定中断与复位输出是来自功能单元实际状态还是软件测试覆盖值。",
+        "explanation": "当wdog_itcr（推测最低位）为0时，输出取自i_wdogint和i_wdogres（来自u_apb_watchdog_frc的功能信号）；为1时则取自wdog_itop[1]和wdog_itop[0]，可能是可写的测试寄存器位。该逻辑实现诊断模式下的中断/复位输出可控。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:007",
+        "doc_priority": "primary",
+        "signals": [
+          "WDOGINT",
+          "WDOGRES",
+          "wdog_itcr",
+          "i_wdogint",
+          "i_wdogres",
+          "wdog_itop"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [
+          "3",
+          "4"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:cmsdk_apb_watchdog:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments index 7"
+          },
+          {
+            "source": "8"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:cmsdk_apb_watchdog:assignments"
@@ -551,41 +567,17 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "生成读数据使能信号，用于在APB地址相位采样读数据。",
-        "explanation": "当PSEL有效、PWRITE为低且PENABLE为低时，prdata_next_en有效，指示读操作开始。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:003",
-        "doc_priority": "secondary",
-        "signals": [
-          "prdata_next_en",
-          "PSEL",
-          "PWRITE",
-          "PENABLE"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "5"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cmsdk_apb_watchdog:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:cmsdk_apb_watchdog:assignments"
@@ -602,20 +594,49 @@
       "rhs_terms": [
         "i_prdata"
       ],
-      "impact_area": "data_path",
+      "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer assignment interpretation is available.",
-        "review_status": "needs_review"
+        "value": "APB读取数据通路控制，prdata_next_en门控读寄存器值，PRDATA由内部i_prdata驱动。",
+        "explanation": "prdata_next_en在PSEL有效、PWRITE为0、PENABLE为0（设置阶段）时有效，推测用于使能读数据寄存器捕获。PRDATA直接由内部信号i_prdata赋值，i_prdata未在上下文中显式定义，但可能来自寄存器文件或子模块的输出多路选择。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:006",
+        "doc_priority": "primary",
+        "signals": [
+          "prdata_next_en",
+          "PRDATA",
+          "i_prdata",
+          "PSEL",
+          "PWRITE",
+          "PENABLE"
+        ],
+        "instances": [],
+        "related_flows": [],
+        "related_assignments": [
+          "6"
+        ],
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
+        "evidence_refs": [
+          "ev:cmsdk_apb_watchdog:semantic_module"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json -> assignments index 5"
+          },
+          {
+            "source": "6"
+          }
+        ]
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir"
+        "knowledge_ir",
+        "semantic_layer"
       ],
       "evidence_refs": [
         "ev:cmsdk_apb_watchdog:assignments"
@@ -701,40 +722,17 @@
       "impact_area": "control_path",
       "doc_priority": "primary",
       "interpretation": {
-        "value": "通过地址译码选择看门狗功能单元。",
-        "explanation": "当PSEL有效且PADDR[11:5]匹配ARM_WDOG1A时，frc_sel置位，用于选通核心定时器。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:assignment_interpretation:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "frc_sel",
-          "PSEL",
-          "PADDR"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "0"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cmsdk_apb_watchdog:semantic_module"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "parser_pipeline_rtl/modules/cmsdk_apb_watchdog.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer assignment interpretation is available.",
+        "review_status": "needs_review"
       },
       "certainty": "derived_fact",
       "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
         "ev:cmsdk_apb_watchdog:assignments"
@@ -742,6 +740,70 @@
     }
   ],
   "important_internal_signals": [
+    {
+      "signal": "PSEL",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 34,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:interface",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "PADDR",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 30,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:interface",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "PWRITE",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 26,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:interface",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "PENABLE",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 26,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:interface",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
     {
       "signal": "PWDATA",
       "kind": "interface_or_inferred",
@@ -759,55 +821,23 @@
       ]
     },
     {
-      "signal": "PADDR",
-      "kind": "interface_or_inferred",
-      "width_text": "",
+      "signal": "wdog_lock",
+      "kind": "reg",
+      "width_text": "1",
       "importance_score": 20,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "knowledge_ir",
+        "parse",
         "semantic_layer"
       ],
       "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:interface",
+        "ev:cmsdk_apb_watchdog:parser_module",
         "ev:cmsdk_apb_watchdog:semantic_module"
       ]
     },
     {
-      "signal": "PWRITE",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 20,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:interface",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "PENABLE",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 20,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:interface",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "PSEL",
+      "signal": "WDOGINT",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 18,
@@ -823,74 +853,10 @@
       ]
     },
     {
-      "signal": "WDOGINT",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:interface",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
       "signal": "WDOGRES",
       "kind": "interface_or_inferred",
       "width_text": "",
-      "importance_score": 16,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:interface",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "wdog_lock_wr_en",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "wdog_lock_wr_val",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 12,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "PRDATA",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 10,
+      "importance_score": 18,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -906,7 +872,7 @@
       "signal": "wdog_itcr",
       "kind": "reg",
       "width_text": "1",
-      "importance_score": 6,
+      "importance_score": 16,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -919,10 +885,170 @@
       ]
     },
     {
+      "signal": "PRDATA",
+      "kind": "interface_or_inferred",
+      "width_text": "",
+      "importance_score": 14,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "knowledge_ir",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:interface",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
       "signal": "wdog_itop",
       "kind": "reg",
       "width_text": "[1:0]",
-      "importance_score": 6,
+      "importance_score": 12,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "frc_sel",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "wdog_lock_wr_en",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "wdog_lock_wr_val",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "wdog_itcr_wr_en",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "wdog_itop_wr_en",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "prdata_next_en",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "frc_data",
+      "kind": "wire",
+      "width_text": "[31:0]",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_wdogint",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
+      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
+      "certainty": "deterministic_fact",
+      "source_layers": [
+        "parse",
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:parser_module",
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    },
+    {
+      "signal": "i_wdogres",
+      "kind": "wire",
+      "width_text": "1",
+      "importance_score": 8,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -936,22 +1062,6 @@
     },
     {
       "signal": "PCLK",
-      "kind": "interface_or_inferred",
-      "width_text": "",
-      "importance_score": 6,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "knowledge_ir",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:interface",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "PRESETn",
       "kind": "interface_or_inferred",
       "width_text": "",
       "importance_score": 6,
@@ -1015,73 +1125,9 @@
       ]
     },
     {
-      "signal": "wdog_itcr_wr_en",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "wdog_itop_wr_en",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_wdogint",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "i_wdogres",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 4,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "wdog_lock",
+      "signal": "i_prdata",
       "kind": "reg",
-      "width_text": "1",
+      "width_text": "[31:0]",
       "importance_score": 4,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
@@ -1095,35 +1141,17 @@
       ]
     },
     {
-      "signal": "frc_sel",
-      "kind": "wire",
-      "width_text": "1",
+      "signal": "PRESETn",
+      "kind": "interface_or_inferred",
+      "width_text": "",
       "importance_score": 2,
       "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
       "certainty": "deterministic_fact",
       "source_layers": [
-        "parse",
-        "semantic_layer"
+        "knowledge_ir"
       ],
       "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
-      ]
-    },
-    {
-      "signal": "prdata_next_en",
-      "kind": "wire",
-      "width_text": "1",
-      "importance_score": 2,
-      "reason": "referenced by semantic claims, interface contracts, or drive flow paths",
-      "certainty": "deterministic_fact",
-      "source_layers": [
-        "parse",
-        "semantic_layer"
-      ],
-      "evidence_refs": [
-        "ev:cmsdk_apb_watchdog:parser_module",
-        "ev:cmsdk_apb_watchdog:semantic_module"
+        "ev:cmsdk_apb_watchdog:interface"
       ]
     },
     {
@@ -1224,7 +1252,19 @@
     }
   ],
   "evidence_gaps": [],
-  "review_questions": [],
+  "review_questions": [
+    {
+      "question": "紧凑上下文未显示这两个信号来自u_apb_watchdog_frc的哪个端口，也未指出wdog_itcr与wdog_itop的位域定义。需要RTL源码确认子模块接口和寄存器字段以生成准确语义。",
+      "subject": "内部信号i_wdogint和i_wdogres的来源",
+      "needed_source_slice": "instance connections, module declaration, always block",
+      "source_layers": [
+        "semantic_layer"
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ]
+    }
+  ],
   "source_context_refs": {
     "knowledge_ir": "modules/cmsdk_apb_watchdog.json",
     "ai_context": "ai_context/modules/cmsdk_apb_watchdog.json",
@@ -1235,7 +1275,7 @@
     "schema_version": "0.1",
     "top_module": "arm_soc_top",
     "module": "cmsdk_apb_watchdog",
-    "source_file": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v",
+    "source_file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
     "module_role": "submodule",
     "page_policy": {
       "module_page_required": true,
@@ -1252,8 +1292,8 @@
       "review_needed": false
     },
     "purpose": {
-      "value": "该模块是APB总线从设备，负责看门狗定时器的寄存器接口与中断/复位输出控制。",
-      "explanation": "模块通过APB接口接收配置和命令，内部实例化cmsdk_apb_watchdog_frc作为核心定时器，并基于锁定机制和测试模式选择输出中断或复位信号。",
+      "value": "基于APB总线接口的看门狗外设控制器，负责寄存器访问、锁定保护、中断/复位输出的生成和路由。",
+      "explanation": "模块包含APB从设备地址解码、写使能生成、密钥解锁逻辑，并将核心定时功能委托给实例u_apb_watchdog_frc，同时根据内部控制位选择中断和复位信号的来源。上下文显示PADDR、PSEL、PWRITE等APB信号驱动多个使能信号，而WDOGINT和WDOGRES的输出选择逻辑表明模块充当中断复位控制节点。",
       "certainty": "ai_inferred",
       "confidence": "high",
       "source_layers": [
@@ -1262,11 +1302,14 @@
       "semantic_claim_id": "semantic:module:cmsdk_apb_watchdog:module_role:001",
       "doc_priority": "primary",
       "signals": [
+        "PSEL",
         "PADDR",
         "PWDATA",
         "PRDATA",
         "WDOGINT",
-        "WDOGRES"
+        "WDOGRES",
+        "wdog_lock",
+        "wdog_itcr"
       ],
       "instances": [
         "u_apb_watchdog_frc"
@@ -1566,7 +1609,7 @@
           ],
           "summary": "clock_reset_init ports, count=4, directions=input:4",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v",
+            "rtl_file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1649,7 +1692,7 @@
           ],
           "summary": "other_ports ports, count=10, directions=input:7, output:3",
           "source_review_context": {
-            "rtl_file": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v",
+            "rtl_file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
             "allowed_use": "port grouping and naming evidence only",
             "claim_promotion": "do_not_promote_to_deterministic_design_intent"
           }
@@ -1664,11 +1707,11 @@
       "components": 0,
       "assignments": 9,
       "evidence_gaps": 0,
-      "review_questions": 0
+      "review_questions": 1
     },
     "source_review_context": {
       "module": "cmsdk_apb_watchdog",
-      "rtl_file": "rtl/rtl/IONet/Watchdog/cmsdk_apb_watchdog.v",
+      "rtl_file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
       "allowed": true,
       "allowed_use": [
         "external port grouping",
@@ -1691,5 +1734,45 @@
       "ev:cmsdk_apb_watchdog:knowledge_module",
       "ev:cmsdk_apb_watchdog:parser_module"
     ]
+  },
+  "source_review_claims": [
+    {
+      "subject": "内部信号i_wdogint和i_wdogres的来源",
+      "summary": "给定RTL切片未包含i_wdogint和i_wdogres的定义与连接，无法确认其来源。",
+      "explanation": "模块输出WDOGINT和WDOGRES可能由内部信号驱动，但切片中未见i_wdogint/i_wdogres声明；子模块cmsdk_apb_watchdog_frc的实例化仅暴露PCLK与PRESETn连接，其余端口未知，且寄存器位域定义文件未被包含在切片内，因此无法判断信号映射关系。",
+      "certainty": "evidence_gap",
+      "source_layers": [
+        "source_review",
+        "rtl_source",
+        "manual_context"
+      ],
+      "signals": [],
+      "instances": [
+        "u_apb_watchdog_frc"
+      ],
+      "source_refs": [
+        {
+          "file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
+          "line_start": 27,
+          "line_end": 55
+        },
+        {
+          "file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
+          "line_start": 312,
+          "line_end": 316
+        }
+      ],
+      "evidence_refs": [
+        "ev:cmsdk_apb_watchdog:semantic_module"
+      ],
+      "review_status": "needs_review"
+    }
+  ],
+  "source_review_report": {
+    "status": "reviewed",
+    "claim_count": 1,
+    "open_question_count": 1,
+    "source_file": "rtl\\rtl\\IONet\\Watchdog\\cmsdk_apb_watchdog.v",
+    "report_file": "source_review_report.json"
   }
 }

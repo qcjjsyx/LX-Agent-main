@@ -3,7 +3,7 @@
   "schema_version": "0.1",
   "top_module": "arm_soc_top",
   "module": "inStack",
-  "source_file": "rtl/rtl/int/inStack.v",
+  "source_file": "rtl\\rtl\\int\\inStack.v",
   "module_role": "submodule",
   "page_policy": {
     "module_page_required": true,
@@ -20,10 +20,10 @@
     "review_needed": true
   },
   "purpose": {
-    "value": "入栈数据打包与地址计算模块，负责将来自RGRF和RPSR的寄存器数据与PC值合并，并基于SP计算四个入栈槽位的地址，最终通过选择器输出一组96位数据（64位数据+32位地址）。",
-    "explanation": "模块接收来自RGRF和RPSR的驱动事件，通过dataMerge（WaitMerge）将192位GRF数据和32位PSR数据合并为224位栈数据，再通过assign将PC值与栈数据拼接形成四个64位数据块，同时基于SP计算四个递减的32位地址。最终通过多路选择器（由w_inNum_2选择）输出一组96位数据（64位数据+32位地址）。模块还包含inStackMerge（MutexMerge）和inStackSele（SelSplit）用于驱动事件的选择与合并，以及dataSpli（SelSplit）用于将输入驱动分发到RGRF和RPSR的输出驱动。",
+    "value": "硬件上下文保存/恢复堆栈管理器，支持向量中断时将RGRF、RPSR、PC打包成栈帧并生成写入地址与数据，或在返回时从栈帧中提取数据分发到相应寄存器。",
+    "explanation": "界面事件输入来自RGRF和RPSR，数据输入包含i_pc_32、i_SP_32、通用寄存器数据(i_grfData_192)和程序状态字(i_psrData_32)，数据输出o_data_96为组合的数据与地址，o_SP_32为更新后的栈指针。内部WaitMerge将两组数据合并为224位栈上下文，SelSplit和MutexMerge等组件协同处理驱动事件，地址计算基于SP偏移8~32，对应4个64位栈条目。整体意图符合中断入栈/出栈场景。",
     "certainty": "ai_inferred",
-    "confidence": "high",
+    "confidence": "medium",
     "source_layers": [
       "semantic_layer"
     ],
@@ -32,12 +32,14 @@
     "signals": [
       "i_driveFromRGRF_1",
       "i_driveFromRPSR_1",
+      "o_driveFromSPDec",
+      "o_driveToRGRF_1",
+      "o_driveToRPSR_1",
       "i_SP_32",
+      "o_SP_32",
       "i_grfData_192",
       "i_psrData_32",
-      "i_pc_32",
-      "o_data_96",
-      "o_SP_32"
+      "o_data_96"
     ],
     "instances": [
       "dataMerge",
@@ -51,20 +53,19 @@
       "flow_001_inStack_i_driveFromRPSR_1"
     ],
     "related_assignments": [],
-    "requires_rtl_source_review": false,
-    "review_status": "ready",
+    "requires_rtl_source_review": true,
+    "review_status": "needs_review",
     "evidence_refs": [
       "ev:inStack:semantic_module"
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/inStack.json"
+        "source": "module_facts",
+        "path": "knowledge_ir/modules/inStack.json"
       },
       {
-        "source": "parser_pipeline_rtl/modules/inStack.json"
-      },
-      {
-        "source": "rtl/rtl/int/inStack.v"
+        "source": "parser_module",
+        "path": "parser_pipeline_rtl/modules/inStack.json"
       }
     ]
   },
@@ -465,7 +466,7 @@
         ],
         "summary": "drive_event ports, count=5, directions=input:2, output:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/int/inStack.v",
+          "rtl_file": "rtl\\rtl\\int\\inStack.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -536,7 +537,7 @@
         ],
         "summary": "free_backpressure ports, count=8, directions=input:4, output:4",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/int/inStack.v",
+          "rtl_file": "rtl\\rtl\\int\\inStack.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -613,7 +614,7 @@
         ],
         "summary": "other_ports ports, count=9, directions=input:6, output:3",
         "source_review_context": {
-          "rtl_file": "rtl/rtl/int/inStack.v",
+          "rtl_file": "rtl\\rtl\\int\\inStack.v",
           "allowed_use": "port grouping and naming evidence only",
           "claim_promotion": "do_not_promote_to_deterministic_design_intent"
         }
@@ -630,71 +631,45 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_000_inStack_i_driveFromRGRF_1.json",
       "reader_takeaway": {
-        "value": "该流无明确数据载荷，可能为纯控制事件流",
-        "explanation": "接口载荷契约显示i_driveFromRGRF_1的载荷列表为空，表明该事件可能不携带数据，仅作为控制信号传递。流经dataMerge和inStackMerge时，可能仅传递事件有效性，而不涉及数据路径。",
+        "value": "手册应强调这是一个不完全的两级合并内部流，说明合并器类型及其仲裁/等待语义，并指出w_inStackDriToDR_1去向不明。",
+        "explanation": "对于使用者，理解RGRF请求如何与RPSR请求协调以及与另一内部选择源的互斥关系是重点。由于缺少端点，文档必须声明流未到达模块输出，避免误解。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:data_control_effect:001",
+        "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
-          "i_driveFromRGRF_1"
+          "i_driveFromRGRF_1",
+          "w_inStackDriToDR_1"
         ],
-        "instances": [],
+        "instances": [
+          "dataMerge",
+          "inStackMerge"
+        ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
           "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
         ],
         "semantic_evidence": [
           {
-            "source": "interface_payload_contracts",
-            "path": "modules/inStack.json"
+            "source": "parser_pipeline_rtl/modules/inStack.json",
+            "path": "flow_graph"
+          },
+          {
+            "source": "knowledge_ir/modules/inStack.json",
+            "path": "internal_event_flow"
           }
         ],
         "supporting_claims": [
           {
-            "value": "最终手册应强调该流无明确端点，需通过RTL源码确认完整路径",
-            "explanation": "当前流上下文警告“no module event output reached from i_driveFromRGRF_1”，表明该流在模块内部未追踪到最终输出。手册应说明该流可能为内部中间路径，或需要结合其他流（如inStackSele相关流）才能形成完整事件链。",
-            "certainty": "ai_inferred",
-            "confidence": "low",
-            "source_layers": [
-              "semantic_layer"
-            ],
-            "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:documentation_focus:001",
-            "doc_priority": "primary",
-            "signals": [
-              "w_inStackDriToDR_1"
-            ],
-            "instances": [
-              "dataMerge",
-              "inStackMerge"
-            ],
-            "related_flows": [],
-            "related_assignments": [
-              "8"
-            ],
-            "requires_rtl_source_review": true,
-            "review_status": "needs_review",
-            "evidence_refs": [
-              "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
-              "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
-            ],
-            "semantic_evidence": [
-              {
-                "source": "flow.warnings",
-                "path": "modules/inStack.json"
-              }
-            ]
-          },
-          {
-            "value": "来自RGRF的驱动事件流，经过两级合并器后输出到下游",
-            "explanation": "该流从模块输入端口i_driveFromRGRF_1发起，首先进入dataMerge（cWaitMerge2_224b_int）与来自RPSR的驱动事件合并，然后通过w_dataMerDriveToInMer_1进入inStackMerge（cMutexMerge2_1b）与来自inStackSele的驱动事件进行互斥合并，最终输出为w_inStackDriToDR_1。流中无明确端点，表明该流可能为内部事件传递路径的一部分。",
+            "value": "从RGRF来源的驱动事件经两级串行合并后形成内部驱动信号，但当前证据未到达任何模块输出端点。",
+            "explanation": "流以i_driveFromRGRF_1为起点，首先在dataMerge与i_driveFromRPSR_1合并，然后其输出在inStackMerge与另一内部事件w_inStackDri_1进行第二次合并，最终产生w_inStackDriToDR_1。由于该信号后续连接缺失，无法断定该流是否驱动模块外部输出或仅用于内部参与。文档应将其标注为不完整的内部合并流。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -712,9 +687,7 @@
               "inStackMerge"
             ],
             "related_flows": [],
-            "related_assignments": [
-              "8"
-            ],
+            "related_assignments": [],
             "requires_rtl_source_review": true,
             "review_status": "needs_review",
             "evidence_refs": [
@@ -723,18 +696,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "modules/inStack.json"
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows",
-                "path": "modules/inStack.json"
+                "source": "parser_pipeline_rtl/modules/inStack.json",
+                "path": "flow_graph"
               }
             ]
           },
           {
-            "value": "可能存在反压信号，但当前证据不足以确认其与流的直接关系",
-            "explanation": "接口载荷契约显示i_driveFromRGRF_1关联了空闲信号o_freeToRGRF_1，表明可能存在反压机制。但当前流上下文未提供该信号在流中的具体连接或使用方式，无法确定其是否直接作用于dataMerge或inStackMerge的传播。",
+            "value": "存在反馈信号o_freeToRGRF_1，暗示下游可对RGRF源施加背压，但合并器内部背压逻辑未在流中显式描述。",
+            "explanation": "自由信号常作为接收方就绪指示，结合WaitMerge和MutexMerge的特性，等待合并器可能在输入未全部就绪时阻塞，从而间接将背压传递给RGRF源。然而流步骤未描述具体的阻塞依赖，需要RTL源核实。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -743,6 +716,42 @@
             "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:completion_backpressure:001",
             "doc_priority": "secondary",
             "signals": [
+              "o_freeToRGRF_1"
+            ],
+            "instances": [
+              "dataMerge"
+            ],
+            "related_flows": [],
+            "related_assignments": [],
+            "requires_rtl_source_review": true,
+            "review_status": "needs_review",
+            "evidence_refs": [
+              "ev:inStack:flow:flow_000_inStack_i_driveFromRGRF_1",
+              "ev:inStack:semantic_flow:flow_000_inStack_i_driveFromRGRF_1"
+            ],
+            "semantic_evidence": [
+              {
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "interface_data_contract"
+              },
+              {
+                "source": "parser_pipeline_rtl/modules/inStack.json",
+                "path": "connection_graph"
+              }
+            ]
+          },
+          {
+            "value": "该驱动为纯事件，无伴随数据负载，仅作为控制触发参与合并，数据层面无耦合。",
+            "explanation": "接口合同显示payloads为空，仅记录free信号o_freeToRGRF_1，表明RGRF端口采用无数据握手。因此流中所有路径都是控制事件传播，不含数据通路变换。",
+            "certainty": "ai_inferred",
+            "confidence": "low",
+            "source_layers": [
+              "semantic_layer"
+            ],
+            "semantic_claim_id": "semantic:flow:inStack:flow_000_inStack_i_driveFromRGRF_1:data_control_effect:001",
+            "doc_priority": "secondary",
+            "signals": [
+              "i_driveFromRGRF_1",
               "o_freeToRGRF_1"
             ],
             "instances": [],
@@ -756,8 +765,12 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface_payload_contracts",
-                "path": "modules/inStack.json"
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "interface_data_contract"
+              },
+              {
+                "source": "parser_pipeline_rtl/modules/inStack.json",
+                "path": "interface"
               }
             ]
           }
@@ -776,16 +789,17 @@
       "doc_priority": "primary",
       "source_file": "flows/flow_001_inStack_i_driveFromRPSR_1.json",
       "reader_takeaway": {
-        "value": "最终手册应强调该流程未到达模块输出端点，可能内部终止或需要进一步追踪",
-        "explanation": "流程上下文中明确警告\"no module event output reached from i_driveFromRPSR_1\"，且endpoints为空。这表明该驱动事件在inStackMerge输出后未连接到任何模块输出端口，可能用于内部状态更新或控制逻辑。手册应说明这一限制，并建议通过RTL源码审查确认实际终点。",
+        "value": "终稿应弱化该流的独立输出角色，强调其为内部数据驱动合并与仲裁的预备路径，且可能作为更大状态机事件的一部分。",
+        "explanation": "因缺少输出端点，若将其作为独立事件表述可能误导，应重点描述其在inStack内部作为数据到位或驱动源选择的中间环节。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:documentation_focus:001",
         "doc_priority": "primary",
         "signals": [
+          "i_driveFromRPSR_1",
           "w_inStackDriToDR_1"
         ],
         "instances": [
@@ -804,16 +818,20 @@
         ],
         "semantic_evidence": [
           {
-            "source": "flow.warnings",
-            "path": "knowledge_ir/modules/inStack.json"
+            "source": "knowledge_ir/modules/inStack.json",
+            "path": "internal_event_flow"
+          },
+          {
+            "source": "parser_pipeline_rtl/modules/inStack.json",
+            "path": "flow_graph"
           }
         ],
         "supporting_claims": [
           {
-            "value": "来自RPSR的驱动事件通过两级合并器(dataMerge和inStackMerge)向内部堆栈传递，但最终未到达模块输出端点",
-            "explanation": "该流程从模块输入i_driveFromRPSR_1开始，首先进入dataMerge(与来自RGRF的驱动事件合并)，然后通过w_dataMerDriveToInMer_1进入inStackMerge(与来自inStackSele的驱动事件合并)，输出为w_inStackDriToDR_1。但流程上下文中未列出任何模块输出端点，表明该事件流可能在内部终止或需要进一步追踪。",
+            "value": "该内部驱动流将来自RPSR的输入事件与RGRF事件在WaitMerge中合并，随后与来自inStackSele的独立事件通过MutexMerge竞争，形成内部驱动信号但未到达模块输出，服务于内部数据到位或仲裁准备。",
+            "explanation": "步骤揭示两级合并：dataMerge可能等待双源有效后输出单一驱动，inStackMerge可能任选其一，最终输出w_inStackDriToDR_1未成为模块事件，提示该路径是为内部状态更新或负载生成提供条件，非对外事件传播。",
             "certainty": "ai_inferred",
-            "confidence": "low",
+            "confidence": "medium",
             "source_layers": [
               "semantic_layer"
             ],
@@ -822,6 +840,7 @@
             "signals": [
               "i_driveFromRPSR_1",
               "w_dataMerDriveToInMer_1",
+              "w_inStackDri_1",
               "w_inStackDriToDR_1"
             ],
             "instances": [
@@ -840,18 +859,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "instances.connections",
-                "path": "parser_pipeline_rtl/modules/inStack.json"
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "internal_event_flow"
               },
               {
-                "source": "transparent_flows",
-                "path": "knowledge_ir/modules/inStack.json"
+                "source": "parser_pipeline_rtl/modules/inStack.json",
+                "path": "connection_graph"
               }
             ]
           },
           {
-            "value": "输入驱动事件i_driveFromRPSR_1与空闲信号o_freeToRPSR_1构成控制耦合，但具体关系不明确",
-            "explanation": "接口负载契约显示i_driveFromRPSR_1的free_signal为o_freeToRPSR_1，表明该输入事件可能受空闲信号控制。但契约置信度为low，且无payload信号关联，无法确定是握手协议、背压机制还是其他控制关系。",
+            "value": "该流作为纯事件传递，无数据载荷；o_freeToRPSR_1反压信号未在步骤中体现，因此控制效能不确定。",
+            "explanation": "接口合约指示i_driveFromRPSR_1无负载，仅有free信号，但合并步骤未展示free信号的连接或反压机制，可能数据控制效果需在RTL中核实。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -874,18 +893,18 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/inStack.json"
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "interface"
               },
               {
-                "source": "interface.data_ports",
-                "path": "knowledge_ir/modules/inStack.json"
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "interface_data_contract"
               }
             ]
           },
           {
-            "value": "空闲信号o_freeToRPSR_1可能表示背压或就绪状态，但无法确定具体语义",
-            "explanation": "接口负载契约将o_freeToRPSR_1列为i_driveFromRPSR_1的free_signal，但未提供握手协议细节。可能表示RPSR可以发送新事件(空闲)，或表示inStack可以接收新事件(就绪)。由于缺乏payload和具体协议信息，无法做出更精确的推断。",
+            "value": "无法从现有步骤推断该流是否完成或如何背压；o_freeToRPSR_1可能提供反馈，但未被合并器利用的证据缺失。",
+            "explanation": "因流未到达模块输出，且dataMerge、inStackMerge的内部逻辑未显式使用free信号，无法断言完成条件或背压链，需要检查实例连接和always块。",
             "certainty": "ai_inferred",
             "confidence": "low",
             "source_layers": [
@@ -894,10 +913,12 @@
             "semantic_claim_id": "semantic:flow:inStack:flow_001_inStack_i_driveFromRPSR_1:completion_backpressure:001",
             "doc_priority": "reference",
             "signals": [
-              "i_driveFromRPSR_1",
               "o_freeToRPSR_1"
             ],
-            "instances": [],
+            "instances": [
+              "dataMerge",
+              "inStackMerge"
+            ],
             "related_flows": [],
             "related_assignments": [],
             "requires_rtl_source_review": true,
@@ -908,8 +929,12 @@
             ],
             "semantic_evidence": [
               {
-                "source": "interface.event_ports",
-                "path": "knowledge_ir/modules/inStack.json"
+                "source": "parser_pipeline_rtl/modules/inStack.json",
+                "path": "connection_graph"
+              },
+              {
+                "source": "knowledge_ir/modules/inStack.json",
+                "path": "internal_event_flow"
               }
             ]
           }
@@ -927,11 +952,11 @@
     "components": 3,
     "assignments": 12,
     "evidence_gaps": 2,
-    "review_questions": 4
+    "review_questions": 5
   },
   "source_review_context": {
     "module": "inStack",
-    "rtl_file": "rtl/rtl/int/inStack.v",
+    "rtl_file": "rtl\\rtl\\int\\inStack.v",
     "allowed": true,
     "allowed_use": [
       "external port grouping",

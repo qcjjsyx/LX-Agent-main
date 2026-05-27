@@ -1,42 +1,45 @@
 # 模块 `sram_8k`
 
-- 源文件：`rtl/rtl/memory/sram_8k.v`。
-- 职责：AI 推断：该模块是一个容量为8K的同步静态随机存取存储器（SRAM）宏单元，提供单端口读写访问。。
-- 说明：模块名“sram_8k”直接表明其功能为8K位SRAM。接口包含地址、写数据、写字节使能以及读数据端口，符合典型同步SRAM的接口特征。无事件输入/输出，表明其为纯数据存储单元，不参与握手或流控协议。
+- **源文件**：`rtl\rtl\memory\sram_8k.v`
+- **职责**：**AI 推断**：基于 10 位地址、64 位数据通路和 8 位字节写使能的 8KB 同步 SRAM 存储模块。
+- **说明**：模块名暗示容量为 8KB（字节），地址宽度 10 位（深度 1024），数据宽度 64 位，乘积为 65536 位（8192 字节）。`i_WEB_8` 指示可选字节写入，是典型的嵌入式 SRAM 宏单元封装，提供数据存储功能。
 
 ## 1. 层级位置
 
-- Parents：`socmem`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- **父模块**：`socmem`
+- **子模块**：无
+- **组件子模块**：无
+- **上游模块**：无
+- **下游模块**：无
 
-### 1.1 本模块结构图
+### 1.1 内部结构
 
-Manual Context 未记录本模块的内部实例或子模块结构。
+Manual Context 未记录本模块内部的子模块或实例结构。
 
-## 2. 输入/输出接口摘要
+## 2. 接口信号
 
-- 接收：数据输入：`i_WEB_8`, `i_addr_10`, `i_data_64`；其他输入：`i_sramTrig`。
-- 输出：数据输出：`o_data_64`。
+| 方向 | 信号 | 宽度（推断） | 简要说明（推断） |
+| --- | --- | --- | --- |
+| 输入 | `i_WEB_8` | 8 | 字节写使能 |
+| 输入 | `i_addr_10` | 10 | 地址总线 |
+| 输入 | `i_data_64` | 64 | 写数据 |
+| 输入 | `i_sramTrig` | 1 | SRAM 触发/使能信号 |
+| 输出 | `o_data_64` | 64 | 读数据 |
 
-### 2.1 端口分组
+> **注意**：所有宽度和功能描述均为基于端口命名和容量推断的结果。
 
-| 端口组 | 方向统计 | 代表信号 |
-| --- | --- | --- |
-| `other_ports` | input:4, output:1 | `i_WEB_8`, `i_addr_10`, `i_data_64`, `o_data_64`, `i_sramTrig` |
+## 3. 契约信息（Drive/Data/Free）
 
-## 3. Drive/Data/Free 契约
+| 接口方向 | 事件触发 | 有效载荷 | 反压/空闲控制 |
+| --- | --- | --- | --- |
+| 输入（data） | 未记录 | `i_WEB_8[7:0]`、`i_addr_10[9:0]`、`i_data_64[63:0]` | 未记录 |
+| 输出（data） | 未记录 | `o_data_64[63:0]` | 未记录 |
 
-| Interface | 方向 | Event | Payload | Free/backpressure |
-| --- | --- | --- | --- | --- |
-| `data_inputs` | input | - | `i_WEB_8 [ 7:0]`, `i_addr_10 [9:0]`, `i_data_64 [63:0]` | 未记录 |
-| `data_outputs` | output | - | `o_data_64 [63:0]` | 未记录 |
+- **证据不足**：Manual Context 未提供本模块的 drive flow 或握手信息。
 
 ## 4. 主要 Drive-centered Flow
 
-- 证据不足：Manual Context 未提供本模块 drive flow。
+- **证据不足**：Manual Context 未提供本模块的 drive flow。
 
 ## 5. 内部组件与 assign 影响
 
@@ -44,10 +47,10 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | 实例 | 类型 | 输入事件 | 输出事件 |
 | --- | --- | --- | --- |
-| - | - | - | Manual Context 未提供 primary internal component |
+| — | — | — | Manual Context 未提供内部组件信息 |
 
 ### 5.2 assign 影响
 
-| Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
+| Assign 语句 | 影响区域 | 左值 | 右值摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| - | - | - | - | Manual Context 未提供 primary assign 影响 |
+| — | — | — | — | Manual Context 未提供 assign 影响信息 |

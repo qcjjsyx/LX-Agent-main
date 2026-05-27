@@ -1,16 +1,16 @@
 # 模块 `timer_module`
 
-- 源文件：`rtl/rtl/IONet/Timer/timer_module.v`。
-- 职责：AI 推断：该模块是一个基于内存映射寄存器接口的定时器单元，提供可编程定时计数和软件中断功能。。
-- 说明：模块通过 addr_i 和 data_i 接收地址和数据，通过 data_o 输出寄存器读取结果，并通过 int_sig_o 输出中断信号。assign 依赖显示其内部包含 timer_value、timer_ctrl、timer_count 和 msip_value 等寄存器，支持定时值、控制、计数和软件中断寄存器访问。
+- 源文件：`rtl\rtl\IONet\Timer\timer_module.v`
+- 职责：AI 推断：实现了一个内存映射的定时器外设，提供寄存器读访问与软件中断信号的合成。
+- 说明：`data_o` 由多路选择器根据 `addr_i` 的低 8 位从内部寄存器（`timer_value`、`timer_ctrl`、`timer_count`、`msip_value`）中选出对应的值输出。`int_sig_o` 将 `msip_value` 的四个字节各自按位与归约（`&`）后，与 `int_sig_r` 拼接出 5 位中断信号。该模块通过组合逻辑暴露软件可见的定时器状态和中断，符合典型系统外设的角色。
 
 ## 1. 层级位置
 
-- Parents：`timer_slot`。
-- Children：无。
-- Component children：无。
-- Upstream modules：无。
-- Downstream modules：无。
+- Parents：`timer_slot`
+- Children：无
+- Component children：无
+- Upstream modules：无
+- Downstream modules：无
 
 ### 1.1 本模块结构图
 
@@ -18,8 +18,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`addr_i`, `data_i`；其他输入：`clk`, `we_i`。
-- 输出：数据输出：`data_o`, `int_sig_o`。
+- 接收：数据输入：`addr_i`, `data_i`；其他输入：`clk`, `we_i`
+- 输出：数据输出：`data_o`, `int_sig_o`
 
 ### 2.1 端口分组
 
@@ -33,11 +33,11 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | Interface | 方向 | Event | Payload | Free/backpressure |
 | --- | --- | --- | --- | --- |
 | `data_inputs` | input | - | `addr_i [31:0]`, `data_i [31:0]` | 未记录 |
-| `data_outputs` | output | - | `data_o [31:0]`, `int_sig_o [ 4:0]` | 未记录 |
+| `data_outputs` | output | - | `data_o [31:0]`, `int_sig_o [4:0]` | 未记录 |
 
 ## 4. 主要 Drive-centered Flow
 
-- 证据不足：Manual Context 未提供本模块 drive flow。
+- 证据不足：Manual Context 未提供本模块的 drive flow 信息。
 
 ## 5. 内部组件与 assign 影响
 

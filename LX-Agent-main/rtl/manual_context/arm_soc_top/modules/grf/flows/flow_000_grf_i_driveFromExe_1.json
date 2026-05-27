@@ -81,10 +81,10 @@
         "o_grfDriveToExe_1"
       ],
       "role_in_flow": {
-        "value": "事件缓冲与传播节点，可能引入背压或门控",
-        "explanation": "cFifo1_2作为Fifo1系列实例，在流中充当单级FIFO缓冲，接收i_driveFromExe_1事件并驱动o_grfDriveToExe_1，其内部状态可能根据满/空条件门控事件传播，但当前上下文未提供具体控制逻辑",
+        "value": "cFifo1_2在该流中作为事件缓冲/同步级，将输入驱动事件暂存后转发至输出驱动。",
+        "explanation": "该FIFO1实例位于i_driveFromExe_1和o_grfDriveToExe_1之间，是流中的唯一组件。它的角色fifo_stage表明其可能用于同步异步事件、缓解反压或匹配数据速率。从输入驱动到输出驱动的连接完全经过它，没有选择、分岔或合并操作。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "high",
         "source_layers": [
           "semantic_layer"
         ],
@@ -98,9 +98,7 @@
           "cFifo1_2"
         ],
         "related_flows": [],
-        "related_assignments": [
-          "5"
-        ],
+        "related_assignments": [],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -108,10 +106,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "component_connections"
           },
           {
-            "source": "transparent_flows"
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "key_instances"
           }
         ]
       },
@@ -182,23 +182,20 @@
     }
   ],
   "semantic_meaning": {
-    "value": "强调单级FIFO缓冲路径，数据负载与事件分离，背压机制需RTL确认",
-    "explanation": "该流结构简单，手册应重点说明cFifo1_2作为事件缓冲节点的作用，以及o_grfDataToExe_64作为伴随数据但不参与事件控制的事实；背压信号的存在需标注为待确认，避免过度声明",
+    "value": "输出驱动事件o_grfDriveToExe_1控制有效负载o_grfDataToExe_64的采样时刻，形成典型的事件-数据绑定。",
+    "explanation": "根据接口有效负载合同，输出侧有一个驱动事件和一个64位数据有效负载。该有效负载由assign index 5持续产生，但外部逻辑应在o_grfDriveToExe_1有效时锁存该数据。流本身只传递事件，数据有效负载独立于步序存在，但二者通过接口约定关联。",
     "certainty": "ai_inferred",
-    "confidence": "medium",
+    "confidence": "high",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:grf:flow_000_grf_i_driveFromExe_1:documentation_focus:001",
+    "semantic_claim_id": "semantic:flow:grf:flow_000_grf_i_driveFromExe_1:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
-      "i_driveFromExe_1",
       "o_grfDriveToExe_1",
       "o_grfDataToExe_64"
     ],
-    "instances": [
-      "cFifo1_2"
-    ],
+    "instances": [],
     "related_flows": [],
     "related_assignments": [
       "5"
@@ -211,16 +208,57 @@
     ],
     "semantic_evidence": [
       {
-        "source": "instances.connections"
+        "source": "knowledge_ir/modules/grf.json",
+        "path": "interface_data_contract"
       },
       {
-        "source": "transparent_flows"
+        "source": "parser_pipeline_rtl/modules/grf.json",
+        "path": "assignment_dependencies"
       }
     ],
     "supporting_claims": [
       {
-        "value": "执行单元到通用寄存器文件的单级事件驱动流，通过Fifo1实例缓冲后输出",
-        "explanation": "该流描述了一个从外部输入i_driveFromExe_1到输出o_grfDriveToExe_1的单一事件路径，中间仅经过一个Fifo1实例cFifo1_2，无分支或合并点，属于典型的寄存器文件写回路径中的一级缓冲",
+        "value": "最终手册应强调此流为Exe到GRF再到Exe的回环驱动路径，由cFifo1_2提供弹性缓冲，并明确定义输出有效负载的来源与绑定。",
+        "explanation": "基于提供的上下文，流的核心是一个FIFO直通，没有复杂的分支或状态。因此文档应侧重于接口时序（驱动事件与数据的对应关系），内部缓冲的必要性，以及FIFO可能造成的阻塞行为。无需深入FIFO实现细节，但要提示数据有效负载由寄存器文件读出值决定，且双字拼接可能具有结构意义。",
+        "certainty": "ai_inferred",
+        "confidence": "medium",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:grf:flow_000_grf_i_driveFromExe_1:documentation_focus:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_driveFromExe_1",
+          "o_grfDriveToExe_1",
+          "o_grfDataToExe_64"
+        ],
+        "instances": [
+          "cFifo1_2"
+        ],
+        "related_flows": [],
+        "related_assignments": [
+          "5"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:grf:flow:flow_000_grf_i_driveFromExe_1",
+          "ev:grf:semantic_flow:flow_000_grf_i_driveFromExe_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "flow_graph"
+          },
+          {
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "internal_event_flow"
+          }
+        ]
+      },
+      {
+        "value": "该流向表示一个来自执行单元（Exe）的驱动事件，经过FIFO1缓冲级传递后再送回Exe，构成一个带缓冲的同步驱动路径。",
+        "explanation": "提供的流步骤仅包含cFifo1_2实例，将输入驱动i_driveFromExe_1直通为输出驱动o_grfDriveToExe_1。由于cFifo1_2是一个FIFO1，它可能引入延迟或背压，但流本身是点对点无分支的，因此其意图是将Exe侧的驱动事件缓冲后回传给Exe与数据配合使用。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -239,68 +277,36 @@
         "related_assignments": [
           "5"
         ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:grf:flow:flow_000_grf_i_driveFromExe_1",
           "ev:grf:semantic_flow:flow_000_grf_i_driveFromExe_1"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "instances.connections"
           },
           {
-            "source": "transparent_flows"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "transparent_flows"
           }
         ]
       },
       {
-        "value": "事件驱动信号与数据负载并行输出，但数据赋值独立于事件流",
-        "explanation": "o_grfDriveToExe_1作为事件有效信号，o_grfDataToExe_64作为其伴随数据，两者在接口上构成一对，但数据赋值5仅依赖内部寄存器r_rsValue_32，与事件流控制逻辑无直接赋值依赖",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:grf:flow_000_grf_i_driveFromExe_1:data_control_effect:001",
-        "doc_priority": "secondary",
-        "signals": [
-          "o_grfDriveToExe_1",
-          "o_grfDataToExe_64"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [
-          "5"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:grf:flow:flow_000_grf_i_driveFromExe_1",
-          "ev:grf:semantic_flow:flow_000_grf_i_driveFromExe_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports"
-          },
-          {
-            "source": "interface.data_ports"
-          }
-        ]
-      },
-      {
-        "value": "存在自由/背压信号接口，但当前流中未体现其与事件传播的直接关系",
-        "explanation": "接口契约显示输入事件i_driveFromExe_1有自由信号o_grfFreeToExe_1，输出事件o_grfDriveToExe_1有自由信号i_grfFreeFromExe_1，但当前流步骤和连接中未包含这些信号，无法确定cFifo1_2是否使用它们进行背压控制",
+        "value": "虽有自由信号存在，但由于缺乏与cFifo1_2的具体连接证据，无法明确其在该流中的确切反压作用。",
+        "explanation": "接口有效负载合同指示输入侧用o_grfFreeToExe_1表示GRF可以接收驱动，输出侧用i_grfFreeFromExe_1表示Exe可以接收驱动，暗示可能存在握手或反压。然而提供的flow步骤只包含纯事件信号，没有显示这些free信号如何连接到cFifo1_2或控制事件传播。因此可以推断流中有反压可能，但不能具体描述其机制。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_000_grf_i_driveFromExe_1:completion_backpressure:001",
-        "doc_priority": "reference",
+        "doc_priority": "secondary",
         "signals": [
-          "i_grfFreeFromExe_1",
-          "o_grfFreeToExe_1"
+          "o_grfFreeToExe_1",
+          "i_grfFreeFromExe_1"
         ],
         "instances": [
           "cFifo1_2"
@@ -315,10 +321,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports"
-          },
-          {
-            "source": "interface.data_ports"
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "interface_data_contract"
           }
         ]
       }

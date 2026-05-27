@@ -92,8 +92,8 @@
         "w_driveToWrite"
       ],
       "role_in_flow": {
-        "value": "三输入互斥合并器，仲裁来自Exp、LSU和WB的写请求，确保同一时刻只有一个写请求被传递。",
-        "explanation": "该实例属于MutexMerge家族，其角色是合并器（merger）。它接收三个输入驱动（i_grfwDriveFromExp_1, i_grfwDriveFromLsu_1, i_grfwDriveFromWB_1），并输出一个合并后的驱动w_driveToWrite。其“互斥”特性意味着它内部包含仲裁逻辑，防止多个写请求同时通过，从而避免写冲突。",
+        "value": "三输入互斥合并器，仲裁来自Exp、LSU和WB的写回驱动，同一时刻只放行一个驱动并传递对应数据。",
+        "explanation": "该实例被标记为 merger，连接 i_grfwDriveFromExp_1 至 i_drive2、i_grfwDriveFromLsu_1 至 i_drive0、i_grfwDriveFromWB_1 至 i_drive1，且负载 i_expDataToGrf_64 连至 i_data2_74；合并器在多个同时驱动时按内部策略选通并输出 w_driveToWrite，从而防止写冲突。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -111,7 +111,9 @@
           "cMutexMerge3_end_74b"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "(none)"
+        ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -119,8 +121,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "instances.connections"
+          },
+          {
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "key_instances"
           }
         ]
       },
@@ -141,15 +147,15 @@
       ],
       "output_drives": [],
       "role_in_flow": {
-        "value": "一级FIFO缓冲器，暂存合并后的写请求，以应对后端写操作的延迟或背压。",
-        "explanation": "该实例属于Fifo1家族，其角色是FIFO级（fifo_stage）。它接收来自cMutexMerge3_end_74b的w_driveToWrite信号，并作为写请求的最终缓冲级。其输出未在提供的上下文中显示，表明它直接驱动GRF内部的写逻辑。FIFO的存在可以解耦前端请求与后端写操作，处理可能的流水线停顿。",
+        "value": "单入口FIFO，暂存合并器输出的写请求及数据，屏蔽下游可能的停顿。",
+        "explanation": "作为 fifo_stage，cLastFifo1_grf 接收 w_driveToWrite 驱动，但上下文未显示其输出驱动，推测它可能将有效写请求下沉至寄存器阵列写入逻辑，这一级FIFO可吸收合并器的输出速率与下游处理速率之间的差异，起到弹性缓冲作用。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:grf:flow_005_grf_i_grfwDriveFromExp_1:component_role:002",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "w_driveToWrite"
         ],
@@ -157,7 +163,9 @@
           "cLastFifo1_grf"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "(none)"
+        ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -165,8 +173,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "instances.connections"
+          },
+          {
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "internal_event_flow"
           }
         ]
       },
@@ -221,8 +233,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "写请求驱动信号i_grfwDriveFromExp_1携带其对应的写数据载荷i_expDataToGrf_64。",
-    "explanation": "接口载荷契约表明，当事件i_grfwDriveFromExp_1有效时，其关联的载荷数据i_expDataToGrf_64（64位宽）会通过cMutexMerge3_end_74b的i_data2_74端口传入。这建立了驱动信号与数据载荷之间的同步关系：驱动信号是控制流，数据信号是伴随的写数据。",
+    "value": "负载 i_expDataToGrf_64 在 i_grfwDriveFromExp_1 有效时被采样，通过合并器传递给后续FIFO，free 信号 o_grfFreeToExp_1 可向Exp指示就绪。",
+    "explanation": "接口契约显示 i_grfwDriveFromExp_1 携带单个负载 i_expDataToGrf_64，经连接至合并器的 i_data2_74，与驱动信号同步；下游反馈信号 o_grfFreeToExp_1 虽未出现在流步骤中，但可能用于反压或握手，当前上下文未给出其连接目标，故只能推断数据与控制遵循写回协议，确切细节待源文件审查。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -232,11 +244,14 @@
     "doc_priority": "primary",
     "signals": [
       "i_grfwDriveFromExp_1",
-      "i_expDataToGrf_64"
+      "i_expDataToGrf_64",
+      "o_grfFreeToExp_1"
     ],
     "instances": [],
     "related_flows": [],
-    "related_assignments": [],
+    "related_assignments": [
+      "(none)"
+    ],
     "requires_rtl_source_review": true,
     "review_status": "needs_review",
     "evidence_refs": [
@@ -245,18 +260,18 @@
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_ports",
-        "path": "modules/grf.json"
+        "source": "knowledge_ir/modules/grf.json",
+        "path": "interface_data_contract"
       },
       {
-        "source": "interface.data_ports",
-        "path": "modules/grf.json"
+        "source": "parser_pipeline_rtl/modules/grf.json",
+        "path": "connection_graph"
       }
     ],
     "supporting_claims": [
       {
-        "value": "文档应重点描述从Exp到GRF的写请求路径，包括互斥合并器的仲裁策略和FIFO的缓冲深度。",
-        "explanation": "该流的核心是cMutexMerge3_end_74b的互斥合并和cLastFifo1_grf的FIFO缓冲。文档需要解释这三个写请求源（Exp, LSU, WB）的优先级或仲裁机制，以及FIFO的深度和空满状态如何影响背压信号o_grfFreeToExp_1的生成。由于流在FIFO处终止，文档还应说明FIFO输出如何连接到GRF的写端口。",
+        "value": "着重说明 Exp 写回在合并器中的仲裁进入以及FIFO的缓冲角色，忽略未证实的输出写回细节。",
+        "explanation": "因为 i_grfwDriveFromExp_1 未直接抵达寄存器阵列，最终写入逻辑在本流之外，故文档应描述到 w_driveToWrite 为止的竞争和同步，提醒读者后续写行为需结合寄存器文件端口和FIFO输出事件，不应过度推测当前流未覆盖的部分。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -274,7 +289,50 @@
           "cLastFifo1_grf"
         ],
         "related_flows": [],
-        "related_assignments": [],
+        "related_assignments": [
+          "(none)"
+        ],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:grf:flow:flow_005_grf_i_grfwDriveFromExp_1",
+          "ev:grf:semantic_flow:flow_005_grf_i_grfwDriveFromExp_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "internal_event_flow"
+          },
+          {
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "interface_data_contract"
+          }
+        ]
+      },
+      {
+        "value": "该流描述了执行单元（Exp）通过事件驱动 i_grfwDriveFromExp_1 将64位结果数据写入寄存器文件的内部路径，经过三路互斥合并器与来自LSU和写回的请求竞争，再由单级FIFO暂存。",
+        "explanation": "提供的流步骤显示 i_grfwDriveFromExp_1 先进入 cMutexMerge3_end_74b，该合并器同时接收 i_grfwDriveFromLsu_1 和 i_grfwDriveFromWB_1 两个驱动，输出 w_driveToWrite 给 cLastFifo1_grf；上下文未发现此FIFO有输出事件驱动，因此尚不能确定最终写入行为，但合并与缓冲的目的是序列化并发写请求避免冲突。",
+        "certainty": "ai_inferred",
+        "confidence": "low",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:grf:flow_005_grf_i_grfwDriveFromExp_1:flow_intent:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_grfwDriveFromExp_1",
+          "i_expDataToGrf_64",
+          "w_driveToWrite",
+          "o_grfFreeToExp_1"
+        ],
+        "instances": [
+          "cMutexMerge3_end_74b",
+          "cLastFifo1_grf"
+        ],
+        "related_flows": [],
+        "related_assignments": [
+          "(none)"
+        ],
         "requires_rtl_source_review": true,
         "review_status": "needs_review",
         "evidence_refs": [
@@ -283,28 +341,27 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "internal_event_flow"
           },
           {
-            "source": "interface.event_ports",
-            "path": "modules/grf.json"
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "interface_data_contract"
           }
         ]
       },
       {
-        "value": "来自执行单元（Exp）的写请求驱动，经互斥合并与FIFO缓冲后，最终写入GRF寄存器堆。",
-        "explanation": "该流从外部输入i_grfwDriveFromExp_1开始，代表执行单元发起的寄存器写请求。该请求首先进入cMutexMerge3_end_74b，与来自LSU和写回级（WB）的写请求进行互斥合并，合并后的输出w_driveToWrite再送入cLastFifo1_grf进行一级FIFO缓冲。流在此处终止，未继续传播到模块输出，表明FIFO的输出直接驱动GRF内部的写操作。",
+        "value": "推测 o_grfFreeToExp_1 为向 Exp 流出的就绪/空闲指示，但当前流未包含该信号在内的完整握手回路，不能确认其作用。",
+        "explanation": "提供的上下文仅注明存在 free_signal o_grfFreeToExp_1，但合并器与FIFO的反馈路径未在 event_flow 中展示；若要明确写回请求从发出到完成的整个背压链，需查看 cMutexMerge3_end_74b 及 cLastFifo1_grf 的 free 输出连接和寄存器文件写入控制逻辑，目前只能保守说明可能存在反压。",
         "certainty": "ai_inferred",
-        "confidence": "medium",
+        "confidence": "low",
         "source_layers": [
           "semantic_layer"
         ],
-        "semantic_claim_id": "semantic:flow:grf:flow_005_grf_i_grfwDriveFromExp_1:flow_intent:001",
-        "doc_priority": "primary",
+        "semantic_claim_id": "semantic:flow:grf:flow_005_grf_i_grfwDriveFromExp_1:completion_backpressure:001",
+        "doc_priority": "secondary",
         "signals": [
-          "i_grfwDriveFromExp_1",
-          "w_driveToWrite"
+          "o_grfFreeToExp_1"
         ],
         "instances": [
           "cMutexMerge3_end_74b",
@@ -320,12 +377,12 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/grf.json"
+            "source": "knowledge_ir/modules/grf.json",
+            "path": "interface"
           },
           {
-            "source": "transparent_flows",
-            "path": "modules/grf.json"
+            "source": "parser_pipeline_rtl/modules/grf.json",
+            "path": "interface"
           }
         ]
       }

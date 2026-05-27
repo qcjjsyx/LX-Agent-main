@@ -300,10 +300,10 @@
         "w_local2westR"
       ],
       "role_in_flow": {
-        "value": "本地事件路由分发器，将输入事件按目标方向扇出至五个仲裁器",
-        "explanation": "localRouteMsg 实例接收 i_driveLocal 事件，根据路由逻辑将事件复制或选择性地发送到五个方向（东、本地、北、南、西）的仲裁器输入，是流的分支点。",
+        "value": "驱动事件扇出节点，将本地输入 i_driveLocal 复制并发送到所有方向仲裁器。",
+        "explanation": "localRouteMsg 接收唯一的 i_driveLocal 端口信号，产出五个独立的输出 w_local2eastR 等，分别连接到 eastArbMsg、localArbMsg 等模块的对应输入。该实例是流的分支关键组件，不负责仲裁，仅执行定向复制。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -329,12 +329,8 @@
         ],
         "semantic_evidence": [
           {
-            "source": "parser_pipeline_rtl/modules/nodeTop.json",
-            "path": "instances"
-          },
-          {
-            "source": "parser_pipeline_rtl/modules/nodeTop.json",
-            "path": "connection_graph"
+            "source": "parser_module",
+            "path": "parser_pipeline_rtl/modules/nodeTop.json"
           }
         ]
       },
@@ -600,8 +596,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "强调本地事件的路由扇出与仲裁合并过程",
-    "explanation": "手册应重点描述 i_driveLocal 事件如何经 localRouteMsg 路由到五个方向，以及各方向仲裁器如何从多个源中选择事件。同时需说明数据载荷（51 位消息）与事件驱动信号的关联。",
+    "value": "重点描述 i_driveLocal 通过 localRouteMsg 复制到各方向仲裁器，并驱动对应 o_drive* 输出，同时强调伴随的消息 payload 和就绪信号。应弱化仲裁器内部多路选择及与其他方向请求冲突的细节，因缺乏内部实现信息。",
+    "explanation": "基于提供的连接和接口合约，流的核心结构已清晰，但仲裁机制和 free 信号的内部连接仍为黑箱。文档应立足已知端口和扇出路径，避免推测性说明。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
@@ -611,16 +607,23 @@
     "doc_priority": "primary",
     "signals": [
       "i_driveLocal",
-      "w_local2eastR",
-      "w_local2localR",
-      "w_local2northR",
-      "w_local2southR",
-      "w_local2westR",
       "o_driveEast",
       "o_driveLocal",
       "o_driveNorth",
       "o_driveSouth",
-      "o_driveWest"
+      "o_driveWest",
+      "i_localInMsg_51",
+      "o_eastMsg_51",
+      "o_localMsg_51",
+      "o_northMsg_51",
+      "o_southMsg_51",
+      "o_westMsg_51",
+      "o_freeLocal",
+      "i_freeEast",
+      "i_freeLocal",
+      "i_freeNorth",
+      "i_freeSouth",
+      "i_freeWest"
     ],
     "instances": [
       "localRouteMsg",
@@ -640,20 +643,18 @@
     ],
     "semantic_evidence": [
       {
-        "source": "knowledge_ir/modules/nodeTop.json",
-        "path": "internal_event_flow"
+        "source": "compact_context"
       },
       {
-        "source": "parser_pipeline_rtl/modules/nodeTop.json",
-        "path": "connection_graph"
+        "source": "interface_payload_contracts"
       }
     ],
     "supporting_claims": [
       {
-        "value": "本地注入事件经路由与仲裁后分发至五个方向输出",
-        "explanation": "该流描述从模块输入端口 i_driveLocal 发起的事件，先由 localRouteMsg 实例根据路由决策将事件分发到五个方向（东、本地、北、南、西）的仲裁器，再由各方向仲裁器（eastArbMsg、localArbMsg、northArbMsg、southArbMsg、westArbMsg）仲裁后输出至对应方向端口。",
+        "value": "本地驱动事件通过路由分发至东、本地、北、南、西五个方向的仲裁输出，构成多播流。",
+        "explanation": "流将 i_driveLocal 作为起点，经 localRouteMsg 扇出为五个定向请求信号，并分别连接到对应方向的 arbMsg 实例，最终在仲裁后产生各方向的 o_drive 事件。该结构表明节点主动向所有邻居同时发起传输的意图。",
         "certainty": "ai_inferred",
-        "confidence": "high",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -661,6 +662,11 @@
         "doc_priority": "primary",
         "signals": [
           "i_driveLocal",
+          "w_local2eastR",
+          "w_local2localR",
+          "w_local2northR",
+          "w_local2southR",
+          "w_local2westR",
           "o_driveEast",
           "o_driveLocal",
           "o_driveNorth",
@@ -685,27 +691,30 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/nodeTop.json",
-            "path": "internal_event_flow"
+            "source": "module_facts",
+            "path": "knowledge_ir/modules/nodeTop.json"
           },
           {
-            "source": "parser_pipeline_rtl/modules/nodeTop.json",
-            "path": "flow_graph"
+            "source": "parser_module",
+            "path": "parser_pipeline_rtl/modules/nodeTop.json"
+          },
+          {
+            "source": "rtl_source",
+            "path": "rtl\\rtl\\IONet\\IONetwork_9.24\\nodeTop.v"
           }
         ]
       },
       {
-        "value": "事件驱动信号与 51 位数据载荷并行传输",
-        "explanation": "i_driveLocal 作为事件驱动信号，伴随 51 位数据载荷 i_localInMsg_51 输入。该载荷经 localRouteMsg 路由后，由各方向仲裁器输出为对应方向的 51 位消息（如 o_eastMsg_51）。",
+        "value": "输入驱动 i_driveLocal 伴随 51 位消息总线 i_localInMsg_51，各方向的输出驱动也携带对应宽度的 o_*Msg_51 数据。",
+        "explanation": "接口合约显示所有驱动事件均绑定一个 [50:0] 宽度的 payload 信号。从连接关系可推断，本地输入消息经过 localRouteMsg 和方向仲裁器后，流向对应输出消息总线，但内部赋值或直通方式尚需 RTL 验证。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:nodeTop:flow_001_nodeTop_i_driveLocal:data_control_effect:001",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
-          "i_driveLocal",
           "i_localInMsg_51",
           "o_eastMsg_51",
           "o_localMsg_51",
@@ -716,26 +725,25 @@
         "instances": [],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
+        "requires_rtl_source_review": true,
+        "review_status": "needs_review",
         "evidence_refs": [
           "ev:nodeTop:flow:flow_001_nodeTop_i_driveLocal",
           "ev:nodeTop:semantic_flow:flow_001_nodeTop_i_driveLocal"
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/nodeTop.json",
-            "path": "interface_data_contract"
+            "source": "interface_payload_contracts"
           },
           {
-            "source": "parser_pipeline_rtl/modules/nodeTop.json",
-            "path": "interface"
+            "source": "rtl_source",
+            "path": "rtl\\rtl\\IONet\\IONetwork_9.24\\nodeTop.v"
           }
         ]
       },
       {
-        "value": "各方向有独立空闲信号，但流中未体现反压机制",
-        "explanation": "接口显示每个方向有独立空闲信号（如 o_freeLocal、i_freeEast），但 flow_001 的步骤和连接中未包含这些信号，无法确定反压如何影响该流。",
+        "value": "输入 i_driveLocal 有 o_freeLocal 反馈本地可接收，各输出方向均有 i_free* 信号指示下游就绪，但缺少内部握手连接证据。",
+        "explanation": "从接口合约可见 free 信号与方向对应，例如 o_driveEast 伴随 i_freeEast。然而，提供的连接图中未显示 free 信号之间的内部连接或组合逻辑，因此无法判定背压机制是否完整闭合，或仅由上级模块控制。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -751,7 +759,9 @@
           "i_freeSouth",
           "i_freeWest"
         ],
-        "instances": [],
+        "instances": [
+          "(未关联内部实例)"
+        ],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -762,8 +772,7 @@
         ],
         "semantic_evidence": [
           {
-            "source": "knowledge_ir/modules/nodeTop.json",
-            "path": "interface_data_contract"
+            "source": "interface_payload_contracts"
           }
         ]
       }

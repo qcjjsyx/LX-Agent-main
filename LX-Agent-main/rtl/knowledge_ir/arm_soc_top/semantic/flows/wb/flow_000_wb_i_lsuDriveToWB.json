@@ -6,7 +6,7 @@
   "top_module": "arm_soc_top",
   "module": "wb",
   "flow_id": "flow_000_wb_i_lsuDriveToWB",
-  "input_hash": "a916b58685a770f4075ebcb9b1fa95adc3ab9703f8facdc555903d01f4911cbb",
+  "input_hash": "c1c45a2250b7beb6fcb8f3db7de72428c7bed31166c20414b6381fd40fd2e450",
   "source_context": "ai_context/modules/wb/flows/flow_000_wb_i_lsuDriveToWB.json",
   "source_refs": [
     {
@@ -33,7 +33,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/WB/wb.v",
+      "source": "rtl\\rtl\\WB\\wb.v",
       "paths": [
         "module_source"
       ]
@@ -41,21 +41,21 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/WB/wb.v",
+        "rtl_file": "rtl\\rtl\\WB\\wb.v",
         "parser_module": "modules/wb.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 8,
+    "count": 17,
     "by_type": {
-      "assignment_interpretation": 1,
+      "assignment_interpretation": 2,
       "completion_backpressure": 1,
-      "component_role": 2,
+      "component_role": 9,
       "data_control_effect": 1,
       "documentation_focus": 1,
       "flow_intent": 1,
-      "source_review_request": 1
+      "source_review_request": 2
     }
   },
   "claims": [
@@ -66,25 +66,43 @@
         "module": "wb",
         "flow_id": "flow_000_wb_i_lsuDriveToWB"
       },
-      "summary": "将 LSU 写回请求分发至多个写回目标（PRF、GRF、XPSR、PC），并包含一个用于 GRF 写回的延迟合并与仲裁路径。",
+      "summary": "该流将LSU写回请求的单个输入事件分发至多个结构目标，包括PRF、GRF读请求、XPSR、PC以及经过合并/仲裁的GRF写回路径，实现写回阶段的多路驱动选择与流水线同步。",
       "subject": "flow_000_wb_i_lsuDriveToWB",
-      "explanation": "该流从 LSU 接收单个写回驱动事件，通过 Splitter 分为两路，分别经不同延迟后进入 Selector1 和 Selector2。Selector1 直接驱动 PRF、ReadGRF 和 PC 输出，同时将一路送入 MutexMerge1 和 MutexMerge2 进行仲裁合并；Selector2 直接驱动 XPSR 输出。MutexMerge1 合并来自 Selector1、wbSplitter 和经 cFifo1 延迟的路径，最终驱动 GRF 输出。整个流体现了写回阶段的多目标分发与 GRF 写回的仲裁机制。",
+      "explanation": "流从 i_lsuDriveToWB 开始，经 Splitter 分支为两路并行路径，各自通过不同延迟后到达 Selector1 和 Selector2。Selector1 根据内部条件将事件导向 o_drive_prf、o_wbDriveReadGRF、PC 路径或参与两个互斥合并。Selector2 专用于 o_drive_xpsr。MutexMerge1 汇聚来自 Selector1、反馈通路及 wbSplitter 的事件，形成最终 GRF 写驱动。MutexMerge2 融合外部输入与 Selector1 的事件，经流水线 FIFO 和延迟返回 MutexMerge1，构成可能用于位操作完成的反馈回路。整体意图是支持多种写回目标的多周期可控分发。",
       "signals": [
         "i_lsuDriveToWB",
+        "w_driveSelector1",
+        "w_driveSelector2",
+        "w_drive1Selector1",
+        "w_drive1Selector2",
         "o_drive_prf",
         "o_wbDriveReadGRF",
+        "w_driveMutexMerge11",
+        "w_driveMutexMerge2",
+        "w_drive_pc",
         "o_drive_xpsr",
+        "w_drivecFifo1",
+        "w_driveMutexMerge12",
+        "w_driveMutexMerge12Delay_1",
+        "w_drive_grf",
+        "o_drive_grf",
         "o_drive_pc",
-        "o_drive_grf"
+        "w_wbSplitterDriveToMutexMerge1_1",
+        "w_freeSelector16",
+        "w_freeSelector22"
       ],
       "instances": [
         "Splitter",
+        "delay1",
+        "delay8",
         "Selector1",
         "Selector2",
         "MutexMerge1",
         "MutexMerge2",
+        "wbSplitter",
         "cFifo1",
-        "wbSplitter"
+        "bitOperationDelay",
+        "toGrfDelay"
       ],
       "related_assignments": [
         "11",
@@ -98,10 +116,7 @@
           "source": "instances.connections"
         },
         {
-          "source": "transparent_flows"
-        },
-        {
-          "source": "interface.event_ports"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:flow_intent:001"
@@ -113,20 +128,16 @@
         "module": "wb",
         "flow_id": "flow_000_wb_i_lsuDriveToWB"
       },
-      "subject": "MutexMerge1",
-      "summary": "作为 GRF 写回路径的仲裁合并点，合并来自 Selector1、wbSplitter 和延迟后的 cFifo1 三路写回请求。",
-      "explanation": "MutexMerge1 接收三路输入：w_driveMutexMerge11（来自 Selector1）、w_driveMutexMerge12Delay_1（来自 cFifo1 经 bitOperationDelay 延迟）、w_wbSplitterDriveToMutexMerge1_1（来自 wbSplitter）。其输出 w_drive_grf 经 toGrfDelay 后驱动 o_drive_grf。这表明 GRF 写回需要仲裁，可能涉及写回优先级或互斥条件。",
+      "subject": "Splitter",
+      "summary": "作为事件分支点，将输入驱动复制为两路，同时向两个选择器通路传递。",
+      "explanation": "Splitter 是 cSplitter2_103b_wb 实例，属于 SelSplit 家族。它接收 i_lsuDriveToWB，产生 w_driveSelector1 和 w_driveSelector2，使同一 LSU 写回事件能够并行进入处理 PRF/PC/GRF 的分支和处理 XPSR 的分支。",
       "signals": [
-        "w_driveMutexMerge11",
-        "w_driveMutexMerge12Delay_1",
-        "w_wbSplitterDriveToMutexMerge1_1",
-        "w_drive_grf"
+        "i_lsuDriveToWB",
+        "w_driveSelector1",
+        "w_driveSelector2"
       ],
       "instances": [
-        "MutexMerge1"
-      ],
-      "related_assignments": [
-        "25"
+        "Splitter"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
@@ -136,7 +147,7 @@
           "source": "instances.connections"
         },
         {
-          "source": "component_connection"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:001"
@@ -148,189 +159,108 @@
         "module": "wb",
         "flow_id": "flow_000_wb_i_lsuDriveToWB"
       },
-      "subject": "cFifo1",
-      "summary": "作为 MutexMerge2 输出到 MutexMerge1 之间的 FIFO 缓冲级，可能用于处理写回请求的排队或速率匹配。",
-      "explanation": "cFifo1 接收来自 MutexMerge2 的 w_drivecFifo1，输出 w_driveMutexMerge12 经 bitOperationDelay 延迟后送入 MutexMerge1。这表明 MutexMerge2 路径上的写回请求可能先进入 FIFO 排队，再经延迟后参与 GRF 写回仲裁。",
+      "subject": "delay1, delay8",
+      "summary": "透明延迟，对齐两条分支的时序。",
+      "explanation": "delay1（8 周期）位于 Selector1 路径，delay8（4 周期）位于 Selector2 路径。它们仅传递驱动事件，不改变事件语义，用于协调下游选择器的到达时刻。",
       "signals": [
-        "w_drivecFifo1",
-        "w_driveMutexMerge12"
+        "w_driveSelector1",
+        "w_drive1Selector1",
+        "w_driveSelector2",
+        "w_drive1Selector2"
       ],
       "instances": [
-        "cFifo1",
-        "bitOperationDelay"
-      ],
-      "related_assignments": [
-        "25"
+        "delay1",
+        "delay8"
       ],
       "doc_priority": "secondary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
           "source": "instances.connections"
         },
         {
-          "source": "component_connection"
+          "source": "flow.steps"
         }
       ],
       "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:002"
     },
     {
-      "claim_type": "assignment_interpretation",
+      "claim_type": "component_role",
       "scope": {
         "type": "flow",
         "module": "wb",
         "flow_id": "flow_000_wb_i_lsuDriveToWB"
       },
-      "subject": "assign 25",
-      "summary": "将 w_driveMutexMerge12Delay_1 信号连接到 o_bitOpOver_1 输出，表明该延迟路径同时驱动一个位操作完成标志。",
-      "explanation": "assign 25 的 lhs 为 o_bitOpOver_1，rhs 为 w_driveMutexMerge12Delay_1。w_driveMutexMerge12Delay_1 是 cFifo1 输出经 bitOperationDelay 延迟后的信号，该赋值将其作为位操作完成标志输出，表明该延迟路径不仅用于 GRF 写回仲裁，还用于指示位操作完成。",
+      "subject": "Selector1",
+      "summary": "多输出选择器，依据未公开的条件将驱动事件定向至 PRF、GRF 读、PC 以及与两个合并器交互的路径。",
+      "explanation": "Selector1 为 cSelector6_101b_wb，输入 w_drive1Selector1，输出驱动包括 o_drive_prf、o_wbDriveReadGRF、w_driveMutexMerge11、w_driveMutexMerge2、w_drive_pc 和 w_freeSelector16。它决定了 LSU 写回事件应作用于哪个目标结构，但选择逻辑所需的数据/控制信号未在本视图展示。",
       "signals": [
-        "o_bitOpOver_1",
-        "w_driveMutexMerge12Delay_1"
-      ],
-      "related_assignments": [
-        "25"
-      ],
-      "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "assign_related"
-        },
-        {
-          "source": "interface_related"
-        }
-      ],
-      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:assignment_interpretation:001"
-    },
-    {
-      "claim_type": "data_control_effect",
-      "scope": {
-        "type": "flow",
-        "module": "wb",
-        "flow_id": "flow_000_wb_i_lsuDriveToWB"
-      },
-      "summary": "LSU 写回事件携带的数据通过 Selector1 和 Selector2 的分发，分别映射到 PRF、PC、XPSR 和 GRF 的 payload 输出。",
-      "subject": "i_lsuDriveToWB 与输出 payload 的关系",
-      "explanation": "从接口 payload 契约可见，o_drive_prf 关联 o_prfData_40，o_drive_pc 关联 o_pcData_32，o_drive_xpsr 关联 o_xpsrData_4，o_drive_grf 关联 o_grfData_74 和 o_WBdataToGRF_8。这些 payload 信号分别来自 Selector1 和 Selector2 的数据输出，表明写回事件的数据内容被分发到不同目标。",
-      "signals": [
-        "o_prfData_40",
-        "o_pcData_32",
-        "o_xpsrData_4",
-        "o_grfData_74",
-        "o_WBdataToGRF_8"
-      ],
-      "related_payload": [
-        "o_prfData_40",
-        "o_pcData_32",
-        "o_xpsrData_4",
-        "o_grfData_74",
-        "o_WBdataToGRF_8"
-      ],
-      "related_assignments": [
-        "11"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "interface.data_ports"
-        },
-        {
-          "source": "component_connection"
-        }
-      ],
-      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:data_control_effect:001"
-    },
-    {
-      "claim_type": "completion_backpressure",
-      "scope": {
-        "type": "flow",
-        "module": "wb",
-        "flow_id": "flow_000_wb_i_lsuDriveToWB"
-      },
-      "summary": "部分写回目标（GRF、ReadGRF、XPSR）有独立的 free 信号，表明这些路径支持背压或完成握手，而 PRF 和 PC 路径未明确关联 free 信号。",
-      "subject": "写回目标的 free/backpressure 信号",
-      "explanation": "从接口 payload 契约可见，o_drive_grf 关联 i_wbFreeFromGRF，o_wbDriveReadGRF 关联 i_wbFreeFromReadGRF，o_drive_xpsr 关联 i_wbFreeFromXpsr。而 o_drive_prf 和 o_drive_pc 未列出 free 信号。这表明 GRF、ReadGRF 和 XPSR 写回路径可能支持背压或完成握手，而 PRF 和 PC 路径可能为无背压的直通路径。",
-      "signals": [
-        "i_wbFreeFromGRF",
-        "i_wbFreeFromReadGRF",
-        "i_wbFreeFromXpsr"
+        "w_drive1Selector1",
+        "o_drive_prf",
+        "o_wbDriveReadGRF",
+        "w_driveMutexMerge11",
+        "w_driveMutexMerge2",
+        "w_drive_pc",
+        "w_freeSelector16"
       ],
       "instances": [
-        "MutexMerge1",
-        "MutexMerge2",
-        "cFifo1"
+        "Selector1"
       ],
-      "doc_priority": "secondary",
+      "doc_priority": "primary",
       "requires_rtl_source_review": true,
       "confidence": "medium",
-      "evidence": [
-        {
-          "source": "interface.event_ports"
-        },
-        {
-          "source": "interface.data_ports"
-        }
-      ],
-      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:completion_backpressure:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "flow",
-        "module": "wb",
-        "flow_id": "flow_000_wb_i_lsuDriveToWB"
-      },
-      "summary": "文档应重点描述 GRF 写回路径的仲裁机制，包括 MutexMerge1 的三路输入来源、cFifo1 的缓冲作用以及 bitOperationDelay 的延迟含义。",
-      "subject": "GRF 写回仲裁路径",
-      "explanation": "GRF 写回路径是流中最复杂的部分，涉及 MutexMerge1 的仲裁、MutexMerge2 的合并、cFifo1 的 FIFO 缓冲以及 bitOperationDelay 的延迟。这些组件共同决定了 GRF 写回的时序和优先级。文档应解释这些组件如何协同工作，以及 o_bitOpOver_1 信号的含义。",
-      "signals": [
-        "w_driveMutexMerge11",
-        "w_driveMutexMerge12Delay_1",
-        "w_wbSplitterDriveToMutexMerge1_1",
-        "w_drive_grf",
-        "o_bitOpOver_1"
-      ],
-      "instances": [
-        "MutexMerge1",
-        "MutexMerge2",
-        "cFifo1",
-        "bitOperationDelay",
-        "toGrfDelay"
-      ],
-      "related_assignments": [
-        "25"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
       "evidence": [
         {
           "source": "instances.connections"
         },
         {
-          "source": "component_connection"
-        },
-        {
-          "source": "assign_related"
+          "source": "flow.steps"
         }
       ],
-      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:documentation_focus:001"
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:003"
     },
     {
-      "claim_type": "source_review_request",
+      "claim_type": "component_role",
       "scope": {
         "type": "flow",
         "module": "wb",
         "flow_id": "flow_000_wb_i_lsuDriveToWB"
       },
-      "reason": "当前上下文未提供 MutexMerge1 的仲裁逻辑（如优先级或互斥条件），需要 RTL 源码中的 always 块或组合逻辑来明确。",
-      "subject": "MutexMerge1 的仲裁条件",
-      "needed_source_slice": "always block or combinational logic for MutexMerge1",
+      "subject": "Selector2",
+      "summary": "独立驱动 XPSR 输出，并产生内部反馈。",
+      "explanation": "Selector2 是 cSelector2_5b_wb，输入 w_drive1Selector2，输出 o_drive_xpsr 和 w_freeSelector22。它专门处理 XPSR 写操作，与 Selector1 平行工作。",
+      "signals": [
+        "w_drive1Selector2",
+        "o_drive_xpsr",
+        "w_freeSelector22"
+      ],
+      "instances": [
+        "Selector2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        },
+        {
+          "source": "flow.steps"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:004"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "MutexMerge1",
+      "summary": "互斥合并三路驱动，产生唯一的 GRF 写驱动事件。",
+      "explanation": "MutexMerge1 为 cMutexMerge3_74b_wb，输入 w_driveMutexMerge11（来自 Selector1）、w_driveMutexMerge12Delay_1（反馈通路）和 w_wbSplitterDriveToMutexMerge1_1（PC 写分支），输出 w_drive_grf。它负责仲裁并发请求，防止同时驱动 GRF。",
       "signals": [
         "w_driveMutexMerge11",
         "w_driveMutexMerge12Delay_1",
@@ -351,16 +281,385 @@
           "source": "instances.connections"
         },
         {
-          "source": "component_connection"
+          "source": "flow.steps"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:005"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "MutexMerge2",
+      "summary": "合并模块外部驱动与内部事件，馈入 FIFO 流水线。",
+      "explanation": "MutexMerge2 是 cMutexMerge2_64b_wb，接收 i_driveMutexMerge2（外部）和 w_driveMutexMerge2（Selector1），输出 w_drivecFifo1。该通路用于将诸如位操作完成事件引入反馈环路。",
+      "signals": [
+        "i_driveMutexMerge2",
+        "w_driveMutexMerge2",
+        "w_drivecFifo1"
+      ],
+      "instances": [
+        "MutexMerge2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        },
+        {
+          "source": "flow.steps"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:006"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "wbSplitter",
+      "summary": "将 PC 写驱动同时发送至外部输出和 GRF 合并路径。",
+      "explanation": "wbSplitter 是 cSplitter2_1b，输入 w_drive_pc，输出 o_drive_pc 和 w_wbSplitterDriveToMutexMerge1_1。这使得 PC 更新也能参与 GRF 写操作的触发。",
+      "signals": [
+        "w_drive_pc",
+        "o_drive_pc",
+        "w_wbSplitterDriveToMutexMerge1_1"
+      ],
+      "instances": [
+        "wbSplitter"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        },
+        {
+          "source": "flow.steps"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:007"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "toGrfDelay",
+      "summary": "最终输出延迟，缓冲 GRF 写驱动。",
+      "explanation": "toGrfDelay 为 4 周期延迟，输入 w_drive_grf，输出 o_drive_grf，用于匹配下游时序。",
+      "signals": [
+        "w_drive_grf",
+        "o_drive_grf"
+      ],
+      "instances": [
+        "toGrfDelay"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        },
+        {
+          "source": "flow.steps"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:008"
+    },
+    {
+      "claim_type": "component_role",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "cFifo1, bitOperationDelay",
+      "summary": "实现反馈流水通道，暂存并延迟事件后送回 MutexMerge1。",
+      "explanation": "cFifo1（深度 1）接收 w_drivecFifo1，输出 w_driveMutexMerge12；后接 16 周期延迟 bitOperationDelay 产生 w_driveMutexMerge12Delay_1。该链路用于位操作或类似流程的流水化同步，最终参与 GRF 驱动合并。",
+      "signals": [
+        "w_drivecFifo1",
+        "w_driveMutexMerge12",
+        "w_driveMutexMerge12Delay_1"
+      ],
+      "instances": [
+        "cFifo1",
+        "bitOperationDelay"
+      ],
+      "related_assignments": [
+        "25"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        },
+        {
+          "source": "flow.steps"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:component_role:009"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "assign 11 (o_WBdataToGRF_8)",
+      "summary": "将 GRF 读取数据的一部分映射到输出，作为写回数据的一部分提供给下游接口。",
+      "explanation": "该赋值从 w_dataReadGRF_87[85:78] 驱动 o_WBdataToGRF_8，可能为 o_wbDriveReadGRF 或 o_drive_grf 提供数据字段。它反映了 GRF 读操作结果对写回流程的贡献。",
+      "signals": [
+        "o_WBdataToGRF_8",
+        "w_dataReadGRF_87"
+      ],
+      "related_assignments": [
+        "11"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "parser_module.assignments"
+        },
+        {
+          "source": "interface_payload_contracts"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:assignment_interpretation:001"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "subject": "assign 25 (o_bitOpOver_1)",
+      "summary": "将位操作完成驱动事件暴露为模块输出，作为状态指示。",
+      "explanation": "该赋值将 w_driveMutexMerge12Delay_1 连接到 o_bitOpOver_1，表明当反馈通路中的事件到达此点时，外部可获悉一次位操作已完成。该信号与驱动流紧密耦合，实质是流中事件状态的镜像。",
+      "signals": [
+        "o_bitOpOver_1",
+        "w_driveMutexMerge12Delay_1"
+      ],
+      "related_assignments": [
+        "25"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "parser_module.assignments"
+        },
+        {
+          "source": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "data_control_effect",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "summary": "数据有效载荷根据不同输出端点携带不同宽度字段，其路由由选择器决定，但控制条件未给出。",
+      "subject": "payload_control_coupling",
+      "explanation": "o_prfData_40、o_pcData_32、o_xpsrData_4 等数据信号分别跟随各自输出驱动事件，来源于对应 Selector 的数据端口。流的驱动分发逻辑受未公开的条件控制，无法确定具体控制信号或数据位如何影响通路选择。部分数据信号（如 o_grfData_74）从 MutexMerge1 的数据输出导出，其值可能来源于输入通路之一。",
+      "signals": [
+        "o_prfData_40",
+        "o_pcData_32",
+        "o_xpsrData_4",
+        "o_grfData_74",
+        "o_WBdataToGRF_8"
+      ],
+      "related_payload": [
+        "o_prfData_40",
+        "o_pcData_32",
+        "o_xpsrData_4",
+        "o_grfData_74"
+      ],
+      "related_assignments": [
+        "11"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "low",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        },
+        {
+          "source": "interface_payload_contracts"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:data_control_effect:001"
+    },
+    {
+      "claim_type": "completion_backpressure",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "summary": "多个输出接口具有自由/反压信号，内部 merge 和 FIFO 可能引入等待，但仲裁机制细节缺失。",
+      "subject": "free_backpressure_indicators",
+      "explanation": "o_drive_grf 由 i_wbFreeFromGRF 控制，o_drive_xpsr 由 i_wbFreeFromXpsr 控制，o_wbDriveReadGRF 由 i_wbFreeFromReadGRF 控制，表明这些端口受下游背压约束。内部 w_freeSelector16 和 w_freeSelector22 为选择器提供本地握手。MutexMerge1 和 MutexMerge2 是阻塞点，可能因并发输入而暂时停止传播；cFifo1 满时也会阻塞上游。但缺少互斥合并的策略描述，无法断言优先级或 fairness。",
+      "signals": [
+        "i_wbFreeFromGRF",
+        "i_wbFreeFromXpsr",
+        "i_wbFreeFromReadGRF",
+        "w_freeSelector16",
+        "w_freeSelector22"
+      ],
+      "instances": [
+        "MutexMerge1",
+        "MutexMerge2",
+        "cFifo1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "interface_payload_contracts"
+        },
+        {
+          "source": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:completion_backpressure:001"
+    },
+    {
+      "claim_type": "documentation_focus",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "summary": "手册应详述 LSU 写回驱动的多出口分发逻辑、Selector 的选择依据、MutexMerge1 的汇聚规则以及 GRF 数据组装；可忽略延迟元件的具体周期数。",
+      "subject": "manual_emphasis",
+      "explanation": "设计人员最需要理解事件如何根据操作类型路由到不同写回目标，以及互斥合并如何保证单写。延迟值属于微架构优化，不影响功能语义。",
+      "signals": [
+        "i_lsuDriveToWB",
+        "o_drive_prf",
+        "o_wbDriveReadGRF",
+        "o_drive_xpsr",
+        "o_drive_pc",
+        "o_drive_grf"
+      ],
+      "instances": [
+        "Selector1",
+        "Selector2",
+        "MutexMerge1",
+        "MutexMerge2"
+      ],
+      "related_assignments": [
+        "11",
+        "25"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "flow.steps"
+        },
+        {
+          "source": "interface_payload_contracts"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "reason": "Selector1 的内部选择条件未在紧凑上下文中提供，必须检查 RTL 源码以确定如何根据伴随数据/控制决定输出通道。",
+      "subject": "Selector1_condition_logic",
+      "needed_source_slice": "Selector1 实例的 always 块或 case 语句，或相关输入信号的连接",
+      "signals": [
+        "w_drive1Selector1",
+        "o_drive_prf",
+        "o_wbDriveReadGRF",
+        "w_driveMutexMerge11",
+        "w_driveMutexMerge2",
+        "w_drive_pc"
+      ],
+      "instances": [
+        "Selector1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "instances.connections"
         }
       ],
       "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "flow",
+        "module": "wb",
+        "flow_id": "flow_000_wb_i_lsuDriveToWB"
+      },
+      "reason": "MutexMerge1 和 MutexMerge2 的仲裁机制（如固定优先级、轮询、或基于 ready 的合并）未揭示，影响对并发事件处理的描述准确性。",
+      "subject": "MutexMerge_arbitration",
+      "needed_source_slice": "MutexMerge1、MutexMerge2 实例内的选通逻辑或注释",
+      "signals": [
+        "w_driveMutexMerge11",
+        "w_driveMutexMerge12Delay_1",
+        "w_wbSplitterDriveToMutexMerge1_1",
+        "w_drivecFifo1",
+        "w_driveMutexMerge2",
+        "i_driveMutexMerge2"
+      ],
+      "instances": [
+        "MutexMerge1",
+        "MutexMerge2"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "instances.connections"
+        }
+      ],
+      "id": "semantic:flow:wb:flow_000_wb_i_lsuDriveToWB:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
-      "field": "i_lsuDriveToWB 的 payload 数据",
-      "reason": "当前上下文未提供 i_lsuDriveToWB 事件携带的 payload 信号，无法确定 LSU 写回数据如何映射到各输出 payload。"
+      "field": "selector_data_condition",
+      "reason": "未提供 Selector1 和 Selector2 的判定信号或数据字段映射，无法解释基于何种操作码或微指令选择输出。"
+    },
+    {
+      "field": "mutex_merge_policy",
+      "reason": "MutexMerge 实例的内部仲裁策略未知，无法描述并发事件的排序或丢弃行为。"
     }
   ]
 }

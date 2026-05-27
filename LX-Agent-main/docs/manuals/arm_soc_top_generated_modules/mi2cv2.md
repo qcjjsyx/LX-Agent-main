@@ -1,8 +1,8 @@
 # 模块 `mi2cv2`
 
-- 源文件：`rtl/rtl/IONet/IIC/mi2cv2.v`。
-- 职责：AI 推断：mi2cv2 是 IONet IIC 子系统内的一个顶层模块，负责将 APB 总线接口（ADDRESS、WDATA、RDATA）桥接到 I2C 总线物理层（ISCL、ISDA、OSCL、OSDA），并集成电源隔离（CKISO、DAISO、DAGND）和驱动使能（ENDRV）控制。。
-- 说明：上下文显示 mi2cv2 通过 U3 (m3s003fb) 处理 APB 寄存器访问（ADDRESS、WDATA、RDATA），通过 U2 和 U5 处理 I2C 总线信号（ISCL/ISDA 输入，OSCL/OSDA 输出），并通过 U4 (m3s004fb) 处理电源隔离和驱动使能信号。这种结构表明它是一个桥接和集成模块，而非纯粹的 I2C 控制器。
+- 源文件：`rtl\rtl\IONet\IIC\mi2cv2.v`。
+- 职责：AI 推断：I2C 总线接口宏，集成数字协议引擎、输入滤波、输出驱动和电源隔离控制，实现完整的 I2C 通信功能。
+- 说明：内部通过逻辑单元 U2 对输入 `IFSDA`/`ISCL`/`ISDA` 进行同步滤波，U3 作为协议控制器提供寄存器读写和中断，U4 管理隔离和驱动使能信号 `CKISO`/`DAGND`/`DAISO`/`ENDRV`，U5 负责输出驱动 `OSCL`/`OSDA`，共同构成闭环 I2C 宏单元。
 
 ## 1. 层级位置
 
@@ -34,16 +34,17 @@ mi2cv2
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`ADDRESS`, `WDATA`；其他输入：`CLOCK`, `FSEN`, `HSEN`, `IFSDA`, `... +5`。
-- 输出：数据输出：`RDATA`；其他输出：`CKISO`, `DAGND`, `DAISO`, `ENDRV`, `... +3`。
+- 输入信号：`ADDRESS[2:0]`, `WDATA[7:0]`, `CLOCK`, `FSEN`, `HSEN`, `IFSDA`, `ISCL`, `ISDA`, `RD`, `VAL`, `RESETN`
+- 输出信号：`RDATA[7:0]`, `CKISO`, `DAGND`, `DAISO`, `ENDRV`, `INTR`, `OSCL`, `OSDA`
 
 ### 2.1 端口分组
 
-| 端口组 | 方向统计 | 代表信号 |
+| 端口组 | 方向统计 | 信号 |
 | --- | --- | --- |
 | `clock_reset_init` | input:1 | `RESETN` |
 | `drive_event` | output:1 | `ENDRV` |
-| `other_ports` | input:10, output:7 | `ADDRESS`, `WDATA`, `RDATA`, `CLOCK`, `FSEN`, `HSEN`, `IFSDA`, `ISCL`, `ISDA`, `RD`, `... +7` |
+| `data_control` | input:10 | `ADDRESS[2:0]`, `CLOCK`, `FSEN`, `HSEN`, `IFSDA`, `ISCL`, `ISDA`, `RD`, `VAL`, `WDATA[7:0]` |
+| `status_output` | output:7 | `CKISO`, `DAGND`, `DAISO`, `INTR`, `OSCL`, `OSDA`, `RDATA[7:0]` |
 
 ## 3. Drive/Data/Free 契约
 

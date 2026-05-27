@@ -226,8 +226,8 @@
         "i_LsuDriveToExe1_1"
       ],
       "role_in_flow": {
-        "value": "作为透明延迟单元，对输入事件进行固定延迟缓冲，不改变事件语义。",
-        "explanation": "lsuDelay0实例化自delay4U模块，其输入为i_LsuDriveToExe_1，输出为i_LsuDriveToExe1_1。该组件仅引入时序延迟，不参与数据选择或合并，是流路径上的纯延迟节点。",
+        "value": "透明事件延迟，为LSU驱动信号提供一级流水对齐。",
+        "explanation": "该实例为delay4U，直通地将输入事件i_LsuDriveToExe_1延迟一个周期后输出为i_LsuDriveToExe1_1，供后续合并使用，承担时序匹配角色。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -251,8 +251,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/execute.json"
+            "source": "instances.connections"
+          },
+          {
+            "source": "flow.steps"
           }
         ]
       },
@@ -276,15 +278,15 @@
         "w_LsuDriveToExe_1"
       ],
       "role_in_flow": {
-        "value": "作为互斥合并器，将LSU驱动事件与另一路来自lsuSele1的事件合并，实现路径仲裁。",
-        "explanation": "lsuMerge实例化自cMutexMerge2_1b，输入为i_LsuDriveToExe1_1和w_driveToLsuMer，输出为w_LsuDriveToExe_1。该组件确保两路输入事件互斥合并，避免冲突，是流路径上的第一个合并点。",
+        "value": "互斥合并点，将LSU延迟驱动与另一内部驱动合并为单一路径。",
+        "explanation": "该cMutexMerge2_1b接收i_LsuDriveToExe1_1与w_driveToLsuMer两路事件，输出w_LsuDriveToExe_1，实现事件仲裁，可能使LSU事件与内部流水事件共享下游资源。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
         "semantic_claim_id": "semantic:flow:execute:flow_002_execute_i_LsuDriveToExe_1:component_role:002",
-        "doc_priority": "primary",
+        "doc_priority": "secondary",
         "signals": [
           "i_LsuDriveToExe1_1",
           "w_driveToLsuMer",
@@ -295,15 +297,17 @@
         ],
         "related_flows": [],
         "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/execute.json"
+            "source": "instances.connections"
+          },
+          {
+            "source": "related_component_connections"
           }
         ]
       },
@@ -497,36 +501,13 @@
         "w_regSelectorFreeToRegMerge_1"
       ],
       "role_in_flow": {
-        "value": "作为等待合并器，将来自rs1Merge和rs2Merge的两路寄存器读取事件合并，输出到后续延迟单元。",
-        "explanation": "regMerge实例化自cWaitMerge2_64b_exe，输入为w_rs1MergeDriveToRegMerge_1和w_rs2MergeDriveToRegMerge_1，输出为w_regSelectorFreeToRegMerge_1。该组件等待两路输入就绪后合并，是流路径的最终汇聚点。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:execute:flow_002_execute_i_LsuDriveToExe_1:component_role:004",
-        "doc_priority": "primary",
-        "signals": [
-          "w_rs1MergeDriveToRegMerge_1",
-          "w_rs2MergeDriveToRegMerge_1",
-          "w_regSelectorFreeToRegMerge_1"
-        ],
-        "instances": [
-          "regMerge"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "modules/execute.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -685,8 +666,8 @@
     }
   ],
   "semantic_meaning": {
-    "value": "64位LSU数据作为伴随载荷，与驱动事件同步传输，用于后续寄存器读取。",
-    "explanation": "接口契约显示i_LsuDriveToExe_1事件伴随64位数据i_lsuToExeData_64。assign 38和39利用该数据生成rs1和rs2的32位数据，表明载荷在流路径中被解析和使用。数据与控制事件在流中耦合，但具体同步机制需RTL源码确认。",
+    "value": "64位LSU数据作为事件载荷，由驱动流携带，并在运算符合并通路中被地址条件选择分割成两个32位操作数。",
+    "explanation": "输入事件i_LsuDriveToExe_1的有效载荷为i_lsuToExeData_64。驱动流保活传递该有效期的概念，当事件到达rele0Selector/rele2Selector并进一步到达rs1Merge/rs2Merge时，对应的地址选择逻辑（assign 38/39）将数据分割为w_lsuR1Data_32和w_lsuR2Data_32。Selector的自身控制条件（未在上下文中显示）协同完成数据路由和释放。整体上事件与数据耦合传递。",
     "certainty": "ai_inferred",
     "confidence": "medium",
     "source_layers": [
@@ -705,26 +686,24 @@
       "38",
       "39"
     ],
-    "requires_rtl_source_review": true,
-    "review_status": "needs_review",
+    "requires_rtl_source_review": false,
+    "review_status": "ready",
     "evidence_refs": [
       "ev:execute:flow:flow_002_execute_i_LsuDriveToExe_1",
       "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
     ],
     "semantic_evidence": [
       {
-        "source": "interface.event_ports",
-        "path": "modules/execute.json"
+        "source": "interface_payload_contracts"
       },
       {
-        "source": "interface.data_ports",
-        "path": "modules/execute.json"
+        "source": "related_assign_dependencies"
       }
     ],
     "supporting_claims": [
       {
-        "value": "最终手册应重点描述LSU驱动事件如何通过延迟、合并、选择/分裂和再合并路径，最终汇聚到寄存器合并单元，并强调伴随数据i_lsuToExeData_64的解析过程。",
-        "explanation": "该流是LSU到执行单元寄存器读取阶段的关键通路，涉及多个合并器和选择器。手册应清晰说明各组件的作用、事件的分发与汇聚逻辑，以及assign 38和39如何从载荷中提取rs1/rs2数据。同时需指出流未到达模块输出，其终点为内部逻辑。",
+        "value": "手册应强调i_LsuDriveToExe_1是LSU写回数据进入执行单元操作数网络的触发事件，并概括其内部合并-分离-再合并的架构模式，而非罗列全部实例。",
+        "explanation": "该流体现了流水线中资源复用和选择器驱动模式，侧重解释LSU数据如何通过事件分发到rs1/rs2合并路径，最终影响寄存器更新。可弱化透明延迟和存在多个复用器的细节，突出模块级接口与操作数数据通路的关系。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -734,20 +713,14 @@
         "doc_priority": "primary",
         "signals": [
           "i_LsuDriveToExe_1",
-          "w_regSelectorFreeToRegMerge_1",
-          "i_lsuToExeData_64",
           "w_lsuR1Data_32",
           "w_lsuR2Data_32"
         ],
         "instances": [
           "lsuDelay0",
           "lsuMerge",
-          "rele0Merge",
-          "rele2Merge",
           "rele0Selector",
           "rele2Selector",
-          "rs1Merge",
-          "rs2Merge",
           "regMerge"
         ],
         "related_flows": [],
@@ -755,28 +728,26 @@
           "38",
           "39"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:execute:flow:flow_002_execute_i_LsuDriveToExe_1",
           "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/execute.json"
+            "source": "flow.steps"
           },
           {
-            "source": "assignment_facts",
-            "path": "modules/execute.json"
+            "source": "related_assign_dependencies"
           }
         ]
       },
       {
-        "value": "来自LSU的驱动事件通过延迟、合并、选择与再合并路径，最终汇聚到寄存器合并单元，构成一条从LSU到执行单元寄存器读取阶段的数据驱动通路。",
-        "explanation": "该流从顶层输入i_LsuDriveToExe_1开始，经过lsuDelay0透明延迟后，在lsuMerge与另一路w_driveToLsuMer合并，然后分发给rele0Merge和rele2Merge，分别与rele4Splitter的驱动合并。合并后的信号进入rele0Selector和rele2Selector进行选择/分裂，输出分别导向rs1Merge和rs2Merge，最终在regMerge处合并为w_regSelectorFreeToRegMerge_1。流未到达模块输出端点，表明其终点为内部寄存器合并逻辑。",
+        "value": "该流描述LSU写回数据在execute模块内部的事件分发路径，经过延迟、合并与选择器网络，最终汇入操作数合并通路，可能用于驱动寄存器文件更新。",
+        "explanation": "流以i_LsuDriveToExe_1输入事件开始，通过透明延迟对齐时序，再由MutexMerge与另一来源合并，产生w_LsuDriveToExe_1事件；该事件分两路进入两个WaitMerge（分别与rele4Splitter输出合并），再经Selector将事件分离成自循环释放信号和操作数选择驱动，最终经rs1/rs2的MutexMerge汇入regMerge，输出释放信号。两个assign（38、39）基于地址比较从i_lsuToExeData_64中选取32位操作数，构成数据通路。虽然流未达模块对外输出，但内部形成从LSU驱动到寄存器合并事件的完整传递链。",
         "certainty": "ai_inferred",
-        "confidence": "low",
+        "confidence": "medium",
         "source_layers": [
           "semantic_layer"
         ],
@@ -784,6 +755,14 @@
         "doc_priority": "primary",
         "signals": [
           "i_LsuDriveToExe_1",
+          "i_LsuDriveToExe1_1",
+          "w_LsuDriveToExe_1",
+          "w_rele0MergeDriveToRele0Selector_1",
+          "w_rele2MergeDriveToRele2Selector_1",
+          "w_rele0SelectorDriveToRs1Merge_1",
+          "w_rele2SelectorDriveToRs2Merge_1",
+          "w_rs1MergeDriveToRegMerge_1",
+          "w_rs2MergeDriveToRegMerge_1",
           "w_regSelectorFreeToRegMerge_1"
         ],
         "instances": [
@@ -802,26 +781,32 @@
           "38",
           "39"
         ],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
         "evidence_refs": [
           "ev:execute:flow:flow_002_execute_i_LsuDriveToExe_1",
           "ev:execute:semantic_flow:flow_002_execute_i_LsuDriveToExe_1"
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "modules/execute.json"
+            "source": "instances.connections"
           },
           {
-            "source": "transparent_flows",
-            "path": "modules/execute.json"
+            "source": "flow.steps"
+          },
+          {
+            "source": "parser_module",
+            "path": "connection_graph"
+          },
+          {
+            "source": "knowledge_ir/modules/execute.json",
+            "path": "internal_event_flow"
           }
         ]
       },
       {
-        "value": "存在反向空闲信号o_lsuFreeFromExecute_1，可能用于流控或背压，但具体关系未在流步骤中体现。",
-        "explanation": "接口契约显示i_LsuDriveToExe_1事件有对应的空闲信号o_lsuFreeFromExecute_1，但流步骤和连接中未包含该信号。该信号可能用于LSU与执行单元之间的流控，但当前上下文不足以确定其与流路径的交互方式。",
+        "value": "流末尾的regMerge输出w_regSelectorFreeToRegMerge_1，可能生成LSU事件释放信号，但未能确证其与模块接口o_lsuFreeFromExecute_1的直接连接。",
+        "explanation": "regMerge的cWaitMerge2_64b_exe输出标记为event_free，发送至regMergeDelay1，暗示该事件用于释放上游资源。然而上下文未展示该释放如何返回到i_LsuDriveToExe_1的free信号（o_lsuFreeFromExecute_1），因此无法断言完整的反压链。合并点如lsuMerge、WaitMerge可能存在本地阻塞，但缺乏显式背压信号。",
         "certainty": "ai_inferred",
         "confidence": "low",
         "source_layers": [
@@ -830,9 +815,12 @@
         "semantic_claim_id": "semantic:flow:execute:flow_002_execute_i_LsuDriveToExe_1:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
+          "w_regSelectorFreeToRegMerge_1",
           "o_lsuFreeFromExecute_1"
         ],
-        "instances": [],
+        "instances": [
+          "regMerge"
+        ],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": true,
@@ -843,8 +831,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "modules/execute.json"
+            "source": "related_component_connections"
+          },
+          {
+            "source": "interface_payload_contracts"
           }
         ]
       }

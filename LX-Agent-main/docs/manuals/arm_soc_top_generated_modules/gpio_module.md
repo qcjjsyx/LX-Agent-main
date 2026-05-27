@@ -1,8 +1,8 @@
 # 模块 `gpio_module`
 
-- 源文件：`rtl/rtl/IONet/GPIO/gpio_module.v`。
-- 职责：AI 推断：通用输入输出控制模块，提供寄存器映射的GPIO引脚控制与中断管理功能。
-- 说明：模块通过地址译码访问多个控制/状态寄存器，实现GPIO方向、数据、中断使能及边沿/电平触发配置，并产生中断请求信号
+- 源文件：`rtl\rtl\IONet\GPIO\gpio_module.v`。
+- 职责：AI 推断：该模块是一个基于地址译码的 GPIO 寄存器外设，通过总线接口提供 GPIO 控制、数据与中断管理功能。
+- 说明：接口包含地址、数据输入和数据输出通路，内部定义了多个控制/状态寄存器（如 `GPIO_CTRL`、`GPIO_DATA`、中断使能、边沿使能等）。组合逻辑依赖分析显示，`data_o` 根据 `addr_i[7:0]` 选择对应的内部寄存器输出，同时生成 `irq` 中断信号，呈现典型的内存映射外设行为。因此推断本模块为系统总线上的 GPIO 从设备。
 
 ## 1. 层级位置
 
@@ -18,8 +18,12 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`addr_i`, `data_i`, `io_pin_i`；其他输入：`clk`, `we_i`。
-- 输出：数据输出：`data_o`, `gpio_ctrl_o`, `gpio_data_o`；其他输出：`irq`。
+- 接收：
+  - 数据输入：`addr_i`、`data_i`、`io_pin_i`
+  - 其他输入：`clk`、`we_i`
+- 输出：
+  - 数据输出：`data_o`、`gpio_ctrl_o`、`gpio_data_o`
+  - 其他输出：`irq`
 
 ### 2.1 端口分组
 
@@ -52,7 +56,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | data_path | `gpio_data_o` | gpio_data | AI 推断：将内部gpio_data寄存器值直接驱动到模块输出端口 |
+| `assign_1` | data_path | `gpio_data_o` | gpio_data | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_2` | data_path | `data_o` | (addr_i[7:0] == GPIO_CTRL) ? gpio_ctrl : (addr_i[7:0] == GPIO_DATA) ? gpio_data : (addr_i[7:0... | 证据不足：No Semantic Layer assignment interpretation is available. |
 | `assign_3` | unknown | `irq` | \|(int_status & int_enable) | 证据不足：No Semantic Layer assignment interpretation is available. |
-| `assign_0` | unknown | `gpio_ctrl_o` | gpio_ctrl | AI 推断：将内部gpio_ctrl寄存器值直接驱动到模块输出端口 |
+| `assign_0` | unknown | `gpio_ctrl_o` | gpio_ctrl | 证据不足：No Semantic Layer assignment interpretation is available. |

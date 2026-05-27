@@ -1,8 +1,8 @@
 # 模块 `adder64`
 
-- 源文件：`rtl/rtl/Execute/adder64.v`。
-- 职责：AI 推断：64位加法器，支持有符号/无符号模式选择，并生成进位和溢出标志。
-- 说明：模块通过assign依赖实现无符号和有符号两种加法路径，由symbol信号选择输出结果，同时生成carry_out和overflow标志，表明其核心功能是带模式选择的64位算术加法单元
+- 源文件：`rtl\rtl\Execute\adder64.v`。
+- 职责：AI 推断：模块实现 64 位加法运算，可动态选择有符号或无符号计算模式，并提供进位和溢出标志。
+- 说明：连续赋值显示该模块根据 `carry_in` 和 `symbol` 信号，分别计算两个操作数的无符号和与有符号和，并通过 `symbol` 选择最终结果；同时输出 `carry_out` 和 `overflow` 标志。由 assign 依赖关系可见，该模块为完整的组合逻辑算术单元，不含时序逻辑。
 
 ## 1. 层级位置
 
@@ -18,8 +18,12 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 ## 2. 输入/输出接口摘要
 
-- 接收：数据输入：`oprand1`, `oprand2`；其他输入：`carry_in`, `symbol`。
-- 输出：数据输出：`result`；其他输出：`carry_out`, `overflow`。
+- 接收：
+  - 数据输入：`oprand1`、`oprand2`
+  - 其他输入：`carry_in`、`symbol`
+- 输出：
+  - 数据输出：`result`
+  - 其他输出：`carry_out`、`overflow`
 
 ### 2.1 端口分组
 
@@ -34,7 +38,7 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 | `data_inputs` | input | - | `oprand1 [63:0]`, `oprand2 [63:0]` | 未记录 |
 | `data_outputs` | output | - | `result [63:0]` | 未记录 |
 
-## 4. 主要 Drive-centered Flow
+## 4. 主要 Drive‑centered Flow
 
 - 证据不足：Manual Context 未提供本模块 drive flow。
 
@@ -50,8 +54,8 @@ Manual Context 未记录本模块的内部实例或子模块结构。
 
 | Assign | Impact area | LHS | RHS 摘要 | 解释状态 |
 | --- | --- | --- | --- | --- |
-| `assign_1` | unknown | `signedSum` | $signed({oprand1[63], oprand1}) + $signed({oprand2[63], oprand2}) + $signed({1'b0,carry_in}) | AI 推断：有符号加法中间结果，65位宽，通过符号扩展实现 |
-| `assign_2` | data_path | `result` | symbol ? unsignedSum[63:0] : signedSum[63:0] | AI 推断：有符号加法中间结果，65位宽，通过符号扩展实现 |
-| `assign_3` | unknown | `carry_out` | symbol ? unsignedSum[64] : 1'b0 | AI 推断：无符号模式下的进位输出，有符号模式下恒为0 |
-| `assign_4` | data_path | `overflow` | symbol ? 1'b0 : (oprand1[63] == oprand2[63]) && (oprand1[63] != result[63]) | AI 推断：有符号模式下的溢出标志，无符号模式下恒为0 |
-| `assign_0` | unknown | `unsignedSum` | {1'b0, oprand1} + {1'b0, oprand2} + carry_in | AI 推断：无符号加法中间结果，65位宽，包含进位位 |
+| `assign_0` | unknown | `unsignedSum` | {1'b0, oprand1} + {1'b0, oprand2} + carry_in | AI 推断：在无符号模式下输出进位标志。 |
+| `assign_1` | unknown | `signedSum` | $signed({oprand1[63], oprand1}) + $signed({oprand2[63], oprand2}) + $signed({1'b0,carry_in}) | AI 推断：根据 symbol 信号选择最终数据输出的来源。 |
+| `assign_2` | data_path | `result` | symbol ? unsignedSum[63:0] : signedSum[63:0] | AI 推断：在有符号模式下检测溢出。 |
+| `assign_3` | unknown | `carry_out` | symbol ? unsignedSum[64] : 1'b0 | AI 推断：计算 65 位无符号扩展和，包含进位输入，为后续选择提供无符号结果。 |
+| `assign_4` | data_path | `overflow` | symbol ? 1'b0 : (oprand1[63] == oprand2[63]) && (oprand1[63] != result[63]) | 证据不足：No Semantic Layer assignment interpretation is available. |

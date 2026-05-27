@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "decoder_32",
-  "input_hash": "4616cfdee27329550ac3436913ac9d5e96d54f1ce7cf79d364b8a2098396a1ad",
+  "input_hash": "81e8d95afd1a8d966ca5795115e9e005c390d79db94895dbc83bc27148dc039d",
   "source_context": "ai_context/modules/decoder_32.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/Decode/decoder_32.v",
+      "source": "rtl\\rtl\\Decode\\decoder_32.v",
       "paths": [
         "module_source"
       ]
@@ -40,20 +40,20 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/Decode/decoder_32.v",
+        "rtl_file": "rtl\\rtl\\Decode\\decoder_32.v",
         "parser_module": "modules/decoder_32.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 12,
+    "count": 13,
     "by_type": {
-      "assignment_interpretation": 4,
+      "assignment_interpretation": 6,
       "component_role": 1,
       "documentation_focus": 1,
       "interface_intent": 2,
       "module_role": 1,
-      "source_review_request": 2,
+      "source_review_request": 1,
       "structural_responsibility": 1
     }
   },
@@ -64,15 +64,19 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "summary": "32位Thumb指令解码器，将输入的32位指令字解码为执行单元所需的控制与数据字段。",
+      "summary": "将64位输入数据(指令与PC)解码为发射级所需的187位控制数据包，同时产生分支偏移、异常号、条件码写使能，并以i_drive事件驱动流水。",
       "subject": "decoder_32",
-      "explanation": "模块接收64位输入数据（包含32位PC和32位指令），通过大量组合逻辑解码出指令类型、操作数、立即数、条件码等，并打包成187位宽的解码数据输出给发射阶段。同时输出异常编号、分支立即数和NZCV写使能信号。",
+      "explanation": "接口显示单一事件驱动i_drive/o_drive，输入i_data_64，输出o_data_187等。assign 0拆分为PC和指令部分，assign 241打包了大量解码信号，体现了解码器的功能。自由信号透传。异常固定为4'b1111。符合解码阶段职责。",
       "signals": [
+        "i_drive",
+        "o_drive",
         "i_data_64",
         "o_data_187",
         "o_excNum_4",
         "o_blImm9_9",
-        "o_nzcvWen_4"
+        "o_nzcvWen_4",
+        "i_free",
+        "o_free"
       ],
       "instances": [
         "topdelay0"
@@ -88,7 +92,7 @@
           "source": "knowledge_ir/modules/decoder_32.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "ai_context/modules/decoder_32/flows/flow_000_decoder_32_i_drive.json"
         }
       ],
       "id": "semantic:module:decoder_32:module_role:001"
@@ -99,17 +103,20 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "summary": "将32位Thumb指令分解为指令类型、操作数、立即数、条件码等字段，并打包成187位解码数据供后续流水线使用。",
-      "subject": "指令解码与数据打包",
-      "explanation": "通过assign_dependencies可见，模块将i_data_64拆分为w_pc_32和w_int_32，再进一步拆分为w_int1_16和w_int2_16。随后基于这些字段解码出大量指令类型标志（如w_addMI12_1、w_movMI12_1等），并组合成w_DecoderDataToLaunch_187输出。同时生成o_excNum_4（固定为4'b1111）、o_blImm9_9和o_nzcvWen_4。",
+      "summary": "接收64位宽输入，拆分为PC和指令两部分，根据指令编码生成大量分类信号，并最终打包成187位发射数据以及相关立即数和控制信号。",
+      "subject": "解码与打包",
+      "explanation": "assign 0拆分，后续大量assign根据指令域(如op、funct、int1/2)生成w_dataProModifImm12_1等解码标志，最后由assign 241将这些标志、域值(m_sRs_8, rn_4等)打包输出。assign 237,240,242输出特定负载。o_free直接透传i_free，维持自由通道。事件通过topdelay0延迟传递。",
       "signals": [
-        "i_data_64",
-        "o_data_187",
         "w_pc_32",
         "w_int_32",
-        "w_int1_16",
-        "w_int2_16",
-        "w_DecoderDataToLaunch_187"
+        "w_DecoderDataToLaunch_187",
+        "o_data_187",
+        "o_nzcvWen_4",
+        "o_blImm9_9",
+        "o_excNum_4"
+      ],
+      "instances": [
+        "topdelay0"
       ],
       "related_flows": [
         "flow_000_decoder_32_i_drive"
@@ -119,10 +126,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
+          "source": "rtl\\rtl\\Decode\\decoder_32.v"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies"
         }
       ],
       "id": "semantic:module:decoder_32:structural_responsibility:001"
@@ -134,8 +141,8 @@
         "module": "decoder_32"
       },
       "subject": "topdelay0",
-      "summary": "输入事件延迟单元，将输入驱动事件i_drive延迟一个周期后输出为o_drive。",
-      "explanation": "从key_component_connections可见，topdelay0的输入inR连接i_drive，输出outR连接o_drive。该组件不参与数据路径，仅用于事件同步或流水线握手。",
+      "summary": "将输入驱动事件i_drive传递给输出o_drive，引入一个时钟周期的延迟以对齐流水线时序。",
+      "explanation": "连接显示i_drive进入topdelay0.inR，其输出outR驱动o_drive。flow_000显示从i_drive到o_drive的一步流，此步骤即为topdelay0的内部延迟。不包含其他逻辑，故其角色为事件传递/延迟。",
       "signals": [
         "i_drive",
         "o_drive"
@@ -147,11 +154,14 @@
         "flow_000_decoder_32_i_drive"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "ai_context/modules/decoder_32/flows/flow_000_decoder_32_i_drive.json"
+        },
+        {
+          "source": "key_component_connections"
         }
       ],
       "id": "semantic:module:decoder_32:component_role:001"
@@ -162,16 +172,16 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "subject": "w_DecoderDataToLaunch_187",
-      "summary": "将解码后的所有控制与数据字段打包为187位宽输出，是模块的核心数据输出。",
-      "explanation": "assign index 241将w_S_1、w_rm_4、w_rn_4、w_immToLaunch_16、w_cond_4等数十个解码字段拼接成w_DecoderDataToLaunch_187，再通过assign index 242赋值给o_data_187。该信号是后续流水线阶段（如发射、执行）的输入。",
+      "subject": "{w_pc_32, w_int_32} = i_data_64 (index 0)",
+      "summary": "将64位输入数据拆分为32位PC和32位指令字(w_int_32)，为后续解码提供指令域。",
+      "explanation": "这是解码第一步，表明i_data_64由PC和指令拼接而成。后续所有解码信号都基于w_int_32的域。影响数据路径。",
       "signals": [
-        "o_data_187",
-        "w_DecoderDataToLaunch_187"
+        "i_data_64",
+        "w_pc_32",
+        "w_int_32"
       ],
       "related_assignments": [
-        "241",
-        "242"
+        "index 1"
       ],
       "related_flows": [
         "flow_000_decoder_32_i_drive"
@@ -181,10 +191,10 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies index 0"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "knowledge_ir/modules/decoder_32.json"
         }
       ],
       "id": "semantic:module:decoder_32:assignment_interpretation:001"
@@ -195,26 +205,21 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "subject": "o_nzcvWen_4",
-      "summary": "根据指令是否更新V标志和C&V标志，生成NZCV条件标志写使能信号。",
-      "explanation": "assign index 240通过w_notUpdateV_1和w_notUpdatCandV_1的组合逻辑生成4位写使能。当不更新V时，NZ位使能；当不更新C和V时，仅N和Z位使能；否则全部使能。",
+      "subject": "o_excNum_4 = 4'b1111 (index 155)",
+      "summary": "指定异常编号为固定值4'b1111，指示当前指令无异常或为默认异常码。",
+      "explanation": "在解码器上下文中，异常编号通常由指令类型决定。固定为全1可能意味着要么解码总是无异常，要么该模块不负责异常检测，下游会覆盖。需要与整体架构核对，但当前证据显示固定值。影响控制路径。",
       "signals": [
-        "o_nzcvWen_4",
-        "w_notUpdateV_1",
-        "w_notUpdatCandV_1"
+        "o_excNum_4"
       ],
-      "related_assignments": [
-        "240"
+      "related_flows": [
+        "flow_000_decoder_32_i_drive"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies index 155"
         }
       ],
       "id": "semantic:module:decoder_32:assignment_interpretation:002"
@@ -225,24 +230,26 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "subject": "w_isSportInt",
-      "summary": "综合判断指令是否为“支持内部异常”的指令类型，用于异常处理逻辑。",
-      "explanation": "assign index 154将w_B_1、w_msr_1、w_mrs_1、w_isLS_1、w_tbb_1等18种指令类型标志进行或运算，生成w_isSportInt。该信号可能用于决定是否触发内部异常或中断。",
+      "subject": "o_nzcvWen_4 = {4{w_notUpdateV_1}} & 4'b1110 | ... (index 240)",
+      "summary": "根据指令标志w_notUpdateV_1和w_notUpdatCandV_1产生4位条件码写使能，控制NZCV标志位V、C等的更新。",
+      "explanation": "NZCV标志的更新取决于指令是否影响V和C标志。表达式使用掩码选择哪些位可写，与ARM指令集的S位/条件执行相关。影响控制路径。",
       "signals": [
-        "w_isSportInt"
+        "o_nzcvWen_4",
+        "w_notUpdateV_1",
+        "w_notUpdatCandV_1"
       ],
       "related_assignments": [
-        "154"
+        "None (来源未明确)"
       ],
-      "doc_priority": "secondary",
+      "related_flows": [
+        "flow_000_decoder_32_i_drive"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies index 240"
         }
       ],
       "id": "semantic:module:decoder_32:assignment_interpretation:003"
@@ -253,27 +260,97 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "subject": "w_immToLaunch_16",
-      "summary": "根据指令类型从不同字段提取并拼接16位立即数，供后续执行使用。",
-      "explanation": "assign index 174根据w_dataProModifImm12_1、w_movePlainImm16_1、w_bitdieldAndSaturate_1等标志，从w_imm_12、w_imm_16、w_satOrLsbit_5等字段中选择并拼接立即数。支持多种立即数格式（12位、16位、5位、8位等）。",
+      "subject": "o_data_187 = w_DecoderDataToLaunch_187 (index 242)",
+      "summary": "将内部解码打包信号直接输出到发射接口，作为后续流水级的数据负载。",
+      "explanation": "w_DecoderDataToLaunch_187包含所有解码信息，通过o_data_187传送。该赋值表明解码器将复杂内部信号集中输出。影响数据路径。",
       "signals": [
-        "w_immToLaunch_16"
+        "o_data_187",
+        "w_DecoderDataToLaunch_187"
       ],
       "related_assignments": [
-        "174"
+        "index 241"
       ],
-      "doc_priority": "secondary",
+      "related_flows": [
+        "flow_000_decoder_32_i_drive"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies index 242"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "241"
         }
       ],
       "id": "semantic:module:decoder_32:assignment_interpretation:004"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "decoder_32"
+      },
+      "subject": "w_DecoderDataToLaunch_187 = { ... } (index 241)",
+      "summary": "将解码产生的所有域（S标志、寄存器索引、立即数、操作类型等）打包成187位宽数据，以便下游使用。",
+      "explanation": "这是一个巨大的拼接，包含了指令类型、操作数寻址、写回等控制信息和数据。体现了解码器的核心任务：将指令编码分解为微架构控制信号。影响数据路径和后续各级。",
+      "signals": [
+        "w_DecoderDataToLaunch_187",
+        "w_S_1",
+        "w_rm_4",
+        "w_rn_4",
+        "以及其他大量信号"
+      ],
+      "related_assignments": [
+        "index 35",
+        "71",
+        "154 等"
+      ],
+      "related_flows": [
+        "flow_000_decoder_32_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "ai_context/assign_dependencies index 241"
+        }
+      ],
+      "id": "semantic:module:decoder_32:assignment_interpretation:005"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "decoder_32"
+      },
+      "subject": "w_immToLaunch_16 = ... (index 174)",
+      "summary": "根据指令类型选择相应的立即数或立即数域，产生16位立即数值发送给发射级。",
+      "explanation": "这是一个多路选择器，根据不同的指令标志（数据操作修改立即数、移动立即数、位域、加载存储等）选择对应的立即数拼接并输出，为后续执行单元提供操作数。影响数据路径。",
+      "signals": [
+        "w_immToLaunch_16",
+        "w_dataProModifImm12_1",
+        "w_imm_12",
+        "w_movePlainImm16_1",
+        "等"
+      ],
+      "related_assignments": [
+        "index 159 等"
+      ],
+      "related_flows": [
+        "flow_000_decoder_32_i_drive"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "ai_context/assign_dependencies index 174"
+        }
+      ],
+      "id": "semantic:module:decoder_32:assignment_interpretation:006"
     },
     {
       "claim_type": "interface_intent",
@@ -281,28 +358,29 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "summary": "i_drive事件与i_data_64数据同步输入，o_drive事件与o_data_187数据同步输出，形成事件驱动的解码流水线。",
-      "subject": "事件-数据同步接口",
-      "explanation": "event_payload_contracts显示i_drive事件与i_data_64数据关联（低置信度），o_drive事件无关联数据。结合topdelay0的延迟作用，推测模块在i_drive有效时解码i_data_64，并在下一个周期通过o_drive输出解码结果o_data_187。",
+      "summary": "将解码结果和辅助控制信号输出给后续发射/执行级，构成解码到发射的数据契约。",
+      "subject": "解码输出组 o_data_187, o_blImm9_9, o_excNum_4, o_nzcvWen_4",
+      "explanation": "o_data_187是主解码数据包，o_blImm9_9提供分支立即数，o_excNum_4表示异常状态，o_nzcvWen_4控制标志更新。它们共同构成解码阶段向下一阶段传递的完整信息，由o_drive事件标记有效。自由信号i_free/o_free可能用于后向压力传递。",
       "signals": [
-        "i_drive",
-        "i_data_64",
+        "o_data_187",
+        "o_blImm9_9",
+        "o_excNum_4",
+        "o_nzcvWen_4",
         "o_drive",
-        "o_data_187"
+        "o_free"
       ],
       "related_payload": [
-        "i_data_64",
-        "o_data_187"
+        "i_data_64"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "low",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
+          "source": "knowledge_ir/modules/decoder_32.json interface"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "event_payload_contracts"
         }
       ],
       "id": "semantic:module:decoder_32:interface_intent:001"
@@ -313,22 +391,26 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "summary": "i_free和o_free直连，表示模块不干预自由运行信号，直接透传。",
-      "subject": "自由运行接口",
-      "explanation": "assign index 243显示o_free直接赋值i_free，无任何逻辑处理。该接口可能用于模块的使能或复位控制，但模块本身不修改其值。",
+      "summary": "握手式驱动接口，i_drive脉冲启动解码，o_drive脉冲表示解码输出有效，中间插入topdelay0延迟一个周期。",
+      "subject": "i_drive / o_drive 事件对",
+      "explanation": "事件流显示i_drive -> topdelay0 -> o_drive，表示解码需要一拍延迟。该时序契约确保输出数据在o_drive有效时稳定。",
       "signals": [
-        "i_free",
-        "o_free"
+        "i_drive",
+        "o_drive"
       ],
-      "doc_priority": "reference",
+      "related_payload": [
+        "i_data_64",
+        "o_data_187"
+      ],
+      "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
+          "source": "flow_000_decoder_32_i_drive"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "key_component_connections"
         }
       ],
       "id": "semantic:module:decoder_32:interface_intent:002"
@@ -339,25 +421,30 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "summary": "手册应重点说明187位解码数据中各字段的含义、位置和编码方式，以及各指令类型标志的生成逻辑。",
-      "subject": "指令解码字段详解",
-      "explanation": "模块核心输出o_data_187包含数十个解码字段（如w_S_1、w_rm_4、w_immToLaunch_16等），这些字段是后续流水线阶段的关键输入。手册应提供字段映射表，并说明各指令类型标志（如w_addMI12_1、w_movMI12_1等）的判定条件。",
+      "summary": "手册应重点说明i_data_64到o_data_187的完整映射，即各个指令类型如何被识别并生成相应的域，以及packed信号的每一位含义。",
+      "subject": "解码数据包结构和指令分类逻辑",
+      "explanation": "因为assign 241展示了187位打包，许多内部信号如w_dataProModifImm12_1等代表指令类别，手册需列出这些分类与指令编码的对应关系，帮助理解数据通路。同时需强调事件驱动时序。",
       "signals": [
         "o_data_187",
-        "w_DecoderDataToLaunch_187"
+        "w_DecoderDataToLaunch_187",
+        "i_data_64",
+        "w_int_32"
+      ],
+      "instances": [
+        "topdelay0"
       ],
       "related_flows": [
         "flow_000_decoder_32_i_drive"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": true,
-      "confidence": "medium",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies index 241"
         },
         {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "knowledge_ir/modules/decoder_32.json"
         }
       ],
       "id": "semantic:module:decoder_32:documentation_focus:001"
@@ -368,62 +455,31 @@
         "type": "module",
         "module": "decoder_32"
       },
-      "reason": "当前上下文仅提供事件与数据的关联假设（低置信度），无法确定i_drive与i_data_64的同步关系、o_drive与o_data_187的时序关系，以及topdelay0的具体延迟行为。",
-      "subject": "事件-数据同步时序",
-      "needed_source_slice": "always block, module declaration",
+      "reason": "这两个信号用于生成o_nzcvWen_4，但紧凑上下文中未提供其赋值，可能基于指令类型和S标志的组合。为完整文档需要查看RTL源码。",
+      "subject": "w_notUpdateV_1和w_notUpdatCandV_1的来源",
+      "needed_source_slice": "assign block or always block that drives w_notUpdateV_1 and w_notUpdatCandV_1",
       "signals": [
-        "i_drive",
-        "i_data_64",
-        "o_drive",
-        "o_data_187"
-      ],
-      "instances": [
-        "topdelay0"
+        "w_notUpdateV_1",
+        "w_notUpdatCandV_1"
       ],
       "related_flows": [
         "flow_000_decoder_32_i_drive"
       ],
-      "doc_priority": "primary",
+      "doc_priority": "secondary",
       "requires_rtl_source_review": true,
-      "confidence": "low",
+      "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/decoder_32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
+          "source": "ai_context/assign_dependencies index 240"
         }
       ],
       "id": "semantic:module:decoder_32:source_review_request:001"
-    },
-    {
-      "claim_type": "source_review_request",
-      "scope": {
-        "type": "module",
-        "module": "decoder_32"
-      },
-      "reason": "当前上下文仅列出部分指令类型标志的assign依赖，但未提供完整的标志列表和生成条件。需要RTL源文件确认所有指令类型标志（如w_addMI12_1、w_movMI12_1等）的完整解码逻辑。",
-      "subject": "指令类型标志生成逻辑",
-      "needed_source_slice": "assign block, always block",
-      "signals": [
-        "w_int1_16",
-        "w_int2_16",
-        "w_op_7",
-        "w_funct_4"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": true,
-      "confidence": "medium",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/decoder_32.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/decoder_32.json"
-        }
-      ],
-      "id": "semantic:module:decoder_32:source_review_request:002"
     }
   ],
-  "evidence_gaps": []
+  "evidence_gaps": [
+    {
+      "field": "key_instances",
+      "reason": "key_instances为空，但存在topdelay0的连接信息，实例具体端口和类型缺失，需要从RTL中补充。"
+    }
+  ]
 }

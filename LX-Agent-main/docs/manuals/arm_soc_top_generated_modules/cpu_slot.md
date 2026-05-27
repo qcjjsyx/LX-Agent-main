@@ -1,8 +1,8 @@
 # 模块 `cpu_slot`
 
-- 源文件：`rtl/rtl/slot/cpu_slot.v`。
-- 职责：AI 推断：该模块是CPU核心与片上网络Mesh之间的数据与事件桥接槽位，负责路由驱动事件、数据负载和初始化控制流。。
-- 说明：通过i_driveFromMesh接收Mesh驱动事件，经内部组件（data_mux、u_cpu_core、u_memory_slot）处理后，通过o_driveToMesh输出响应事件；同时管理初始化序列（SoCStart、select2、event2CPU）和自由信号（i_freeFMesh/o_free2Mesh）。
+- 源文件：`rtl\rtl\slot\cpu_slot.v`。
+- 职责：AI 推断：init_rx 和 init_tx 直接连接到 memory_slot 的 UART 接口，init_sig 由 memory_slot 输出并用作事件源 UARTInitStart 的开关。
+- 说明：切片中 memory_slot 的实例化端口 `.init_rx(init_rx)`、`.init_tx(init_tx)` 表明这两个信号是内部 UART 的收发引脚。memory_slot 的 `.init_sig(init_sig)` 与事件源 UARTInitStart 的 `.switch(init_sig)` 相连，`.UART_INIT_SEL(UART_INIT_SEL)` 亦接入 memory_slot。UARTInitStart 的 `.fire` 输出 `w_drv2MemUARTRoad`，说明 init_sig 用于触发 UART 初始加载事件。
 
 ## 1. 层级位置
 
@@ -81,8 +81,7 @@ cpu_slot
 - Payload：`o_driveToMesh` -> `o_data2Mesh [50:0]`。
 - 输出/影响：`o_driveToMesh`。
 - 结构复杂度：branch=3，join=3，blocking=0。
-- AI 推断：手册应重点描述i_driveFromMesh事件如何经data_mux分发至CPU核心和内存槽，以及最终输出回Mesh的路径。
-
+- AI 推断：手册应重点解释驱动流的闭环拓扑和 data_mux 的核心作用，弱化对绝对顺序时序的描述，避免猜测反压细节。
 
 ## 5. 内部组件与 assign 影响
 

@@ -1586,8 +1586,8 @@
         "w_drvFTop"
       ],
       "role_in_flow": {
-        "value": "作为流入口的互斥合并器，将外部启动信号与写回、异常中断等内部驱动信号合并，决定取指路径的起始PC。",
-        "explanation": "BranchMerge（cMutexMerge4_32b）接收i_driveFromStart_1、w_branchDri2（来自写回）、w_branchDri3（来自异常中断）和w_launchBranchDri四个输入，通过互斥仲裁选择一路驱动w_drvFTop，是取指路径的起点和分支汇聚点。",
+        "value": "作为多个取指驱动源（外部启动、写回跳转、异常返回、发射分支驱动）的互斥合并器，确保一次只放行一个驱动事件进入后续流水线。",
+        "explanation": "实例类型为cMutexMerge4_32b，四个输入分别来自i_driveFromStart_1、w_branchDri2、w_branchDri3、w_launchBranchDri，输出w_drvFTop。该合并点充当取指请求的仲裁与防冲突角色，将来自不同启动源的驱动归一化，是整个流中的入口关守卫。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1614,8 +1614,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
+            "source": "flow.steps[1]"
+          },
+          {
+            "source": "related_component_connections"
+          },
+          {
+            "source": "blocking_points"
           }
         ]
       },
@@ -1699,8 +1704,8 @@
         "w_intDriToIntTmp"
       ],
       "role_in_flow": {
-        "value": "取指单元，接收来自不同选择器的驱动信号，输出解码、异常、中断、ICache等多个子路径的驱动信号，是流的核心分叉点。",
-        "explanation": "fetch_inst接收w_drvFICache、w_fetchSele0DriveToFetch_1和w_fetchSele1DriveToFetch_1三个输入驱动，输出w_driveToDec（解码路径）、w_drv2Excp_2Tmp（异常路径）、w_fetchDriveToIcache_1（ICache路径）、w_iFExcdriToIntTmp（中断路径）和w_intDriToIntTmp（内部中断路径），将单一取指事件分叉为多个并行子流。",
+        "value": "取指核心模块，接收经选择后的取指驱动和指令缓存数据，生成取指结果送往解码以及ICache请求。",
+        "explanation": "输入w_fetchSele1DriveToFetch_1等驱动事件，输出w_driveToDec等。该实例负责完成指令获取的主体动作，其产生的驱动向两个方向扩散：一是经延迟送往后续解码流水（最终形成o_lsuDriveToDataRout_1），二是生成ICache请求驱动经延迟后进入icachecArbMerge输出o_drv2ICache。模块内部细节未展开，但其连接决定了流的两个主要终点。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1709,14 +1714,9 @@
         "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:component_role:002",
         "doc_priority": "primary",
         "signals": [
-          "w_drvFICache",
-          "w_fetchSele0DriveToFetch_1",
           "w_fetchSele1DriveToFetch_1",
           "w_driveToDec",
-          "w_drv2Excp_2Tmp",
-          "w_fetchDriveToIcache_1",
-          "w_iFExcdriToIntTmp",
-          "w_intDriToIntTmp"
+          "w_fetchDriveToIcache_1"
         ],
         "instances": [
           "fetch_inst"
@@ -1730,8 +1730,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
+            "source": "flow.steps[4]"
+          },
+          {
+            "source": "related_component_connections"
+          },
+          {
+            "source": "branch_points"
           }
         ]
       },
@@ -1957,8 +1962,8 @@
         "o_drv2ICache"
       ],
       "role_in_flow": {
-        "value": "ICache请求的仲裁合并器，将取指和访存两个来源的ICache请求合并后输出到外部ICache接口。",
-        "explanation": "icachecArbMerge（cArbMerge2_105b_cpu）接收来自取指路径的w_fetchDriveToIcacheDelay_1和来自访存路径的w_lsuDriveToIcacheDelay_1，通过仲裁选择一路驱动o_drv2ICache，是ICache请求的最终输出点。",
+        "value": "指令缓存请求的仲裁合并器，将取指模块的ICache请求与LSU的ICache请求合并后输出到顶层o_drv2ICache。",
+        "explanation": "cArbMerge2_105b_cpu实例，两个输入为w_fetchDriveToIcacheDelay_1和w_lsuDriveToIcacheDelay_1，输出为o_drv2ICache。仲裁合并确保取指和LSU的ICache访问请求不会冲突，是流到达指令缓存边界的最终汇聚点。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -1983,8 +1988,13 @@
         ],
         "semantic_evidence": [
           {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
+            "source": "flow.steps[12]"
+          },
+          {
+            "source": "related_component_connections"
+          },
+          {
+            "source": "join_points"
           }
         ]
       },
@@ -2202,13 +2212,43 @@
         "w_lsuDriveToDR_1"
       ],
       "role_in_flow": {
-        "value": "",
-        "certainty": "evidence_gap",
-        "confidence": "low",
-        "source_layers": [],
-        "evidence_refs": [],
-        "reason": "No Semantic Layer component role is available for this flow.",
-        "review_status": "needs_review"
+        "value": "数据路由输出的互斥合并器，将整数执行单元的数据路由驱动和LSU完成的数据路由驱动合并，最终产生o_lsuDriveToDataRout_1。",
+        "explanation": "cMutexMerge2_105b_cpu，输入w_intDriveToDR和w_lsuDriveToDataRoutDelay1_1，输出w_lsuDriveToDR_1，再经lsuToDataRoutDelay1延迟输出至顶层。它保证了整数写回与LSU写回对数据路由互斥访问，形成流向数据路由的可靠驱动。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:component_role:004",
+        "doc_priority": "primary",
+        "signals": [
+          "w_intDriveToDR",
+          "w_lsuDriveToDataRoutDelay1_1",
+          "w_lsuDriveToDR_1",
+          "o_lsuDriveToDataRout_1"
+        ],
+        "instances": [
+          "DRMutexMerge",
+          "lsuToDataRoutDelay1"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:cpu_top_all:semantic_flow:flow_002_cpu_top_all_i_driveFromStart_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "flow.steps[19][27]"
+          },
+          {
+            "source": "related_component_connections"
+          },
+          {
+            "source": "blocking_points"
+          }
+        ]
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -2441,35 +2481,13 @@
         "o_lsuDriveToDataRout_1"
       ],
       "role_in_flow": {
-        "value": "访存到DataRout路径的延迟级，将合并后的访存数据驱动延迟后输出到外部DataRout接口。",
-        "explanation": "lsuToDataRoutDelay1（delay8U）接收来自DRMutexMerge的w_lsuDriveToDR_1，经过8个时钟周期的延迟后输出o_lsuDriveToDataRout_1，是访存数据到外部数据路由接口的最终输出点。",
-        "certainty": "ai_inferred",
-        "confidence": "high",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:component_role:004",
-        "doc_priority": "primary",
-        "signals": [
-          "w_lsuDriveToDR_1",
-          "o_lsuDriveToDataRout_1"
-        ],
-        "instances": [
-          "lsuToDataRoutDelay1"
-        ],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cpu_top_all:semantic_flow:flow_002_cpu_top_all_i_driveFromStart_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
-          }
-        ]
+        "value": "",
+        "certainty": "evidence_gap",
+        "confidence": "low",
+        "source_layers": [],
+        "evidence_refs": [],
+        "reason": "No Semantic Layer component role is available for this flow.",
+        "review_status": "needs_review"
       },
       "certainty": "deterministic_fact",
       "source_layers": [
@@ -4210,29 +4228,26 @@
     }
   ],
   "semantic_meaning": {
-    "value": "文档应重点描述该流从启动到两个外部端点的完整路径，特别是fetch_inst和intAndExc_inst等关键分叉点以及BranchMerge和icachecArbMerge等汇聚点的作用。",
-    "explanation": "该流包含大量分叉（fetch_inst、outStackSele、launch_inst等）和汇聚（BranchMerge、icachecArbMerge、DRMutexMerge等）点，形成了复杂的流水线结构，文档需要清晰描述每个分叉/汇聚点的输入输出关系及其在流中的语义角色。",
+    "value": "起始驱动携带32位起始PC载荷，驱动流主要传播控制令牌，载荷沿流水线经各模块潜在地更新并在数据路由输出端附带105位数据；内部分支驱动（w_branchDri3等）则构成控制反馈环，影响前端的取指合并。",
+    "explanation": "接口载荷合约显示i_driveFromStart_1有i_startPc_32数据，而o_lsuDriveToDataRout_1有105位数据。取指路径（fetch_inst）会使用PC生成请求。另一方面，w_branchDri3来自异常/中断模块，被送回BranchMerge，形成控制反馈，属于该流的“控制效果”部分，控制未来取指地址，实现程序流跳转。",
     "certainty": "ai_inferred",
     "confidence": "high",
     "source_layers": [
       "semantic_layer"
     ],
-    "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:documentation_focus:001",
+    "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:data_control_effect:001",
     "doc_priority": "primary",
     "signals": [
-      "i_driveFromStart_1",
-      "o_drv2ICache",
-      "o_lsuDriveToDataRout_1"
+      "i_startPc_32",
+      "o_lsuToDataRoutData_105",
+      "w_branchDri3",
+      "w_branchDri2"
     ],
-    "instances": [
-      "BranchMerge",
-      "fetch_inst",
-      "intAndExc_inst",
-      "icachecArbMerge",
-      "DRMutexMerge"
-    ],
+    "instances": [],
     "related_flows": [],
-    "related_assignments": [],
+    "related_assignments": [
+      "39"
+    ],
     "requires_rtl_source_review": false,
     "review_status": "ready",
     "evidence_refs": [
@@ -4241,14 +4256,54 @@
     ],
     "semantic_evidence": [
       {
-        "source": "instances.connections",
-        "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
+        "source": "interface_payload_contracts"
+      },
+      {
+        "source": "related_component_connections"
+      },
+      {
+        "source": "flow.branch_points"
       }
     ],
     "supporting_claims": [
       {
-        "value": "从外部启动信号i_driveFromStart_1出发，经过分支合并、取指、发射、执行、访存、写回等流水线阶段，最终驱动ICache和DataRout两个外部接口的完整指令执行流。",
-        "explanation": "该流以外部输入i_driveFromStart_1为起点，通过BranchMerge与来自写回和异常中断的驱动信号合并，经取指单元fetch_inst后分叉为解码、异常、中断、ICache等多个子路径，再经发射、执行、访存、写回等阶段，最终通过icachecArbMerge和lsuToDataRoutDelay1分别驱动o_drv2ICache和o_lsuDriveToDataRout_1两个外部端点，覆盖了CPU从启动到指令完成的全流程。",
+        "value": "手册应强调该流作为CPU“取指启动-指令缓存请求生成”与“取指-执行-数据路由输出”两条关键路径的统一描述，弱化内部繁琐的延迟匹配与旁路细节。",
+        "explanation": "流虽然分支众多，但其核心价值在于展示从外部驱动到两个顶层输出（ICache请求和数据路由）的事件传播链。大量延迟单元和FIFO属于实现时序匹配，不应喧宾夺主；需要指出关键合并/仲裁点（BranchMerge, icachecArbMerge, DRMutexMerge）和主要分支选择器，以体现模块化的流水线架构。",
+        "certainty": "ai_inferred",
+        "confidence": "high",
+        "source_layers": [
+          "semantic_layer"
+        ],
+        "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:documentation_focus:001",
+        "doc_priority": "primary",
+        "signals": [
+          "i_driveFromStart_1",
+          "o_drv2ICache",
+          "o_lsuDriveToDataRout_1"
+        ],
+        "instances": [
+          "BranchMerge",
+          "fetch_inst",
+          "icachecArbMerge",
+          "DRMutexMerge"
+        ],
+        "related_flows": [],
+        "related_assignments": [],
+        "requires_rtl_source_review": false,
+        "review_status": "ready",
+        "evidence_refs": [
+          "ev:cpu_top_all:flow:flow_002_cpu_top_all_i_driveFromStart_1",
+          "ev:cpu_top_all:semantic_flow:flow_002_cpu_top_all_i_driveFromStart_1"
+        ],
+        "semantic_evidence": [
+          {
+            "source": "flow structure and endpoint definitions"
+          }
+        ]
+      },
+      {
+        "value": "该驱动流表示从外部传入的初始取指请求驱动（带起始PC载荷），经前端合并与仲裁后分两路向外发出：一路生成指令缓存请求驱动，另一路经过执行流水线和数据路由合并后生成LSU数据路由驱动。",
+        "explanation": "流起始于i_driveFromStart_1并通过BranchMerge与写回、异常返回等分支驱动合并，再经延迟和选择进入fetch_inst取指模块，内部通过多级延迟和FIFO管理流水节拍，最终由icachecArbMerge合并LSU和取指的ICache请求产生o_drv2ICache；同时取指结果经解码、发射、执行、LSU等流水级与数据路由合并后，通过DRMutexMerge和延迟输出o_lsuDriveToDataRout_1。这一流覆盖了CPU顶层从输入驱动到输出可见请求的完整事件扩散。",
         "certainty": "ai_inferred",
         "confidence": "high",
         "source_layers": [
@@ -4264,49 +4319,9 @@
         "instances": [
           "BranchMerge",
           "fetch_inst",
-          "launch_inst",
-          "execute_inst",
-          "lsu_inst",
-          "wb_inst",
           "icachecArbMerge",
-          "lsuToDataRoutDelay1"
+          "DRMutexMerge"
         ],
-        "related_flows": [],
-        "related_assignments": [
-          "39"
-        ],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cpu_top_all:flow:flow_002_cpu_top_all_i_driveFromStart_1",
-          "ev:cpu_top_all:semantic_flow:flow_002_cpu_top_all_i_driveFromStart_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "instances.connections",
-            "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
-          },
-          {
-            "source": "transparent_flows",
-            "path": "parser_pipeline_rtl/modules/cpu_top_all.json"
-          }
-        ]
-      },
-      {
-        "value": "启动事件i_driveFromStart_1携带32位起始PC数据i_startPc_32，作为指令流的初始地址。",
-        "explanation": "接口契约显示i_driveFromStart_1事件伴随i_startPc_32[31:0]数据，该PC值通过BranchMerge进入取指路径，决定了指令流从何处开始取指，是流的数据起点。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:data_control_effect:001",
-        "doc_priority": "primary",
-        "signals": [
-          "i_driveFromStart_1",
-          "i_startPc_32"
-        ],
-        "instances": [],
         "related_flows": [],
         "related_assignments": [],
         "requires_rtl_source_review": false,
@@ -4317,52 +4332,19 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/cpu_top_all.json"
+            "source": "compact_context.flow.steps"
           },
           {
-            "source": "interface.data_ports",
-            "path": "knowledge_ir/modules/cpu_top_all.json"
+            "source": "related_component_connections"
+          },
+          {
+            "source": "interface_payload_contracts"
           }
         ]
       },
       {
-        "value": "访存到DataRout的输出事件携带105位访存数据，是流的数据输出终点。",
-        "explanation": "接口契约显示o_lsuDriveToDataRout_1事件伴随o_lsuToDataRoutData_105[104:0]数据，该数据经过lsu_inst、DRMutexMerge和lsuToDataRoutDelay1等阶段后输出，是访存操作的结果数据。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:data_control_effect:002",
-        "doc_priority": "primary",
-        "signals": [
-          "o_lsuDriveToDataRout_1",
-          "o_lsuToDataRoutData_105"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": false,
-        "review_status": "ready",
-        "evidence_refs": [
-          "ev:cpu_top_all:flow:flow_002_cpu_top_all_i_driveFromStart_1",
-          "ev:cpu_top_all:semantic_flow:flow_002_cpu_top_all_i_driveFromStart_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/cpu_top_all.json"
-          },
-          {
-            "source": "interface.data_ports",
-            "path": "knowledge_ir/modules/cpu_top_all.json"
-          }
-        ]
-      },
-      {
-        "value": "启动事件i_driveFromStart_1有对应的空闲信号o_freeToStart_1，表明该接口支持反压/握手机制。",
-        "explanation": "接口契约显示i_driveFromStart_1有对应的free_signal o_freeToStart_1，表明外部启动源可以通过该信号感知内部是否准备好接收新的启动请求，但当前上下文未提供该信号的具体连接和时序关系。",
+        "value": "o_lsuDriveToDataRout_1 存在对应反压信号 i_lsuFreeFromDataRout_1，说明该输出能感知下游就绪状态；o_drv2ICache 的反压信息缺失，可能通过其他手段（如ICache内部FIFO）管理。",
+        "explanation": "接口载荷合约指出o_lsuDriveToDataRout_1的direction为output并有free_signal i_lsuFreeFromDataRout_1，表明该事件传输具备标准异步握手。o_drv2ICache无配套free信号记录，上下文未提供其反压机制，推测其依赖ICache内部缓冲或固定吞吐，无法就此做出确定总结。",
         "certainty": "ai_inferred",
         "confidence": "medium",
         "source_layers": [
@@ -4371,38 +4353,9 @@
         "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:completion_backpressure:001",
         "doc_priority": "secondary",
         "signals": [
-          "i_driveFromStart_1",
-          "o_freeToStart_1"
-        ],
-        "instances": [],
-        "related_flows": [],
-        "related_assignments": [],
-        "requires_rtl_source_review": true,
-        "review_status": "needs_review",
-        "evidence_refs": [
-          "ev:cpu_top_all:flow:flow_002_cpu_top_all_i_driveFromStart_1",
-          "ev:cpu_top_all:semantic_flow:flow_002_cpu_top_all_i_driveFromStart_1"
-        ],
-        "semantic_evidence": [
-          {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/cpu_top_all.json"
-          }
-        ]
-      },
-      {
-        "value": "访存到DataRout的输出事件有对应的空闲信号i_lsuFreeFromDataRout_1，表明该接口支持反压/握手机制。",
-        "explanation": "接口契约显示o_lsuDriveToDataRout_1有对应的free_signal i_lsuFreeFromDataRout_1，表明外部DataRout可以通过该信号通知内部是否准备好接收新的访存数据，但当前上下文未提供该信号的具体连接和时序关系。",
-        "certainty": "ai_inferred",
-        "confidence": "medium",
-        "source_layers": [
-          "semantic_layer"
-        ],
-        "semantic_claim_id": "semantic:flow:cpu_top_all:flow_002_cpu_top_all_i_driveFromStart_1:completion_backpressure:002",
-        "doc_priority": "secondary",
-        "signals": [
           "o_lsuDriveToDataRout_1",
-          "i_lsuFreeFromDataRout_1"
+          "i_lsuFreeFromDataRout_1",
+          "o_drv2ICache"
         ],
         "instances": [],
         "related_flows": [],
@@ -4415,8 +4368,10 @@
         ],
         "semantic_evidence": [
           {
-            "source": "interface.event_ports",
-            "path": "knowledge_ir/modules/cpu_top_all.json"
+            "source": "interface_payload_contracts"
+          },
+          {
+            "source": "compact_context.flow.steps"
           }
         ]
       }

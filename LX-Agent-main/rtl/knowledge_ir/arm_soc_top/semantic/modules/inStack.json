@@ -5,7 +5,7 @@
   "kind": "module_semantic_claims",
   "top_module": "arm_soc_top",
   "module": "inStack",
-  "input_hash": "447546a518d2d9da8c5f3ca6f5b47009adecb88c4b2231d5abb8ec661f543fb1",
+  "input_hash": "764a0ee8f5146617596be47ea0fb64387dd312bcb71ef568caf5a2f1089cf7e3",
   "source_context": "ai_context/modules/inStack.json",
   "source_refs": [
     {
@@ -32,7 +32,7 @@
     },
     {
       "id": "rtl_source",
-      "source": "rtl/rtl/int/inStack.v",
+      "source": "rtl\\rtl\\int\\inStack.v",
       "paths": [
         "module_source"
       ]
@@ -40,19 +40,20 @@
     {
       "id": "ai_context_source",
       "source": {
-        "rtl_file": "rtl/rtl/int/inStack.v",
+        "rtl_file": "rtl\\rtl\\int\\inStack.v",
         "parser_module": "modules/inStack.json"
       }
     }
   ],
   "claim_summary": {
-    "count": 14,
+    "count": 15,
     "by_type": {
-      "assignment_interpretation": 4,
+      "assignment_interpretation": 5,
       "component_role": 4,
-      "documentation_focus": 2,
-      "interface_intent": 2,
+      "documentation_focus": 1,
+      "interface_intent": 1,
       "module_role": 1,
+      "source_review_request": 2,
       "structural_responsibility": 1
     }
   },
@@ -63,18 +64,20 @@
         "type": "module",
         "module": "inStack"
       },
-      "summary": "入栈数据打包与地址计算模块，负责将来自RGRF和RPSR的寄存器数据与PC值合并，并基于SP计算四个入栈槽位的地址，最终通过选择器输出一组96位数据（64位数据+32位地址）。",
+      "summary": "硬件上下文保存/恢复堆栈管理器，支持向量中断时将RGRF、RPSR、PC打包成栈帧并生成写入地址与数据，或在返回时从栈帧中提取数据分发到相应寄存器。",
       "subject": "inStack",
-      "explanation": "模块接收来自RGRF和RPSR的驱动事件，通过dataMerge（WaitMerge）将192位GRF数据和32位PSR数据合并为224位栈数据，再通过assign将PC值与栈数据拼接形成四个64位数据块，同时基于SP计算四个递减的32位地址。最终通过多路选择器（由w_inNum_2选择）输出一组96位数据（64位数据+32位地址）。模块还包含inStackMerge（MutexMerge）和inStackSele（SelSplit）用于驱动事件的选择与合并，以及dataSpli（SelSplit）用于将输入驱动分发到RGRF和RPSR的输出驱动。",
+      "explanation": "界面事件输入来自RGRF和RPSR，数据输入包含i_pc_32、i_SP_32、通用寄存器数据(i_grfData_192)和程序状态字(i_psrData_32)，数据输出o_data_96为组合的数据与地址，o_SP_32为更新后的栈指针。内部WaitMerge将两组数据合并为224位栈上下文，SelSplit和MutexMerge等组件协同处理驱动事件，地址计算基于SP偏移8~32，对应4个64位栈条目。整体意图符合中断入栈/出栈场景。",
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
+        "o_driveFromSPDec",
+        "o_driveToRGRF_1",
+        "o_driveToRPSR_1",
         "i_SP_32",
+        "o_SP_32",
         "i_grfData_192",
         "i_psrData_32",
-        "i_pc_32",
-        "o_data_96",
-        "o_SP_32"
+        "o_data_96"
       ],
       "instances": [
         "dataMerge",
@@ -88,17 +91,16 @@
         "flow_001_inStack_i_driveFromRPSR_1"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "module_facts",
+          "path": "knowledge_ir/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:module_role:001"
@@ -109,10 +111,11 @@
         "type": "module",
         "module": "inStack"
       },
-      "summary": "将输入的GRF数据、PSR数据和PC值打包成四个64位数据块，并基于SP计算四个递减的32位地址，最终通过选择器输出一组96位数据。",
-      "subject": "入栈数据打包与地址计算",
-      "explanation": "通过assign 0-3将224位栈数据（来自dataMerge）拆分为四个64位数据块（w_inData0_64至w_inData3_64），其中w_inData0_64由PC值与栈数据高位拼接而成。通过assign 4-7基于SP计算四个递减地址（SP-8, SP-16, SP-24, SP-32）。assign 10通过w_inNum_2选择输出一组96位数据（64位数据+32位地址）。assign 11将内部寄存器r_SP_32输出为o_SP_32。",
+      "summary": "将来自多个源的寄存器数据合并为224位栈帧，切片为4条64位项并补入PC，同时计算每条项对应的内存地址，最终通过选择器输出目标数据及地址。",
+      "subject": "inStack 上下文打包与地址生成",
+      "explanation": "赋值中w_inData0_64由i_pc_32与w_stackData_224高32位拼接，其余三项直接取自w_stackData_224切片，w_inData0Addr_32~w_inData3Addr_32由i_SP_32减去8/16/24/32生成，o_data_96根据w_inNum_2做四选一输出，体现硬件中栈帧组装与地址计算的并行结构。事件合并与分发通过dataMerge、inStackMerge、inStackSele完成，最终驱动数据输出与外部寄存器写回。",
       "signals": [
+        "w_stackData_224",
         "w_inData0_64",
         "w_inData1_64",
         "w_inData2_64",
@@ -121,29 +124,30 @@
         "w_inData1Addr_32",
         "w_inData2Addr_32",
         "w_inData3Addr_32",
-        "w_inNum_2",
         "o_data_96",
         "o_SP_32"
       ],
       "instances": [
-        "dataMerge"
+        "dataMerge",
+        "dataSpli",
+        "inStackMerge",
+        "inStackSele"
       ],
       "related_flows": [
         "flow_000_inStack_i_driveFromRGRF_1",
         "flow_001_inStack_i_driveFromRPSR_1"
       ],
       "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "parser_module",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "module_facts",
+          "path": "knowledge_ir/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:structural_responsibility:001"
@@ -154,9 +158,9 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "dataMerge",
-      "summary": "作为WaitMerge，将来自RGRF和RPSR的驱动事件与数据合并，输出224位栈数据。",
-      "explanation": "dataMerge（cWaitMerge2_224b_int）接收来自RGRF的192位数据和来自RPSR的32位数据，以及对应的驱动事件i_driveFromRGRF_1和i_driveFromRPSR_1。当两个事件都到达后，将数据合并为224位栈数据（w_stackData_224）并输出驱动事件w_dataMerDriveToInMer_1。",
+      "subject": "dataMerge (cWaitMerge2_224b_int)",
+      "summary": "等待i_driveFromRGRF_1和i_driveFromRPSR_1均有效后，将i_grfData_192和i_psrData_32合并为224位栈帧w_stackData_224，并产生内部驱动事件w_dataMerDriveToInMer_1。",
+      "explanation": "该WaitMerge组件确保两个数据源同时就绪，合并后输出完整的中断上下文位宽，对应自由信号o_freeToRGRF_1和o_freeToRPSR_1在上游释放，属于数据流水线中的同步点。",
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
@@ -177,13 +181,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "key_component_connections",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "key_instances",
+          "path": "knowledge_ir/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:component_role:001"
@@ -194,16 +197,13 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "dataSpli",
-      "summary": "作为SelSplit，将输入驱动事件分发到RGRF和RPSR的输出驱动路径。",
-      "explanation": "dataSpli（cSplitter2_1b_Nodata）接收输入驱动i_inOutDriToDataSpli_1，并根据选择将其分发为o_driveToRGRF_1和o_driveToRPSR_1两个输出驱动事件。同时接收来自RGRF和RPSR的释放信号i_freeFromRGRF_1和i_freeFromRPSR_1，并输出释放信号o_freeFromInStack。",
+      "subject": "dataSpli (cSplitter2_1b_Nodata)",
+      "summary": "根据i_inOutDriToDataSpli_1的选择状态，将内部驱动事件分发至o_driveToRGRF_1或o_driveToRPSR_1，用于控制寄存器文件的后续加载。",
+      "explanation": "SelSplit无数据输入，仅根据1b选择信号决定事件输出通道，对应自由信号i_freeFromRGRF_1和i_freeFromRPSR_1，表明该组件负责出栈时驱动目标寄存器文件的过程。",
       "signals": [
         "i_inOutDriToDataSpli_1",
         "o_driveToRGRF_1",
-        "o_driveToRPSR_1",
-        "i_freeFromRGRF_1",
-        "i_freeFromRPSR_1",
-        "o_freeFromInStack"
+        "o_driveToRPSR_1"
       ],
       "instances": [
         "dataSpli"
@@ -217,13 +217,12 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "key_component_connections",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "key_instances",
+          "path": "knowledge_ir/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:component_role:002"
@@ -234,33 +233,35 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "inStackMerge",
-      "summary": "作为MutexMerge，仲裁来自dataMerge和inStackSele的驱动事件，确保互斥访问。",
-      "explanation": "inStackMerge（cMutexMerge2_1b）接收来自dataMerge的驱动事件w_dataMerDriveToInMer_1和来自inStackSele的驱动事件w_inStackDri_1，进行互斥仲裁后输出。同时接收来自DR的释放信号i_freeFromDR_1。",
+      "subject": "inStackSele (cSplitter2_1b_Nodata)",
+      "summary": "接收外部驱动事件i_DRSeleDriToinStackSele_1，将其分为两个路径：o_driveNext0经Delay0产生o_driveFromSPDec，o_driveNext1参与inStackMerge合并，可能用于区分栈操作类型（如压栈/出栈）。",
+      "explanation": "该SelSplit的两个输出分别连接至延迟单元和合并单元，自由信号i_freeFromSPDec与o_freeFrominStackSele_1用于握手，说明不同路径服务于栈管理中的不同下游。",
       "signals": [
-        "w_dataMerDriveToInMer_1",
+        "i_DRSeleDriToinStackSele_1",
+        "w_inStackSeleToMe_1",
         "w_inStackDri_1",
-        "i_freeFromDR_1"
+        "o_driveFromSPDec",
+        "o_freeFrominStackSele_1"
       ],
       "instances": [
-        "inStackMerge"
+        "inStackSele",
+        "Delay0"
       ],
       "related_flows": [
         "flow_000_inStack_i_driveFromRGRF_1",
         "flow_001_inStack_i_driveFromRPSR_1"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "key_component_connections",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:component_role:003"
@@ -271,35 +272,31 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "inStackSele",
-      "summary": "作为SelSplit，将输入驱动事件分发到inStackMerge和Delay0路径。",
-      "explanation": "inStackSele（cSplitter2_1b_Nodata）接收输入驱动i_DRSeleDriToinStackSele_1，将其分发为o_driveNext0（到Delay0）和o_driveNext1（到inStackMerge）。同时接收来自SPDec的释放信号i_freeFromSPDec，并输出释放信号o_freeFrominStackSele_1。",
+      "subject": "inStackMerge (cMutexMerge2_1b)",
+      "summary": "互斥合并来自dataMerge的数据就绪事件w_dataMerDriveToInMer_1和来自inStackSele的驱动事件w_inStackDri_1，其输出可能产生w_inNum_2以选择当前出栈条目。",
+      "explanation": "MutexMerge确保两个事件源互斥访问，防止栈事务冲突，合并后的驱动事件用于更新内部状态或触发后续选择逻辑，但输出连接未在紧凑上下文中明确。",
       "signals": [
-        "i_DRSeleDriToinStackSele_1",
-        "w_inStackSeleToMe_1",
-        "w_inStackDri_1",
-        "i_freeFromSPDec",
-        "o_freeFrominStackSele_1"
+        "w_dataMerDriveToInMer_1",
+        "w_inStackDri_1"
       ],
       "instances": [
-        "inStackSele"
+        "inStackMerge"
       ],
       "related_flows": [
         "flow_000_inStack_i_driveFromRGRF_1",
         "flow_001_inStack_i_driveFromRPSR_1"
       ],
       "doc_priority": "secondary",
-      "requires_rtl_source_review": false,
+      "requires_rtl_source_review": true,
       "confidence": "medium",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "key_component_connections",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "key_instances",
+          "path": "knowledge_ir/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:component_role:004"
@@ -310,16 +307,17 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "w_inData0_64",
-      "summary": "将PC值与栈数据高位拼接，形成第一个入栈数据块。",
-      "explanation": "assign 0将32位PC值（i_pc_32）与224位栈数据的高32位（w_stackData_224[223:192]）拼接为64位数据块w_inData0_64。这表明PC值被作为入栈数据的一部分，与GRF/PSR数据一起打包。",
+      "subject": "assign_0 (w_inData0_64)",
+      "summary": "将i_pc_32与w_stackData_224高32位拼接，形成栈条目0的内容（PC+PSR高32位）。",
+      "explanation": "该拼接使PC成为栈帧的一部分，与之后续地址计算对齐，说明入栈操作需保存PC及部分状态字。",
       "signals": [
+        "w_inData0_64",
         "i_pc_32",
-        "w_stackData_224",
-        "w_inData0_64"
+        "w_stackData_224"
       ],
       "related_assignments": [
-        "0"
+        "4",
+        "10"
       ],
       "related_flows": [
         "flow_000_inStack_i_driveFromRGRF_1",
@@ -330,13 +328,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:assignment_interpretation:001"
@@ -347,17 +340,60 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "w_inData0Addr_32, w_inData1Addr_32, w_inData2Addr_32, w_inData3Addr_32",
-      "summary": "基于SP计算四个递减的入栈地址，间隔8字节。",
-      "explanation": "assign 4-7分别计算四个入栈槽位的地址：SP-8, SP-16, SP-24, SP-32。地址间隔为8字节（64位），与64位数据块大小一致，表明每个槽位存储一个64位数据块。",
+      "subject": "assign_4 (w_inData0Addr_32)",
+      "summary": "计算栈条目0的地址为i_SP_32 - 8，后续assign_5/6/7分别计算条目1~3地址为SP-16/-24/-32。",
+      "explanation": "地址连续偏移8字节，符合64位栈条目大小，表明该模块同时生成四个可能的栈地址供选择输出。",
       "signals": [
-        "i_SP_32",
         "w_inData0Addr_32",
         "w_inData1Addr_32",
         "w_inData2Addr_32",
+        "w_inData3Addr_32",
+        "i_SP_32"
+      ],
+      "related_assignments": [
+        "5",
+        "6",
+        "7",
+        "10"
+      ],
+      "related_flows": [
+        "flow_000_inStack_i_driveFromRGRF_1",
+        "flow_001_inStack_i_driveFromRPSR_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": false,
+      "confidence": "high",
+      "evidence": [
+        {
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
+        }
+      ],
+      "id": "semantic:module:inStack:assignment_interpretation:002"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "inStack"
+      },
+      "subject": "assign_10 (o_data_96)",
+      "summary": "根据w_inNum_2选择一组合并的64位数据与32位地址输出，作为栈写入数据总线。",
+      "explanation": "多路选择器将预设的四个栈条目之一送上o_data_96，高64位为寄存器/PC内容，低32位为目标地址，表明该输出将直接驱动存储器接口。",
+      "signals": [
+        "o_data_96",
+        "w_inNum_2",
+        "w_inData0_64",
+        "w_inData0Addr_32",
+        "w_inData1_64",
+        "w_inData1Addr_32",
+        "w_inData2_64",
+        "w_inData2Addr_32",
+        "w_inData3_64",
         "w_inData3Addr_32"
       ],
       "related_assignments": [
+        "0",
         "4",
         "5",
         "6",
@@ -372,57 +408,8 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
-        }
-      ],
-      "id": "semantic:module:inStack:assignment_interpretation:002"
-    },
-    {
-      "claim_type": "assignment_interpretation",
-      "scope": {
-        "type": "module",
-        "module": "inStack"
-      },
-      "subject": "o_data_96",
-      "summary": "通过多路选择器输出一组96位数据（64位数据+32位地址）。",
-      "explanation": "assign 10根据w_inNum_2的值从四个数据块中选择一组输出。每个数据块由64位数据（w_inDataX_64）和32位地址（w_inDataXAddr_32）拼接而成，形成96位输出。w_inNum_2的选择逻辑表明模块支持四个入栈槽位。",
-      "signals": [
-        "w_inNum_2",
-        "w_inData0_64",
-        "w_inData0Addr_32",
-        "w_inData1_64",
-        "w_inData1Addr_32",
-        "w_inData2_64",
-        "w_inData2Addr_32",
-        "w_inData3_64",
-        "w_inData3Addr_32",
-        "o_data_96"
-      ],
-      "related_assignments": [
-        "10"
-      ],
-      "related_flows": [
-        "flow_000_inStack_i_driveFromRGRF_1",
-        "flow_001_inStack_i_driveFromRPSR_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/inStack.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:assignment_interpretation:003"
@@ -433,16 +420,47 @@
         "type": "module",
         "module": "inStack"
       },
-      "subject": "w_inNumPose_1",
-      "summary": "合并两个驱动事件，用于触发地址计算或选择逻辑。",
-      "explanation": "assign 8将来自inStackSele的驱动事件w_inStackDri_1和w_inStackSeleToMe_1进行或运算，生成w_inNumPose_1。该信号可能用于触发w_inNum_2的更新或地址计算逻辑。",
+      "subject": "assign_11 (o_SP_32)",
+      "summary": "将内部寄存器r_SP_32直接驱动到输出o_SP_32，反映更新后的栈指针。",
+      "explanation": "r_SP_32的更新逻辑未在当前上下文展示，推断由压栈/出栈操作完成后自增/自减产生。",
       "signals": [
-        "w_inStackDri_1",
-        "w_inStackSeleToMe_1",
-        "w_inNumPose_1"
+        "o_SP_32",
+        "r_SP_32"
       ],
       "related_assignments": [
-        "8"
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "related_flows": [
+        "flow_000_inStack_i_driveFromRGRF_1",
+        "flow_001_inStack_i_driveFromRPSR_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
+        }
+      ],
+      "id": "semantic:module:inStack:assignment_interpretation:004"
+    },
+    {
+      "claim_type": "assignment_interpretation",
+      "scope": {
+        "type": "module",
+        "module": "inStack"
+      },
+      "subject": "assign_8 (w_inNumPose_1)",
+      "summary": "组合inStackSele的两路输出，用作内部触发信号w_inNumPose_1，可能指示有操作正在进行。",
+      "explanation": "该信号在w_inStackDri_1或w_inStackSeleToMe_1任一有效时置位，可能用于控制w_inNum_2或其它时序，但具体使用未在赋值中体现。",
+      "signals": [
+        "w_inNumPose_1",
+        "w_inStackDri_1",
+        "w_inStackSeleToMe_1"
       ],
       "related_flows": [
         "flow_000_inStack_i_driveFromRGRF_1",
@@ -453,16 +471,11 @@
       "confidence": "low",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         }
       ],
-      "id": "semantic:module:inStack:assignment_interpretation:004"
+      "id": "semantic:module:inStack:assignment_interpretation:005"
     },
     {
       "claim_type": "interface_intent",
@@ -470,9 +483,9 @@
         "type": "module",
         "module": "inStack"
       },
-      "summary": "每个驱动事件输入/输出都配有一个对应的释放信号，形成请求-释放握手协议。",
-      "subject": "驱动事件与释放信号配对",
-      "explanation": "接口中每个驱动事件（event_drive）都对应一个释放信号（event_free），例如i_driveFromRGRF_1配o_freeToRGRF_1，o_driveToRGRF_1配i_freeFromRGRF_1。这表明模块内部使用请求-释放握手协议进行流控，确保数据在驱动事件到达后处理完成才释放资源。",
+      "summary": "每个事件驱动信号均伴随对应的自由信号形成完整的异步/同步握手，入栈事件i_driveFromRGRF_1/i_driveFromRPSR_1与o_freeToRGRF_1/o_freeToRPSR_1成对，出栈事件o_driveToRGRF_1/o_driveToRPSR_1由i_freeFromRGRF_1/i_freeFromRPSR_1确认，o_driveFromSPDec与i_freeFromSPDec配对，另有o_freeFromInStack和o_freeFrominStackSele_1供外部流控。",
+      "subject": "事件驱动与自由握手协议组",
+      "explanation": "自由信号的命名与驱动信号形成一一对应，符合事件驱动设计规范，确保数据在读/写完成后释放上游。",
       "signals": [
         "i_driveFromRGRF_1",
         "o_freeToRGRF_1",
@@ -483,131 +496,47 @@
         "o_driveToRGRF_1",
         "i_freeFromRGRF_1",
         "o_driveToRPSR_1",
-        "i_freeFromRPSR_1"
+        "i_freeFromRPSR_1",
+        "o_freeFromInStack",
+        "o_freeFrominStackSele_1"
       ],
       "related_payload": [
         "i_grfData_192",
         "i_psrData_32",
-        "i_pc_32",
-        "i_SP_32"
+        "o_data_96",
+        "o_SP_32"
       ],
       "doc_priority": "primary",
       "requires_rtl_source_review": false,
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "event_payload_contracts",
+          "path": "knowledge_ir/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "interface",
+          "path": "knowledge_ir/modules/inStack.json"
         }
       ],
       "id": "semantic:module:inStack:interface_intent:001"
     },
     {
-      "claim_type": "interface_intent",
-      "scope": {
-        "type": "module",
-        "module": "inStack"
-      },
-      "summary": "数据输入与驱动事件通过组件连接隐式关联，形成数据-事件绑定。",
-      "subject": "数据输入与驱动事件关联",
-      "explanation": "i_grfData_192和i_psrData_32连接到dataMerge，而对应的驱动事件i_driveFromRGRF_1和i_driveFromRPSR_1也连接到dataMerge。这表明数据与驱动事件在dataMerge内部绑定，驱动事件触发数据合并操作。",
-      "signals": [
-        "i_grfData_192",
-        "i_psrData_32",
-        "i_driveFromRGRF_1",
-        "i_driveFromRPSR_1"
-      ],
-      "related_payload": [
-        "i_grfData_192",
-        "i_psrData_32"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/inStack.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
-        }
-      ],
-      "id": "semantic:module:inStack:interface_intent:002"
-    },
-    {
       "claim_type": "documentation_focus",
       "scope": {
         "type": "module",
         "module": "inStack"
       },
-      "summary": "文档应重点描述数据打包过程（PC+GRF+PSR合并为四个64位数据块）和地址计算（基于SP递减8字节）。",
-      "subject": "入栈数据打包与地址计算逻辑",
-      "explanation": "这是模块的核心功能，通过assign 0-7和10实现。数据打包将PC值与栈数据拼接，地址计算基于SP生成四个递减地址，最终通过选择器输出。这些逻辑直接决定了入栈数据的格式和存储位置。",
-      "signals": [
-        "w_inData0_64",
-        "w_inData1_64",
-        "w_inData2_64",
-        "w_inData3_64",
-        "w_inData0Addr_32",
-        "w_inData1Addr_32",
-        "w_inData2Addr_32",
-        "w_inData3Addr_32",
-        "o_data_96"
-      ],
-      "instances": [
-        "dataMerge"
-      ],
-      "related_flows": [
-        "flow_000_inStack_i_driveFromRGRF_1",
-        "flow_001_inStack_i_driveFromRPSR_1"
-      ],
-      "doc_priority": "primary",
-      "requires_rtl_source_review": false,
-      "confidence": "high",
-      "evidence": [
-        {
-          "source": "knowledge_ir/modules/inStack.json"
-        },
-        {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
-        },
-        {
-          "source": "rtl/rtl/int/inStack.v"
-        }
-      ],
-      "id": "semantic:module:inStack:documentation_focus:001"
-    },
-    {
-      "claim_type": "documentation_focus",
-      "scope": {
-        "type": "module",
-        "module": "inStack"
-      },
-      "summary": "文档应强调驱动事件与释放信号的配对关系，以及组件间的驱动事件流。",
-      "subject": "驱动事件流与释放信号握手",
-      "explanation": "模块内部通过驱动事件和释放信号实现流控，dataMerge、dataSpli、inStackMerge和inStackSele之间的驱动事件连接形成了完整的请求-释放握手路径。理解这些事件流对于正确使用模块至关重要。",
+      "summary": "应重点描述入栈（保存上下文）与出栈（恢复上下文）的触发流程、数据拼接与地址生成规则、内部事件驱动组件的协作时序以及栈指针更新机制，弱化内部wire细节列表。",
+      "subject": "模块手册重点",
+      "explanation": "鉴于inStack的核心功能为中断上下文管理，手册需明确操作语义而非仅列举端口连接，便于集成者理解并使用。",
       "signals": [
         "i_driveFromRGRF_1",
         "i_driveFromRPSR_1",
-        "o_driveFromSPDec",
         "o_driveToRGRF_1",
         "o_driveToRPSR_1",
-        "i_freeFromDR_1",
-        "i_freeFromRGRF_1",
-        "i_freeFromRPSR_1",
-        "i_freeFromSPDec",
-        "o_freeFromInStack",
-        "o_freeFrominStackSele_1",
-        "o_freeToRGRF_1",
-        "o_freeToRPSR_1"
+        "o_data_96",
+        "o_SP_32"
       ],
       "instances": [
         "dataMerge",
@@ -624,26 +553,96 @@
       "confidence": "high",
       "evidence": [
         {
-          "source": "knowledge_ir/modules/inStack.json"
+          "source": "interface",
+          "path": "knowledge_ir/modules/inStack.json"
         },
         {
-          "source": "parser_pipeline_rtl/modules/inStack.json"
+          "source": "event_payload_contracts",
+          "path": "knowledge_ir/modules/inStack.json"
         },
         {
-          "source": "rtl/rtl/int/inStack.v"
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
         }
       ],
-      "id": "semantic:module:inStack:documentation_focus:002"
+      "id": "semantic:module:inStack:documentation_focus:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "inStack"
+      },
+      "reason": "紧凑上下文未提供w_inNum_2选择信号的生成逻辑，也未明确inStackMerge的输出驱动目标，无法推断栈条目选择机制。",
+      "subject": "w_inNum_2 来源与 inStackMerge 输出连接",
+      "needed_source_slice": "always block 或 assign block 中涉及 w_inNum_2 以及 inStackMerge 实例连接",
+      "signals": [
+        "w_inNum_2",
+        "w_inNumPose_1"
+      ],
+      "instances": [
+        "inStackMerge"
+      ],
+      "related_flows": [
+        "flow_000_inStack_i_driveFromRGRF_1",
+        "flow_001_inStack_i_driveFromRPSR_1"
+      ],
+      "doc_priority": "primary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
+        },
+        {
+          "source": "key_component_connections",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
+        }
+      ],
+      "id": "semantic:module:inStack:source_review_request:001"
+    },
+    {
+      "claim_type": "source_review_request",
+      "scope": {
+        "type": "module",
+        "module": "inStack"
+      },
+      "reason": "未见任何赋值更新寄存器r_SP_32，上下文仅展示其直接驱动o_SP_32，压栈/出栈后栈指针的变化规律缺失。",
+      "subject": "r_SP_32 更新逻辑",
+      "needed_source_slice": "always block 中 r_SP_32 的赋值",
+      "signals": [
+        "r_SP_32",
+        "o_SP_32"
+      ],
+      "related_flows": [
+        "flow_000_inStack_i_driveFromRGRF_1",
+        "flow_001_inStack_i_driveFromRPSR_1"
+      ],
+      "doc_priority": "secondary",
+      "requires_rtl_source_review": true,
+      "confidence": "medium",
+      "evidence": [
+        {
+          "source": "assign_dependencies",
+          "path": "parser_pipeline_rtl/modules/inStack.json"
+        },
+        {
+          "source": "interface",
+          "path": "knowledge_ir/modules/inStack.json"
+        }
+      ],
+      "id": "semantic:module:inStack:source_review_request:002"
     }
   ],
   "evidence_gaps": [
     {
       "field": "internal_event_flow.i_driveFromRGRF_1",
-      "reason": "内部事件流未追踪到模块事件输出，无法确认驱动事件从输入到输出的完整路径。"
+      "reason": "no module event output reached from i_driveFromRGRF_1"
     },
     {
       "field": "internal_event_flow.i_driveFromRPSR_1",
-      "reason": "内部事件流未追踪到模块事件输出，无法确认驱动事件从输入到输出的完整路径。"
+      "reason": "no module event output reached from i_driveFromRPSR_1"
     }
   ]
 }
