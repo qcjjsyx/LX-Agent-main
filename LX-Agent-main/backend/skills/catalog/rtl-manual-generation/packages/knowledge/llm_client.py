@@ -29,10 +29,10 @@ class OpenAICompatibleLLMClient:
         _load_dotenv_if_available()
         self.model = (
             model
-            or os.getenv("DEEPSEEK_MODEL")
             or os.getenv("KNOWLEDGE_IR_SEMANTIC_MODEL")
+            or os.getenv("DEEPSEEK_MODEL")
             or os.getenv("OPENAI_MODEL")
-            or "deepseek-chat"
+            or "deepseek-v4-flash"
         )
         self.api_key = (
             api_key
@@ -51,6 +51,10 @@ class OpenAICompatibleLLMClient:
         )
         self.temperature = temperature
         self.timeout = timeout
+        self.disable_thinking = _env_bool(
+            "KNOWLEDGE_IR_DISABLE_THINKING",
+            default=self.model.lower().startswith("deepseek-v4"),
+        )
 
     def complete_text(self, messages: List[Dict[str, str]]) -> str:
         if not self.api_key:
@@ -71,11 +75,14 @@ class OpenAICompatibleLLMClient:
 
         client = OpenAI(**client_kwargs)
         try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages, # type: ignore
-                temperature=self.temperature,
-            )
+            request_kwargs: Dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": self.temperature,
+            }
+            if self.disable_thinking:
+                request_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+            response = client.chat.completions.create(**request_kwargs) # type: ignore[arg-type]
         except Exception as exc:  # pragma: no cover - provider-specific transport detail
             raise LLMClientError(f"LLM request failed: {exc}") from exc
 
@@ -91,3 +98,10 @@ def _load_dotenv_if_available() -> None:
     except ImportError:
         return
     dotenv.load_dotenv()
+
+
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on", "enabled"}

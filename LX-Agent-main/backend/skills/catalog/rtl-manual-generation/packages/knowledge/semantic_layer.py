@@ -10,12 +10,14 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import sys
+from threading import Lock
 from typing import Any, Callable, Dict, Iterable, List, Protocol
 
 try:
@@ -163,6 +165,8 @@ def enrich_semantic_layer(
 
     client = llm_client or OpenAICompatibleLLMClient()
     semantic_root = knowledge_root / "semantic"
+    progress_log_path = semantic_root / "semantic_progress.jsonl"
+    progress_lock = Lock()
     module_files: Dict[str, str] = {}
     flow_files: Dict[str, List[str]] = {}
     issues: List[Dict[str, Any]] = []
@@ -172,10 +176,33 @@ def enrich_semantic_layer(
     skipped_flows = 0
     workers = resolve_semantic_workers(max_workers)
 
+    progress_log_path.parent.mkdir(parents=True, exist_ok=True)
+    progress_log_path.write_text("", encoding="utf-8")
+
+    def progress(event_type: str, **payload: Any) -> None:
+        write_progress_event(
+            progress_log_path,
+            progress_lock,
+            event_type=event_type,
+            top_module=top_module,
+            **payload,
+        )
+
+    progress(
+        "semantic_layer_start",
+        model=getattr(client, "model", ""),
+        workers=workers,
+        planned_modules=len(plan["module_contexts"]),
+        planned_flows=len(plan["flow_contexts"]),
+        modules_requested=selected_modules,
+    )
+
     module_results = run_enrichment_tasks(
         plan["module_contexts"],
         lambda item: enrich_module_context(knowledge_root, client, item),
         max_workers=workers,
+        task_kind="module",
+        progress=progress,
     )
     for result in module_results:
         if result["ok"]:
@@ -192,12 +219,27 @@ def enrich_semantic_layer(
         }
         issues.append(issue)
         if not skip_failed:
+            progress(
+                "semantic_layer_failed",
+                phase="modules",
+                message=issue["message"],
+            )
             raise SemanticLayerError(issue["message"])
+
+    progress(
+        "semantic_module_phase_end",
+        completed=len(module_results),
+        succeeded=len(module_cards),
+        skipped=skipped_modules,
+        failed=len([item for item in module_results if not item.get("ok")]),
+    )
 
     flow_results = run_enrichment_tasks(
         plan["flow_contexts"],
         lambda item: enrich_flow_context(knowledge_root, client, item),
         max_workers=workers,
+        task_kind="flow",
+        progress=progress,
     )
     for result in flow_results:
         if result["ok"]:
@@ -215,6 +257,11 @@ def enrich_semantic_layer(
         }
         issues.append(issue)
         if not skip_failed:
+            progress(
+                "semantic_layer_failed",
+                phase="flows",
+                message=issue["message"],
+            )
             raise SemanticLayerError(issue["message"])
 
     status = semantic_status(issues)
@@ -238,6 +285,7 @@ def enrich_semantic_layer(
         "files": {
             "modules": module_files,
             "flows": flow_files,
+            "progress_log": "semantic/semantic_progress.jsonl",
         },
         "issues": issues,
         "status": status,
@@ -261,10 +309,21 @@ def enrich_semantic_layer(
             "skipped_flows": skipped_flows,
         },
         "workers": workers,
+        "progress_log": str(progress_log_path),
         "claim_types": claim_counts,
         "issues": issues,
     }
     write_json(semantic_root / "semantic_report.json", report)
+    progress(
+        "semantic_layer_end",
+        status=status,
+        modules=len(module_cards),
+        flows=len(flow_cards),
+        claims=sum(claim_counts.values()),
+        skipped_modules=skipped_modules,
+        skipped_flows=skipped_flows,
+        issue_count=len(issues),
+    )
     return report
 
 
@@ -370,20 +429,89 @@ def read_cached_semantic_card(path: Path, *, expected_schema: str, expected_hash
     return payload
 
 
+def write_progress_event(
+    path: Path,
+    lock: Lock,
+    *,
+    event_type: str,
+    top_module: str,
+    **payload: Any,
+) -> None:
+    event = {
+        "time": datetime.now(timezone.utc).isoformat(),
+        "event_type": event_type,
+        "top_module": top_module,
+        **payload,
+    }
+    line = json.dumps(event, ensure_ascii=False, sort_keys=True)
+    with lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+
+
 def run_enrichment_tasks(
     items: List[tuple[str, Path]],
     worker: Callable[[tuple[str, Path]], Dict[str, Any]],
     *,
     max_workers: int,
+    task_kind: str = "task",
+    progress: Callable[..., None] | None = None,
 ) -> List[Dict[str, Any]]:
     if not items:
         return []
+    total = len(items)
+    completed = 0
+    completed_lock = Lock()
+
+    def run_one(index: int, item: tuple[str, Path]) -> Dict[str, Any]:
+        nonlocal completed
+        module_name, context_path = item
+        if progress:
+            progress(
+                "semantic_task_start",
+                kind=task_kind,
+                index=index + 1,
+                total=total,
+                module=module_name,
+                context_path=str(context_path),
+            )
+        try:
+            result = worker(item)
+        except Exception as exc:
+            result = {
+                "ok": False,
+                "module": module_name,
+                "message": str(exc),
+            }
+        with completed_lock:
+            completed += 1
+            completed_count = completed
+        if progress:
+            progress(
+                "semantic_task_end",
+                kind=task_kind,
+                index=index + 1,
+                total=total,
+                completed=completed_count,
+                module=result.get("module", module_name),
+                flow_id=result.get("flow_id", ""),
+                status="success" if result.get("ok") else "error",
+                skipped=bool(result.get("skipped")),
+                rel_path=result.get("rel_path", ""),
+                message=str(result.get("message", ""))[:1000],
+            )
+        return result
+
     if max_workers <= 1 or len(items) == 1:
-        return [worker(item) for item in items]
+        return [run_one(index, item) for index, item in enumerate(items)]
 
     results: List[Dict[str, Any] | None] = [None] * len(items)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index = {executor.submit(worker, item): index for index, item in enumerate(items)}
+        future_to_index = {
+            executor.submit(run_one, index, item): index
+            for index, item in enumerate(items)
+        }
         for future in as_completed(future_to_index):
             results[future_to_index[future]] = future.result()
     return [result for result in results if result is not None]

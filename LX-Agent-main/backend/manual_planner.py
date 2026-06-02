@@ -30,23 +30,12 @@ class WorkflowPlan:
     auto_run: bool
     semantic_enrichment: bool = True
     enrich_modules: str = ""
-    manual_generation_mode: str = "deterministic"
-    llm_module_page_scope: str = "top_and_direct"
-    llm_module_page_limit: int = 20
-    llm_module_page_allowlist: str = ""
     confirmation_required: bool = False
     confirmation_message: str = ""
 
 
 VALID_AUDIENCES = {"newcomer", "maintainer", "reviewer"}
 VALID_EVIDENCE_MODES = {"project", "reading_path"}
-VALID_MANUAL_GENERATION_MODES = {
-    "deterministic",
-    "llm_polish",
-    "llm_section_generate",
-    "llm_section_generate_with_page_polish",
-}
-VALID_LLM_MODULE_PAGE_SCOPES = {"none", "top_only", "top_and_direct", "all", "allowlist"}
 TOP_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 
@@ -64,30 +53,6 @@ def build_manual_plan(
     enrich_modules = intent.enrich_modules
     if not enrich_modules and previous_state:
         enrich_modules = previous_state.get("enrich_modules", "") or ""
-    manual_generation_mode = _value(
-        intent.manual_generation_mode,
-        previous_state,
-        "manual_generation_mode",
-        "deterministic",
-    )
-    llm_module_page_scope = _value(
-        intent.llm_module_page_scope,
-        previous_state,
-        "llm_module_page_scope",
-        "top_and_direct",
-    )
-    llm_module_page_limit = _int_value(
-        intent.llm_module_page_limit,
-        previous_state,
-        "llm_module_page_limit",
-        20,
-    )
-    llm_module_page_allowlist = _value(
-        intent.llm_module_page_allowlist,
-        previous_state,
-        "llm_module_page_allowlist",
-        "",
-    )
 
     start_stage = _resolve_start_stage(intent, previous_state)
     stages: list[str] = []
@@ -124,9 +89,6 @@ def build_manual_plan(
         start_stage=start_stage,
         audience=audience,
         evidence_mode=evidence_mode,
-        manual_generation_mode=manual_generation_mode,
-        llm_module_page_scope=llm_module_page_scope,
-        llm_module_page_limit=llm_module_page_limit,
         base_dir=base_dir,
         previous_state=previous_state,
     )
@@ -145,10 +107,6 @@ def build_manual_plan(
             auto_run=auto_run,
             semantic_enrichment=True,
             enrich_modules=enrich_modules,
-            manual_generation_mode=manual_generation_mode,
-            llm_module_page_scope=llm_module_page_scope,
-            llm_module_page_limit=llm_module_page_limit,
-            llm_module_page_allowlist=llm_module_page_allowlist,
             confirmation_required=True,
             confirmation_message=confirmation_message,
         )
@@ -167,10 +125,6 @@ def build_manual_plan(
         auto_run=auto_run,
         semantic_enrichment=True,
         enrich_modules=enrich_modules,
-        manual_generation_mode=manual_generation_mode,
-        llm_module_page_scope=llm_module_page_scope,
-        llm_module_page_limit=llm_module_page_limit,
-        llm_module_page_allowlist=llm_module_page_allowlist,
     )
 
 
@@ -182,9 +136,6 @@ def validate_manual_intent(
     start_stage: str | None,
     audience: str,
     evidence_mode: str,
-    manual_generation_mode: str,
-    llm_module_page_scope: str,
-    llm_module_page_limit: int,
     base_dir: str | Path = ".",
     previous_state: dict | None = None,
 ) -> tuple[bool, str]:
@@ -212,18 +163,6 @@ def validate_manual_intent(
 
     if evidence_mode not in VALID_EVIDENCE_MODES:
         messages.append("`evidence_mode` 必须是 project 或 reading_path。")
-
-    if manual_generation_mode not in VALID_MANUAL_GENERATION_MODES:
-        messages.append(
-            "`manual_generation_mode` 必须是 deterministic、llm_polish、"
-            "llm_section_generate 或 llm_section_generate_with_page_polish。"
-        )
-
-    if llm_module_page_scope not in VALID_LLM_MODULE_PAGE_SCOPES:
-        messages.append("`llm_module_page_scope` 必须是 none、top_only、top_and_direct、all 或 allowlist。")
-
-    if llm_module_page_limit < 0:
-        messages.append("`llm_module_page_limit` 不能为负数。")
 
     if project_root:
         resolved_root = _resolve_project_root(project_root, base_dir)
@@ -271,6 +210,8 @@ def _int_value(explicit_value: int | str | None, previous_state: dict | None, ke
 def _resolve_auto_run(intent: ManualIntent, previous_state: dict | None) -> bool:
     if intent.auto_run is not None:
         return bool(intent.auto_run)
+    if intent.intent in {"generate_manual", "rerun_workflow"}:
+        return True
     if previous_state and previous_state.get("auto_run") is not None:
         return bool(previous_state.get("auto_run"))
     return True

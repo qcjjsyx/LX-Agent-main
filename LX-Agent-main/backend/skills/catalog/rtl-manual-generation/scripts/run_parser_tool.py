@@ -36,15 +36,14 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl", timeout: i
     if not root.exists():
         return f"Parser failed: project_root does not exist: {root}"
 
-    rtl_inputs, inputs_path = resolve_rtl_inputs(root, rtl_inputs)
-    output_base = inputs_path.parent if inputs_path.parent != root and inputs_path.name == "rtl" else root
-    output_dir = output_base / "parser_pipeline_rtl"
+    inputs_path = root / rtl_inputs
+    output_dir = root / "parser_pipeline_rtl"
     output_arg = path_arg(root, output_dir)
 
     if not inputs_path.exists():
         return (
             f"Parser failed: RTL input directory does not exist: {inputs_path}\n"
-            "Check rtl_inputs, for example rtl, rtl/rtl, test_data/rtl, or tests/fixtures/rtl."
+            "Check project_root and rtl_inputs. The parser uses exactly project_root/rtl_inputs as the RTL source directory."
         )
 
     cmd = [
@@ -115,31 +114,6 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl", timeout: i
     report += f"\n\nSTDOUT:\n{stdout or 'None'}\n"
     report += f"\nSTDERR:\n{stderr or 'None'}"
     return report
-
-
-def resolve_rtl_inputs(root: Path, rtl_inputs: str) -> tuple[str, Path]:
-    inputs_path = root / rtl_inputs
-    if looks_like_rtl_project(inputs_path):
-        return rtl_inputs, inputs_path
-
-    nested = inputs_path / "rtl"
-    if looks_like_rtl_project(nested):
-        return str(Path(rtl_inputs) / "rtl"), nested
-
-    return rtl_inputs, inputs_path
-
-
-def looks_like_rtl_project(path: Path) -> bool:
-    return (
-        path.exists()
-        and path.is_dir()
-        and (
-            (path / "read_rtl_list.tcl").is_file()
-            or (path / "rtl_top_list.tcl").is_file()
-            or any(path.glob("*.v"))
-            or any(path.glob("*.sv"))
-        )
-    )
 
 
 def path_arg(root: Path, path: Path) -> str:

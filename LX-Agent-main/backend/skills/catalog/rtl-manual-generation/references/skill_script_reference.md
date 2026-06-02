@@ -61,7 +61,7 @@ python -m knowledge.pipeline \
 
 ```bash
 python backend/skills/catalog/rtl-manual-generation/scripts/run_parser_tool.py \
-  --project-root . \
+  --project-root ./rtl \
   --rtl-inputs rtl
 ```
 
@@ -88,7 +88,7 @@ parser artifacts 是后续 Knowledge IR 的结构事实来源。
 
 ```bash
 python backend/skills/catalog/rtl-manual-generation/scripts/run_knowledge_tool.py \
-  --project-root . \
+  --project-root ./rtl \
   --top-module arm_soc_top
 ```
 

@@ -303,16 +303,15 @@ def run_parser_tool(project_root: str = ".", rtl_inputs: str = "rtl"):
     职责：
         阅读 RTL / 源代码。
 
-    当测试文件类型是 rtl 时：
-        生成 parser_pipeline_rtl；如果识别到当前项目是 rtl/rtl 输入布局，
-        则输出到 rtl/parser_pipeline_rtl。
+    生成 project_root/parser_pipeline_rtl。输入目录固定为
+    project_root/rtl_inputs，不做嵌套目录自动探测。
 
     输入：
         project_root: 项目根目录，默认 "."
         rtl_inputs: RTL 输入目录，默认 "rtl"
 
     输出：
-        parser_pipeline_rtl/ 或 rtl/parser_pipeline_rtl/
+        project_root/parser_pipeline_rtl/
     """
     print("\n[Parser Tool] 调用 rtl-manual-generation/scripts/run_parser_tool.py...")
     parser_timeout = env_int("RTL_MANUAL_PARSER_TIMEOUT", 220)
@@ -348,10 +347,10 @@ def run_knowledge_tool(
         -> Semantic Layer -> Manual Context 流水线。
 
     固定输入：
-        rtl/parser_pipeline_rtl/ 或 parser_pipeline_rtl/
+        project_root/parser_pipeline_rtl/
 
     固定输出：
-        rtl/knowledge_ir/<top_module>/ 和 rtl/manual_context/<top_module>/
+        project_root/knowledge_ir/<top_module>/ 和 project_root/manual_context/<top_module>/
     """
     print("\n[Knowledge Tool] 调用 rtl-manual-generation/scripts/run_knowledge_tool.py...")
 
@@ -490,7 +489,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_parser_tool",
-            "description": "Parser Tool：阅读 RTL 源码目录，运行 parser pipeline，生成 parser_pipeline_rtl；对 rtl/rtl 输入布局会生成 rtl/parser_pipeline_rtl。",
+            "description": "Parser Tool：阅读 project_root/rtl_inputs 指定的 RTL 源码目录，运行 parser pipeline，生成 project_root/parser_pipeline_rtl。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -511,7 +510,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_knowledge_tool",
-            "description": "Knowledge Tool：读取 parser artifacts，运行 Knowledge IR、AI Context、Semantic Layer、Manual Context 流水线，生成 rtl/knowledge_ir/<top_module> 和 rtl/manual_context/<top_module>。旧 Manual IR/ContextPack 不再作为主输出。",
+            "description": "Knowledge Tool：读取 project_root/parser_pipeline_rtl，运行 Knowledge IR、AI Context、Semantic Layer、Manual Context 流水线，生成 project_root/knowledge_ir/<top_module> 和 project_root/manual_context/<top_module>。旧 Manual IR/ContextPack 不再作为主输出。",
             "parameters": {
                 "type": "object",
                 "properties": {

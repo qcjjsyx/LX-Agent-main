@@ -53,8 +53,7 @@ def run_knowledge_tool(
     if not parser_dir:
         return (
             "Knowledge Tool execution failed: parser artifacts were not found.\n"
-            "Expected one of:\n"
-            f"- {root / 'rtl' / 'parser_pipeline_rtl'}\n"
+            "Expected:\n"
             f"- {root / 'parser_pipeline_rtl'}\n"
             "Run run_parser_tool first so parser artifacts exist."
         )
@@ -159,8 +158,9 @@ def run_knowledge_tool(
         f"Input parser artifacts: {path_arg(root, parser_dir)}\n"
         f"Knowledge IR output: {path_arg(root, knowledge_dir)}\n"
         f"Manual Context output: {path_arg(root, manual_context_dir)}\n"
-        "Legacy Manual IR output: not generated\n"
-        f"Manual Context validation: {validation_status}\n"
+        + (f"Semantic progress log: {path_arg(root, knowledge_dir / 'semantic' / 'semantic_progress.jsonl')}\n" if enrich else "")
+        + "Legacy Manual IR output: not generated\n"
+        + f"Manual Context validation: {validation_status}\n"
     )
 
     if audience or section_id:
@@ -187,6 +187,7 @@ def run_knowledge_tool(
             f"- {path_arg(root, knowledge_dir / 'modules')}/\n"
             f"- {path_arg(root, knowledge_dir / 'ai_context' / 'index.json')}\n"
             + (f"- {path_arg(root, knowledge_dir / 'semantic' / 'index.json')}\n" if enrich else "")
+            + (f"- {path_arg(root, knowledge_dir / 'semantic' / 'semantic_progress.jsonl')}\n" if enrich else "")
             + f"- {path_arg(root, manual_context_dir / 'manifest.json')}\n"
             + f"- {path_arg(root, manual_context_dir / 'project_context.json')}\n"
             + f"- {path_arg(root, manual_context_dir / 'system_topology.json')}\n"
@@ -205,19 +206,13 @@ def run_knowledge_tool(
 
 
 def locate_parser_artifacts(root: Path) -> Path | None:
-    candidates = [
-        root / "rtl" / "parser_pipeline_rtl",
-        root / "parser_pipeline_rtl",
-    ]
-    for candidate in candidates:
-        if (candidate / "project_index.json").is_file() and (candidate / "modules").is_dir():
-            return candidate
+    candidate = root / "parser_pipeline_rtl"
+    if (candidate / "project_index.json").is_file() and (candidate / "modules").is_dir():
+        return candidate
     return None
 
 
 def output_base_for(root: Path, parser_dir: Path) -> Path:
-    if parser_dir.parent.name == "rtl":
-        return parser_dir.parent
     return root
 
 
@@ -251,6 +246,7 @@ def summarize_pipeline_report(report: dict) -> dict:
             {
                 "name": step.get("name", ""),
                 "status": step.get("status", ""),
+                "progress_log": step.get("progress_log", ""),
                 "counts": step.get("counts", {}),
                 "issues": step.get("issues", [])[:5],
             }

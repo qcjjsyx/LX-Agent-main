@@ -14,6 +14,9 @@ class SkillSpec:
     instruction: str = ""
     reference_files: tuple[str, ...] = field(default_factory=tuple)
     priority: int = 100
+    skill_type: str = "agentic"
+    workflow_id: str = ""
+    actions: tuple[str, ...] = field(default_factory=tuple)
 
     def matches(self, user_input: str) -> bool:
         return self.match_score(user_input) > 0
@@ -118,6 +121,9 @@ def load_skill_from_directory(skill_dir: Path):
         instruction=body,
         reference_files=tuple(runtime_metadata.get("reference_files", [])),
         priority=int(runtime_metadata.get("priority", 100)),
+        skill_type=runtime_metadata.get("type", "agentic"),
+        workflow_id=runtime_metadata.get("workflow_id", ""),
+        actions=tuple(runtime_metadata.get("actions", [])),
     )
 
 

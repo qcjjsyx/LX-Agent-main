@@ -82,23 +82,29 @@ description: 基于 parser 产物、Knowledge IR、AI Context、Semantic Layer c
 
 ## 命令行调试入口
 
-不启动 `app.py` 时，可以直接用同一套后端流程生成手册：
+不启动 `app.py` 时，可以直接用分层 CLI 生成手册：
 
 ```bash
-python -m backend.manual_cli \
-  --project-root . \
+python -m backend.manual_cli build \
+  --project-root ./rtl \
   --rtl-inputs rtl \
+  --top-module arm_soc_top
+
+python -m backend.manual_cli compose \
+  --project-root ./rtl \
   --top-module arm_soc_top
 ```
 
 常用参数：
 
-- `--force`：不复用已有 parser / manual context / 手册产物，强制重跑。
-- `--output docs/manuals/debug.md`：把公开手册写到指定路径。
-- `--no-llm`：不调用 source-review 模型，被标记项保留为证据缺口。
+- `build --force`：不复用已有 parser / knowledge / evidence / outline / chapter plan / base 产物，强制重跑。
+- `source-review`：只对 `evidence_gap` / `needs_review` / `requires_rtl_source_review` 显式标记项执行受控源码复核，写回 Manual Context，并标记增强片段过期。
+- `enhance --main-manual`：把整篇 base 主手册作为一个 fragment 增强，并注入紧凑 Manual Context digest。
+- `enhance --target-module <module>`：只增强一个 base 模块页。
+- `compose`：用有效增强片段生成公开最终手册；缺失、失败或 stale 时回退 base。
+- `--no-llm`：不调用 source-review 模型，被标记项保留为证据缺口；`enhance` 需要模型 client。
 - `--require-llm`：没有 OpenAI-compatible API key 时直接失败。
 - `--knowledge-timeout 3600`：给全量 Semantic Layer 重跑更长时间。
-- `--state-out /tmp/manual_state.json`：保存最终 workflow state，便于调试。
 
 ## 写作规则
 

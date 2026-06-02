@@ -11,7 +11,6 @@ Stage = Literal[
     "parser",
     "knowledge",
     "evidence",
-    "source_review",
     "outline",
     "chapter_plan",
     "manual",
@@ -23,7 +22,6 @@ MANUAL_STAGE_ORDER: tuple[Stage, ...] = (
     "parser",
     "knowledge",
     "evidence",
-    "source_review",
     "outline",
     "chapter_plan",
     "manual",
@@ -56,10 +54,6 @@ class ManualIntent:
     audience: str | None = None
     evidence_mode: str | None = None
     start_stage: str | None = None
-    manual_generation_mode: str | None = None
-    llm_module_page_scope: str | None = None
-    llm_module_page_limit: int | None = None
-    llm_module_page_allowlist: str | None = None
     rerun_policy: Literal[
         "reuse_valid_artifacts",
         "force_from_stage",
@@ -102,7 +96,6 @@ STEP_BY_STEP_WORDS = (
     "一步步",
     "单步",
     "逐步",
-    "不要自动",
     "先不要继续",
 )
 
@@ -163,14 +156,13 @@ CANCEL_WORDS = ("取消", "cancel", "stop workflow")
 STATUS_WORDS = ("状态", "进度", "status", "progress")
 
 STAGE_ALIASES: dict[Stage, tuple[str, ...]] = {
-    "references": ("references", "reference", "refs", "参考"),
+    "references": ("references", "reference", "refs", "build", "base build", "构建", "参考"),
     "parser": ("parser", "parse", "解析"),
     "knowledge": ("knowledge_ir", "knowledge ir", "knowledge", "manual_context", "manual context", "知识"),
     "evidence": ("evidence", "证据"),
-    "source_review": ("source_review", "source review", "source-review", "源码复核", "源代码复核"),
     "outline": ("outline", "toc", "目录", "大纲"),
     "chapter_plan": ("chapter_plan", "chapter plan", "chapter-plan", "章节规划"),
-    "manual": ("manual", "markdown 正文", "markdown", "正文"),
+    "manual": ("manual", "compose", "markdown 正文", "markdown", "正文"),
     "review": ("review", "checker", "审查", "检查"),
 }
 
@@ -247,10 +239,6 @@ def parse_manual_intent(user_input: str, state: dict | None = None) -> ManualInt
         audience=params.get("audience"),
         evidence_mode=params.get("evidence_mode"),
         start_stage=start_stage,
-        manual_generation_mode=params.get("manual_generation_mode"),
-        llm_module_page_scope=params.get("llm_module_page_scope"),
-        llm_module_page_limit=params.get("llm_module_page_limit"),
-        llm_module_page_allowlist=params.get("llm_module_page_allowlist"),
         rerun_policy=rerun_policy,  # type: ignore[arg-type]
         auto_run=_extract_auto_run(text),
         semantic_enrichment=True,
@@ -262,7 +250,7 @@ def parse_manual_intent(user_input: str, state: dict | None = None) -> ManualInt
 
     if no_reuse_requested and not start_stage and not _can_infer_start_stage(state):
         intent.confirmation_required = True
-        intent.questions.append("你想从哪个阶段开始强制重跑？可选 references/parser/knowledge/evidence/source_review/outline/chapter_plan/manual/review。")
+        intent.questions.append("你想从哪个阶段开始强制重跑？可选 references/parser/knowledge/evidence/outline/chapter_plan/manual/review。")
 
     if intent.conflicts:
         intent.confirmation_required = True
@@ -318,23 +306,6 @@ def _extract_explicit_params(text: str) -> dict[str, str]:
             r"增强模块\s*(?:=|:|：|是|为)\s*([A-Za-z0-9_,$\-\s，]+)",
             r"语义模块\s*(?:=|:|：|是|为)\s*([A-Za-z0-9_,$\-\s，]+)",
         ),
-        "manual_generation_mode": (
-            r"manual_generation_mode\s*(?:=|:|：|是|为)\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
-            r"manual_mode\s*(?:=|:|：|是|为)\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
-            r"手册生成模式\s*(?:=|:|：|是|为)\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
-            r"手册模式\s*(?:=|:|：|是|为)\s*(llm_section_generate_with_page_polish|llm_section_generate|llm_polish|deterministic)",
-        ),
-        "llm_module_page_scope": (
-            r"llm_module_page_scope\s*(?:=|:|：|是|为)\s*(top_and_direct|top_only|allowlist|none|all)",
-            r"模块页范围\s*(?:=|:|：|是|为)\s*(top_and_direct|top_only|allowlist|none|all)",
-        ),
-        "llm_module_page_limit": (
-            r"llm_module_page_limit\s*(?:=|:|：|是|为)\s*(\d+)",
-        ),
-        "llm_module_page_allowlist": (
-            r"llm_module_page_allowlist\s*(?:=|:|：|是|为)\s*([A-Za-z0-9_,$\-\s，]+)",
-            r"模块页白名单\s*(?:=|:|：|是|为)\s*([A-Za-z0-9_,$\-\s，]+)",
-        ),
     }.items():
         value = _match_value(text, patterns)
         if value:
@@ -357,22 +328,6 @@ def _extract_explicit_params(text: str) -> dict[str, str]:
             if item.strip()
         ]
         params["enrich_modules"] = ",".join(modules)
-    if params.get("llm_module_page_allowlist"):
-        modules = [
-            item.strip()
-            for item in re.split(r"[,，\s]+", params["llm_module_page_allowlist"])
-            if item.strip()
-        ]
-        params["llm_module_page_allowlist"] = ",".join(modules)
-    if params.get("llm_module_page_limit"):
-        try:
-            params["llm_module_page_limit"] = max(0, int(params["llm_module_page_limit"]))
-        except ValueError:
-            params.pop("llm_module_page_limit", None)
-
-    mode = params.get("manual_generation_mode") or _extract_manual_generation_mode_text(text)
-    if mode:
-        params["manual_generation_mode"] = mode
 
     return params
 
@@ -459,78 +414,56 @@ def _stage_context_is_explicit(prefix: str, suffix: str) -> bool:
 
 def _is_manual_only_request(text: str) -> bool:
     lower_text = text.lower()
-    has_generation_or_rerun = _has_any(text, RERUN_WORDS) or "生成" in text
+    has_rerun = _has_any(text, RERUN_WORDS)
     explicit_final_manual = any(phrase in text for phrase in ("最终手册", "最终正文", "Markdown 正文", "markdown 正文"))
     explicit_only_manual = (
         bool(re.search(r"(?:只|仅)\s*(?:重新生成|重跑|生成)?\s*(?:manual|markdown|正文)(?:\s*阶段)?", lower_text))
         or bool(re.search(r"(?:只|仅).*(?:最终手册|Markdown 正文|markdown 正文|正文)", text))
     )
-    return explicit_only_manual or (explicit_final_manual and has_generation_or_rerun)
+    return explicit_only_manual or (explicit_final_manual and has_rerun)
 
 
 def _extract_auto_run(text: str) -> bool | None:
-    if _has_any(text, STEP_BY_STEP_WORDS):
+    if _wants_step_by_step(text):
         return False
-    if _has_any(text, AUTO_RUN_WORDS):
+    if _wants_auto_run(text):
         return True
     return None
 
 
-def _extract_manual_generation_mode_text(text: str) -> str:
+def _wants_step_by_step(text: str) -> bool:
+    if _has_any(text, STEP_BY_STEP_WORDS):
+        return True
+
     raw_text = text or ""
-    lower_text = raw_text.lower()
-    compact_text = re.sub(r"[\s_-]+", "_", lower_text)
-    deterministic_patterns = (
-        "不用 llm",
-        "不用LLM",
-        "不要 llm",
-        "不要LLM",
-        "不要让 llm",
-        "不要让LLM",
-        "不用模型润色",
-        "不要模型润色",
-        "确定性",
-        "模板生成",
-        "deterministic",
-    )
-    if any(pattern.lower() in lower_text for pattern in deterministic_patterns):
-        return "deterministic"
+    for match in re.finditer(r"不要自动", raw_text):
+        suffix = raw_text[match.end():match.end() + 32].lower()
+        if re.search(r"(继续|下一步|后续|流程|全流程|完整流程|阶段|workflow|跑完|跑完整)", suffix):
+            return True
+        if re.search(r"(source[-_ ]?review|enhance|llm|文档增强|源码复核|源码审查|增强)", suffix, flags=re.IGNORECASE):
+            continue
+    return False
 
-    if "llm_section_generate_with_page_polish" in compact_text:
-        return "llm_section_generate_with_page_polish"
-    if "llm_section_generate" in compact_text:
-        return "llm_section_generate"
-    if "llm_polish" in compact_text:
-        return "llm_polish"
 
-    if (
-        re.search(r"(?:llm|模型).*(?:章节|按章节).*(?:模块页).*(?:润色|polish)", raw_text, flags=re.IGNORECASE)
-        or re.search(r"(?:模块页).*(?:也)?.*(?:llm|模型).*(?:润色|polish)", raw_text, flags=re.IGNORECASE)
-        or re.search(r"(?:llm|模型).*(?:生成章节|章节内容).*(?:润色模块页)", raw_text, flags=re.IGNORECASE)
-    ):
-        return "llm_section_generate_with_page_polish"
-
-    section_patterns = (
-        r"用\s*(?:llm|模型)\s*(?:按章节)?生成主手册",
-        r"(?:llm|模型)\s*按章节\s*生成(?:主手册)?",
-        r"章节内容\s*用\s*(?:llm|模型)\s*生成",
-        r"(?:llm|模型)\s*生成章节内容",
-    )
-    for pattern in section_patterns:
-        if re.search(pattern, raw_text, flags=re.IGNORECASE):
-            return "llm_section_generate"
-
-    polish_patterns = (
-        r"(?:llm|模型)\s*润色",
-        r"润色\s*(?:主手册|最终手册)",
-        r"用\s*(?:llm|模型)\s*润色手册",
-        r"让\s*模型\s*润色(?:最终)?手册",
-        r"llm\s*polish",
-    )
-    for pattern in polish_patterns:
-        if re.search(pattern, raw_text, flags=re.IGNORECASE):
-            return "llm_polish"
-    return ""
+def _wants_auto_run(text: str) -> bool:
+    raw_text = text or ""
+    for word in AUTO_RUN_WORDS:
+        start = 0
+        while True:
+            index = raw_text.find(word, start)
+            if index < 0:
+                break
+            prefix = raw_text[max(0, index - 4):index]
+            suffix = raw_text[index + len(word):index + len(word) + 24].lower()
+            if "不要" in prefix and re.search(
+                r"(source[-_ ]?review|enhance|llm|文档增强|源码复核|源码审查|增强)",
+                suffix,
+                flags=re.IGNORECASE,
+            ):
+                start = index + len(word)
+                continue
+            return True
+    return False
 
 
 def _is_continue_request(text: str) -> bool:
@@ -591,7 +524,7 @@ def _match_value(text: str, patterns: tuple[str, ...]) -> str:
 
 def _clean_param_value(key: str, value: str) -> str:
     value = (value or "").strip().strip("`'\"")
-    if key not in {"enrich_modules", "llm_module_page_allowlist"}:
+    if key != "enrich_modules":
         for splitter in ("并", "，", ",", "。", "；", ";"):
             value = value.split(splitter)[0]
     return value.strip().strip("`'\"")
@@ -650,24 +583,4 @@ def _infer_project_paths(path_text: str) -> tuple[str, str]:
     if candidate.name.lower() == "rtl":
         return str(candidate.parent), candidate.name
 
-    if candidate.exists() and candidate.is_dir():
-        rtl_child = candidate / "rtl"
-        if _looks_like_rtl_input_dir(rtl_child):
-            return str(candidate), "rtl"
-        if _looks_like_rtl_input_dir(candidate):
-            return str(candidate.parent), candidate.name
-
     return str(candidate), "rtl"
-
-
-def _looks_like_rtl_input_dir(path: Path) -> bool:
-    return (
-        path.exists()
-        and path.is_dir()
-        and (
-            (path / "read_rtl_list.tcl").exists()
-            or (path / "rtl_top_list.tcl").exists()
-            or any(path.rglob("*.v"))
-            or any(path.rglob("*.sv"))
-        )
-    )

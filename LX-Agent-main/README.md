@@ -1,13 +1,16 @@
 # LX-Agent
 
-LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工具，并为 RTL 项目生成结构化代码手册。当前核心能力是 RTL 手册生成流程：从 RTL 源码解析开始，经过 Parser Artifacts、Knowledge IR、AI Context、Semantic Layer、Manual Context、Source Review，最后渲染为 Markdown 手册。
+LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工具，并为 RTL 项目生成结构化代码手册。当前核心能力是 RTL 手册生成 workflow：从 RTL 源码解析开始，经过 Parser Artifacts、Knowledge IR、AI Context、Semantic Layer、Manual Context，再按 base / enhanced / final 三层生成 Markdown 手册。
+
+项目正在从单一手册生成工具演进为轻量 Agent 平台。当前后端已经具备 `WorkflowRuntime`，可以把强流程任务作为标准 workflow 调度；普通问答、文件分析和开放式任务仍走 Agent + Tool 路径。
 
 项目主要包含：
 
-- Flask Web UI：聊天、文件上传、路径导入、会话管理、日志查看。
-- 命令行入口：用于调试 Agent 和手册生成 workflow。
-- Skill 系统：根据用户输入确定性选择合适的 skill 和工具。
-- RTL 手册生成 workflow：固定阶段、支持继续执行、支持从指定阶段重跑。
+- Flask Web UI：聊天、文件上传、路径导入、会话管理、日志查看、RTL Manual workflow 面板。
+- 命令行入口：用于调试 Agent 和 RTL Manual workflow。
+- Skill 系统：根据用户输入确定性选择合适的 skill；workflow skill 可声明 `workflow_id` 和 action。
+- Workflow Runtime：统一注册、查询和执行固定 workflow。
+- RTL Manual workflow：固定流程、分层 artifact、manifest 状态、可单独 build/enhance/compose/review。
 - 本地持久化：会话、日志、Parser 输出、Knowledge 输出、Manual Context、最终手册均保存为本地文件。
 
 ## 项目结构
@@ -18,10 +21,15 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 |   |-- app.py                         # Flask 路由、会话持久化、Web 后端入口
 |   |-- agent_runner.py                # Web 和 CLI 共享的 Agent 执行核心
 |   |-- agent_core.py                  # 简单交互式 CLI Agent
-|   |-- manual_workflow.py             # RTL 手册生成 workflow
+|   |-- manual_workflow.py             # 旧 workflow 适配层和 Web 执行器
 |   |-- manual_intent.py               # 将用户自然语言解析为结构化 ManualIntent
 |   |-- manual_planner.py              # 将 ManualIntent 校验并规划为 WorkflowPlan
-|   |-- manual_cli.py                  # 手册 workflow 命令行入口
+|   |-- manual_cli.py                  # 手册 workflow 兼容命令行入口
+|   |-- workflows/
+|   |   |-- types.py                    # Workflow Runtime 通用数据结构
+|   |   |-- registry.py                 # workflow 注册表
+|   |   |-- runtime.py                  # WorkflowRuntime 统一调用入口
+|   |   `-- rtl_manual/                # RTL manual 分层 workflow 实现
 |   |-- tools.py                       # 工具注册和脚本封装
 |   |-- context_manager.py             # 对话上下文压缩
 |   |-- event_logger.py                # JSONL 事件日志
@@ -38,13 +46,14 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 |                   |-- parser/
 |                   `-- knowledge/
 |-- frontend/
-|   |-- templates/index.html
+|   |-- templates/index.html           # 聊天界面和 RTL Manual workflow 面板
 |   `-- static/style.css
 |-- rtl/
 |   |-- rtl/                           # RTL 源码输入目录
 |   |-- parser_pipeline_rtl/           # Parser 产物
 |   |-- knowledge_ir/<top_module>/     # Knowledge IR / AI Context / Semantic Layer
-|   `-- manual_context/<top_module>/   # Manual Context 主证据
+|   |-- manual_context/<top_module>/   # Manual Context 主证据
+|   `-- docs/manuals/                  # 以 rtl/ 为 project_root 时的手册产物
 |-- docs/
 |   `-- manuals/                       # 生成的 Markdown 手册
 |-- data/
@@ -61,33 +70,56 @@ LX-Agent 是一个本地 AI Agent 项目，用于读取工程、调用本地工�
 
 ```mermaid
 flowchart TD
-    UI["Web UI / CLI"] --> Runner["AgentRunner"]
+    UI["Web UI / CLI / API"] --> Runner["AgentRunner"]
     Runner --> Selector["Skill Selector"]
-    Selector --> GeneralTools["通用工具"]
+    Selector --> GeneralAgent["General Agent Path"]
+    GeneralAgent --> GeneralTools["通用工具 / LLM"]
     Selector --> Intent["ManualIntent Parser"]
     Intent --> Planner["WorkflowPlan Validator / Planner"]
-    Planner --> ManualWorkflow["manual_workflow Executor"]
-    ManualWorkflow --> Parser["Parser Tool"]
+    Planner --> ManualWorkflow["legacy manual_workflow adapter"]
+    Runner --> Runtime["WorkflowRuntime"]
+    UI --> WorkflowAPI["/api/workflows/*"]
+    WorkflowAPI --> Runtime
+    Runtime --> RtlManual["rtl_manual workflow actions"]
+    RtlManual --> Parser["Parser Tool"]
     Parser --> ParserArtifacts["parser_pipeline_rtl"]
-    ManualWorkflow --> Knowledge["Knowledge Tool"]
+    RtlManual --> Knowledge["Knowledge Tool"]
     Knowledge --> KnowledgeIR["knowledge_ir/<top_module>"]
     Knowledge --> ManualContext["manual_context/<top_module>"]
-    ManualWorkflow --> SourceReview["Source Review"]
-    ManualWorkflow --> Render["Markdown Renderer"]
-    Render --> Manual["docs/manuals/<top_module>_generated.md"]
+    RtlManual --> BaseRender["Base Renderer"]
+    ManualContext --> SourceReview["Explicit Source Review"]
+    SourceReview --> ManualContext
+    BaseRender --> BaseManual["<top_module>_base.md / _base_modules/"]
+    BaseManual --> Enhance["Enhance Fragments"]
+    Enhance --> Enhanced["<top_module>_enhanced/"]
+    BaseManual --> Compose["Composer"]
+    Enhanced --> Compose
+    Compose --> Manual["<top_module>_generated.md / _generated_modules/"]
+    Compose --> Manifest["<top_module>_enhancement_manifest.json"]
     Runner --> ConversationStore["data/conversations/*.json"]
     Runner --> EventLogs["data/logs/*.jsonl"]
 ```
 
 `AgentRunner` 是共享执行核心。`app.py` 负责 Web 路由和会话持久化，`agent_core.py` 和 `manual_cli.py` 提供命令行入口。
 
-RTL 手册生成现在分成三层：
+当前平台有两条执行路径：
 
-1. `manual_intent.py`：只负责理解用户输入，把自然语言和 key-value 参数转换成 `ManualIntent`。
-2. `manual_planner.py`：只负责校验 intent，并生成确定性的 `WorkflowPlan`。
-3. `manual_workflow.py`：只负责把 plan 写入旧 workflow state，然后执行现有阶段 handler。
+1. **General Agent Path**：普通问答、文件分析、通用工具调用和开放式任务。
+2. **Workflow Runtime Path**：固定流程任务，例如 RTL Manual。入口只传 `workflow_id/action/params/context`，具体业务步骤留在 workflow 内部。
 
-这样做的目标是让“自然语言理解”和“workflow 执行控制”解耦。执行器不再直接根据“手册”“review”“重新跑”等关键词决定阶段和重跑范围。
+RTL Manual 仍保留旧聊天式 `manual_workflow.py` 适配层，同时已经提供标准 runtime actions：
+
+```text
+status
+build
+source_review
+enhance_main
+enhance_module
+compose
+review
+```
+
+CLI、Workflow API 和 Web UI 手册面板都通过 `WorkflowRuntime` 调用这些 action。
 
 ## 环境要求
 
@@ -122,7 +154,9 @@ DEEPSEEK_API_KEY=your_api_key_here
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_REVIEW_MODEL=deepseek-v4-flash
+KNOWLEDGE_IR_SEMANTIC_MODEL=deepseek-v4-flash
 
 RTL_MANUAL_SEMANTIC_WORKERS=4
 RTL_MANUAL_PARSER_TIMEOUT=220
@@ -137,7 +171,9 @@ RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT=10920
 | `PORT` | `5000` | Flask Web 服务端口。 |
 | `DEEPSEEK_API_KEY` | 空 | Web/CLI 默认模型 API key。 |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 兼容接口地址。 |
-| `DEEPSEEK_MODEL` | `deepseek-chat` | Web 默认模型名称。 |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | 文档增强默认模型名称。 |
+| `DEEPSEEK_REVIEW_MODEL` | `deepseek-v4-flash` | source-review、review 和 compose 后自动审查默认模型名称。 |
+| `KNOWLEDGE_IR_SEMANTIC_MODEL` | `deepseek-v4-flash` | Knowledge Semantic Layer 默认模型名称。 |
 | `RTL_MANUAL_PARSER_TIMEOUT` | `220` | Parser Tool 超时时间，单位秒。 |
 | `RTL_MANUAL_KNOWLEDGE_TIMEOUT` | `3600` | Knowledge pipeline 内层超时时间，单位秒。 |
 | `RTL_MANUAL_KNOWLEDGE_WRAPPER_TIMEOUT` | `knowledge_timeout + 120` | Knowledge Tool 外层 wrapper 超时时间。 |
@@ -170,46 +206,209 @@ $env:PORT = "5001"
 python -m backend.run_web
 ```
 
-### 2. 生成本仓库示例 RTL 手册
+Web UI 顶部有“手册”按钮，可打开 RTL Manual workflow 面板。面板直接调用 Workflow API，可以执行：
 
-当前仓库内置示例 RTL 源码在 `rtl/rtl/`。因为工具会自动识别 `rtl` 目录下的嵌套 RTL 项目，所以 Web UI 中可以直接发送：
+```text
+Status
+Build
+Source Review
+Enhance Main
+Enhance Module
+Enhance Batch
+Compose
+Review
+```
+
+聊天入口仍可使用自然语言生成手册；显式 workflow 命令也可在聊天中使用，例如：
+
+```text
+workflow rtl_manual status project_root=./rtl top_module=arm_soc_top
+```
+
+### 2. 自然语言生成手册测试提示词
+
+CLI 和 workflow 面板适合验证固定 action；自然语言测试建议直接在 Web UI 聊天框中发送下面的提示词。当前示例项目的确定性参数是：
+
+```text
+project_root=./rtl
+rtl_inputs=rtl
+top_module=arm_soc_top
+```
+
+#### 最短生成流程
+
+用于测试自然语言能否触发完整手册生成，不额外执行源码复核或文档增强。
 
 ```text
 请为当前项目生成 RTL 代码手册。
-project_root=.
+
+参数如下：
+project_root=./rtl
 rtl_inputs=rtl
 top_module=arm_soc_top
-manual_generation_mode=deterministic
 
-从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。
-语义增强开启，模块语义和 flow 语义都全量生成。
+请自动连续执行：
+1. 从 build 阶段开始，生成 parser、knowledge、manual_context 和 base 手册。
+2. 执行 compose，生成最终公开手册。
+
+跳过 source-review。
+跳过 LLM 文档增强。
 ```
 
-`manual_generation_mode=deterministic` 是默认值，也可以不写。该模式只使用确定性 Markdown renderer，不会让 LLM 参与最终主手册生成。
+#### 全量重新生成
 
-如果希望在确定性 renderer 生成 draft 后，让 LLM 只对主手册做受控润色，可以显式指定：
+用于测试从头重跑 parser/knowledge/base/compose。
 
 ```text
-请为当前项目生成 RTL 代码手册。
-project_root=.
+请为当前项目全量重新生成 RTL 代码手册。
+
+project_root=./rtl
 rtl_inputs=rtl
 top_module=arm_soc_top
-manual_generation_mode=llm_polish
 
-从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。
+请自动连续执行。
+请强制重新执行 build，重新生成 parser_pipeline_rtl、knowledge_ir、manual_context 和 base 手册。
+build 完成后执行 compose，生成最终公开手册。
 ```
 
-`llm_polish` 只润色主手册 Markdown，不生成或改写模块页。模块页仍由确定性 renderer 生成。如果模型客户端不可用，manual 阶段会自动回退到 deterministic draft，并在回复和日志里标记 LLM polish 被跳过或回退。
+#### 带 Source Review 的完整流程
+
+用于测试证据增强链路。注意这里明确要求先 build，再 source-review，然后直接重新 enhance / compose；不要在 source-review 后再次执行完整 build。
+
+```text
+请为当前项目生成带源码复核证据的 RTL 代码手册。
+
+project_root=./rtl
+rtl_inputs=rtl
+top_module=arm_soc_top
+
+请自动连续执行。
+请按这个顺序执行：
+1. build：生成或复用 parser、knowledge、manual_context 和 base 手册。
+2. source-review：读取已有 Manual Context 和 RTL 源码，只对 `evidence_gap` / `needs_review` / `requires_rtl_source_review` 显式标记项执行受控源码复核，并把结论写回 Manual Context。
+3. enhance：基于写回后的 Manual Context 重新增强主手册和模块页。
+4. compose：生成最终公开手册。
+
+不要把 source-review 放到第一次 build 前面。
+不要在 source-review 后再次执行完整 build，避免覆盖 source-review 写回的 Manual Context。
+```
+
+#### 主手册增强
+
+用于测试 LLM 文档增强只写 enhanced fragment，再由 compose 合成最终手册。
+
+```text
+请增强当前项目 RTL 代码手册的主手册。
+
+project_root=./rtl
+top_module=arm_soc_top
+
+请自动连续执行。
+请先检查 status。如果 base 手册不存在，请先 build。
+然后执行 enhance main manual，只增强主手册，不覆盖 base。
+增强完成后执行 compose。
+```
+
+#### 批量模块页增强
+
+用于测试批量增强模块页。`retryable` 会选择 `pending/missing/stale/failed/invalid` 的模块。
+
+```text
+请批量增强当前项目 RTL 代码手册的模块页。
+
+project_root=./rtl
+top_module=arm_soc_top
+module_filter=retryable
+
+请自动连续执行。
+请先检查 status。如果 base 模块页不存在，请先 build。
+然后批量增强所有 retryable 模块页。
+每个模块单独增强，某个模块失败不要影响其他模块继续执行。
+完成后执行 compose。
+```
+
+#### 指定模块页增强
+
+用于测试单模块增强。
+
+```text
+请只增强 cpu_slot 这个模块页。
+
+project_root=./rtl
+top_module=arm_soc_top
+target_module=cpu_slot
+
+请自动连续执行。
+请执行单模块增强，不要增强其他模块。
+增强完成后执行 compose。
+```
+
+#### 状态检查和继续执行
+
+用于测试中断后恢复、状态检查和缺参追问。
+
+```text
+请检查当前 RTL 手册 workflow 状态。
+
+project_root=./rtl
+top_module=arm_soc_top
+
+请告诉我 base、source_review、enhancements、compose、review 分别是什么状态，以及下一步建议执行什么。
+```
+
+```text
+继续刚才的 RTL 手册生成流程。
+如果上一步失败，请先说明失败阶段和错误原因；
+如果可以继续，请从下一个安全阶段继续，不要重复已经成功且仍然有效的阶段。
+```
+
+自然语言入口适合测试 intent 解析、参数继承、继续执行和错误提示。若要验证底层 action 本身是否正确，优先使用 CLI 或 Web UI 的“手册”面板。
+
+如果只是想跳过某个可选动作，推荐使用“跳过 source-review / 跳过 enhance”这类表述。系统已经区分“不要自动执行某个可选动作”和“不要自动继续后续阶段”；只有后者会进入分阶段单步执行。
+
+### 3. 分层生成本仓库示例 RTL 手册
+
+当前仓库内置示例 RTL 源码在 `rtl/rtl/`。当前 parser 不做嵌套目录自动识别，参数语义是固定的：
+
+```text
+project_root = ./rtl
+rtl_inputs   = rtl
+```
+
+也就是 `project_root/rtl_inputs` 必须直接指向源码目录。对于本仓库示例，实际读取目录就是 `./rtl/rtl`。如果不需要源码复核，推荐 CLI 使用最短分层流程：
+
+```powershell
+python -m backend.manual_cli status `
+  --project-root ./rtl `
+  --top-module arm_soc_top
+
+python -m backend.manual_cli build `
+  --project-root ./rtl `
+  --rtl-inputs rtl `
+  --top-module arm_soc_top `
+  --force `
+  --knowledge-timeout 10800 `
+  --log-events
+
+python -m backend.manual_cli compose `
+  --project-root ./rtl `
+  --top-module arm_soc_top
+```
+
+`build` 会先运行或复用 Parser Tool 与 Knowledge Tool，生成 `parser_pipeline_rtl/`、`knowledge_ir/<top_module>/` 和 `manual_context/<top_module>/`，然后基于这些产物渲染 deterministic base 手册。Knowledge 的 Semantic Layer 可以使用 LLM；base 手册渲染本身不做最终写作 LLM 改写。`compose` 把 base 和有效增强片段组装成最终公开手册，并按 CLI 行为继续执行 final review。`status` 读取 enhancement manifest 和 artifact existence，不解析日志或 stdout。
 
 运行完成后重点查看：
 
 ```text
-docs/manuals/arm_soc_top_generated.md
-docs/manuals/arm_soc_top_generated_modules/
-docs/manuals/arm_soc_top_generated_review.md
+rtl/docs/manuals/arm_soc_top_base.md
+rtl/docs/manuals/arm_soc_top_base_modules/
+rtl/docs/manuals/arm_soc_top_enhancement_manifest.json
+rtl/docs/manuals/arm_soc_top_generated.md
+rtl/docs/manuals/arm_soc_top_generated_modules/
+rtl/docs/manuals/arm_soc_top_generated_review.md
 ```
 
-### 3. 为外部 RTL 项目生成手册
+### 4. 为外部 RTL 项目生成手册
 
 外部项目只需要传对三个参数：
 
@@ -226,10 +425,12 @@ top_module=<顶层模块名>
 Parser 产物       = project_root / parser_pipeline_rtl
 Knowledge 产物    = project_root / knowledge_ir/<top_module>
 Manual Context   = project_root / manual_context/<top_module>
+base 手册         = project_root / docs/manuals/<top_module>_base.md
+增强片段          = project_root / docs/manuals/<top_module>_enhanced/
 最终手册          = project_root / docs/manuals/<top_module>_generated.md
 ```
 
-例如源码目录是 `E:\arm\rtl`，希望产物写到 `E:\arm` 下，应传：
+例如源码目录是 `E:\arm\rtl`，并且希望产物写到 `E:\arm` 下，应传：
 
 ```text
 project_root=E:\arm
@@ -237,227 +438,192 @@ rtl_inputs=rtl
 top_module=arm_soc_top
 ```
 
-不要传成：
+如果希望产物写到 `E:\arm\rtl` 下，则应传：
 
 ```text
 project_root=E:\arm\rtl
 rtl_inputs=.
 ```
 
-对应 Web UI 输入示例：
+不要依赖工具自动猜测 `rtl/rtl` 这类嵌套布局。现在不会根据目录内容自动改写输入路径。
+
+不推荐在本仓库示例中传成：
 
 ```text
-请为 E:\arm\rtl 下的 RTL 源码生成代码手册。
-project_root=E:\arm
+project_root=.
 rtl_inputs=rtl
-top_module=arm_soc_top
-manual_generation_mode=deterministic
-
-从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。
-语义增强开启，模块语义和 flow 语义都全量生成。
 ```
 
-外部项目同样可以显式启用 LLM 润色：
+### 5. Source Review 和 LLM 增强
+
+`source-review` 是显式证据增强步骤，不是 Parser/Knowledge 的替代品。它依赖已有 `manual_context/<top_module>/`，因此第一次运行前必须先执行一次 `build`。
+
+使用 Source Review 的正确顺序是：
 
 ```text
-请为 E:\arm\rtl 下的 RTL 源码生成代码手册。
-project_root=E:\arm
-rtl_inputs=rtl
-top_module=arm_soc_top
-manual_generation_mode=llm_polish
-
-重新生成最终手册，然后继续后续步骤。
+build -> source-review -> enhance -> compose -> review 可选
 ```
 
-### 4. 继续执行和阶段重跑
-
-如果一个会话已经进入 workflow，中途停止或浏览器等待超时后，可以在同一个会话继续发送：
+含义如下：
 
 ```text
-继续
+第一次 build     生成或复用 parser_pipeline_rtl、knowledge_ir、manual_context，并渲染 base 手册。
+source-review   读取已有 Manual Context 和 RTL 源码，只对 evidence_gap / needs_review / requires_rtl_source_review 显式标记项做受控源码复核，把结论写回 Manual Context。
+enhance          读取写回后的 Manual Context，重新生成 enhanced fragments，不覆盖 base。
+compose          组装最终公开手册；增强片段无效时自动回退 base。
 ```
 
-如果只想从某个阶段开始重跑，直接说明阶段名：
+`source-review` 的主要产物写在 Manual Context 中：
 
 ```text
-从 knowledge 阶段开始重跑，然后继续后续步骤。
+<project_root>/manual_context/<top_module>/source_review_report.json
+<project_root>/manual_context/<top_module>/modules/<module>/source_review_report.json
 ```
 
-支持的阶段：
+它还会更新对应模块的：
 
 ```text
-references
-parser
-knowledge
-evidence
-source_review
-outline
-chapter_plan
-manual
-review
+<project_root>/manual_context/<top_module>/modules/<module>/module_context.json
+<project_root>/manual_context/<top_module>/modules/<module>/module_doc_card.json
+<project_root>/manual_context/<top_module>/manifest.json
 ```
 
-常用重跑指令：
-
-```text
-从 parser 阶段开始重跑
-从 knowledge 阶段开始重跑
-重新生成 source_review 并继续
-强制重新生成 manual 和 review
-```
-
-当前重跑控制会先生成结构化 plan，再执行：
-
-- `从 source_review 阶段开始重跑` 会从 `source_review` 开始，强制重跑 `source_review -> outline -> chapter_plan -> manual -> review`。
-- `从 references 阶段开始重跑` 会从 `references` 开始，强制重跑所有阶段。
-- `从头再跑一遍`、`全量重来`、`清空后重来` 会按全量 clean run 处理。
-- `重新生成最终手册`、`只重跑 manual 阶段`、`只生成 Markdown 正文` 才会按 `manual -> review` 处理。
-- 普通的 `生成代码手册`、`项目手册`、`代码手册` 不会被解释成从 `manual` 阶段开始。
-- 如果只说 `不要复用旧结果`，但没有说明从哪个阶段开始，且当前会话状态也不能推断，系统会要求确认，不会猜测执行。
-- 如果同时说 `继续` 和 `全量重来`，系统会要求确认，不会执行任何阶段。
-
-阶段名识别按完整 stage 优先处理，避免把 `source_review` 误判为 `review`，或把 `chapter_plan` 误判为普通 `plan/manual`。
-
-手册正文生成模式也可以在 Web 对话里切换：
-
-```text
-manual_generation_mode=deterministic 重新生成最终手册
-manual_generation_mode=llm_polish 重新生成最终手册
-用 LLM 润色手册，重新生成最终手册
-不用 LLM 润色，确定性生成手册
-```
-
-只有明确指定 `manual_generation_mode=llm_polish` 或说“用 LLM/模型润色手册”时，manual 阶段才会调用 LLM。普通“生成代码手册”不会启用 LLM polish。
-
-### 5. 使用 CLI 运行 workflow
-
-CLI 更适合本地调试、复现、计时和自动化：
+`source-review` 完成后，enhancement manifest 会标记已有 enhanced fragments 过期；后续应重新执行 `enhance` 和 `compose`。不要立刻重新执行完整 `build`，因为 build 会重建 Manual Context 并覆盖 `source_review_claims` / `source_review_report`。
 
 ```powershell
-python -m backend.manual_cli `
-  --project-root . `
+python -m backend.manual_cli build `
+  --project-root ./rtl `
   --rtl-inputs rtl `
   --top-module arm_soc_top `
-  --manual-generation-mode deterministic `
-  --force `
   --knowledge-timeout 10800 `
+  --log-events
+
+python -m backend.manual_cli source-review `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
+  --log-events
+
+python -m backend.manual_cli enhance `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
+  --main-manual `
+  --log-events
+
+python -m backend.manual_cli enhance `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
+  --all-modules `
+  --module-filter retryable `
+  --log-events
+
+python -m backend.manual_cli compose `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
   --log-events
 ```
 
-`--manual-generation-mode deterministic` 是默认值，也可以省略。
-
-外部项目示例：
+LLM 文档增强不会覆盖 base，只写增强片段；主手册增强会读取紧凑 Manual Context 摘要，模块页增强会读取对应模块的 Manual Context packet：
 
 ```powershell
-python -m backend.manual_cli `
-  --project-root E:\arm `
-  --rtl-inputs rtl `
+python -m backend.manual_cli enhance `
+  --project-root ./rtl `
   --top-module arm_soc_top `
-  --manual-generation-mode deterministic `
-  --force `
-  --knowledge-timeout 10800 `
-  --log-events
+  --main-manual
+
+python -m backend.manual_cli enhance `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
+  --target-module cpu_slot
+
+python -m backend.manual_cli enhance `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
+  --all-modules `
+  --module-filter retryable
+
+python -m backend.manual_cli enhance `
+  --project-root ./rtl `
+  --top-module arm_soc_top `
+  --modules cpu_slot,decode_unit,writeback_unit
 ```
 
-如果希望让 LLM 参与最后主手册润色：
+模块批量增强仍然按“单模块是原子目标”的方式执行：每个模块单独写入 `docs/manuals/<top_module>_enhanced/modules/<module>.md`，单个模块失败会记录到 manifest，不会覆盖 base，也不会阻止其他模块继续尝试。`--module-filter retryable` 表示只增强 `pending/missing/stale/failed/invalid` 模块，适合 source-review 后直接补齐增强片段。
 
-```powershell
-python -m backend.manual_cli `
-  --project-root . `
-  --rtl-inputs rtl `
-  --top-module arm_soc_top `
-  --manual-generation-mode llm_polish `
-  --force `
-  --knowledge-timeout 10800 `
-  --log-events
-```
+`compose` 时如果增强片段存在且 base hash 匹配，就使用增强片段；否则自动回退 base。
 
-如果同时使用 `--manual-generation-mode llm_polish --no-llm`，CLI 不会报错；manual 阶段会回退到 deterministic draft，并输出 LLM polish skipped / fallback 状态。如果使用 `--manual-generation-mode llm_polish --require-llm` 且模型客户端不可用，会沿用现有 fail-fast 行为。
-
-如果需要让 LLM 生成主手册章节，并额外润色模块页，可以使用 `llm_section_generate_with_page_polish`：
-
-```powershell
-python -m backend.manual_cli `
-  --project-root . `
-  --rtl-inputs rtl `
-  --top-module arm_soc_top `
-  --manual-generation-mode llm_section_generate_with_page_polish `
-  --llm-module-page-scope top_and_direct `
-  --llm-module-page-limit 20 `
-  --force `
-  --knowledge-timeout 10800 `
-  --log-events
-```
-
-模块页润色由下面三个参数控制：
+### 6. CLI 子命令
 
 ```text
---llm-module-page-scope <scope>
-                            仅在 manual_generation_mode=llm_section_generate_with_page_polish 时生效。
-                            none：不润色模块页。
-                            top_only：只润色顶层模块页。
-                            top_and_direct：润色顶层模块页和顶层直接子模块页，默认值。
-                            all：按模块列表顺序润色所有模块页，仍受 limit 限制。
-                            allowlist：只润色 allowlist 指定的模块页。
---llm-module-page-limit <n>
-                            最多润色多少个模块页，默认 20；设为 0 等同于不润色模块页。
---llm-module-page-allowlist <list>
-                            当 scope=allowlist 时使用，逗号分隔模块名，例如 arm_soc_top,IONet_slot,cpu_slot。
+status        读取 manifest 和 artifact 状态。
+build          跑 parser/knowledge/evidence/outline/chapter_plan，并生成 deterministic base。Knowledge Semantic Layer 可使用 LLM；base 渲染不做写作 LLM 改写。
+source-review 依赖已有 Manual Context，只复核显式标记的不确定项，写回 Manual Context，并标记 enhanced stale。执行后应重新 enhance / compose。
+enhance        增强整篇主手册、单个模块页或批量模块页，结果写入 enhanced fragments；主手册增强会注入 Manual Context 摘要。
+compose        组装最终手册和模块页，并运行最终审查。
+review         单独审查已 compose 的最终手册和模块页。
 ```
-
-注意：`llm_section_generate_with_page_polish` 不表示默认润色所有模块页。默认 `top_and_direct` 只会润色顶层模块和顶层直接子模块；其他模块页仍会由确定性 renderer 正常生成。日志里的 `manual_module_pages` 计数表示写出了多少个模块页，`page_llm_success_count` 才表示其中多少页实际经过 LLM 润色。
-
-如果确实要全量润色所有模块页，需要显式使用 `all`，并把 limit 调到不小于模块数：
-
-```powershell
-python -m backend.manual_cli `
-  --project-root . `
-  --rtl-inputs rtl `
-  --top-module arm_soc_top `
-  --manual-generation-mode llm_section_generate_with_page_polish `
-  --llm-module-page-scope all `
-  --llm-module-page-limit 200 `
-  --force `
-  --knowledge-timeout 10800 `
-  --log-events
-```
-
-全量模块页润色会对每个选中模块页调用一次 LLM，耗时和费用会随模块数增加。
 
 常用参数：
 
 ```text
---project-root <path>       RTL 项目根目录，默认当前仓库根目录。
---rtl-inputs <path>         RTL 输入目录，默认 rtl。
---top-module <name>         顶层模块名，必填。
---audience newcomer         newcomer | maintainer | reviewer。
---evidence-mode project     主证据模式。
---enrich-modules <list>     Semantic Layer 模块白名单，逗号分隔；空值表示全部模块。
---manual-generation-mode <mode>
-                            deterministic | llm_polish | llm_section_generate | llm_section_generate_with_page_polish。
-                            默认 deterministic；llm_polish 会先确定性生成 draft，再让 LLM 润色主手册。
---llm-module-page-scope <scope>
-                            none | top_only | top_and_direct | all | allowlist，默认 top_and_direct。
---llm-module-page-limit <n>
-                            模块页 LLM 润色数量上限，默认 20。
---llm-module-page-allowlist <list>
-                            scope=allowlist 时的模块白名单，逗号分隔。
---output <path>             自定义 Markdown 输出路径。
---force                     强制重新生成，不复用已有产物。
---no-llm                    跳过 source_review 模型调用。
---require-llm               没有 API key 或模型客户端时直接失败。
---start-stage <stage>       从指定阶段开始。
---state-out <path>          保存最终 workflow state。
---parser-timeout <seconds>  覆盖 Parser Tool 超时时间。
---knowledge-timeout <sec>   覆盖 Knowledge Tool 超时时间。
---log-events                写入 data/logs 事件日志。
---quiet                     只输出简要阶段进度。
---verbose                   输出完整阶段回复。
+status:
+  --project-root <path>
+  --top-module <name>
+  --log-events
+
+build:
+  --project-root <path>
+  --rtl-inputs <path>
+  --top-module <name>
+  --audience newcomer|maintainer|reviewer
+  --evidence-mode project|reading_path
+  --enrich-modules <list>
+  --force
+  --parser-timeout <seconds>
+  --knowledge-timeout <seconds>
+  --log-events
+
+source-review / enhance:
+  --project-root <path>
+  --top-module <name>
+  --model <model>   # source-review 默认 deepseek-v4-flash；enhance 默认 deepseek-v4-pro
+  --base-url <url>
+  --api-key <key>
+  --no-llm
+  --require-llm
+
+enhance target:
+  --main-manual
+  --target-module <module>
+  --all-modules
+  --modules <module_a,module_b>
+  --module-filter all|pending|missing|stale|failed|invalid|success|retryable|not-success
+
+compose:
+  --project-root <path>
+  --top-module <name>
+  --model <model>   # compose 后自动 review 默认 deepseek-v4-flash
+  --base-url <url>
+  --api-key <key>
+  --no-llm
+  --require-llm
+  --log-events
+
+review:
+  --project-root <path>
+  --top-module <name>
+  --model <model>   # 默认 deepseek-v4-flash
+  --base-url <url>
+  --api-key <key>
+  --no-llm
+  --require-llm
+  --log-events
 ```
 
-### 6. Web API
+所有 CLI 子命令现在都通过 `WorkflowRuntime` 调度；`manual_cli.py` 只是兼容入口，实际实现位于 `backend/workflows/rtl_manual/cli.py`。
 
-Web UI 背后主要调用 `/chat`：
+### 7. Web API
+
+Web UI 背后保留聊天接口 `/chat`：
 
 ```http
 POST /chat
@@ -473,11 +639,11 @@ Content-Type: application/json
 }
 ```
 
-全量生成并启用 LLM polish 的请求示例：
+全量生成请求示例：
 
 ```json
 {
-  "message": "请为当前项目生成 RTL 代码手册。\nproject_root=.\nrtl_inputs=rtl\ntop_module=arm_soc_top\nmanual_generation_mode=llm_polish\n\n从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。"
+  "message": "请为当前项目生成 RTL 代码手册。\nproject_root=./rtl\nrtl_inputs=rtl\ntop_module=arm_soc_top\n\n从 references 阶段开始重跑，强制重新生成所有阶段，然后继续后续步骤。"
 }
 ```
 
@@ -498,7 +664,68 @@ POST   /new_chat
 POST   /reset
 ```
 
-### 7. Workflow 阶段说明
+Workflow Runtime API：
+
+```text
+GET  /api/workflows
+GET  /api/workflows/<workflow_id>/actions
+GET  /api/workflows/<workflow_id>/status
+POST /api/workflows/<workflow_id>/actions/<action>
+```
+
+查询 workflow：
+
+```http
+GET /api/workflows
+```
+
+查询 RTL Manual 状态：
+
+```http
+GET /api/workflows/rtl_manual/status?project_root=./rtl&top_module=arm_soc_top
+```
+
+执行 build：
+
+```http
+POST /api/workflows/rtl_manual/actions/build
+Content-Type: application/json
+
+{
+  "project_root": "./rtl",
+  "rtl_inputs": "rtl",
+  "top_module": "arm_soc_top",
+  "force": true
+}
+```
+
+增强单个模块页：
+
+```http
+POST /api/workflows/rtl_manual/actions/enhance_module
+Content-Type: application/json
+
+{
+  "project_root": ".",
+  "top_module": "arm_soc_top",
+  "target_module": "cpu_slot"
+}
+```
+
+API 直接返回 `WorkflowActionResult` 或 `WorkflowStatus` 的 JSON 结构。Web UI 的“手册”面板和聊天中的显式 workflow 命令最终都走同一个 `WorkflowRuntime`。
+
+### 8. Workflow Runtime 和旧阶段说明
+
+标准 workflow 注册在：
+
+```text
+backend/workflows/registry.py
+backend/workflows/runtime.py
+backend/workflows/types.py
+backend/workflows/rtl_manual/actions.py
+```
+
+`WorkflowRuntime` 只负责注册、查询、调用和结构化错误返回，不理解 RTL manual 内部 parser、knowledge、compose 等业务细节。
 
 手册 workflow 是固定阶段表，定义在 `backend/manual_workflow.py`：
 
@@ -506,11 +733,12 @@ POST   /reset
 2. `parser`：运行 Parser Tool，生成 `parser_pipeline_rtl/`。
 3. `knowledge`：运行 Knowledge Tool，生成 `knowledge_ir/<top_module>/` 和 `manual_context/<top_module>/`。
 4. `evidence`：从 Manual Context 建立主证据索引。
-5. `source_review`：对需要源码复核的项做受控 AI review，并写回 Manual Context。
-6. `outline`：生成手册目录。
-7. `chapter_plan`：生成章节写作计划。
-8. `manual`：渲染主手册和模块页。
-9. `review`：检查最终手册。
+5. `outline`：生成手册目录。
+6. `chapter_plan`：生成章节写作计划。
+7. `manual`：渲染 base 手册和模块页，并 compose 最终手册。
+8. `review`：检查最终手册。
+
+`manual_workflow.py` 仍是聊天式旧适配层。源码复核不再是默认阶段；需要时通过 runtime action / CLI / Web UI 面板的 `source_review` 显式运行。注意：`source_review` 必须在已有 `manual_context/<top_module>/` 后运行，所以完整源码复核链路是 `build -> source_review -> enhance -> compose`，不是从空项目直接先跑 `source_review`。
 
 简单 Agent 调试入口仍然保留：
 
@@ -521,27 +749,26 @@ python -m backend.agent_core
 
 ## 统计全量运行时间
 
-`backend.manual_timing` 是专门的性能/回归分析入口。它会按固定 workflow 从 `references` 开始做一次全量强制重跑，逐阶段记录耗时、状态、重要输出路径和最终产物位置，并写出 JSON / Markdown timing report。它适合用来回答：
+`backend.manual_timing` 是专门的性能/回归分析入口。它会强制执行一次 deterministic base build，记录耗时、状态、重要输出路径和最终产物位置，并写出 JSON / Markdown timing report。它适合用来回答：
 
-- Parser、Knowledge、Source Review、Manual、Review 各阶段分别耗时多久。
-- 调整 `RTL_MANUAL_SEMANTIC_WORKERS`、timeout 或 `manual_generation_mode` 后是否变快。
+- Parser、Knowledge、Evidence、Outline、Chapter Plan、Base Render 各阶段分别耗时多久。
+- 调整 `RTL_MANUAL_SEMANTIC_WORKERS` 或 timeout 后是否变快。
 - 某次全量重跑失败在哪个阶段，最后错误是什么。
-- 自动化环境里是否稳定生成了 parser、knowledge、manual、review 产物。
+- 自动化环境里是否稳定生成了 parser、knowledge 和 base manual 产物。
 
 直接运行：
 
 ```powershell
 python -m backend.manual_timing `
-  --project-root . `
+  --project-root ./rtl `
   --rtl-inputs rtl `
   --top-module arm_soc_top `
-  --manual-generation-mode deterministic `
   --knowledge-timeout 10800 `
   --report-dir data/logs `
   --log-events
 ```
 
-`manual_timing` 现在和 Web/CLI 一样使用 `ManualIntent -> WorkflowPlan -> apply_manual_plan_to_state()` 初始化 workflow state；区别是它固定按全量强制重跑来计时，并在每个 stage 后记录 timing item。
+`manual_timing` 固定统计 deterministic base build；它不会执行 source-review、enhance 或 compose 增强路径。适合做 parser/knowledge/base render 的性能回归。
 
 PowerShell 计时示例：
 
@@ -549,7 +776,7 @@ PowerShell 计时示例：
 $body = @{
   message = @"
 请为 rtl 目录全量重新生成 RTL 代码手册。
-project_root=.
+project_root=./rtl
 rtl_inputs=rtl
 top_module=arm_soc_top
 
@@ -599,9 +826,13 @@ $elapsed
 rtl/parser_pipeline_rtl
 rtl/knowledge_ir/<top_module>
 rtl/manual_context/<top_module>
-docs/manuals/<top_module>_generated.md
-docs/manuals/<top_module>_generated_modules
-docs/manuals/<top_module>_generated_review.md
+rtl/docs/manuals/<top_module>_base.md
+rtl/docs/manuals/<top_module>_base_modules
+rtl/docs/manuals/<top_module>_enhanced
+rtl/docs/manuals/<top_module>_enhancement_manifest.json
+rtl/docs/manuals/<top_module>_generated.md
+rtl/docs/manuals/<top_module>_generated_modules
+rtl/docs/manuals/<top_module>_generated_review.md
 ```
 
 如果要冷启动全量重跑，建议先把这些产物移动到备份目录，而不是直接删除。
@@ -780,6 +1011,63 @@ rtl/manual_context/arm_soc_top
 继续
 ```
 
+## 源码阅读建议
+
+如果要审查当前架构，推荐按以下顺序阅读：
+
+1. Workflow Runtime 抽象：
+
+```text
+backend/workflows/types.py
+backend/workflows/runtime.py
+backend/workflows/registry.py
+```
+
+2. RTL Manual workflow facade 和 artifact 状态：
+
+```text
+backend/workflows/rtl_manual/actions.py
+backend/workflows/rtl_manual/manifest.py
+backend/workflows/rtl_manual/artifacts.py
+```
+
+3. CLI 入口：
+
+```text
+backend/manual_cli.py
+backend/workflows/rtl_manual/cli.py
+```
+
+4. Skill metadata 和选择逻辑：
+
+```text
+backend/skills/spec.py
+backend/skills/registry.py
+backend/skills/catalog/rtl-manual-generation/skill.json
+```
+
+5. Agent 调度和 Web API：
+
+```text
+backend/agent_runner.py
+backend/app.py
+```
+
+6. Web UI 面板：
+
+```text
+frontend/templates/index.html
+frontend/static/style.css
+```
+
+7. 行为测试：
+
+```text
+backend/tests/test_manual_workflow.py
+backend/tests/test_app_conversation_state.py
+backend/tests/test_skill_registry.py
+```
+
 ## 开发和测试
 
 语法检查：
@@ -794,6 +1082,12 @@ python -m py_compile `
   backend\manual_planner.py `
   backend\manual_workflow.py `
   backend\manual_cli.py `
+  backend\workflows\types.py `
+  backend\workflows\registry.py `
+  backend\workflows\runtime.py `
+  backend\workflows\rtl_manual\actions.py `
+  backend\workflows\rtl_manual\manifest.py `
+  backend\workflows\rtl_manual\cli.py `
   backend\context_manager.py `
   backend\event_logger.py
 ```
@@ -814,6 +1108,12 @@ python -B -m unittest `
 
 - `ManualIntent` 阶段识别、重跑策略、确认机制和 `WorkflowPlan` 范围规划。
 - manual workflow 阶段顺序和重跑逻辑。
+- RTL manual CLI 子命令解析、base/enhanced/final artifact 分层和 manifest hash 校验。
+- Workflow Runtime 注册、action 调用、结构化 status/result 和错误返回。
+- Flask Workflow API 的 workflow/actions/status/action 调用。
+- AgentRunner 显式 workflow 命令调度。
+- RTL Manual Web UI 面板入口和 API 绑定。
+- `source-review` 显式失效 base/enhanced 状态，以及 compose 对 stale/failed/missing 增强片段的 base 回退。
 - parser 生成后 artifact 路径刷新。
 - skill selector 确定性打分。
 - conversation 级别的 manual workflow 状态隔离。
@@ -822,7 +1122,16 @@ python -B -m unittest `
 
 ## 设计说明
 
-RTL 手册生成使用固定 workflow，而不是完全依赖提示词驱动，这是有意设计。
+LX-Agent 当前按“Agent Core + Skill + Workflow Runtime + Tool Registry”组织能力。
+
+任务分为两类：
+
+```text
+开放式任务 -> General Agent Path
+强流程任务 -> Workflow Runtime
+```
+
+RTL 手册生成属于强流程任务，使用固定 workflow，而不是完全依赖提示词驱动，这是有意设计。
 
 原因：
 
@@ -833,7 +1142,9 @@ RTL 手册生成使用固定 workflow，而不是完全依赖提示词驱动，�
 
 因此：
 
-- Skill 描述能力、规则和边界。
+- Skill 描述能力、规则和边界；workflow skill 额外声明 `workflow_id` 和 `actions`。
+- AgentRunner 负责普通问答、工具调用和显式 workflow 命令调度。
+- WorkflowRuntime 负责固定 workflow 的统一注册、查询、执行和状态返回。
 - Intent Parser 负责把自然语言转换成结构化 `ManualIntent`。
 - Planner 负责把 intent 校验并转换成确定性的 `WorkflowPlan`。
 - Workflow Executor 负责阶段顺序、状态转移、产物检查、重跑、继续执行和安全边界。
@@ -845,7 +1156,10 @@ RTL 手册生成使用固定 workflow，而不是完全依赖提示词驱动，�
 - `handle_manual_workflow()` 仍保留旧签名和旧返回值 `(reply, state)`，用于兼容 `app.py`、既有测试和可能存在的旧调用方。
 - 新增 `handle_manual_workflow_structured()` 返回 `(reply, state, intent_dict, plan_dict)`，`AgentRunner` 使用这个新入口保存 `last_manual_intent` 和 `current_manual_plan`。
 - `AgentSession` 和 `AgentRunResult` 只新增可选字段，默认值为 `None`，旧测试和旧构造方式不需要立即传入 intent/plan。
-- `manual_cli.py` 和 `manual_timing.py` 现在也通过 `ManualIntent -> WorkflowPlan -> apply_manual_plan_to_state()` 初始化 workflow state；它们仍保留原有逐阶段 loop 和输出/计时方式。
+- `manual_cli.py` 是兼容入口，实际实现下沉到 `workflows/rtl_manual/cli.py`；所有 RTL Manual CLI 子命令都通过 `WorkflowRuntime` 调度。
+- `AgentRunner` 支持显式 workflow 命令，但低置信度自然语言仍保留旧 manual workflow 适配路径。
+- Flask 已提供 `/api/workflows/*`，Web UI 的“手册”面板通过这些 API 调用 runtime。
+- `manual_timing.py` 保留为 base 构建计时入口，只统计 deterministic base build。
 - `_run_current_stage()` 和各阶段 handler 没有大规模改写，仍读取旧 state 字段，例如 `stage`、`force_stages`、`force_regenerate`、`completed_stages`。
 - `apply_manual_plan_to_state()` 是新 plan 到旧 state 的适配层：它写入 `stage`、`restart_stage`、`force_stages`、`auto_run` 等旧字段，并清理对应阶段旧产物。
 - `_should_force_stage()` 仍兼容 `force_regenerate`，但新的 plan 优先写入精确的 `force_stages`，避免全局 force 造成范围不清。
@@ -857,13 +1171,14 @@ RTL 手册生成使用固定 workflow，而不是完全依赖提示词驱动，�
 
 ## 当前限制
 
-- Web UI 当前等待 `/chat` 返回，长耗时阶段还没有实时进度条。
+- Web UI 和 Workflow API 当前都是同步请求，长耗时 workflow 还没有任务队列和实时进度条。
+- 当前不支持同一个 `project_root + top_module` 的多个并发 run；`run_id` 字段已保留，但第一版主要按 manifest 状态工作。
 - 大型 RTL 项目的全量 Semantic Layer 仍可能耗时较长。
 - 当前项目定位为本地开发工具，不是生产环境部署方案。
 
 ## 安全注意事项
 
-- 不要删除 `rtl/rtl/` 源码目录。
+- 不要删除 `rtl/rtl/` 源码目录，这是测试目录。
 - 全量重跑前建议备份已有生成产物。
 - 不要提交包含真实 API key 的 `.env`。
-- `rtl/knowledge_ir/`、`rtl/manual_context/`、`docs/manuals/`、`data/logs/` 通常是生成或运行时产物，是否纳入版本管理需要明确决定。
+- `rtl/parser_pipeline_rtl/`、`rtl/knowledge_ir/`、`rtl/manual_context/`、`rtl/docs/manuals/`、`data/logs/` 通常是生成或运行时产物，不要提交到版本管理。

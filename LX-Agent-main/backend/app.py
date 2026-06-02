@@ -6,6 +6,7 @@ import threading
 import uuid
 import zipfile
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 from datetime import datetime
 
@@ -24,12 +25,16 @@ try:
     from .context_manager import maybe_compress_context
     from .manual_workflow import handle_manual_workflow, should_handle_manual_workflow
     from .event_logger import log_event, read_events
+    from .workflows.runtime import WorkflowRuntime
+    from .workflows.types import WorkflowContext
 except ImportError:
     from agent_runner import AgentRunner, AgentSession
     from tools import select_tools_for_task
     from context_manager import maybe_compress_context
     from manual_workflow import handle_manual_workflow, should_handle_manual_workflow
     from event_logger import log_event, read_events
+    from workflows.runtime import WorkflowRuntime
+    from workflows.types import WorkflowContext
 
 dotenv.load_dotenv()
 
@@ -135,6 +140,7 @@ agent_runner = AgentRunner(
     base_dir=BASE_DIR,
     system_message=SYSTEM_MESSAGE,
 )
+workflow_runtime = WorkflowRuntime()
 
 
 # ====================== 基础函数 ======================
@@ -351,7 +357,6 @@ def save_current_conversation():
 
     with STATE_LOCK:
         if current_conversation_id is None:
-            create_new_conversation()
             return
         conversation_id = current_conversation_id
         conversation_messages = list(messages)
@@ -614,7 +619,7 @@ def call_model(active_messages, active_tools):
         params["tools"] = active_tools
         params["tool_choice"] = "auto"
 
-    return client.chat.completions.create(**params)
+    return client.chat.completions.create(**params) # type: ignore
 
 
 def build_debug_tip(active_skill_names, used_tools):
@@ -949,11 +954,6 @@ def run_agent_once(user_input, conversation_id=None):
 
 @app.route("/")
 def index():
-    global current_conversation_id
-
-    if current_conversation_id is None:
-        create_new_conversation()
-
     return render_template("index.html")
 
 
@@ -988,6 +988,47 @@ def chat():
         return jsonify({
             "reply": f"出错了：{str(e)}"
         })
+
+
+def workflow_context_for_request(payload=None):
+    payload = payload or {}
+    conversation_id = payload.get("conversation_id") or request.args.get("conversation_id") or current_conversation_id or "workflow_api"
+    return WorkflowContext(
+        session_id=str(conversation_id),
+        run_id=str(conversation_id),
+        event_logger=lambda event_type, **event_payload: log_event(conversation_id, event_type, **event_payload),
+        model_client=client,
+        model=MODEL,
+    )
+
+
+@app.route("/api/workflows", methods=["GET"])
+def api_list_workflows():
+    return jsonify({"workflows": workflow_runtime.list_workflows()})
+
+
+@app.route("/api/workflows/<workflow_id>/actions", methods=["GET"])
+def api_workflow_actions(workflow_id):
+    actions = workflow_runtime.get_actions(workflow_id)
+    if not actions:
+        return jsonify({"workflow_id": workflow_id, "actions": []}), 404
+    return jsonify({"workflow_id": workflow_id, "actions": actions})
+
+
+@app.route("/api/workflows/<workflow_id>/status", methods=["GET"])
+def api_workflow_status(workflow_id):
+    params = dict(request.args.items())
+    status = workflow_runtime.get_status(workflow_id, params, workflow_context_for_request())
+    return jsonify(asdict(status)), 200 if status.ok else 400
+
+
+@app.route("/api/workflows/<workflow_id>/actions/<action>", methods=["POST"])
+def api_run_workflow_action(workflow_id, action):
+    payload = request.get_json() or {}
+    params = dict(payload)
+    params.pop("conversation_id", None)
+    result = workflow_runtime.run_action(workflow_id, action, params, workflow_context_for_request(payload))
+    return jsonify(asdict(result)), 200 if result.ok else 400
 
 
 @app.route("/upload", methods=["POST"])
@@ -1394,8 +1435,10 @@ def delete_conversation(conversation_id):
             deleting_current = current_conversation_id == conversation_id
 
         if deleting_current:
-            manual_workflow_state = None
-            create_new_conversation()
+            with STATE_LOCK:
+                current_conversation_id = None
+                messages = [SYSTEM_MESSAGE]
+                manual_workflow_state = None
 
         return jsonify({
             "message": "聊天记录已删除。",
@@ -1462,11 +1505,15 @@ def rename_conversation(conversation_id):
 
 @app.route("/new_chat", methods=["POST"])
 def new_chat():
-    conversation_id = create_new_conversation()
-    log_event(conversation_id, "new_chat_route")
+    global current_conversation_id, messages, manual_workflow_state
+
+    with STATE_LOCK:
+        current_conversation_id = None
+        messages = [SYSTEM_MESSAGE]
+        manual_workflow_state = None
 
     return jsonify({
-        "conversation_id": conversation_id,
+        "conversation_id": None,
         "messages": visible_messages_only(messages),
         "conversations": list_conversations()
     })
@@ -1476,10 +1523,14 @@ def new_chat():
 def reset():
     global messages, manual_workflow_state
 
-    messages = [SYSTEM_MESSAGE]
-    manual_workflow_state = None
-    save_current_conversation()
-    log_event(current_conversation_id, "conversation_reset")
+    with STATE_LOCK:
+        active_id = current_conversation_id
+        messages = [SYSTEM_MESSAGE]
+        manual_workflow_state = None
+
+    if active_id:
+        save_conversation_state(active_id, messages, manual_workflow_state)
+        log_event(active_id, "conversation_reset")
 
     return jsonify({
         "message": "当前聊天已清空。",
@@ -1487,6 +1538,6 @@ def reset():
         "conversations": list_conversations()
     })
 
-
+## 调试使用，不要在生产环境中运行
 if __name__ == "__main__":
     app.run(debug=True)

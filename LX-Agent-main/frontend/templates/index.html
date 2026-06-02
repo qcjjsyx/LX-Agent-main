@@ -45,6 +45,7 @@
             </div>
 
             <div class="topbar-actions">
+                <button class="workflow-btn" onclick="openWorkflowPanel()">手册</button>
                 <button class="log-btn" onclick="openLogPanel()">日志</button>
                 <div class="status">
                     <span></span>
@@ -119,6 +120,69 @@
     </div>
 </aside>
 
+<div id="workflow-backdrop" class="workflow-backdrop" onclick="closeWorkflowPanel()"></div>
+<aside id="workflow-panel" class="workflow-panel" aria-hidden="true">
+    <div class="workflow-panel-header">
+        <div>
+            <h2>RTL Manual</h2>
+            <p>Workflow Runtime</p>
+        </div>
+        <button class="workflow-close-btn" onclick="closeWorkflowPanel()">关闭</button>
+    </div>
+    <div class="workflow-form">
+        <label>
+            <span>project_root</span>
+            <input id="workflow-project-root" value="./rtl">
+        </label>
+        <label>
+            <span>rtl_inputs</span>
+            <input id="workflow-rtl-inputs" value="rtl">
+        </label>
+        <label>
+            <span>top_module</span>
+            <input id="workflow-top-module" value="arm_soc_top">
+        </label>
+        <label>
+            <span>target_module</span>
+            <input id="workflow-target-module" placeholder="模块页增强时填写">
+        </label>
+        <label>
+            <span>target_modules</span>
+            <input id="workflow-target-modules" placeholder="批量增强：child,decode,writeback">
+        </label>
+        <label>
+            <span>module_filter</span>
+            <select id="workflow-module-filter">
+                <option value="retryable">retryable</option>
+                <option value="all">all</option>
+                <option value="pending">pending</option>
+                <option value="missing">missing</option>
+                <option value="stale">stale</option>
+                <option value="failed">failed</option>
+                <option value="invalid">invalid</option>
+                <option value="not-success">not-success</option>
+            </select>
+        </label>
+        <label class="workflow-check">
+            <input id="workflow-force" type="checkbox">
+            <span>force 重新生成</span>
+        </label>
+        <div class="workflow-actions">
+            <button onclick="refreshWorkflowStatus()">Status</button>
+            <button onclick="runWorkflowAction('build')">Build</button>
+            <button onclick="runWorkflowAction('source_review')">Source Review</button>
+            <button onclick="runWorkflowAction('enhance_main')">Enhance Main</button>
+            <button onclick="runWorkflowAction('enhance_module')">Enhance Module</button>
+            <button onclick="runWorkflowAction('enhance_modules')">Enhance Batch</button>
+            <button onclick="runWorkflowAction('compose')">Compose</button>
+            <button onclick="runWorkflowAction('review')">Review</button>
+        </div>
+    </div>
+    <div id="workflow-status" class="workflow-status-box">
+        <div class="workflow-empty">尚未加载状态</div>
+    </div>
+</aside>
+
 <script>
 const chatBox = document.getElementById("chat-box");
 const input = document.getElementById("user-input");
@@ -129,6 +193,9 @@ const logPanel = document.getElementById("log-panel");
 const logBackdrop = document.getElementById("log-backdrop");
 const logList = document.getElementById("log-list");
 const logSubtitle = document.getElementById("log-subtitle");
+const workflowPanel = document.getElementById("workflow-panel");
+const workflowBackdrop = document.getElementById("workflow-backdrop");
+const workflowStatus = document.getElementById("workflow-status");
 
 let currentConversationId = null;
 
@@ -294,6 +361,108 @@ function closeLogPanel() {
 function refreshLogsIfOpen() {
     if (logPanel.classList.contains("show")) {
         refreshLogs();
+    }
+}
+
+function workflowParams() {
+    return {
+        project_root: document.getElementById("workflow-project-root").value.trim() || "./rtl",
+        rtl_inputs: document.getElementById("workflow-rtl-inputs").value.trim() || "rtl",
+        top_module: document.getElementById("workflow-top-module").value.trim(),
+        target_module: document.getElementById("workflow-target-module").value.trim(),
+        target_modules: document.getElementById("workflow-target-modules").value.trim(),
+        module_filter: document.getElementById("workflow-module-filter").value,
+        force: document.getElementById("workflow-force").checked,
+        conversation_id: currentConversationId
+    };
+}
+
+function renderWorkflowPayload(payload) {
+    workflowStatus.innerHTML = "";
+    const pre = document.createElement("pre");
+    pre.className = "workflow-json";
+    pre.innerText = JSON.stringify(payload, null, 2);
+    workflowStatus.appendChild(pre);
+}
+
+function openWorkflowPanel() {
+    workflowPanel.classList.add("show");
+    workflowBackdrop.classList.add("show");
+    workflowPanel.setAttribute("aria-hidden", "false");
+    refreshWorkflowStatus();
+}
+
+function closeWorkflowPanel() {
+    workflowPanel.classList.remove("show");
+    workflowBackdrop.classList.remove("show");
+    workflowPanel.setAttribute("aria-hidden", "true");
+}
+
+async function refreshWorkflowStatus() {
+    const params = workflowParams();
+    if (!params.top_module) {
+        workflowStatus.innerHTML = '<div class="workflow-empty">请填写 top_module</div>';
+        return;
+    }
+
+    workflowStatus.innerHTML = '<div class="workflow-empty">正在加载状态...</div>';
+    const query = new URLSearchParams({
+        project_root: params.project_root,
+        top_module: params.top_module
+    });
+    if (params.conversation_id) {
+        query.set("conversation_id", params.conversation_id);
+    }
+
+    try {
+        const response = await fetch("/api/workflows/rtl_manual/status?" + query.toString());
+        const data = await response.json();
+        renderWorkflowPayload(data);
+    } catch (error) {
+        workflowStatus.innerHTML = '<div class="workflow-empty">状态加载失败：' + error + '</div>';
+    }
+}
+
+async function runWorkflowAction(action) {
+    const params = workflowParams();
+    if (!params.top_module) {
+        workflowStatus.innerHTML = '<div class="workflow-empty">请填写 top_module</div>';
+        return;
+    }
+    if (action === "enhance_module" && !params.target_module) {
+        workflowStatus.innerHTML = '<div class="workflow-empty">请填写 target_module</div>';
+        return;
+    }
+
+    const body = {
+        project_root: params.project_root,
+        top_module: params.top_module,
+        conversation_id: params.conversation_id
+    };
+    if (action === "build") {
+        body.rtl_inputs = params.rtl_inputs;
+        body.force = params.force;
+    }
+    if (action === "enhance_module") {
+        body.target_module = params.target_module;
+    }
+    if (action === "enhance_modules") {
+        body.target_modules = params.target_modules;
+        body.module_filter = params.target_modules ? "all" : params.module_filter;
+    }
+
+    workflowStatus.innerHTML = '<div class="workflow-empty">正在执行 ' + action + '...</div>';
+    try {
+        const response = await fetch("/api/workflows/rtl_manual/actions/" + action, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        renderWorkflowPayload(data);
+        refreshLogsIfOpen();
+    } catch (error) {
+        workflowStatus.innerHTML = '<div class="workflow-empty">执行失败：' + error + '</div>';
     }
 }
 

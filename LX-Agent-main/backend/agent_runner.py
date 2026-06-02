@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+import shlex
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +10,14 @@ try:
     from .context_manager import maybe_compress_context
     from .manual_workflow import handle_manual_workflow_structured, should_handle_manual_workflow
     from .tools import select_tools_for_task
+    from .workflows.runtime import WorkflowRuntime
+    from .workflows.types import WorkflowContext
 except ImportError:  # pragma: no cover - supports direct script execution
     from context_manager import maybe_compress_context
     from manual_workflow import handle_manual_workflow_structured, should_handle_manual_workflow
     from tools import select_tools_for_task
+    from workflows.runtime import WorkflowRuntime
+    from workflows.types import WorkflowContext
 
 
 @dataclass
@@ -126,6 +131,72 @@ def build_skill_context(active_skill_instructions, active_reference_files):
     return "\n\n".join(parts)
 
 
+WORKFLOW_ACTION_ALIASES = {
+    "source-review": "source_review",
+    "source_review": "source_review",
+    "enhance-main": "enhance_main",
+    "enhance_main": "enhance_main",
+    "enhance-module": "enhance_module",
+    "enhance_module": "enhance_module",
+    "enhance-modules": "enhance_modules",
+    "enhance_modules": "enhance_modules",
+    "target-module": "target_module",
+    "target_module": "target_module",
+    "target-modules": "target_modules",
+    "target_modules": "target_modules",
+    "module-filter": "module_filter",
+    "module_filter": "module_filter",
+}
+
+
+def parse_explicit_workflow_command(user_input: str) -> dict[str, Any] | None:
+    text = (user_input or "").strip()
+    if not text:
+        return None
+
+    lowered = text.lower()
+    explicit = lowered.startswith("/workflow") or "workflow" in lowered or "workflow_id=" in lowered
+    if not explicit:
+        return None
+
+    try:
+        tokens = shlex.split(text)
+    except ValueError:
+        tokens = text.split()
+
+    workflow_id = ""
+    action = ""
+    params: dict[str, Any] = {}
+    positional = []
+
+    for token in tokens:
+        if token in {"/workflow", "workflow"}:
+            continue
+        if "=" in token:
+            key, value = token.split("=", 1)
+            key = WORKFLOW_ACTION_ALIASES.get(key.strip().lstrip("-").replace("-", "_"), key.strip().lstrip("-").replace("-", "_"))
+            if key in {"workflow", "workflow_id"}:
+                workflow_id = value
+            elif key == "action":
+                action = WORKFLOW_ACTION_ALIASES.get(value, value)
+            else:
+                params[key] = value
+            continue
+        positional.append(token)
+
+    if not workflow_id and positional:
+        workflow_id = positional.pop(0)
+    if not action and positional:
+        raw_action = positional.pop(0)
+        action = WORKFLOW_ACTION_ALIASES.get(raw_action, raw_action)
+
+    if workflow_id != "rtl_manual" or not action:
+        return None
+
+    action = WORKFLOW_ACTION_ALIASES.get(action, action)
+    return {"workflow_id": workflow_id, "action": action, "params": params}
+
+
 class AgentRunner:
     def __init__(self, client, model: str, base_dir: str | Path, system_message: dict[str, Any]):
         self.client = client
@@ -176,6 +247,19 @@ class AgentRunner:
 
         log_event("chat_request", message=user_input)
 
+        workflow_command = parse_explicit_workflow_command(user_input)
+        if workflow_command:
+            return self._run_workflow_command(
+                workflow_command=workflow_command,
+                user_input=user_input,
+                messages=messages,
+                manual_state=manual_state,
+                last_manual_intent=last_manual_intent,
+                current_manual_plan=current_manual_plan,
+                conversation_id=conversation_id,
+                log_event=log_event,
+            )
+
         if should_handle_manual_workflow(user_input, manual_state):
             return self._run_manual_workflow(
                 user_input=user_input,
@@ -195,6 +279,87 @@ class AgentRunner:
             current_manual_plan=current_manual_plan,
             log_event=log_event,
         )
+
+    def run_workflow_action(self, workflow_id: str, action: str, params: dict[str, Any], conversation_id=None, log_event=None):
+        runtime = WorkflowRuntime()
+        return runtime.run_action(
+            workflow_id=workflow_id,
+            action=action,
+            params=params,
+            context=WorkflowContext(
+                session_id=str(conversation_id or ""),
+                run_id=str(conversation_id or ""),
+                event_logger=(lambda event_type, **payload: log_event(event_type, **payload)) if log_event else None,
+                model_client=self.client,
+                model=self.model,
+            ),
+        )
+
+    def _run_workflow_command(
+        self,
+        workflow_command,
+        user_input,
+        messages,
+        manual_state,
+        last_manual_intent,
+        current_manual_plan,
+        conversation_id,
+        log_event,
+    ):
+        workflow_id = workflow_command["workflow_id"]
+        action = workflow_command["action"]
+        params = dict(workflow_command["params"])
+        missing = self._missing_workflow_params(workflow_id, action, params)
+
+        messages.append({"role": "user", "content": user_input})
+        if missing:
+            reply = "Workflow 参数不足，请补充：" + ", ".join(missing)
+            messages.append({"role": "assistant", "content": reply})
+            return AgentRunResult(
+                reply=reply,
+                messages=messages,
+                manual_workflow_state=manual_state,
+                last_manual_intent=last_manual_intent,
+                current_manual_plan=current_manual_plan,
+                skills=["rtl-manual-generation"],
+                used_tools=[],
+            )
+
+        log_event("workflow_action_start", workflow_id=workflow_id, action=action, params=params)
+        result = self.run_workflow_action(workflow_id, action, params, conversation_id=conversation_id, log_event=log_event)
+        log_event(
+            "workflow_action_end",
+            workflow_id=workflow_id,
+            action=action,
+            status="success" if result.ok else "error",
+            errors=result.errors,
+        )
+        reply = self._workflow_result_text(result)
+        messages.append({"role": "assistant", "content": reply})
+
+        return AgentRunResult(
+            reply=reply,
+            messages=messages,
+            manual_workflow_state=manual_state,
+            last_manual_intent=last_manual_intent,
+            current_manual_plan=current_manual_plan,
+            skills=["rtl-manual-generation"],
+            used_tools=[],
+        )
+
+    def _missing_workflow_params(self, workflow_id: str, action: str, params: dict[str, Any]) -> list[str]:
+        required = []
+        for spec in WorkflowRuntime().get_actions(workflow_id):
+            if spec.get("id") == action:
+                required = spec.get("required_params", [])
+                break
+        return [key for key in required if not params.get(key)]
+
+    def _workflow_result_text(self, result) -> str:
+        payload = asdict(result)
+        if result.ok:
+            return "Workflow action completed.\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+        return "Workflow action failed.\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
 
     def _run_manual_workflow(
         self,

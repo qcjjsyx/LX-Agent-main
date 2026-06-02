@@ -84,23 +84,29 @@ The scripts set `PYTHONPATH` to `packages/` before invoking module commands, so 
 
 ## CLI Debug Entry
 
-For app-free local debugging, run the same backend workflow through:
+For app-free local debugging, run the layered manual workflow through:
 
 ```bash
-python -m backend.manual_cli \
-  --project-root . \
+python -m backend.manual_cli build \
+  --project-root ./rtl \
   --rtl-inputs rtl \
+  --top-module arm_soc_top
+
+python -m backend.manual_cli compose \
+  --project-root ./rtl \
   --top-module arm_soc_top
 ```
 
 Useful options:
 
-- `--force`: regenerate instead of reusing existing parser / manual context / manual artifacts.
-- `--output docs/manuals/debug.md`: write the public manual to a custom path.
-- `--no-llm`: skip source-review model calls and keep flagged claims as evidence gaps.
+- `build --force`: regenerate parser, knowledge, evidence, outline, chapter plan, and base artifacts.
+- `source-review`: run the explicit controlled source-review step only for `evidence_gap`, `needs_review`, or `requires_rtl_source_review` targets, write back Manual Context, and mark enhanced fragments stale.
+- `enhance --main-manual`: enhance the whole base main manual as one fragment with a compact Manual Context digest.
+- `enhance --target-module <module>`: enhance exactly one base module page.
+- `compose`: write the public final manual from valid enhanced fragments, falling back to base when needed.
+- `--no-llm`: skip source-review model calls and keep flagged claims as evidence gaps. `enhance` requires a model client.
 - `--require-llm`: fail if no OpenAI-compatible API key is configured.
 - `--knowledge-timeout 3600`: allow long full Semantic Layer regeneration runs.
-- `--state-out /tmp/manual_state.json`: save final workflow state for debugging.
 
 ## Evidence Boundary
 

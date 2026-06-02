@@ -131,6 +131,7 @@ def run_knowledge_pipeline(
             "name": "semantic_layer",
             "status": semantic_report.get("status", "unknown"),
             "output_dir": str(knowledge_root / "semantic"),
+            "progress_log": semantic_report.get("progress_log", ""),
             "counts": semantic_report.get("count", semantic_report.get("counts", {})),
             "claim_types": semantic_report.get("claim_types", {}),
             "issues": semantic_report.get("issues", []),
