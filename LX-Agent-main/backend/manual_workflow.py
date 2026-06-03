@@ -3896,6 +3896,7 @@ def _write_module_pages(state, output_path, client=None, model=None):
 def _build_module_page_polish_packet(state, digest, module, draft_page):
     position = module.get("system_position", {})
     source_review = module.get("source_review_report", {}) or {}
+    drive_diagram_packet = _build_drive_diagram_packet(state, digest, module)
     return {
         "top_module": state.get("top_module") or digest.get("top_module", ""),
         "module_name": module.get("module_name", ""),
@@ -3906,6 +3907,8 @@ def _build_module_page_polish_packet(state, digest, module, draft_page):
         "port_names": _module_port_names(module),
         "instance_names": _module_instance_names(module),
         "flow_titles": _module_flow_titles(module),
+        "drive_diagram_packet": drive_diagram_packet,
+        "drive_diagram_text": _drive_diagram_text(drive_diagram_packet),
         "source_review_summary": {
             "claim_count": source_review.get("claim_count", 0),
             "open_question_count": source_review.get("open_question_count", 0),
@@ -3913,6 +3916,8 @@ def _build_module_page_polish_packet(state, digest, module, draft_page):
         "draft_links": _markdown_links(draft_page),
         "evidence_boundary": [
             "只能润色 deterministic draft 中已有内容。",
+            "Drive 事件流图只能依据 drive_diagram_packet 改写表达；不得补充 packet 中没有的 drive 边。",
+            "Drive 事件流图只关注 drive/event 传递，可忽略 payload；free 只在影响 backpressure 时保留文字说明。",
             "不得新增 packet 或 draft 中没有的端口、信号、实例、状态机、协议行为、时序关系或模块功能。",
             "证据不足、AI 推断、需要源码复核等风险标记必须保留。",
         ],
@@ -3935,6 +3940,7 @@ def _polish_module_page_with_llm(state, module_name, draft_page, module_packet, 
             "content": (
                 "请润色下面的模块页。\n"
                 "要求：保留模块页标题和模块名；保留所有端口名；保留所有实例名；保留 source_file；"
+                "保留 Drive 事件流图的节点、边和证据不足标记；Drive 事件流图只解释 drive，不解释 payload；"
                 "保留证据不足 / AI 推断 / 需要源码复核；不输出解释过程；只输出 Markdown。\n\n"
                 "module packet：\n"
                 "```json\n"
@@ -4021,6 +4027,329 @@ def _module_flow_titles(module):
     return titles[:12]
 
 
+def _build_drive_diagram_packet(state, digest, module):
+    module_name = module.get("module_name", "")
+    known_drives = _module_drive_signal_set(module)
+    flows = []
+    for flow in _load_module_flow_contexts(digest, module):
+        flow_packet = _drive_flow_packet(flow, known_drives)
+        if flow_packet:
+            flows.append(flow_packet)
+            for step in flow_packet.get("steps", []):
+                known_drives.update(step.get("inputs", []) or [])
+                known_drives.update(step.get("outputs", []) or [])
+                signal = step.get("signal")
+                if signal:
+                    known_drives.add(signal)
+    parser_module = _load_parser_module_for_drive_diagram(state, digest, module_name)
+    return {
+        "schema": "drive_diagram_packet.v1",
+        "module": module_name,
+        "focus": "drive_event_only",
+        "drive_inputs": sorted(_module_event_signals(module, "event_inputs", known_drives)),
+        "drive_outputs": sorted(_module_event_signals(module, "event_outputs", known_drives)),
+        "flows": flows[:12],
+        "logic_nodes": _collect_drive_logic_nodes(parser_module, known_drives)[:20],
+        "evidence_policy": [
+            "只关注 drive/event 传递，忽略 payload 数据路径。",
+            "flow 边来自 Manual Context ordered_path。",
+            "logic_nodes 来自 parser assignments，仅用于展示由多个 drive-like 信号组合出的 drive。",
+        ],
+    }
+
+
+def _module_drive_signal_set(module):
+    names = set()
+    names.update(_module_event_signals(module, "event_inputs"))
+    names.update(_module_event_signals(module, "event_outputs"))
+    for flow in module.get("key_drive_flows", []) or []:
+        for key in ("trigger_signal", "source_signal", "sink_signal"):
+            if flow.get(key):
+                names.add(flow[key])
+        for key in ("input_drives", "output_drives", "outputs"):
+            for signal in flow.get(key, []) or []:
+                if isinstance(signal, str):
+                    names.add(signal)
+                elif isinstance(signal, dict) and signal.get("signal"):
+                    names.add(signal["signal"])
+    for component in (module.get("internal_components", {}) or {}).get("primary_samples", []) or []:
+        names.update(component.get("input_events", []) or [])
+        names.update(component.get("output_events", []) or [])
+    return {name for name in names if name}
+
+
+def _module_event_signals(module, key, fallback=None):
+    interfaces = module.get("interfaces", {}) or {}
+    names = set()
+    for signal in interfaces.get(key, []) or []:
+        if isinstance(signal, str):
+            names.add(signal)
+        elif isinstance(signal, dict) and signal.get("name"):
+            names.add(signal["name"])
+    for group in interfaces.get("interface_groups", []) or []:
+        direction = group.get("direction", "")
+        if key == "event_inputs" and direction != "input":
+            continue
+        if key == "event_outputs" and direction != "output":
+            continue
+        for signal in group.get("event_signals", []) or []:
+            if isinstance(signal, dict) and signal.get("name"):
+                names.add(signal["name"])
+            elif isinstance(signal, str):
+                names.add(signal)
+    if not names and fallback:
+        prefix = "i_" if key == "event_inputs" else "o_"
+        names.update(name for name in fallback if str(name).startswith(prefix))
+    return names
+
+
+def _drive_flow_packet(flow, known_drives):
+    ordered_path = flow.get("ordered_path", []) or []
+    if not ordered_path:
+        return {}
+    steps = []
+    for step in ordered_path:
+        kind = step.get("kind", "")
+        if kind in {"input_event", "output_event"}:
+            signal = step.get("name") or step.get("signal")
+            if not signal:
+                continue
+            known_drives.add(signal)
+            steps.append({
+                "kind": "port",
+                "role": "input" if kind == "input_event" else "output",
+                "signal": signal,
+                "certainty": step.get("certainty", ""),
+            })
+        elif kind == "component":
+            inputs = _drive_list(step.get("input_drives", []), known_drives)
+            outputs = _drive_list(step.get("output_drives", []), known_drives)
+            if not inputs and not outputs:
+                continue
+            steps.append({
+                "kind": "component",
+                "instance": step.get("name", ""),
+                "module_type": step.get("module_type") or step.get("component_family") or "",
+                "artifact_kind": step.get("artifact_kind", ""),
+                "inputs": inputs,
+                "outputs": outputs,
+                "certainty": step.get("certainty", ""),
+            })
+    if not steps:
+        return {}
+    trigger = (flow.get("trigger_event", {}) or {}).get("signal", "")
+    return {
+        "flow_id": flow.get("flow_id", ""),
+        "title": flow.get("title", ""),
+        "trigger": trigger,
+        "steps": steps[:40],
+        "gaps": _drive_flow_gaps(flow),
+    }
+
+
+def _drive_list(values, known_drives):
+    result = []
+    for value in values or []:
+        if not isinstance(value, str) or not value:
+            continue
+        known_drives.add(value)
+        result.append(value)
+    return result
+
+
+def _drive_flow_gaps(flow):
+    gaps = []
+    for gap in flow.get("evidence_gaps", []) or []:
+        if isinstance(gap, dict):
+            gaps.append(_plain(gap.get("reason") or gap.get("field") or "evidence_gap"))
+        elif gap:
+            gaps.append(_plain(gap))
+    for effect in flow.get("outputs_or_effects", []) or []:
+        if isinstance(effect, dict) and effect.get("certainty") == "evidence_gap":
+            gaps.append(_plain(effect.get("reason") or effect.get("signal") or "output evidence_gap"))
+    return _clip_list([gap for gap in gaps if gap], 4)
+
+
+def _load_parser_module_for_drive_diagram(state, digest, module_name):
+    project_root = Path(state.get("project_root") or ".")
+    manual_context_dir = digest.get("manual_context_dir", "")
+    if manual_context_dir:
+        project_root = Path(manual_context_dir).parent.parent
+    candidates = [
+        project_root / "parser_pipeline_rtl" / "modules" / f"{safe_filename(module_name)}.json",
+        project_root / "parser_pipeline_rtl" / "modules" / f"{module_name}.json",
+    ]
+    for path in candidates:
+        if path.exists():
+            try:
+                return _read_json(path)
+            except Exception:
+                return {}
+    return {}
+
+
+def _collect_drive_logic_nodes(parser_module, known_drives):
+    if not isinstance(parser_module, dict):
+        return []
+    nodes = []
+    seen = set()
+    for assignment in parser_module.get("assignments", []) or []:
+        lhs = assignment.get("lhs_signal") or assignment.get("lhs") or ""
+        rhs_terms = _clean_signal_terms(assignment.get("rhs_terms", []))
+        lhs_terms = _clean_signal_terms(assignment.get("lhs_terms", [])) or ([lhs] if lhs else [])
+        lhs_drive = any(_is_drive_like_signal(term, known_drives) for term in lhs_terms)
+        rhs_drive_terms = [term for term in rhs_terms if _is_drive_like_signal(term, known_drives)]
+        if not lhs_drive and not rhs_drive_terms:
+            continue
+        if lhs_drive and rhs_terms:
+            inputs = rhs_drive_terms or rhs_terms[:6]
+        else:
+            inputs = rhs_drive_terms
+        if not lhs or not inputs:
+            continue
+        key = (lhs, tuple(inputs), assignment.get("rhs", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        nodes.append({
+            "kind": "drive_logic",
+            "operator": _infer_assignment_operator(assignment.get("rhs", "")),
+            "output": lhs,
+            "inputs": inputs[:8],
+            "assignment_id": assignment.get("assignment_id", ""),
+            "rhs": _shorten(assignment.get("rhs", ""), 120),
+        })
+    return nodes
+
+
+def _clean_signal_terms(values):
+    terms = []
+    for value in values or []:
+        if not isinstance(value, str):
+            continue
+        cleaned = re.sub(r"\[[^\]]+\]", "", value).strip()
+        if cleaned and cleaned not in terms:
+            terms.append(cleaned)
+    return terms
+
+
+def _is_drive_like_signal(signal, known_drives):
+    if not signal:
+        return False
+    if signal in known_drives:
+        return True
+    text = str(signal).lower()
+    return bool(re.search(r"(^|_)(i_|o_|w_)?(drive|drv|fire)(_|$)", text) or text.endswith(("drive", "drv", "fire")))
+
+
+def _infer_assignment_operator(rhs):
+    text = rhs or ""
+    if "?" in text and ":" in text:
+        return "mux"
+    if "&&" in text or "&" in text:
+        return "and"
+    if "||" in text or "|" in text:
+        return "or"
+    if "^" in text:
+        return "xor"
+    if "~" in text or "!" in text:
+        return "not"
+    return "alias"
+
+
+def _render_module_drive_diagram(digest, module):
+    packet = _build_drive_diagram_packet({}, digest, module)
+    lines = [
+        "",
+        "## 4. Drive 事件流图",
+        "",
+        "- 视角：只展示 drive/event 传递；payload 数据路径不进入本图。",
+    ]
+    text = _drive_diagram_text(packet)
+    if not text:
+        lines.append("- 证据不足：当前 Manual Context 未提供可绘制的 drive ordered_path。")
+        return lines
+    lines.extend([
+        "",
+        "```text",
+        text,
+        "```",
+    ])
+    if packet.get("logic_nodes"):
+        lines.extend([
+            "",
+            "### 4.1 drive 逻辑合成节点",
+            "",
+            "| 输出 drive | 逻辑 | 输入 drive-like 信号 | Assign |",
+            "| --- | --- | --- | --- |",
+        ])
+        for node in packet["logic_nodes"][:12]:
+            lines.append(
+                "| "
+                + " | ".join([
+                    _md_cell(_code(node.get("output"))),
+                    _md_cell(node.get("operator", "")),
+                    _md_cell(_code_list(node.get("inputs", []))),
+                    _md_cell(_code(node.get("assignment_id")) if node.get("assignment_id") else _shorten(node.get("rhs", ""), 80)),
+                ])
+                + " |"
+            )
+        if len(packet["logic_nodes"]) > 12:
+            lines.append(f"| ... | ... | ... | 其余 {len(packet['logic_nodes']) - 12} 个 drive 逻辑节点省略 |")
+    return lines
+
+
+def _drive_diagram_text(packet):
+    if not packet or not packet.get("flows"):
+        return ""
+    lines = []
+    for index, flow in enumerate(packet.get("flows", [])[:6], 1):
+        title = flow.get("title") or flow.get("flow_id") or f"flow_{index}"
+        lines.append(f"[{index}] {title}")
+        for path_line in _drive_flow_text_lines(flow):
+            lines.append(f"    {path_line}")
+        for gap in flow.get("gaps", []) or []:
+            lines.append(f"    ? evidence_gap: {gap}")
+        lines.append("")
+    if len(packet.get("flows", [])) > 6:
+        lines.append(f"... {len(packet['flows']) - 6} more drive flows in Manual Context")
+    return "\n".join(lines).strip()
+
+
+def _drive_flow_text_lines(flow):
+    segments = []
+    current_outputs = []
+    for step in flow.get("steps", []) or []:
+        if step.get("kind") == "port":
+            label = step.get("signal", "")
+            if label:
+                segments.append(label)
+                current_outputs = [label]
+        elif step.get("kind") == "component":
+            instance = step.get("instance", "")
+            module_type = step.get("module_type", "")
+            label = f"{instance}:{module_type}" if module_type else instance
+            inputs = step.get("inputs", []) or current_outputs
+            outputs = step.get("outputs", [])
+            if len(outputs) > 3:
+                out_text = "{" + ", ".join(outputs[:3]) + f", +{len(outputs) - 3}" + "}"
+            else:
+                out_text = ", ".join(outputs)
+            if not segments and inputs:
+                segments.append(", ".join(inputs))
+            if label:
+                segments.append(f"[{label}]")
+            if out_text:
+                segments.append(out_text)
+            current_outputs = outputs or current_outputs
+        if len(segments) >= 28:
+            segments.append("...")
+            break
+    if not segments:
+        return []
+    return [" -> ".join(segment for segment in segments if segment)]
+
+
 def _render_module_page(digest, module):
     module_name = module.get("module_name", "")
     policy = module.get("page_policy", {})
@@ -4057,6 +4386,7 @@ def _render_module_page(digest, module):
     ])
     lines.extend(_render_module_port_groups(port_summary, detail_level))
     lines.extend(_render_module_interfaces(module, detail_level))
+    lines.extend(_render_module_drive_diagram(digest, module))
     lines.extend(_render_module_flows(digest, module, detail_level))
     lines.extend(_render_module_components_assignments(module, detail_level))
     return "\n".join(lines).strip()
@@ -4205,7 +4535,7 @@ def _render_module_flows(digest, module, detail_level):
     limit = 12 if detail_level == "detailed" else 6 if detail_level == "standard" else 3
     lines = [
         "",
-        "## 4. 主要 Drive-centered Flow",
+        "## 5. 主要 Drive-centered Flow",
         "",
     ]
     if not flows:
@@ -4238,9 +4568,9 @@ def _render_module_components_assignments(module, detail_level):
     assignments = module.get("assignment_impact_summary", {}).get("primary_samples", [])
     lines = [
         "",
-        "## 5. 内部组件与 assign 影响",
+        "## 6. 内部组件与 assign 影响",
         "",
-        "### 5.1 内部组件",
+        "### 6.1 内部组件",
         "",
         "| 实例 | 类型 | 输入事件 | 输出事件 |",
         "| --- | --- | --- | --- |",
@@ -4263,7 +4593,7 @@ def _render_module_components_assignments(module, detail_level):
         lines.append("| - | - | - | Manual Context 未提供 primary internal component |")
     lines.extend([
         "",
-        "### 5.2 assign 影响",
+        "### 6.2 assign 影响",
         "",
         "| Assign | Impact area | LHS | RHS 摘要 | 解释状态 |",
         "| --- | --- | --- | --- | --- |",
@@ -4303,7 +4633,7 @@ def _render_module_gaps(module):
         rows.append(gap)
     lines = [
         "",
-        "## 6. 证据缺口",
+        "## 7. 证据缺口",
         "",
     ]
     if not rows:

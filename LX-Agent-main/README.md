@@ -469,7 +469,7 @@ build -> source-review -> enhance -> compose -> review 可选
 ```text
 第一次 build     生成或复用 parser_pipeline_rtl、knowledge_ir、manual_context，并渲染 base 手册。
 source-review   读取已有 Manual Context 和 RTL 源码，只对 evidence_gap / needs_review / requires_rtl_source_review 显式标记项做受控源码复核，把结论写回 Manual Context。
-enhance          读取写回后的 Manual Context，重新生成 enhanced fragments，不覆盖 base。
+enhance          读取写回后的 Manual Context，重新生成 enhanced fragments，不覆盖 base；模块页会注入 drive-only 事件流图 packet。
 compose          组装最终公开手册；增强片段无效时自动回退 base。
 ```
 
@@ -522,7 +522,7 @@ python -m backend.manual_cli compose `
   --log-events
 ```
 
-LLM 文档增强不会覆盖 base，只写增强片段；主手册增强会读取紧凑 Manual Context 摘要，模块页增强会读取对应模块的 Manual Context packet：
+LLM 文档增强不会覆盖 base，只写增强片段；主手册增强会读取紧凑 Manual Context 摘要，模块页增强会读取对应模块的 Manual Context packet。模块页 packet 还包含 `drive_diagram_packet.v1`，它从 Manual Context 的 `ordered_path` 和 parser assignments 中确定性提取 drive/event 流线，只用于展示 drive 传播与 drive-like 逻辑合成，不展开 payload 数据路径：
 
 ```powershell
 python -m backend.manual_cli enhance `
@@ -557,7 +557,7 @@ python -m backend.manual_cli enhance `
 status        读取 manifest 和 artifact 状态。
 build          跑 parser/knowledge/evidence/outline/chapter_plan，并生成 deterministic base。Knowledge Semantic Layer 可使用 LLM；base 渲染不做写作 LLM 改写。
 source-review 依赖已有 Manual Context，只复核显式标记的不确定项，写回 Manual Context，并标记 enhanced stale。执行后应重新 enhance / compose。
-enhance        增强整篇主手册、单个模块页或批量模块页，结果写入 enhanced fragments；主手册增强会注入 Manual Context 摘要。
+enhance        增强整篇主手册、单个模块页或批量模块页，结果写入 enhanced fragments；主手册增强会注入 Manual Context 摘要，模块页增强会注入 drive-only 事件流图 packet。
 compose        组装最终手册和模块页，并运行最终审查。
 review         单独审查已 compose 的最终手册和模块页。
 ```
@@ -1113,7 +1113,8 @@ python -B -m unittest `
 - Flask Workflow API 的 workflow/actions/status/action 调用。
 - AgentRunner 显式 workflow 命令调度。
 - RTL Manual Web UI 面板入口和 API 绑定。
-- `source-review` 显式失效 base/enhanced 状态，以及 compose 对 stale/failed/missing 增强片段的 base 回退。
+- `source-review` 写回 Manual Context 后标记 enhanced fragments stale，以及 compose 对 stale/failed/missing 增强片段的 base 回退。
+- 模块页 drive-only 事件流图 packet、plaintext 渲染和增强 packet 注入。
 - parser 生成后 artifact 路径刷新。
 - skill selector 确定性打分。
 - conversation 级别的 manual workflow 状态隔离。
